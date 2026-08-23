@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- the `backtest`, `data_sync`, and `live` modules moved under `engine`; crate-root re-exports such as `quantforge::LiveTradeEngine` are unchanged, but path imports like `quantforge::live::LiveTradeConfig` become `quantforge::engine::live::LiveTradeConfig`
 - `Strategy::on_bar` returns the desired target position as plain data instead of mutating a context callback, making the strategy boundary drivable across an FFI boundary
 - `StrategyContext` is now a plain-data snapshot struct with owned `market`, `now_ms`, `cash`, and `position_qty` fields instead of a trait
 - `Strategy::name` returns `&str` instead of `&'static str` so foreign strategies can report dynamically owned names

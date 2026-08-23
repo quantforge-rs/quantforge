@@ -403,7 +403,7 @@ fn backtest_reproduces_pinned_summary_for_seeded_fixture() {
         Symbol::new("BTCUSDT").expect("symbol"),
         Interval::M1,
     );
-    // Same regression fixture as the engine-level test in `src/backtest.rs`
+    // Same regression fixture as the engine-level test in `src/engine/backtest.rs`
     // (see `sma_cross_fixture` there for the design notes): with fast=2,
     // slow=3, cash=10010, and fee 10 bps, every division behind the pinned
     // output is exact in `Decimal`, producing one fee-driven losing trade,

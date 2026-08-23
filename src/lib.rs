@@ -2,21 +2,18 @@
 #![deny(missing_debug_implementations)]
 #![doc = include_str!("../README.md")]
 
-pub mod backtest;
-pub mod data_sync;
 pub mod engine;
 pub mod exchange;
-pub mod live;
 pub mod model;
 pub mod ports;
 pub mod sdk;
 pub mod storage;
 
-pub use backtest::{BacktestConfig, BacktestEngine, BacktestResult};
-pub use data_sync::{DataSyncConfig, DataSyncEngine, DataSyncSummary};
 pub use engine::EngineError;
+pub use engine::backtest::{BacktestConfig, BacktestEngine, BacktestResult};
+pub use engine::data_sync::{DataSyncConfig, DataSyncEngine, DataSyncSummary};
+pub use engine::live::{LiveTradeConfig, LiveTradeEngine, LiveTradeSummary};
 pub use exchange::{BinanceCredentials, BinanceSpotClient};
-pub use live::{LiveTradeConfig, LiveTradeEngine, LiveTradeSummary};
 pub use model::{
     AccountTrade, AssetBalance, BotRunState, Candle, ClosedTrade, ExchangeId, ExchangeOrder,
     ExecutionMode, Fill, Interval, MarketId, ModelError, OrderStatus, PositionState, RunStatus,
