@@ -675,7 +675,7 @@ mod tests {
         }
     }
 
-    // Deterministic twin of the resume fixture in `src/live.rs`: an open
+    // Deterministic twin of the resume fixture in `src/engine/live/`: an open
     // position and a processed-bar cursor, exactly the state a restarted bot
     // depends on.
     fn run_state(run_id: &str) -> BotRunState {
@@ -1188,12 +1188,12 @@ mod tests {
 
     // Restart/resume assumptions pinned by the next two tests:
     // - data sync resumes from the candle high-water mark (`max_open_time_ms`
-    //   + interval step, src/data_sync.rs); holes below the max are never
+    //   + interval step, src/engine/data_sync.rs); holes below the max are never
     //   revisited — backfilling needs an explicit bounded --start/--end run;
     // - a live/dry-run bot resumes by run_id from `state_json` alone
-    //   (`load_or_create_run_state` in src/live.rs); the identity checks
+    //   (`load_or_create_run_state` in src/engine/live/state.rs); the identity checks
     //   (market, strategy, config, execution mode) live in
-    //   `apply_resume_checks` and are unit-tested in live.rs without SQLite;
+    //   `apply_resume_checks` and are unit-tested in src/engine/live/state.rs without SQLite;
     // - sibling columns (`status`, `stopped_at_ms`, `last_error`) are
     //   display-only copies and are never read back;
     // - re-`init` over an existing database is idempotent and re-stamps the
