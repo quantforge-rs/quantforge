@@ -31,10 +31,11 @@
 //!
 //! Fixture builders at the bottom mirror payloads recorded from the real
 //! Binance Spot testnet (`testnet.binance.vision`, 2026-08-07) and from the
-//! wire fixtures embedded in `src/exchange.rs`'s parser tests: 12-element
-//! kline rows, the `exchangeInfo` filter list (including its numeric-valued
-//! filters the client must skip), FULL / ACK / query-shaped order
-//! responses, and `account` balances.
+//! wire fixtures embedded in the parser tests in
+//! `src/exchange/binance/convert.rs`: 12-element kline rows, the
+//! `exchangeInfo` filter list (including its numeric-valued filters the
+//! client must skip), FULL / ACK / query-shaped order responses, and
+//! `account` balances.
 //!
 //! ```text
 //! let mut scenario = Scenario::new();
@@ -338,7 +339,7 @@ impl Drop for MockBinance {
 }
 
 // ── Fixture builders (shapes recorded from testnet.binance.vision and the
-// ── wire fixtures in src/exchange.rs parser tests) ─────────────────────
+// ── wire fixtures in src/exchange/binance/convert.rs parser tests) ────
 
 /// One 12-element kline row as served by `GET /api/v3/klines`, mirroring a
 /// row recorded from the Spot testnet. Open/high/low are derived from
@@ -434,8 +435,9 @@ pub fn exchange_info_btcusdt() -> Value {
 /// A FULL market-order response (the shape `newOrderRespType=FULL`
 /// returns): executed quantities, cumulative quote, and one fill with a
 /// base-asset commission — mirroring the canonical fixture in
-/// `src/exchange.rs`. `fill_price` = `cummulative_quote` / `executed_qty`
-/// is the caller's responsibility to keep coherent.
+/// `src/exchange/binance/convert.rs`. `fill_price` =
+/// `cummulative_quote` / `executed_qty` is the caller's responsibility to
+/// keep coherent.
 pub fn order_full_response(
     side: &str,
     order_id: i64,
@@ -470,7 +472,8 @@ pub fn order_full_response(
 }
 
 /// An ACK-shaped order response: identifiers only, no status, no
-/// quantities, no fills (mirrors the ACK fixture in `src/exchange.rs`).
+/// quantities, no fills (mirrors the ACK fixture in
+/// `src/exchange/binance/convert.rs`).
 /// The live engine must refuse to update position state from this.
 pub fn order_ack_response(side: &str, order_id: i64) -> Value {
     json!({
@@ -485,7 +488,8 @@ pub fn order_ack_response(side: &str, order_id: i64) -> Value {
 }
 
 /// A query/cancel-shaped order response: status and quantities but no
-/// `fills` array (mirrors the query fixture in `src/exchange.rs`) — the
+/// `fills` array (mirrors the query fixture in
+/// `src/exchange/binance/convert.rs`) — the
 /// "missing fill data" case.
 pub fn order_query_response(side: &str, order_id: i64, executed_qty: &str) -> Value {
     json!({

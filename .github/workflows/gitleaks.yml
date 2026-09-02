@@ -15,20 +15,62 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
+# the gitleaks CLI is MIT-licensed and needs no key. gitleaks-action, used here
+# until the repository moved to the quantforge-rs organization, refuses to run
+# for organization-owned repos without a GITLEAKS_LICENSE secret, and its EULA
+# still reserves paid per-repo tiers even though the key is free today
+env:
+  # bumped by hand: this repo has no dependabot or renovate config. the digest
+  # is the linux_x64 line from the release's gitleaks_<version>_checksums.txt
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+
 jobs:
   scan:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # allows the action to comment on the offending lines of a pull request
-      pull-requests: write
+      # upload the sarif report to the Security tab
+      security-events: write
     steps:
       - uses: actions/checkout@v7
         with:
           # full history so every commit is scanned, not just the checked-out tree
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v3
-        env:
-          # GITLEAKS_LICENSE is only required for organization-owned repos;
-          # this repo belongs to a personal account
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: install gitleaks
+        run: |
+          set -euo pipefail
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum --check --strict
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}" gitleaks
+          echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
+
+      # the same command CONTRIBUTING.md documents for local runs. exit 2 on
+      # findings keeps a leak distinguishable from a broken tool, which exits 1,
+      # and --redact keeps the secret itself out of the public job log
+      - name: scan committed history
+        run: |
+          gitleaks git . \
+            --no-banner \
+            --redact=100 \
+            --verbose \
+            --exit-code 2 \
+            --platform github \
+            --report-format sarif \
+            --report-path gitleaks.sarif
+
+      - name: upload sarif report
+        # runs on findings too, so a leak lands in the Security tab and not only
+        # in the failed job log; skipped when gitleaks failed before writing a
+        # report. a pull request from a fork gets a read-only token whatever the
+        # permissions block says, so the upload cannot succeed there — the scan
+        # step above is what gates the pull request either way
+        if: always() && hashFiles('gitleaks.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
