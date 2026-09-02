@@ -146,8 +146,10 @@ mod tests {
         assert_eq!(sma.update(dec("1")), None);
         assert_eq!(sma.update(dec("1")), None);
         // 4 / 3 has no exact decimal form. Bounds rather than a literal, so
-        // the test catches integer truncation and float drift without
-        // pinning rust_decimal's 28-digit rounding.
+        // the test catches integer truncation without pinning
+        // rust_decimal's 28-digit rounding. Float error is far too small to
+        // escape a 1e-10 bracket; that regression is caught by
+        // `sma_averages_stay_exact_where_floats_would_drift`.
         let average = sma.update(dec("2")).expect("warmed up");
         assert!(
             average > dec("1.3333333333") && average < dec("1.3333333334"),
