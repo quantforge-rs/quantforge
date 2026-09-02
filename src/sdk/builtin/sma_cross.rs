@@ -5,7 +5,6 @@
 //! answer to "what do I have to write?".
 
 use crate::{Candle, Indicator, Sma, Strategy, StrategyContext, StrategyError, TargetPosition};
-use rust_decimal::Decimal;
 
 /// The SMA crossover example: long while the fast average is above the slow
 /// one, flat while it is below.
@@ -20,8 +19,6 @@ use rust_decimal::Decimal;
 pub struct SmaCrossStrategy {
     fast: Sma,
     slow: Sma,
-    prev_fast: Option<Decimal>,
-    prev_slow: Option<Decimal>,
 }
 
 impl SmaCrossStrategy {
@@ -46,8 +43,6 @@ impl SmaCrossStrategy {
         Ok(Self {
             fast: Sma::new(fast)?,
             slow: Sma::new(slow)?,
-            prev_fast: None,
-            prev_slow: None,
         })
     }
 }
@@ -66,9 +61,6 @@ impl Strategy for SmaCrossStrategy {
         let slow_now = self.slow.update(bar.close);
 
         if let (Some(fast_now), Some(slow_now)) = (fast_now, slow_now) {
-            self.prev_fast = Some(fast_now);
-            self.prev_slow = Some(slow_now);
-
             if fast_now > slow_now {
                 return Ok(Some(TargetPosition::LongAllIn));
             }
@@ -85,6 +77,7 @@ impl Strategy for SmaCrossStrategy {
 mod tests {
     use super::*;
     use crate::{ExchangeId, Interval, MarketId, Symbol, TimestampMs};
+    use rust_decimal::Decimal;
     use std::str::FromStr;
 
     fn context() -> StrategyContext {
