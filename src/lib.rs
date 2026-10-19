@@ -14,8 +14,10 @@
 //! those seams, [`sdk`] is the boundary a strategy is written against, and
 //! [`engine`] drives all of them.
 //!
-//! - [`model`] — market identity, the candle grid and its validation,
-//!   exchange orders, bot-run state, and the timestamp and decimal helpers.
+//! - [`model`] — market identity, the candle grid and its validation, the
+//!   columnar [`CandleBatch`], exchange orders, bot-run state, and the
+//!   timestamp and decimal helpers, including the decimal ↔ float64
+//!   conversions.
 //! - [`ports`] — [`MarketDataSource`] and [`TradingVenue`] are what a venue
 //!   adapter provides, [`CandleStore`] and [`RunJournalStore`] what a
 //!   persistence backend provides, plus their request and error types.
@@ -57,7 +59,7 @@
 //! paths are supported too, and are how the tree above is read —
 //! `quantforge::Candle` and `quantforge::model::Candle` are one type.
 //!
-//! A name is public here for exactly one of three reasons:
+//! A name is public here for one of four reasons:
 //!
 //! - the binary or the integration tests name it, and both consume this
 //!   crate externally, so `pub(crate)` is not available for it;
@@ -69,7 +71,11 @@
 //!   repository: [`Strategy`], [`StrategyContext`], [`TargetPosition`],
 //!   [`StrategyError`], [`Indicator`], [`Sma`] and [`SmaCrossStrategy`] are
 //!   driven by the engines but named by neither the CLI nor the tests, and
-//!   are kept reachable on purpose.
+//!   are kept reachable on purpose;
+//! - it is the Python interchange, published ahead of the bindings that
+//!   will use it: [`CandleBatch`], [`CandleColumns`], [`decimal_to_f64`] and
+//!   [`decimal_from_f64`], which follow the
+//!   [decimal and float64 policy](https://github.com/quantforge-rs/quantforge/blob/main/docs/decimal-float-policy.md).
 //!
 //! Everything else is internal and moves without notice: the Binance wire
 //! DTOs, request signing and HTTP transport; the SQLite schema and row
@@ -89,14 +95,17 @@ pub mod sdk;
 pub mod storage;
 
 /// Domain vocabulary. Every layer speaks it, and every command parses its
-/// arguments into these types before anything else runs. `TargetPosition` is
-/// the exception to the grouping: it is defined here but belongs to the
-/// `sdk` contract, as the value `Strategy::on_bar` returns.
+/// arguments into these types before anything else runs. Two exceptions to
+/// the grouping: `TargetPosition` is defined here but belongs to the `sdk`
+/// contract, as the value `Strategy::on_bar` returns; and `CandleBatch`,
+/// `CandleColumns`, `decimal_to_f64` and `decimal_from_f64` are the Python
+/// interchange, which no command uses yet.
 pub use model::{
-    AccountTrade, AssetBalance, BotRunState, Candle, ClosedTrade, ExchangeId, ExchangeOrder,
-    ExecutionMode, Fill, Interval, MarketId, ModelError, OrderStatus, PositionState, RunStatus,
-    Side, Symbol, SymbolRules, TargetPosition, TimestampMs, ValidationIssue, ValidationReport,
-    ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms, round_down_to_step, validate_candles,
+    AccountTrade, AssetBalance, BotRunState, Candle, CandleBatch, CandleColumns, ClosedTrade,
+    ExchangeId, ExchangeOrder, ExecutionMode, Fill, Interval, MarketId, ModelError, OrderStatus,
+    PositionState, RunStatus, Side, Symbol, SymbolRules, TargetPosition, TimestampMs,
+    ValidationIssue, ValidationReport, decimal_from_f64, decimal_to_f64, ms_to_rfc3339, now_utc_ms,
+    parse_rfc3339_to_ms, round_down_to_step, validate_candles,
 };
 
 /// The seams. An out-of-tree venue or storage backend implements these four

@@ -1,8 +1,10 @@
 //! Normalized domain types shared by every layer: market identity, the
-//! candle grid and its validation, exchange orders, bot-run state, and the
-//! timestamp and decimal helpers they are built from.
+//! candle grid and its validation, the columnar candle batch, exchange
+//! orders, bot-run state, and the timestamp and decimal helpers they are
+//! built from, including the decimal ↔ float64 conversions.
 
 pub mod candle;
+pub mod candle_batch;
 pub mod decimal;
 pub mod interval;
 pub mod market;
@@ -14,7 +16,8 @@ pub mod timestamp;
 use thiserror::Error;
 
 pub use candle::{Candle, ValidationIssue, ValidationReport, validate_candles};
-pub use decimal::round_down_to_step;
+pub use candle_batch::{CandleBatch, CandleColumns};
+pub use decimal::{decimal_from_f64, decimal_to_f64, round_down_to_step};
 pub use interval::Interval;
 pub use market::{ExchangeId, MarketId, Symbol};
 pub use order::{AccountTrade, ExchangeOrder, Fill, OrderStatus, Side};
@@ -38,4 +41,16 @@ pub enum ModelError {
 
     #[error("time parse error: {0}")]
     TimeParse(#[from] time::error::Parse),
+
+    #[error("candle column `{column}` has {found} rows, expected {expected}")]
+    CandleColumnLength {
+        column: &'static str,
+        found: usize,
+        expected: usize,
+    },
+
+    // Debug formatting keeps the float short: Display would write f64::MAX
+    // as 309 digits.
+    #[error("cannot convert {value:?} to a decimal: {reason}")]
+    FloatToDecimal { value: f64, reason: &'static str },
 }

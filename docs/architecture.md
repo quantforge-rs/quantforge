@@ -67,7 +67,8 @@ src/
 ├── model/                      domain types every layer speaks
 │   ├── mod.rs                  ModelError and the re-exports
 │   ├── candle.rs               Candle and validate_candles
-│   ├── decimal.rs              round_down_to_step for exchange step sizes
+│   ├── candle_batch.rs         CandleBatch: candles as columns, the Python interchange
+│   ├── decimal.rs              round_down_to_step and the decimal ↔ float64 conversions
 │   ├── interval.rs             Interval: wire form, step duration, parsing
 │   ├── market.rs               Symbol, ExchangeId, MarketId
 │   ├── order.rs                Side, OrderStatus, Fill, ExchangeOrder, AccountTrade
@@ -126,8 +127,12 @@ which adapters to pass in.
   `layout.rs` for the CLI surface and this document
 - `tests/snapshots/`: the committed `--help` output of every command, plus
   `version.txt` for `--version`
-- `tests/candle_validation.rs`, `tests/sqlite_store.rs`, and
+- `tests/candle_validation.rs`, `tests/candle_batch.rs`,
+  `tests/decimal_float.rs`, `tests/sqlite_store.rs`, and
   `tests/live_engine.rs`: library integration tests
+- `tests/fixtures/`: data shared with the Python bindings' tests, starting
+  with the decimal ↔ float64 conformance cases of
+  [decimal-float-policy.md](decimal-float-policy.md)
 - unit tests sit at the bottom of the module they test, in
   `#[cfg(test)] mod tests`
 

@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `CandleBatch` holds candles as parallel columns — `open_time_ms`, `close_time_ms`, `open`, `high`, `low`, `close`, `volume`, and `trades` — for the planned Python bindings, and converts to and from `Vec<Candle>` without loss; `CandleBatch::from_columns` builds one from a `CandleColumns` and rejects columns of different lengths
+- `decimal_to_f64` and `decimal_from_f64` implement the decimal ↔ float64 policy in `docs/decimal-float-policy.md`: the nearest float64 one way, the shortest round-trip decimal the other, and an error instead of rounding for NaN, infinities, and values a decimal cannot hold; `tests/fixtures/decimal_float_cases.csv` pins the cases for Rust and Python alike
+
 - the crate documentation describes the module tree innermost first, which library entry point each CLI command wraps, and which names are public API
 - `docs/architecture.md` maps every CLI command to the file that implements it and gives each source file a one-line note; the `README.md` module overview links to it
 - `CONTRIBUTING.md` documents how to add a CLI command: the file to create under `src/cli/<group>/`, the shared flattened arguments, and the snapshots, docs, and tests that change with it

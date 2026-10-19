@@ -1,0 +1,37 @@
+direction,input,expected,note
+to_f64,0,0000000000000000,zero
+to_f64,-0,0000000000000000,negative zero becomes +0.0
+to_f64,1,3ff0000000000000,one
+to_f64,0.1,3fb999999999999a,not exact in binary
+to_f64,-2.5,c004000000000000,negative
+to_f64,81940.01000000,40f4014028f5c28f,binance price; trailing zeros
+to_f64,0.17235000,3fc60f9096bb98c8,binance volume
+to_f64,14118.14755140,40cb9312e2f6dabd,binance quote volume
+to_f64,123456789012345,42dc12218377de40,15 significant digits
+to_f64,9007199254740993,4340000000000000,2^53 + 1 ties to even (down)
+to_f64,9007199254740995,4340000000000002,2^53 + 3 ties to even (up)
+to_f64,66633140290.84541427,422f074a1085b0da,19 digits; double rounding would miss
+to_f64,0.12147738891864899987371366,3fbf1924649bec07,scale 26; double rounding would miss
+to_f64,998431.2042875853960324310791,412e783e689861e5,28 digits; double rounding would miss
+to_f64,0.0000000000000000000000000001,3a1fb0f6be506019,smallest positive decimal
+to_f64,79228162514264337593543950335,45f0000000000000,decimal maximum
+to_f64,-79228162514264337593543950335,c5f0000000000000,decimal minimum
+from_f64,0000000000000000,0,zero
+from_f64,8000000000000000,0,negative zero becomes 0
+from_f64,3fb999999999999a,0.1,shortest form
+from_f64,3fd3333333333334,0.30000000000000004,shortest form keeps 17 digits
+from_f64,40f4014028f5c28f,81940.01,trailing zeros are not restored
+from_f64,c004000000000000,-2.5,negative
+from_f64,3e7ad7f29abcaf48,0.0000001,no exponent notation
+from_f64,444b1ae4d6e2ef50,1000000000000000000000,large integer
+from_f64,4340000000000000,9007199254740992,2^53
+from_f64,3a1fb0f6be506019,0.0000000000000000000000000001,smallest positive decimal
+from_f64,39e95a5efea6b347,error:more than 28 decimal places,too small for 28 decimal places
+from_f64,0000000000000001,error:more than 28 decimal places,smallest subnormal
+from_f64,45efe86896aa2af2,79000000000000000000000000000,just inside the decimal maximum
+from_f64,45f0000000000000,error:beyond the decimal range,double nearest the decimal maximum lies above it
+from_f64,45f431e0fae6d721,error:beyond the decimal range,above the decimal maximum
+from_f64,7fefffffffffffff,error:beyond the decimal range,largest double
+from_f64,7ff8000000000000,error:not finite,nan
+from_f64,7ff0000000000000,error:not finite,positive infinity
+from_f64,fff0000000000000,error:not finite,negative infinity
