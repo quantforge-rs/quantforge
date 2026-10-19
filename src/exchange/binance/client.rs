@@ -29,6 +29,8 @@ impl BinanceSpotClient {
         }
         Self {
             base_url,
+            // reqwest honors the HTTP(S)_PROXY/ALL_PROXY/NO_PROXY convention;
+            // nothing else in the environment reaches the client.
             http: reqwest::Client::new(),
             credentials: None,
             recv_window_ms: 5_000,

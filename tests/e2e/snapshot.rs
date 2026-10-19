@@ -60,8 +60,10 @@ fn snapshot_path(name: &str) -> PathBuf {
         .join(format!("{name}.txt"))
 }
 
-// Deliberately value-based: `UPDATE_SNAPSHOTS=0` in a leftover shell
-// export must not silently disable every guard in this file.
+// An environment switch because libtest owns the test binary's arguments;
+// it is test tooling, not a quantforge setting. Deliberately value-based:
+// `UPDATE_SNAPSHOTS=0` in a leftover shell export must not silently
+// disable every guard in this file.
 fn updating() -> bool {
     matches!(
         std::env::var("UPDATE_SNAPSHOTS").ok().as_deref(),

@@ -2,7 +2,7 @@
 //! both-or-nothing rule; where the two values come from is the caller's
 //! business. The CLI takes them from `--binance-api-key`/`--binance-api-secret`
 //! with `QF_BINANCE_API_KEY`/`QF_BINANCE_API_SECRET` as env fallbacks, so the
-//! library itself never reads the process environment.
+//! library never reads credentials from the process environment.
 
 use std::fmt;
 

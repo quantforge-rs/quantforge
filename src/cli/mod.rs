@@ -182,6 +182,7 @@ pub(crate) enum Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     // clap's own consistency self-check: duplicate flags or ids, broken
     // defaults, and malformed value parsers panic here rather than at the
@@ -264,6 +265,180 @@ mod tests {
         assert!(
             !debug.contains("secret-sentinel"),
             "Debug output contains the secret"
+        );
+    }
+
+    const CONFIGURATION_DOC: &str = include_str!("../../docs/configuration.md");
+    const MATRIX_HEADER: &str = "| Setting | Flag | Env var | Default | Scope |";
+
+    /// One flag as one scope sees it, spelled the way the matrix spells it.
+    #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+    struct Setting {
+        scope: String,
+        flag: String,
+        env: String,
+        default: String,
+    }
+
+    /// Every flag clap defines, plus the leaf command paths that `every
+    /// command` stands for. The command is walked unbuilt, where globals
+    /// still live only on the root and the generated help and version flags
+    /// do not exist yet.
+    fn defined_settings() -> (Vec<Setting>, Vec<String>) {
+        fn walk(
+            command: &clap::Command,
+            path: &str,
+            settings: &mut Vec<Setting>,
+            leaves: &mut Vec<String>,
+        ) {
+            for arg in command.get_arguments() {
+                let id = arg.get_id().as_str();
+                if id == "help" || id == "version" {
+                    continue;
+                }
+                let long = arg
+                    .get_long()
+                    .unwrap_or_else(|| panic!("argument {id} has no long flag"));
+                let defaults: Vec<_> = arg
+                    .get_default_values()
+                    .iter()
+                    .map(|value| value.to_string_lossy())
+                    .collect();
+                let default = if !defaults.is_empty() {
+                    defaults.join(",")
+                } else if arg.is_required_set() {
+                    "required".to_string()
+                } else {
+                    "none".to_string()
+                };
+                settings.push(Setting {
+                    scope: if arg.is_global_set() {
+                        "global".to_string()
+                    } else {
+                        path.to_string()
+                    },
+                    flag: format!("--{long}"),
+                    env: arg.get_env().map_or_else(
+                        || "—".to_string(),
+                        |name| name.to_string_lossy().into_owned(),
+                    ),
+                    default,
+                });
+            }
+            let mut subcommands = command.get_subcommands().peekable();
+            if subcommands.peek().is_none() && !path.is_empty() {
+                leaves.push(path.to_string());
+            }
+            for subcommand in subcommands {
+                let child = if path.is_empty() {
+                    subcommand.get_name().to_string()
+                } else {
+                    format!("{path} {}", subcommand.get_name())
+                };
+                walk(subcommand, &child, settings, leaves);
+            }
+        }
+
+        let (mut settings, mut leaves) = (Vec::new(), Vec::new());
+        walk(&Cli::command(), "", &mut settings, &mut leaves);
+        (settings, leaves)
+    }
+
+    /// The matrix rows, one entry per scope a row names. A row that breaks
+    /// the cell format documented above the table fails here, quoted.
+    fn documented_settings(leaves: &[String]) -> Vec<Setting> {
+        // A cell holding exactly one backticked span.
+        fn code(cell: &str) -> Option<&str> {
+            let inner = cell.strip_prefix('`')?.strip_suffix('`')?;
+            (!inner.contains('`')).then_some(inner)
+        }
+
+        let mut lines = CONFIGURATION_DOC
+            .lines()
+            .skip_while(|line| line.trim_end() != MATRIX_HEADER);
+        assert!(
+            lines.next().is_some(),
+            "docs/configuration.md has no matrix header {MATRIX_HEADER:?}"
+        );
+
+        let mut settings = Vec::new();
+        for row in lines.take_while(|line| line.starts_with('|')) {
+            let cells: Vec<&str> = row
+                .trim_end()
+                .trim_matches('|')
+                .split('|')
+                .map(str::trim)
+                .collect();
+            let is_separator = cells
+                .iter()
+                .all(|cell| !cell.is_empty() && cell.chars().all(|c| matches!(c, '-' | ':')));
+            if is_separator {
+                continue;
+            }
+            let [_, flag, env, default, scope] = cells[..] else {
+                panic!("matrix row needs five cells: {row}");
+            };
+
+            let flag = code(flag)
+                .and_then(|flag| flag.split(' ').next())
+                .filter(|name| name.starts_with("--"))
+                .unwrap_or_else(|| panic!("flag cell is not one backticked --flag: {row}"));
+            let env = match env {
+                "—" => "—",
+                env => code(env)
+                    .unwrap_or_else(|| panic!("env var cell is not backticked or —: {row}")),
+            };
+            let default = match default {
+                "required" | "none" => default,
+                default => code(default).unwrap_or_else(|| {
+                    panic!("default cell is not backticked, required, or none: {row}")
+                }),
+            };
+            let scopes: Vec<&str> = match scope {
+                "global" => vec!["global"],
+                "every command" => leaves.iter().map(String::as_str).collect(),
+                scope => scope
+                    .split(',')
+                    .map(|path| {
+                        code(path.trim()).unwrap_or_else(|| {
+                            panic!("scope is not global, every command, or backticked paths: {row}")
+                        })
+                    })
+                    .collect(),
+            };
+
+            settings.extend(scopes.into_iter().map(|scope| Setting {
+                scope: scope.to_string(),
+                flag: flag.to_string(),
+                env: env.to_string(),
+                default: default.to_string(),
+            }));
+        }
+        settings
+    }
+
+    // docs/configuration.md is the operator-facing contract for every flag;
+    // this keeps it from drifting the way --help cannot.
+    #[test]
+    fn configuration_doc_matches_every_flag_env_var_default_and_scope() {
+        let (defined, leaves) = defined_settings();
+        let documented = documented_settings(&leaves);
+
+        let mut listed = BTreeSet::new();
+        for setting in &documented {
+            assert!(
+                listed.insert(setting),
+                "docs/configuration.md lists {setting:?} twice"
+            );
+        }
+        let defined: BTreeSet<&Setting> = defined.iter().collect();
+        let missing: Vec<_> = defined.difference(&listed).collect();
+        let stale: Vec<_> = listed.difference(&defined).collect();
+        assert!(
+            missing.is_empty() && stale.is_empty(),
+            "docs/configuration.md is out of date with the CLI definition\n\
+             missing from the doc: {missing:#?}\n\
+             stale in the doc: {stale:#?}"
         );
     }
 }

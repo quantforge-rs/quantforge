@@ -10,8 +10,13 @@
 //!   sourced `.env` with real credentials and a base-URL override) can
 //!   never leak into a test. The only `QF_*` values a child sees are the
 //!   ones a builder injects explicitly.
-//! - `--db` and `--log-level` are always passed as flags, so even a
-//!   hypothetical `QF_DB`/`QF_LOG` leak would be inert (flags win).
+//! - Every builder from [`cli_cmd`] up passes `--db` and `--log-level` as
+//!   flags, so even a hypothetical `QF_DB`/`QF_LOG` leak would be inert
+//!   (flags win). Precedence tests pin nothing and start from
+//!   [`unpinned_cmd`] instead.
+//! - Bed-bound commands run with the bed as their working directory, so a
+//!   relative path — including the default `data/market.sqlite` — resolves
+//!   inside the bed, never in the checkout.
 //!
 //! # Tiers
 //!
@@ -54,7 +59,7 @@
 use assert_cmd::Command;
 use quantforge::SqliteStore;
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -76,8 +81,12 @@ impl TestBed {
         }
     }
 
+    pub fn dir(&self) -> &Path {
+        self.tempdir.path()
+    }
+
     pub fn db_path(&self) -> PathBuf {
-        self.tempdir.path().join("market.sqlite")
+        self.dir().join("market.sqlite")
     }
 
     /// Open the bed's database for direct state assertions. Does not
@@ -113,10 +122,19 @@ pub fn isolated_cmd() -> Command {
     cmd
 }
 
+/// Level 1 with nothing pinned: an isolated command running in the bed's
+/// directory, for tests about where settings come from. Every setting
+/// takes its default unless the test supplies a flag or variable.
+pub fn unpinned_cmd(bed: &TestBed) -> Command {
+    let mut cmd = isolated_cmd();
+    cmd.current_dir(bed.dir());
+    cmd
+}
+
 /// Level 1: an isolated command bound to the bed's database with an
 /// explicit log level. Use `"error"` unless a test asserts log output.
 pub fn cli_cmd(bed: &TestBed, log_level: &str) -> Command {
-    let mut cmd = isolated_cmd();
+    let mut cmd = unpinned_cmd(bed);
     cmd.arg("--db")
         .arg(bed.db_path())
         .arg("--log-level")
@@ -199,7 +217,9 @@ pub fn assert_testnet_success(cmd: &mut Command) -> Output {
 
 /// The operator's testnet credentials, read from the real (test-runner)
 /// environment. Both-or-nothing with blank values counting as unset,
-/// mirroring `BinanceCredentials::resolve`.
+/// mirroring `BinanceCredentials::resolve`. An environment read rather than
+/// a flag because libtest owns the test binary's arguments; it is the
+/// runner's opt-in to the testnet tier, not a quantforge setting.
 pub struct TestnetEnv {
     pub api_key: String,
     pub api_secret: String,

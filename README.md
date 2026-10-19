@@ -74,6 +74,16 @@ confirmation and logs mark it with `(PRODUCTION)`; this is a guardrail against
 operator mistakes, not a security boundary — prefer a dedicated `--db` and
 `https://testnet.binance.vision/` while testing.
 
+## Configuration
+
+Every setting is a command-line flag. The global ones — `--db`,
+`--binance-base-url`, `--log-level`, `--binance-api-key`, and
+`--binance-api-secret` — fall back to `QF_DB`, `QF_BINANCE_BASE_URL`, `QF_LOG`,
+`QF_BINANCE_API_KEY`, and `QF_BINANCE_API_SECRET`, and a flag always wins over
+its variable. The
+[configuration matrix](https://github.com/quantforge-rs/quantforge/blob/main/docs/configuration.md)
+lists every flag with its environment variable, default, and scope.
+
 ## Credentials
 
 QuantForge keeps secrets out of the repository. For live and monitor commands, use:
