@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- the crate documentation describes the module tree innermost first, which library entry point each CLI command wraps, and which names are public API
 - `docs/architecture.md` maps every CLI command to the file that implements it and gives each source file a one-line note; the `README.md` module overview links to it
 - `CONTRIBUTING.md` documents how to add a CLI command: the file to create under `src/cli/<group>/`, the shared flattened arguments, and the snapshots, docs, and tests that change with it
 - `scripts/file-size-check.sh` enforces a line budget on every `src/**/*.rs` file, counting raw lines including in-file tests: more than 400 lines warns and more than 600 fails; ci runs it on pull requests targeting `main`, and `scripts/release-check.sh` runs it before building
@@ -24,6 +25,7 @@ All notable changes to this project will be documented in this file.
 - missing-credential errors from `monitor`, `trade close`, and `trade run --mode live` name both the flags and the environment variables
 - an empty or whitespace-only credential counts as missing instead of being sent to the exchange; an empty flag never falls back to the environment variable it overrides
 - the `sdk` module is split into `sdk::strategy` (the `Strategy` trait and its `StrategyContext` snapshot), `sdk::indicators`, and `sdk::builtin`, with `StrategyError` staying on `sdk` itself; crate-root re-exports such as `quantforge::Strategy` and `quantforge::SmaCrossStrategy` are unchanged, but the path import `quantforge::sdk::strategies::SmaCrossStrategy` becomes `quantforge::sdk::builtin::SmaCrossStrategy`
+- the `model`, `exchange`, and `storage` modules are split into public submodules — `model::candle`, `model::decimal`, `model::interval`, `model::market`, `model::order`, `model::rules`, `model::run`, `model::timestamp`, `exchange::binance`, and `storage::sqlite`; existing paths such as `quantforge::model::Candle` and `quantforge::storage::SqliteStore`, and every crate-root re-export, are unchanged
 - gitleaks scanning runs the MIT-licensed gitleaks cli directly instead of `gitleaks-action`, which refuses to run for organization-owned repositories without a license key, and uploads its findings to the Security tab as sarif
 - the `repository` and `homepage` links point at `quantforge-rs/quantforge` after the repository moved out of a personal account
 - the `backtest`, `data_sync`, and `live` modules moved under `engine`; crate-root re-exports such as `quantforge::LiveTradeEngine` are unchanged, but path imports like `quantforge::live::LiveTradeConfig` become `quantforge::engine::live::LiveTradeConfig`
