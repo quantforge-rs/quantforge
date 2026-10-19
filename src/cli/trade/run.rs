@@ -6,10 +6,9 @@ use crate::cli::common::{
     strategy_config,
 };
 use crate::cli::context::{self, AppContext, display_url};
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use clap::Args;
 use quantforge::{LiveTradeConfig, LiveTradeEngine, TradingVenue, ms_to_rfc3339};
-use std::io::{self, IsTerminal};
 use std::time::Duration;
 use tracing::warn;
 use url::Url;
@@ -47,7 +46,6 @@ pub(crate) struct TradeRunArgs {
 pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Result<()> {
     let store = &ctx.store;
     let public_client = &ctx.public_client;
-    let private_client = ctx.private_client.as_ref();
     let base_url = &ctx.base_url;
     let market = parse_market(args.market.symbol, args.market.interval)?;
     let quote_order_qty = parse_positive_decimal("--quote-order-qty", &args.quote_order_qty)?;
@@ -60,7 +58,7 @@ pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Re
             } else {
                 ""
             };
-            let interactive = io::stdin().is_terminal() && io::stdout().is_terminal();
+            let interactive = context::is_interactive();
             if !interactive {
                 println!("refusing to start live trading without --yes");
                 println!(
@@ -102,8 +100,7 @@ pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Re
         store,
         if matches!(args.mode, CliExecutionMode::Live) {
             Some(
-                private_client
-                    .ok_or_else(|| anyhow!("trade run --mode live requires Binance credentials"))?
+                ctx.require_private_client("trade run --mode live requires Binance credentials")?
                     as &dyn TradingVenue,
             )
         } else {

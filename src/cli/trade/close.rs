@@ -30,9 +30,7 @@ pub(crate) async fn handle_trade_close(ctx: &AppContext, args: TradeCloseArgs) -
     let store = &ctx.store;
     // Credential gate before parsing, preserving the pre-split dispatch
     // ordering.
-    let private_client = ctx.require_private_client(
-        "trade close requires QF_BINANCE_API_KEY and QF_BINANCE_API_SECRET",
-    )?;
+    let private_client = ctx.require_private_client("trade close requires Binance credentials")?;
     let market = parse_market(args.market.symbol, args.market.interval)?;
     let rules = private_client.fetch_symbol_rules(&market.symbol).await?;
     let mut run_state = if let Some(run_id) = args.run_id {

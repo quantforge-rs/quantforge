@@ -23,3 +23,9 @@ Options:
           
   -h, --help
           Print help
+
+Binance credentials:
+      --binance-api-key <BINANCE_API_KEY>
+          Binance API key for signed endpoints (monitor, trade close, trade run --mode live); prefer QF_BINANCE_API_KEY: command-line values can land in shell history and process listings [env: QF_BINANCE_API_KEY]
+      --binance-api-secret <BINANCE_API_SECRET>
+          Binance API secret paired with --binance-api-key; prefer QF_BINANCE_API_SECRET: command-line values can land in shell history and process listings [env: QF_BINANCE_API_SECRET]

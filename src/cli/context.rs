@@ -1,14 +1,25 @@
 //! Shared per-invocation construction: tracing, the SQLite store, and the
 //! Binance clients — built once from the parsed [`Cli`] and handed to the
-//! handlers, plus the interactive confirmation helpers.
+//! handlers, plus the interactive-session and confirmation helpers.
 
 use super::Cli;
 use anyhow::{Context, Result, anyhow};
 use quantforge::{BinanceCredentials, BinanceSpotClient, CandleStore, SqliteStore};
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 use url::Url;
+
+/// Appended to every missing-credentials error so it names both ways to
+/// supply them.
+const CREDENTIALS_REMEDY: &str = "pass --binance-api-key and --binance-api-secret, or set \
+     QF_BINANCE_API_KEY and QF_BINANCE_API_SECRET";
+
+/// Logged when a credential came from the command line of an interactive
+/// session. It never includes the value itself.
+const SHELL_HISTORY_WARNING: &str = "a Binance credential was passed on the command line; a \
+     literally typed value may be saved in shell history, and command-line values are visible \
+     in process listings while quantforge runs; prefer QF_BINANCE_API_KEY/QF_BINANCE_API_SECRET";
 
 /// Everything a command handler needs, constructed once per invocation.
 #[derive(Debug)]
@@ -20,10 +31,14 @@ pub(crate) struct AppContext {
 }
 
 impl AppContext {
-    /// Build the context in startup order: tracing first (so the store
-    /// warnings can be emitted), then the database, then the clients.
+    /// Build the context in startup order: tracing first (so the credential
+    /// and store warnings can be emitted), then the database, then the
+    /// clients.
     pub(crate) fn init(cli: &Cli) -> Result<Self> {
         init_tracing(&cli.log_level)?;
+        if cli.credentials.on_command_line && is_interactive() {
+            warn!("{SHELL_HISTORY_WARNING}");
+        }
 
         let db_existed = cli.db.exists();
         if let Some(parent) = cli.db.parent() {
@@ -46,9 +61,11 @@ impl AppContext {
             Url::parse(&cli.binance_base_url).context("failed to parse --binance-base-url")?;
         info!(base_url = %display_url(&base_url), "using Binance base URL");
         let public_client = BinanceSpotClient::new(base_url.clone());
-        let private_client = BinanceCredentials::from_env().map(|credentials| {
-            BinanceSpotClient::new(base_url.clone()).with_credentials(credentials)
-        });
+        let private_client = BinanceCredentials::resolve(
+            cli.credentials.binance_api_key.clone(),
+            cli.credentials.binance_api_secret.clone(),
+        )
+        .map(|credentials| BinanceSpotClient::new(base_url.clone()).with_credentials(credentials));
 
         Ok(Self {
             store,
@@ -58,15 +75,15 @@ impl AppContext {
         })
     }
 
-    /// The authenticated client, or `error_message` naming the missing
-    /// credentials — callers pass their command's exact tested wording.
+    /// The authenticated client, or an error that opens with `subject` (the
+    /// command's tested wording) and names both ways to supply credentials.
     pub(crate) fn require_private_client(
         &self,
-        error_message: &'static str,
+        subject: &'static str,
     ) -> Result<&BinanceSpotClient> {
         self.private_client
             .as_ref()
-            .ok_or_else(|| anyhow!(error_message))
+            .ok_or_else(|| anyhow!("{subject}: {CREDENTIALS_REMEDY}"))
     }
 }
 
@@ -80,6 +97,12 @@ fn init_tracing(level: &str) -> Result<()> {
         .compact()
         .init();
     Ok(())
+}
+
+/// Both stdin and stdout are terminals: an operator at a shell, as opposed
+/// to a script, supervisor, or test harness driving piped stdio.
+pub(crate) fn is_interactive() -> bool {
+    io::stdin().is_terminal() && io::stdout().is_terminal()
 }
 
 /// Prints `prompt`, reads one stdin line, and applies the strict `yes`

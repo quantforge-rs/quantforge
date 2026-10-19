@@ -40,6 +40,9 @@ impl BinanceSpotClient {
         self
     }
 
+    /// Swaps in a caller-built HTTP client. One built with reqwest's
+    /// `connection_verbose(true)` logs raw request bytes at trace level,
+    /// including the `X-MBX-APIKEY` header.
     pub fn with_http(mut self, http: reqwest::Client) -> Self {
         self.http = http;
         self
