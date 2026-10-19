@@ -86,9 +86,20 @@ mod tests {
         )
         .with_credentials(credentials.clone());
 
-        for debug in [format!("{credentials:?}"), format!("{client:?}")] {
-            assert!(!debug.contains("key-sentinel"), "key leaked: {debug}");
-            assert!(!debug.contains("secret-sentinel"), "secret leaked: {debug}");
+        // Failure messages name the owner, never the output: a failing run
+        // must not print what leaked.
+        for (owner, debug) in [
+            ("credentials", format!("{credentials:?}")),
+            ("client", format!("{client:?}")),
+        ] {
+            assert!(
+                !debug.contains("key-sentinel"),
+                "{owner} Debug output contains the key"
+            );
+            assert!(
+                !debug.contains("secret-sentinel"),
+                "{owner} Debug output contains the secret"
+            );
         }
     }
 }

@@ -250,9 +250,20 @@ mod tests {
         ])
         .expect("cli");
 
+        // Failure messages never include the output itself: a failing run
+        // must not print what leaked.
         let debug = format!("{cli:?}");
-        assert!(debug.contains("<redacted>"), "{debug}");
-        assert!(!debug.contains("key-sentinel"), "key leaked: {debug}");
-        assert!(!debug.contains("secret-sentinel"), "secret leaked: {debug}");
+        assert!(
+            debug.contains("<redacted>"),
+            "Debug output lacks the redaction marker"
+        );
+        assert!(
+            !debug.contains("key-sentinel"),
+            "Debug output contains the key"
+        );
+        assert!(
+            !debug.contains("secret-sentinel"),
+            "Debug output contains the secret"
+        );
     }
 }

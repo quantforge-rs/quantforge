@@ -354,21 +354,21 @@ fn monitor_status_scenario() -> Scenario {
 }
 
 /// Every signed `monitor status` request carried `key` in `X-MBX-APIKEY`
-/// and was signed with `secret`; `case` labels the failure.
+/// and was signed with `secret`; `case` labels the failure. The messages
+/// never print either credential, so a failing run cannot leak one.
 fn assert_signed_by(case: &str, requests: &[RecordedRequest], key: &str, secret: &str) {
     for path in ["/api/v3/account", "/api/v3/openOrders", "/api/v3/myTrades"] {
         let request = requests
             .iter()
             .find(|request| request.path == path)
             .unwrap_or_else(|| panic!("{case}: missing request to {path}"));
-        assert_eq!(
-            request.api_key.as_deref(),
-            Some(key),
-            "{case}: api key sent to {path}"
+        assert!(
+            request.api_key.as_deref() == Some(key),
+            "{case}: {path} carried a different api key"
         );
         assert!(
             request.signed_with(secret),
-            "{case}: {path} was not signed with {secret}"
+            "{case}: {path} was signed with a different secret"
         );
     }
 }
@@ -545,12 +545,21 @@ fn isolated_commands_do_not_inherit_shell_credentials() {
 // Credential sources. The mock accepts any key and signature, so these
 // assert on the wire instead: `X-MBX-APIKEY` names the key that was used,
 // and `signed_with` recomputes the HMAC to name the secret. Each source
-// gets distinct values so every assertion can tell which one won.
+// gets distinct values so every assertion can tell which one won. Failure
+// messages name a credential by label and never print its value.
 
 const KEY_FROM_FLAG: &str = "key-from-flag";
 const SECRET_FROM_FLAG: &str = "secret-from-flag";
 const KEY_FROM_ENV: &str = "key-from-env";
 const SECRET_FROM_ENV: &str = "secret-from-env";
+
+/// Every credential value above with its label, for leak checks.
+const SENTINELS: [(&str, &str); 4] = [
+    ("key from flag", KEY_FROM_FLAG),
+    ("secret from flag", SECRET_FROM_FLAG),
+    ("key from env", KEY_FROM_ENV),
+    ("secret from env", SECRET_FROM_ENV),
+];
 
 const MONITOR_STATUS: [&str; 4] = ["monitor", "status", "--symbol", "BTCUSDT"];
 const FLAG_CREDENTIALS: [&str; 4] = [
@@ -714,15 +723,10 @@ fn half_configured_or_blank_credentials_count_as_missing() {
         ));
 
         let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
-        for value in [
-            KEY_FROM_FLAG,
-            SECRET_FROM_FLAG,
-            KEY_FROM_ENV,
-            SECRET_FROM_ENV,
-        ] {
+        for (label, value) in SENTINELS {
             assert!(
                 !stderr.contains(value),
-                "{}: stderr echoed {value}",
+                "{}: stderr echoed the {label}",
                 case.name
             );
         }
@@ -773,12 +777,10 @@ fn credentials_never_appear_in_trace_output() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    for value in [
-        KEY_FROM_FLAG,
-        SECRET_FROM_FLAG,
-        KEY_FROM_ENV,
-        SECRET_FROM_ENV,
-    ] {
-        assert!(!printed.contains(value), "{value} appeared in the output");
+    for (label, value) in SENTINELS {
+        assert!(
+            !printed.contains(value),
+            "the {label} appeared in the output"
+        );
     }
 }
