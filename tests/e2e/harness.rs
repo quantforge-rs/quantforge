@@ -18,10 +18,14 @@
 //! - Offline commands use [`offline_cmd`]: the mock server's base URL plus
 //!   fake credentials ([`FAKE_API_KEY`]/[`FAKE_API_SECRET`]) — inert for
 //!   `data`/`backtest`, and they satisfy the credential gate for
-//!   `monitor`/`trade` without any real secret.
-//! - Testnet commands use [`testnet_cmd`]: the public Spot testnet URL,
-//!   the operator's real testnet credentials, and a 30-second command
-//!   timeout (the HTTP client itself has none). Gate tests with
+//!   `monitor`/`trade` without any real secret. Tests about credential
+//!   sources start from [`mock_cmd`] instead and supply their own.
+//! - Testnet commands use [`testnet_cmd`] (credentials as env vars) or
+//!   [`testnet_flag_cmd`] (as flags): the public Spot testnet URL, the
+//!   operator's real testnet credentials, and a 30-second command timeout
+//!   (the HTTP client itself has none). Run them through
+//!   [`assert_testnet_success`], never `.assert()`: assert_cmd's failure
+//!   report prints the whole command, keys included. Gate tests with
 //!   [`skip_unless_testnet!`]; without credentials they return early and
 //!   write a `SKIP (testnet tier)` marker straight to stderr — direct
 //!   `io::stderr()` writes bypass libtest's output capture, so the marker
@@ -49,7 +53,9 @@
 
 use assert_cmd::Command;
 use quantforge::SqliteStore;
+use std::fmt;
 use std::path::PathBuf;
+use std::process::Output;
 use std::time::Duration;
 use tempfile::TempDir;
 
@@ -128,41 +134,94 @@ pub fn offline_cmd_with_log(
     mock: &crate::mock_binance::MockBinance,
     log_level: &str,
 ) -> Command {
-    let mut cmd = cli_cmd(bed, log_level);
+    let mut cmd = mock_cmd(bed, mock, log_level);
     cmd.env("QF_BINANCE_API_KEY", FAKE_API_KEY)
-        .env("QF_BINANCE_API_SECRET", FAKE_API_SECRET)
-        .arg("--binance-base-url")
-        .arg(mock.base_url());
+        .env("QF_BINANCE_API_SECRET", FAKE_API_SECRET);
+    cmd
+}
+
+/// Level 2, offline tier without credentials: bed + mock base URL, for
+/// tests that supply credentials through flags or env vars themselves.
+pub fn mock_cmd(
+    bed: &TestBed,
+    mock: &crate::mock_binance::MockBinance,
+    log_level: &str,
+) -> Command {
+    let mut cmd = cli_cmd(bed, log_level);
+    cmd.arg("--binance-base-url").arg(mock.base_url());
     cmd
 }
 
 /// Level 2, testnet tier: bed + Spot testnet URL + the operator's real
-/// testnet credentials + a 30s wall-clock guard (the HTTP client has no
-/// timeouts of its own).
+/// testnet credentials as env vars + a 30s wall-clock guard (the HTTP
+/// client has no timeouts of its own).
 pub fn testnet_cmd(bed: &TestBed, testnet: &TestnetEnv) -> Command {
-    let mut cmd = cli_cmd(bed, "error");
+    let mut cmd = testnet_base_cmd(bed);
     cmd.env("QF_BINANCE_API_KEY", &testnet.api_key)
-        .env("QF_BINANCE_API_SECRET", &testnet.api_secret)
-        .arg("--binance-base-url")
+        .env("QF_BINANCE_API_SECRET", &testnet.api_secret);
+    cmd
+}
+
+/// [`testnet_cmd`] with the credentials passed as flags instead, so the
+/// child environment holds no `QF_*` value at all.
+pub fn testnet_flag_cmd(bed: &TestBed, testnet: &TestnetEnv) -> Command {
+    let mut cmd = testnet_base_cmd(bed);
+    cmd.arg("--binance-api-key")
+        .arg(&testnet.api_key)
+        .arg("--binance-api-secret")
+        .arg(&testnet.api_secret);
+    cmd
+}
+
+fn testnet_base_cmd(bed: &TestBed) -> Command {
+    let mut cmd = cli_cmd(bed, "error");
+    cmd.arg("--binance-base-url")
         .arg(TESTNET_BASE_URL)
         .timeout(Duration::from_secs(30));
     cmd
 }
 
+/// Runs a command carrying the operator's real testnet credentials and
+/// asserts it succeeded, reporting only the exit status and the CLI's own
+/// stderr (which never echoes a credential). `.assert()` would instead
+/// print the whole `Command` on failure: its arguments and, on Unix, its
+/// environment.
+pub fn assert_testnet_success(cmd: &mut Command) -> Output {
+    let output = cmd.output().expect("run testnet command");
+    assert!(
+        output.status.success(),
+        "testnet command failed ({}): {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    output
+}
+
 /// The operator's testnet credentials, read from the real (test-runner)
-/// environment. Both-or-nothing, mirroring `BinanceCredentials::from_env`.
-#[derive(Debug)]
+/// environment. Both-or-nothing with blank values counting as unset,
+/// mirroring `BinanceCredentials::resolve`.
 pub struct TestnetEnv {
     pub api_key: String,
     pub api_secret: String,
 }
 
+/// Never prints the keys, so a stray `{:?}` in a failing test cannot leak
+/// them.
+impl fmt::Debug for TestnetEnv {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TestnetEnv").finish_non_exhaustive()
+    }
+}
+
 pub fn testnet_env() -> Option<TestnetEnv> {
-    let api_key = std::env::var("QF_BINANCE_API_KEY").ok()?;
-    let api_secret = std::env::var("QF_BINANCE_API_SECRET").ok()?;
+    let present = |name: &str| {
+        std::env::var(name)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+    };
     Some(TestnetEnv {
-        api_key,
-        api_secret,
+        api_key: present("QF_BINANCE_API_KEY")?,
+        api_secret: present("QF_BINANCE_API_SECRET")?,
     })
 }
 

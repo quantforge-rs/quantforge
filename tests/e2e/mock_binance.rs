@@ -48,12 +48,14 @@
 //! // point the CLI at mock.base_url() via --binance-base-url
 //! ```
 
+use hmac::{Hmac, Mac};
 use http_body_util::Full;
 use hyper::body::Bytes;
 use hyper::service::service_fn;
 use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use serde_json::{Value, json};
+use sha2::Sha256;
 use std::collections::{HashMap, VecDeque};
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -117,6 +119,18 @@ impl RecordedRequest {
         self.query
             .split('&')
             .any(|pair| pair.split('=').next() == Some(name))
+    }
+
+    /// True when the trailing `signature` is the hex HMAC-SHA256 of the
+    /// rest of the query under `secret` — an independent check of which
+    /// secret signed the request, since the mock itself accepts any.
+    pub fn signed_with(&self, secret: &str) -> bool {
+        let Some((payload, signature)) = self.query.rsplit_once("&signature=") else {
+            return false;
+        };
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("hmac key");
+        mac.update(payload.as_bytes());
+        hex::encode(mac.finalize().into_bytes()) == signature
     }
 }
 

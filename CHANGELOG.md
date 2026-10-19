@@ -6,12 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `--binance-api-key` and `--binance-api-secret` global flags supply Binance credentials on the command line; `QF_BINANCE_API_KEY` and `QF_BINANCE_API_SECRET` remain as fallbacks, and a flag wins over its environment variable
+- `--help` names the credential environment variables but never prints their values
+- a credential passed as a flag on an interactive terminal logs a one-line warning that it may be saved in shell history and is visible in process listings, recommending the environment variables instead
 - codeql static analysis workflow running on pull requests targeting `main`, pushes to `main`, and a weekly schedule
 - gitleaks secret scanning workflow covering the full git history on the same triggers plus manual dispatch
 - ci, codeql, and gitleaks status badges in `README.md`
 
 ### Changed
 
+- missing-credential errors from `monitor`, `trade close`, and `trade run --mode live` name both the flags and the environment variables
+- an empty or whitespace-only credential counts as missing instead of being sent to the exchange; an empty flag never falls back to the environment variable it overrides
 - the `sdk` module is split into `sdk::strategy` (the `Strategy` trait and its `StrategyContext` snapshot), `sdk::indicators`, and `sdk::builtin`, with `StrategyError` staying on `sdk` itself; crate-root re-exports such as `quantforge::Strategy` and `quantforge::SmaCrossStrategy` are unchanged, but the path import `quantforge::sdk::strategies::SmaCrossStrategy` becomes `quantforge::sdk::builtin::SmaCrossStrategy`
 - gitleaks scanning runs the MIT-licensed gitleaks cli directly instead of `gitleaks-action`, which refuses to run for organization-owned repositories without a license key, and uploads its findings to the Security tab as sarif
 - the `repository` and `homepage` links point at `quantforge-rs/quantforge` after the repository moved out of a personal account
@@ -42,10 +47,12 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
+- `BinanceCredentials::from_env` and `BinanceCredentials::from_required_env`; the library no longer reads credentials from the process environment, so pass them to `BinanceCredentials::resolve` instead
 - `BacktestConfig` no longer implements `Default`; construct its fields explicitly instead of relying on fabricated cash and fee values
 
 ### Fixed
 
+- `Debug` output of `BinanceCredentials`, and of any `BinanceSpotClient` holding them, no longer prints the API key or secret
 - `Interval::H8` now formats as `8h` instead of `1m`
 - re-sync any 8h candles written before this fix; they were stored under the `1m` interval key
 - `Symbol` deserialization now validates and normalizes (trim, uppercase, reject empty) exactly like `Symbol::new`, closing the bypass on `state_json`/`raw_json` reloads
