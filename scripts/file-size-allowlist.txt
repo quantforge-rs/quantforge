@@ -1,0 +1,14 @@
+# Exceptions to the file-size budget that scripts/file-size-check.sh enforces
+# on src/**/*.rs: more than 400 lines warns, more than 600 fails. Prefer
+# splitting the module; see "File size budget" in CONTRIBUTING.md.
+#
+# One entry per line, fields separated by whitespace:
+#
+#   <path> <ceiling> <justification>
+#   src/engine/example.rs 700 why this file cannot reasonably be split
+#
+# The path is exact and relative to the repository root, with no globs and no
+# leading ./. The ceiling is a whole number above 600, and the justification is
+# required. The file still fails above its ceiling, and an entry fails once its
+# file is back at 600 lines or fewer or no longer exists. Blank lines and lines
+# starting with # are ignored.

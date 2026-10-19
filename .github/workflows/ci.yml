@@ -17,6 +17,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      # the size budget runs on the linux leg only (line counts are the same on
+      # every platform) and inside this required job, so a failure blocks merging
+      # without a branch protection change
+      - name: file-size
+        if: runner.os == 'Linux'
+        run: ./scripts/file-size-check.sh
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
