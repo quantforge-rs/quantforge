@@ -22,12 +22,13 @@ use std::path::{Path, PathBuf};
 
 /// Every command path in the CLI, paired with the snapshot file name and
 /// the module path expected to implement it. One list so that adding a
-/// subcommand fails in exactly one obvious place.
+/// subcommand fails in exactly one obvious place; `layout.rs` reads it too,
+/// to check that `docs/architecture.md` labels each module with its command.
 ///
 /// The module path is relative to `src/cli/`; a leaf command may live
 /// either in `<name>.rs` or in `<name>/mod.rs` (the directory form leaves
 /// room for future subcommands).
-const COMMANDS: &[(&str, &[&str], &str)] = &[
+pub(crate) const COMMANDS: &[(&str, &[&str], &str)] = &[
     ("root", &[], ""),
     ("data", &["data"], "data"),
     ("data-sync", &["data", "sync"], "data/sync"),

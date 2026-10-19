@@ -44,6 +44,67 @@ otherwise they skip with a `SKIP (testnet tier)` marker on stderr. Run one
 tier alone with `cargo test --test e2e offline::` or
 `cargo test --test e2e testnet::`.
 
+## Adding a CLI command
+
+The module tree under `src/cli/` mirrors the command tree (see
+[docs/architecture.md](docs/architecture.md)), so a new command is a new file
+at its mirroring path: `quantforge <group> <name>` lives in
+`src/cli/<group>/<name>.rs`, with dashes in the name turned into
+underscores. `src/cli/data/validate.rs` is a small complete command to copy
+from; `monitor` commands such as `src/cli/monitor/orders.rs` get the signed
+client (and the store, if they need it) from `monitor::dispatch` instead of
+`AppContext`.
+
+1. Create the file. Start it with a module doc naming the command
+   (`` //! `quantforge <group> <name>` — what it does ``), then add:
+   - an args struct, `<Group><Name>Args`, deriving `Args` and `Debug`. Take
+     shared flags from `src/cli/common.rs` with `#[command(flatten)]` instead
+     of declaring them again: `SymbolArgs` (`--symbol`), `MarketArgs`
+     (`--symbol`, `--interval`), `ConfirmArgs` (`--yes`), `PollArgs`
+     (`--poll-secs`, `--max-loops`), and `StrategyArgs` (`--strategy-name`).
+     Flattened flags appear in `--help` where their field sits, so field
+     order is help order. The global flags (`--db`, `--binance-base-url`,
+     `--log-level`, and the credentials) are applied once by
+     `AppContext::init`; a handler uses `ctx.store`, `ctx.base_url`,
+     `ctx.public_client`, or `ctx.private_client`, and never declares them
+     again.
+   - a handler, `handle_<group>_<name>`, that parses and validates every
+     argument at its top, before it reads the store or calls Binance, using
+     `parse_market`, `parse_positive_decimal`, and
+     `parse_non_negative_decimal`. Take money amounts as `String` flags and
+     parse them into `Decimal`, never a float. Print results as `key: value`
+     lines, and send diagnostics through `tracing`.
+2. Gate what needs gating. A command that sends signed requests gets its
+   client from `ctx.require_private_client("<group> <name> requires Binance
+   credentials")`, which fails with a remedy naming both credential
+   mechanisms; `monitor` commands skip this, because `run()` checks
+   credentials once for the whole group. A command that changes exchange
+   state flattens `ConfirmArgs` and, without `--yes`, prints what it would do
+   (or that nothing was sent) and exits 0.
+3. Register it in `src/cli/<group>/mod.rs`: declare the module, add a
+   variant to the group's command enum (its `///` doc comment becomes the
+   `--help` summary), and add an arm to `dispatch`. A new top-level command
+   lives in `src/cli/<name>/mod.rs` and also needs `mod <name>;`, a `Command`
+   variant, and a `run()` arm in `src/cli/mod.rs`. A group's `mod.rs` holds
+   its enum and `dispatch`; a leaf like `backtest` holds its args and
+   `handle_<name>`.
+4. Update what CI checks:
+   - add the command to `COMMANDS` in `tests/e2e/snapshot.rs`, then run
+     `UPDATE_SNAPSHOTS=1 cargo test --test e2e snapshot::` and review the
+     diff: the new `tests/snapshots/<group>-<name>.txt` (dashes kept) and
+     `<group>.txt`, which now lists it;
+   - add each new flag to the matrix in `docs/configuration.md`, and the
+     command to the scope of each shared flag it takes;
+     `configuration_doc_matches_every_flag_env_var_default_and_scope` names
+     every setting that is missing from the doc or stale in it;
+   - add the file to the tree in `docs/architecture.md`, with a note that
+     starts with `quantforge <group> <name>:`;
+   - add tests: argument validation and error text in `tests/cli.rs`, with
+     `--binance-base-url http://127.0.0.1:9/` so a validation-ordering bug
+     fails instead of reaching Binance, and exchange flows in
+     `tests/e2e/offline.rs` against the mock server;
+   - add a `CHANGELOG.md` entry.
+
 ## CLI snapshots
 
 The `--help` output of every command is locked by committed snapshots in
