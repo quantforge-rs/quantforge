@@ -127,9 +127,9 @@ which adapters to pass in.
   `layout.rs` for the CLI surface and this document
 - `tests/snapshots/`: the committed `--help` output of every command, plus
   `version.txt` for `--version`
-- `tests/candle_validation.rs`, `tests/candle_batch.rs`,
-  `tests/decimal_float.rs`, `tests/sqlite_store.rs`, and
-  `tests/live_engine.rs`: library integration tests
+- `tests/backtest_engine.rs`, `tests/candle_validation.rs`,
+  `tests/candle_batch.rs`, `tests/decimal_float.rs`, `tests/sqlite_store.rs`,
+  and `tests/live_engine.rs`: library integration tests
 - `tests/fixtures/`: data shared with the Python bindings' tests, starting
   with the decimal ↔ float64 conformance cases of
   [decimal-float-policy.md](decimal-float-policy.md)
