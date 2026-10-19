@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `scripts/file-size-check.sh` enforces a line budget on every `src/**/*.rs` file, counting raw lines including in-file tests: more than 400 lines warns and more than 600 fails; ci runs it on pull requests targeting `main`, and `scripts/release-check.sh` runs it before building
+- `scripts/file-size-allowlist.txt` grants a file a justified ceiling above 600 lines; the file still fails above that ceiling, and its entry fails once the file is back within 600 lines or no longer exists
 - `docs/configuration.md` lists every setting with its flag, environment variable, default, and scope, plus the environment variables read by dependencies; the `README.md` configuration section links to it
 - `--binance-api-key` and `--binance-api-secret` global flags supply Binance credentials on the command line; `QF_BINANCE_API_KEY` and `QF_BINANCE_API_SECRET` remain as fallbacks, and a flag wins over its environment variable
 - `--help` names the credential environment variables but never prints their values

@@ -56,6 +56,31 @@ surface, refresh the snapshots and review the diff:
 UPDATE_SNAPSHOTS=1 cargo test --test e2e snapshot::
 ```
 
+## File size budget
+
+Each `.rs` file under `src/` has a line budget: more than 400 lines prints a
+warning, and more than 600 lines fails CI and `./scripts/release-check.sh`.
+Lines are counted raw, so comments, blank lines, and an in-file
+`#[cfg(test)] mod tests` all count; files under `tests/` are not checked. Run
+the check on its own with:
+
+```bash
+./scripts/file-size-check.sh
+```
+
+To bring a file back under budget, split it along a responsibility boundary,
+the way `src/engine/live/` separates the runner, order execution, and run
+state. A large test module can move to its own file: keep
+`#[cfg(test)] mod tests;` in the module and move the body to `tests.rs` beside
+a `mod.rs`, or to `<name>/tests.rs` beside a `<name>.rs` (for example
+`src/engine/live/execution/tests.rs`).
+
+A file that cannot reasonably be split yet can get a higher ceiling in
+`scripts/file-size-allowlist.txt`: one `<path> <ceiling> <justification>`
+entry per line, with the ceiling above 600. The file still fails above its
+ceiling, and the entry itself fails once the file is back at 600 lines or
+fewer or no longer exists, so remove it in the same change as the split.
+
 ## Security and secrets
 
 Do not commit API keys, secrets, `.env` files, or production credentials.
