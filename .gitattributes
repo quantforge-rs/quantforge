@@ -1,2 +1,4 @@
 # Snapshots are compared byte for byte; keep them LF on every platform.
 tests/snapshots/*.txt text eol=lf
+# Fixtures are shared with the Python tests; the same bytes everywhere.
+tests/fixtures/*.csv text eol=lf
