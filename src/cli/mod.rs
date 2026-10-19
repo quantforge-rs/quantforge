@@ -441,4 +441,109 @@ mod tests {
              stale in the doc: {stale:#?}"
         );
     }
+
+    const README: &str = include_str!("../../README.md");
+
+    /// The logical lines of the README's bash blocks, `\` continuations
+    /// joined.
+    fn readme_command_lines() -> Vec<String> {
+        let (mut lines, mut pending, mut in_bash) = (Vec::new(), String::new(), false);
+        for line in README.lines().map(str::trim_end) {
+            if !in_bash {
+                in_bash = line == "```bash";
+                continue;
+            }
+            if line == "```" {
+                in_bash = false;
+                continue;
+            }
+            match line.strip_suffix('\\') {
+                Some(head) => {
+                    pending.push_str(head.trim());
+                    pending.push(' ');
+                }
+                None => {
+                    pending.push_str(line.trim());
+                    let logical = std::mem::take(&mut pending);
+                    if !logical.is_empty() {
+                        lines.push(logical);
+                    }
+                }
+            }
+        }
+        lines
+    }
+
+    /// Shell words with quotes grouped and removed, and nothing expanded:
+    /// `"$(cat key)"` stays one literal word, as clap would receive a value.
+    fn shell_words(line: &str) -> Vec<String> {
+        let (mut words, mut word, mut in_word) = (Vec::new(), String::new(), false);
+        let mut quote = None;
+        for c in line.chars() {
+            match quote {
+                Some(open) if c == open => quote = None,
+                Some(_) => word.push(c),
+                None if c == '"' || c == '\'' => {
+                    quote = Some(c);
+                    in_word = true;
+                }
+                None if c.is_whitespace() => {
+                    if in_word {
+                        words.push(std::mem::take(&mut word));
+                        in_word = false;
+                    }
+                }
+                None => {
+                    word.push(c);
+                    in_word = true;
+                }
+            }
+        }
+        assert!(quote.is_none(), "unterminated quote in README line: {line}");
+        if in_word {
+            words.push(word);
+        }
+        words
+    }
+
+    // The README is the crates.io front page and the crate docs; a renamed
+    // flag or variable must fail here instead of in a reader's terminal.
+    #[test]
+    fn every_readme_command_parses_and_exports_only_known_variables() {
+        let known_vars: BTreeSet<String> = defined_settings()
+            .0
+            .into_iter()
+            .map(|setting| setting.env)
+            .filter(|env| env != "—")
+            .collect();
+
+        let mut commands = 0;
+        for line in readme_command_lines() {
+            let words = shell_words(&line);
+            match words.iter().map(String::as_str).collect::<Vec<_>>()[..] {
+                ["cargo", "run", "--", ref args @ ..] => {
+                    commands += 1;
+                    let argv = std::iter::once("quantforge").chain(args.iter().copied());
+                    if let Err(err) = Cli::try_parse_from(argv) {
+                        panic!("README command does not parse: {line}\n{err}");
+                    }
+                }
+                ["export", assignment] => {
+                    let name = assignment
+                        .split_once('=')
+                        .map_or(assignment, |(name, _)| name);
+                    assert!(
+                        known_vars.contains(name),
+                        "README exports {name}, which no flag reads: {line}"
+                    );
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(
+            commands,
+            README.matches("cargo run --").count(),
+            "a `cargo run --` command in the README sits outside a bash block"
+        );
+    }
 }

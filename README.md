@@ -49,7 +49,8 @@ The public surface is layered as Rust modules, innermost first:
 - built-in strategy in 0.2.0: SMA crossover example
 - default execution mode: **dry-run**
 - live order placement requires explicit `--mode live`, a confirmation (`--yes`
-  or an interactive prompt), and Binance credentials from environment variables
+  or an interactive prompt), and Binance credentials (flags or environment
+  variables)
 
 ## Dry-run vs live
 
@@ -60,8 +61,7 @@ The public surface is layered as Rust modules, innermost first:
   constructed without a trading venue, so no order can be sent at all. It needs
   no credentials and no confirmation.
 - **live** places real spot market orders. It requires `--mode live`, Binance
-  credentials in `QF_BINANCE_API_KEY` / `QF_BINANCE_API_SECRET`, and an
-  explicit confirmation:
+  credentials (see Credentials below), and an explicit confirmation:
   - on an interactive terminal, the CLI shows the strategy, market, and
     endpoint, then asks you to type `yes`;
   - with `--yes`, the prompt is skipped (for scripts and supervisors);
@@ -86,15 +86,53 @@ lists every flag with its environment variable, default, and scope.
 
 ## Credentials
 
-QuantForge keeps secrets out of the repository. For live and monitor commands, use:
+Signed endpoints — every `monitor` command, `trade close`, and
+`trade run --mode live` — need a Binance API key and secret, passed as flags
+or as environment variables:
+
+| Credential | Flag | Environment variable |
+| --- | --- | --- |
+| API key | `--binance-api-key` | `QF_BINANCE_API_KEY` |
+| API secret | `--binance-api-secret` | `QF_BINANCE_API_SECRET` |
+
+A flag wins over its variable, one credential at a time: with both variables
+exported, `--binance-api-secret` replaces only the secret. Supply both
+credentials or neither — a lone or empty value counts as missing, and the
+command stops with an error that names both mechanisms.
+
+Use Binance Spot testnet first: create testnet keys at
+<https://testnet.binance.vision/> and point QuantForge there with
+`--binance-base-url https://testnet.binance.vision/` or `QF_BINANCE_BASE_URL`.
+
+Keep each secret in a file only you can read (`chmod 600`) and load it with
+command substitution. The environment form, set once per shell, is the
+recommended one:
 
 ```bash
-export QF_BINANCE_API_KEY="..."
-export QF_BINANCE_API_SECRET="..."
+export QF_BINANCE_API_KEY="$(cat ~/.config/quantforge/testnet-api-key)"
+export QF_BINANCE_API_SECRET="$(cat ~/.config/quantforge/testnet-api-secret)"
 export QF_BINANCE_BASE_URL="https://testnet.binance.vision/"
 ```
 
-Use Binance Spot testnet first.
+The flag form covers a single command with no variable set, for example
+`--binance-api-secret "$(cat ~/.config/quantforge/testnet-api-secret)"`; the
+quickstart below includes a fully flag-driven `monitor status`.
+
+Security notes:
+
+- a secret typed literally — as a flag or in an `export` — is saved in your
+  shell history; with command substitution, history records only `$(cat ...)`
+- command-line arguments appear in process listings (`ps`) while QuantForge
+  runs, and environment variables are not shown there by default, so prefer
+  the variables, especially for long-running commands such as `trade run` and
+  `monitor watch`; on an interactive terminal QuantForge logs a warning when a
+  credential arrives as a flag
+- if the file is missing, `"$(cat ...)"` expands to an empty value, which
+  counts as missing — an empty flag never falls back to its variable — so the
+  command fails instead of quietly using another key
+- a value that loses its flag is echoed back in the usage error
+  (`unexpected argument '...'` or `unrecognized subcommand '...'`), on screen
+  and in any captured log
 
 ## Quickstart
 
@@ -124,7 +162,9 @@ cargo run -- \
   --interval 1m
 ```
 
-Backtest the SMA crossover example:
+Backtest the SMA crossover example. The strategy needs more than `--slow`
+candles (50 here) before it can trade, so backfill with `--start` first — a
+sync that starts at the current time adds only one `1m` candle per minute:
 
 ```bash
 cargo run -- \
@@ -177,6 +217,18 @@ Inspect balances, open orders, and recent trades:
 ```bash
 cargo run -- \
   --db data/market.sqlite \
+  monitor status \
+  --symbol BTCUSDT
+```
+
+The same report, fully flag-driven, with no `QF_*` variable set:
+
+```bash
+cargo run -- \
+  --db data/market.sqlite \
+  --binance-base-url https://testnet.binance.vision/ \
+  --binance-api-key "$(cat ~/.config/quantforge/testnet-api-key)" \
+  --binance-api-secret "$(cat ~/.config/quantforge/testnet-api-secret)" \
   monitor status \
   --symbol BTCUSDT
 ```
