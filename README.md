@@ -41,6 +41,12 @@ The public surface is layered as Rust modules, innermost first:
 - `sdk` - the strategy trait and its context, indicator math, and built-in strategies
 - `engine` - the drivers: `engine::backtest`, `engine::data_sync`, and `engine::live`
 
+The `quantforge` binary adds `cli`, a module tree that mirrors the command
+tree: `quantforge monitor cancel-order` lives in
+`src/cli/monitor/cancel_order.rs`. The
+[architecture overview](https://github.com/quantforge-rs/quantforge/blob/main/docs/architecture.md)
+annotates every source file and maps each command to its file.
+
 ## Scope and guardrails
 
 - exchange in 0.2.0: **Binance Spot**

@@ -10,6 +10,8 @@
 //!
 //! [`snapshot`] locks the CLI surface itself: committed `--help`
 //! snapshots plus a check that the module tree mirrors the command tree.
+//! [`layout`] keeps the annotated source tree in `docs/architecture.md` in
+//! step with `src/`, each command's module labeled with its command.
 //!
 //! Shared infrastructure lives in [`harness`]: the env-isolated
 //! `assert_cmd` runner, per-test temp databases, `key: value` output
@@ -19,6 +21,7 @@
 //! `cargo test --test e2e testnet::`.
 
 mod harness;
+mod layout;
 mod mock_binance;
 mod offline;
 mod precedence;
