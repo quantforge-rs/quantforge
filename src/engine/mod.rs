@@ -20,6 +20,12 @@ pub enum EngineError {
     #[error("invalid state: {0}")]
     InvalidState(String),
 
+    /// A decimal result fell outside the representable range; the payload
+    /// names the step, such as "the entry". Reported instead of the panic
+    /// rust_decimal's operators would raise.
+    #[error("decimal overflow computing {0}")]
+    Overflow(&'static str),
+
     #[error(transparent)]
     Strategy(#[from] StrategyError),
 

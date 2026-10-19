@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `BacktestEngine` documents its execution model — bar-close signals, next-open fills, the basis-point fee on every fill, close-out at the last close, close-marked equity — and its determinism guarantee, with a runnable example that backtests a strategy defined outside the crate
+
 - `CandleBatch` holds candles as parallel columns — `open_time_ms`, `close_time_ms`, `open`, `high`, `low`, `close`, `volume`, and `trades` — for the planned Python bindings, and converts to and from `Vec<Candle>` without loss; `CandleBatch::from_columns` builds one from a `CandleColumns` and rejects columns of different lengths
 - `decimal_to_f64` and `decimal_from_f64` implement the decimal ↔ float64 policy in `docs/decimal-float-policy.md`: the nearest float64 one way, the shortest round-trip decimal the other, and an error instead of rounding for NaN, infinities, and values a decimal cannot hold; `tests/fixtures/decimal_float_cases.csv` pins the cases for Rust and Python alike
 
@@ -62,6 +64,8 @@ All notable changes to this project will be documented in this file.
 - `BacktestConfig` no longer implements `Default`; construct its fields explicitly instead of relying on fabricated cash and fee values
 
 ### Fixed
+
+- a backtest whose fill or equity arithmetic leaves the decimal range (for example an entry at a price so small that the quantity cannot be represented) returns the new `EngineError::Overflow` instead of panicking
 
 - `Debug` output of `BinanceCredentials`, and of any `BinanceSpotClient` holding them, no longer prints the API key or secret
 - `Interval::H8` now formats as `8h` instead of `1m`
