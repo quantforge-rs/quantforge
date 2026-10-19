@@ -5,6 +5,9 @@
 //! - `testnet`: real Binance Spot testnet; skips with a stderr marker
 //!   unless `QF_BINANCE_API_KEY`/`QF_BINANCE_API_SECRET` are exported
 //!
+//! [`precedence`] asserts where each global setting comes from: flag, then
+//! `QF_*` variable, then default. No network, always runs.
+//!
 //! [`snapshot`] locks the CLI surface itself: committed `--help`
 //! snapshots plus a check that the module tree mirrors the command tree.
 //!
@@ -18,5 +21,6 @@
 mod harness;
 mod mock_binance;
 mod offline;
+mod precedence;
 mod snapshot;
 mod testnet;

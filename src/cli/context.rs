@@ -88,6 +88,9 @@ impl AppContext {
 }
 
 fn init_tracing(level: &str) -> Result<()> {
+    // The filter comes only from --log-level/QF_LOG: `try_new` never reads
+    // RUST_LOG, unlike `EnvFilter::from_default_env`. The fmt layer still
+    // honors NO_COLOR, an output convention rather than a setting.
     let env_filter = EnvFilter::try_new(level)
         .with_context(|| format!("invalid log level/filter expression: {level}"))?;
 

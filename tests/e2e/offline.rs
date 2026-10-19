@@ -617,28 +617,31 @@ fn credential_flags_override_env_vars_on_either_side_of_the_subcommand() {
     }
 }
 
+// Both env vars are set in every case, so the one flag must beat its own
+// variable while the other credential still falls back to its variable.
 #[test]
-fn each_credential_falls_back_to_its_env_var_independently() {
+fn a_credential_flag_overrides_only_its_own_env_var() {
     let cases = [
         (
-            "key flag with secret env var",
+            "key flag over both env vars",
             ["--binance-api-key", KEY_FROM_FLAG],
-            ("QF_BINANCE_API_SECRET", SECRET_FROM_ENV),
             (KEY_FROM_FLAG, SECRET_FROM_ENV),
         ),
         (
-            "secret flag with key env var",
+            "secret flag over both env vars",
             ["--binance-api-secret", SECRET_FROM_FLAG],
-            ("QF_BINANCE_API_KEY", KEY_FROM_ENV),
             (KEY_FROM_ENV, SECRET_FROM_FLAG),
         ),
     ];
-    for (case, flag, (env_name, env_value), (key, secret)) in cases {
+    for (case, flag, (key, secret)) in cases {
         let mock = MockBinance::start(monitor_status_scenario());
         let bed = TestBed::new();
 
         let mut cmd = mock_cmd(&bed, &mock, "error");
-        cmd.env(env_name, env_value).args(MONITOR_STATUS).args(flag);
+        cmd.env("QF_BINANCE_API_KEY", KEY_FROM_ENV)
+            .env("QF_BINANCE_API_SECRET", SECRET_FROM_ENV)
+            .args(MONITOR_STATUS)
+            .args(flag);
         cmd.assert().success();
 
         assert_signed_by(case, &mock.requests(), key, secret);

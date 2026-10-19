@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `docs/configuration.md` lists every setting with its flag, environment variable, default, and scope, plus the environment variables read by dependencies; the `README.md` configuration section links to it
 - `--binance-api-key` and `--binance-api-secret` global flags supply Binance credentials on the command line; `QF_BINANCE_API_KEY` and `QF_BINANCE_API_SECRET` remain as fallbacks, and a flag wins over its environment variable
 - `--help` names the credential environment variables but never prints their values
 - a credential passed as a flag on an interactive terminal logs a one-line warning that it may be saved in shell history and is visible in process listings, recommending the environment variables instead
