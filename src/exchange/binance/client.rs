@@ -1,5 +1,6 @@
 //! The Binance Spot HTTP transport: base-URL handling, the public and signed
-//! request paths, and the mapping of HTTP failures onto `ExchangeError`.
+//! request paths, and the mapping of HTTP failures onto `ExchangeError`,
+//! classified by the sibling `errors` module.
 //!
 //! `send_public` and `send_signed` are the single choke point for every call
 //! the adapter makes — rate limiting, retries and timeouts belong here if they
@@ -9,8 +10,8 @@ use reqwest::{Method, StatusCode};
 use serde_json::Value;
 use url::Url;
 
-use super::signing;
 use super::types::BinanceApiError;
+use super::{errors, signing};
 use crate::exchange::ApiCredentials;
 use crate::{ExchangeError, now_utc_ms};
 
@@ -129,16 +130,18 @@ async fn decode_json(response: reqwest::Response) -> Result<Value, ExchangeError
 
     if !status.is_success() {
         if let Ok(api_error) = serde_json::from_str::<BinanceApiError>(&body) {
-            return Err(ExchangeError::Api {
-                code: Some(api_error.code),
-                message: api_error.msg,
-            });
+            return Err(ExchangeError::api(
+                errors::classify(status, Some(api_error.code), &api_error.msg),
+                Some(api_error.code),
+                api_error.msg,
+            ));
         }
 
-        return Err(ExchangeError::Api {
-            code: status_to_code(status),
-            message: format!("http {status}: {body}"),
-        });
+        return Err(ExchangeError::api(
+            errors::classify(status, None, &body),
+            status_to_code(status),
+            format!("http {status}: {body}"),
+        ));
     }
 
     serde_json::from_str::<Value>(&body).map_err(|err| ExchangeError::InvalidResponse {

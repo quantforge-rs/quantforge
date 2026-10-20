@@ -44,6 +44,50 @@ otherwise they skip with a `SKIP (testnet tier)` marker on stderr. Run one
 tier alone with `cargo test --test e2e offline::` or
 `cargo test --test e2e testnet::`.
 
+## The conformance suite
+
+`src/exchange/conformance/` holds every exchange connector to one contract,
+what the engines rely on, written down as checks; `tests/conformance/` runs
+each check against every registered exchange.
+
+- Plain `cargo test` replays each check's fixture from
+  `tests/conformance/fixtures/<exchange>/<check>.json`, with no network. It
+  also proves every check can fail, keeps
+  [docs/exchange-feature-matrix.md](docs/exchange-feature-matrix.md) in step
+  with the results, and checks that recordings hold no credentials.
+- `CONFORMANCE_MODE=testnet` runs the checks live against the testnet of the
+  exchange `CONFORMANCE_EXCHANGE` names, signing with that exchange's testnet
+  keys. The order checks place small market orders there, sized from the
+  symbol's minimum notional, and sell back what they buy. The `conformance`
+  workflow runs this every day; it never runs on pull requests.
+- `CONFORMANCE_MODE=record` does the same, and rewrites the fixture of every
+  check that passes and then replays exactly as it ran.
+
+```bash
+CONFORMANCE_MODE=record CONFORMANCE_EXCHANGE=binance \
+  QF_API_KEY="$(cat ~/.config/quantforge/testnet-api-key)" \
+  QF_API_SECRET="$(cat ~/.config/quantforge/testnet-api-secret)" \
+  cargo test --locked --test conformance live:: -- --nocapture
+```
+
+`CONFORMANCE_CHECK=<id>`, such as `orders.lifecycle`, narrows a live run to
+one check. After recording, refresh the matrix and review both diffs:
+
+```bash
+UPDATE_SNAPSHOTS=1 cargo test --test conformance
+```
+
+The checks that script faults no testnet produces on demand — clock skew,
+rate limits, outages, garbled responses — run against hand-written fixtures
+only, and record mode leaves those alone.
+
+## Adding an exchange
+
+An exchange is an adapter that implements the connector traits, a registry
+entry, and fixtures it passes the conformance suite with;
+[docs/adding-an-exchange.md](docs/adding-an-exchange.md) walks through each
+step.
+
 ## Adding a CLI command
 
 The module tree under `src/cli/` mirrors the command tree (see

@@ -1,13 +1,14 @@
 //! Binance Spot REST adapter. The work is split across private sibling
 //! modules — `client` owns the HTTP transport, `venue` implements the
 //! [`crate::ports`] connector traits on top of it, `signing` computes the
-//! HMAC-SHA256 query signature, and `types` and `convert` hold the wire DTOs
-//! and their mapping onto domain types. Only [`BinanceSpotClient`] leaves
-//! this namespace; the registry reaches the rest through its `REGISTRATION`
-//! entry.
+//! HMAC-SHA256 query signature, `errors` classifies Binance's error codes,
+//! and `types` and `convert` hold the wire DTOs and their mapping onto
+//! domain types. Only [`BinanceSpotClient`] leaves this namespace; the
+//! registry reaches the rest through its `REGISTRATION` entry.
 
 mod client;
 mod convert;
+mod errors;
 mod signing;
 mod types;
 mod venue;

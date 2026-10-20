@@ -1,0 +1,26 @@
+{
+  "check": "errors.unauthorized",
+  "exchange": "binance",
+  "source": "recorded",
+  "recorded_on": "2026-10-20",
+  "recorded_from": "https://testnet.binance.vision/",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/account",
+        "query": [
+          "omitZeroBalances=true",
+          "recvWindow=5000",
+          "timestamp=*",
+          "signature=*"
+        ],
+        "credentials": true
+      },
+      "response": {
+        "status": 401,
+        "json": {"code":-2014,"msg":"API-key format invalid."}
+      }
+    }
+  ]
+}

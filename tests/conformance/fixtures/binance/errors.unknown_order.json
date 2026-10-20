@@ -1,0 +1,57 @@
+{
+  "check": "errors.unknown_order",
+  "exchange": "binance",
+  "source": "recorded",
+  "recorded_on": "2026-10-20",
+  "recorded_from": "https://testnet.binance.vision/",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/time",
+        "query": [],
+        "credentials": false
+      },
+      "response": {
+        "status": 200,
+        "json": {"serverTime":1792515946301}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/order",
+        "query": [
+          "symbol=BTCUSDT",
+          "origClientOrderId=qfc-1792515946301-none",
+          "recvWindow=5000",
+          "timestamp=*",
+          "signature=*"
+        ],
+        "credentials": true
+      },
+      "response": {
+        "status": 400,
+        "json": {"code":-2013,"msg":"Order does not exist."}
+      }
+    },
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/api/v3/order",
+        "query": [
+          "symbol=BTCUSDT",
+          "origClientOrderId=qfc-1792515946301-none",
+          "recvWindow=5000",
+          "timestamp=*",
+          "signature=*"
+        ],
+        "credentials": true
+      },
+      "response": {
+        "status": 400,
+        "json": {"code":-2011,"msg":"Unknown order sent."}
+      }
+    }
+  ]
+}

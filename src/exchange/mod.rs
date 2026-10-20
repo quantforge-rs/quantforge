@@ -5,9 +5,11 @@
 //! this module knows which adapter serves which [`crate::ExchangeId`].
 //! Binance Spot is the only exchange today; each lives under its own
 //! namespace ([`binance`]) so a second one can be added without
-//! restructuring the tree.
+//! restructuring the tree. [`conformance`] is the contract every adapter
+//! meets, written down as checks.
 
 pub mod binance;
+pub mod conformance;
 mod credentials;
 mod registry;
 

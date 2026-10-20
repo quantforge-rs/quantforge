@@ -1,0 +1,28 @@
+{
+  "check": "errors.unavailable",
+  "exchange": "binance",
+  "source": "authored",
+  "note": "Binance refusing work it never started, worded as in the Spot API error codes: -1001 and -1008, both of which ask the caller to try again, sent with a 4xx status. On a server error the same codes are outcome_unknown, because Binance documents every 5xx as an unknown execution status.",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/klines"
+      },
+      "response": {
+        "status": 400,
+        "json": {"code":-1001,"msg":"Internal error; unable to process your request. Please try again."}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/account"
+      },
+      "response": {
+        "status": 400,
+        "json": {"code":-1008,"msg":"Server is currently overloaded with other requests. Please try again in a few minutes."}
+      }
+    }
+  ]
+}

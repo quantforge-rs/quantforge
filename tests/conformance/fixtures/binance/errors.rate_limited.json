@@ -1,0 +1,48 @@
+{
+  "check": "errors.rate_limited",
+  "exchange": "binance",
+  "source": "authored",
+  "note": "Binance's rate limits as its Spot API documents them: request weight (429, -1003), an IP ban (418, -1003), the web application firewall (a bare 403 page), and the order rate (429, -1015).",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/klines"
+      },
+      "response": {
+        "status": 429,
+        "json": {"code":-1003,"msg":"Too much request weight used; current limit is 6000 request weight per 1 MINUTE. Please use WebSocket Streams for live updates to avoid polling the API."}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/klines"
+      },
+      "response": {
+        "status": 418,
+        "json": {"code":-1003,"msg":"Way too much request weight used; IP banned until 1792411200000. Please use WebSocket Streams for live updates to avoid bans."}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/account"
+      },
+      "response": {
+        "status": 403,
+        "text": "<html><head><title>403 Forbidden</title></head><body><h1>403 Forbidden</h1></body></html>"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/api/v3/order"
+      },
+      "response": {
+        "status": 429,
+        "json": {"code":-1015,"msg":"Too many new orders; current limit is 50 orders per 10 SECOND."}
+      }
+    }
+  ]
+}
