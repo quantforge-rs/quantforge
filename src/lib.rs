@@ -115,7 +115,7 @@ pub use model::{
 };
 
 /// The seams. An out-of-tree exchange or storage backend implements these
-/// seven traits; the engines are written against them and never against an
+/// six traits; the engines are written against them and never against an
 /// adapter. `ExchangeCapabilities` describes what an exchange supports,
 /// `SignedConnectors` pairs the two connectors that need credentials, and
 /// `ExchangeError` and `StorageError` are the two failure channels they

@@ -70,14 +70,14 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
-- `BinanceCredentials::from_env` and `BinanceCredentials::from_required_env`; the library no longer reads credentials from the process environment, so pass them to `BinanceCredentials::resolve` instead
+- `BinanceCredentials::from_env` and `BinanceCredentials::from_required_env`; the library no longer reads credentials from the process environment, so pass them to `ApiCredentials::resolve` instead
 - `BacktestConfig` no longer implements `Default`; construct its fields explicitly instead of relying on fabricated cash and fee values
 
 ### Fixed
 
 - a backtest whose fill or equity arithmetic leaves the decimal range (for example an entry at a price so small that the quantity cannot be represented) returns the new `EngineError::Overflow` instead of panicking
 
-- `Debug` output of `BinanceCredentials`, and of any `BinanceSpotClient` holding them, no longer prints the API key or secret
+- `Debug` output of `ApiCredentials`, and of any `BinanceSpotClient`, `ConnectorConfig`, or `ExchangeConnectors` holding them, no longer prints the API key or secret
 - `Interval::H8` now formats as `8h` instead of `1m`
 - re-sync any 8h candles written before this fix; they were stored under the `1m` interval key
 - `Symbol` deserialization now validates and normalizes (trim, uppercase, reject empty) exactly like `Symbol::new`, closing the bypass on `state_json`/`raw_json` reloads
