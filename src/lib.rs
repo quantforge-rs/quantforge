@@ -9,10 +9,13 @@
 //!
 //! # Module tree
 //!
-//! Six modules, innermost first: [`model`] names the domain, [`ports`] names
-//! the seams over it, [`exchange`] and [`storage`] are the adapters behind
-//! those seams, [`sdk`] is the boundary a strategy is written against, and
-//! [`engine`] drives all of them.
+//! Seven modules. Six of them layer innermost first: [`model`] names the
+//! domain, [`ports`] names the seams over it, [`exchange`] and [`storage`]
+//! are the adapters behind those seams, [`sdk`] is the boundary a strategy
+//! is written against, and [`engine`] drives all of them. The seventh,
+//! [`protocol`], stands apart: it is the wire format between QuantForge
+//! instances, it uses nothing else in the crate, and nothing uses it yet, so
+//! that it can become a crate of its own.
 //!
 //! - [`model`] — market identity, the candle grid and its validation, the
 //!   columnar [`CandleBatch`], exchange orders and the exchange-agnostic
@@ -34,6 +37,9 @@
 //!   from, and the built-in SMA crossover the CLI runs.
 //! - [`engine`] — the drivers: [`engine::backtest`], [`engine::data_sync`]
 //!   and [`engine::live`].
+//! - [`protocol`] — the versioned wire types of remote backtest jobs,
+//!   candle segments, and the live bar stream; its documentation is the wire
+//!   specification.
 //!
 //! # The command tree it answers to
 //!
@@ -66,7 +72,7 @@
 //! paths are supported too, and are how the tree above is read —
 //! `quantforge::Candle` and `quantforge::model::Candle` are one type.
 //!
-//! A name is public here for one of five reasons:
+//! A name is public here for one of six reasons:
 //!
 //! - the binary or the integration tests name it, and both consume this
 //!   crate externally, so `pub(crate)` is not available for it;
@@ -85,7 +91,10 @@
 //!   [decimal and float64 policy](https://github.com/quantforge-rs/quantforge/blob/main/docs/decimal-float-policy.md);
 //! - it is the conformance suite, published for adapters written outside
 //!   this repository: [`exchange::conformance`] runs against any connector
-//!   factory, not only the registered ones.
+//!   factory, not only the registered ones;
+//! - it is the wire protocol, published for clients and servers written
+//!   outside this repository: [`protocol`] is used through its module, and
+//!   nothing in the crate names it yet.
 //!
 //! Everything else is internal and moves without notice: the Binance wire
 //! DTOs, request signing and HTTP transport behind
@@ -103,6 +112,7 @@ pub mod engine;
 pub mod exchange;
 pub mod model;
 pub mod ports;
+pub mod protocol;
 pub mod sdk;
 pub mod storage;
 

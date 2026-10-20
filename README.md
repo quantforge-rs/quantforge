@@ -30,7 +30,9 @@ recommend trades, and does not promise profitability.
 ## Why keep a single crate?
 
 This repository stays as a single Cargo package in `0.2.0` so versioning,
-publishing, installation, and contributor onboarding remain simple.
+publishing, installation, and contributor onboarding remain simple. The one
+planned exception is `protocol`, which uses nothing else in the crate so
+that it can become the `quantforge-protocol` crate once it is stable.
 
 The public surface is layered as Rust modules, innermost first:
 
@@ -40,6 +42,7 @@ The public surface is layered as Rust modules, innermost first:
 - `storage` - persistence adapters, one namespace per backend; `sqlite` is the only one
 - `sdk` - the strategy trait and its context, indicator math, and built-in strategies
 - `engine` - the drivers: `engine::backtest`, `engine::data_sync`, and `engine::live`
+- `protocol` - stands apart from the layers above: the versioned wire types between QuantForge instances, for remote backtest jobs, candle segments, and the live bar stream; its rustdoc is the wire specification
 
 The `quantforge` binary adds `cli`, a module tree that mirrors the command
 tree: `quantforge monitor cancel-order` lives in
