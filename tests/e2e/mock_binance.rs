@@ -46,7 +46,7 @@
 //!     "BUY", 1_001, "0.01000000", "100.00000000", "10000.00000000", "0.00001000",
 //! ));
 //! let mock = MockBinance::start(scenario);
-//! // point the CLI at mock.base_url() via --binance-base-url
+//! // point the CLI at mock.base_url() via --base-url
 //! ```
 
 use hmac::{Hmac, Mac};
@@ -340,7 +340,7 @@ impl MockBinance {
         }
     }
 
-    /// Base URL for `--binance-base-url` (trailing slash included).
+    /// Base URL for `--base-url` (trailing slash included).
     pub fn base_url(&self) -> String {
         format!("http://{}/", self.addr)
     }

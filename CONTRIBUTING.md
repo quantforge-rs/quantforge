@@ -38,8 +38,8 @@ Examples:
 ## Running the e2e tiers
 
 Plain `cargo test` runs the offline tier (mock exchange, zero network).
-Testnet-tier tests run only when `QF_BINANCE_API_KEY` and
-`QF_BINANCE_API_SECRET` (Binance Spot *testnet* keys) are exported;
+Testnet-tier tests run only when `QF_API_KEY` and `QF_API_SECRET` (Binance
+Spot *testnet* keys) are exported;
 otherwise they skip with a `SKIP (testnet tier)` marker on stderr. Run one
 tier alone with `cargo test --test e2e offline::` or
 `cargo test --test e2e testnet::`.
@@ -55,7 +55,9 @@ from; `monitor` commands such as `src/cli/monitor/orders.rs` get the
 connectors they need (and the store, if they need it) from
 `monitor::dispatch` instead of `AppContext`. Commands reach the exchange only
 through the `ports` connector traits; `tests/exchange_boundary.rs` fails if
-any code outside `src/exchange/` names a concrete adapter.
+any code outside `src/exchange/` names a concrete adapter, or if any code or
+`--help` outside the Binance adapter names Binance beyond the few registry
+and exchange-id lines it lists.
 
 1. Create the file. Start it with a module doc naming the command
    (`` //! `quantforge <group> <name>` — what it does ``), then add:
@@ -65,20 +67,21 @@ any code outside `src/exchange/` names a concrete adapter.
      (`--symbol`, `--interval`), `ConfirmArgs` (`--yes`), `PollArgs`
      (`--poll-secs`, `--max-loops`), and `StrategyArgs` (`--strategy-name`).
      Flattened flags appear in `--help` where their field sits, so field
-     order is help order. The global flags (`--db`, `--binance-base-url`,
-     `--log-level`, and the credentials) are applied once by
+     order is help order. The global flags (`--db`, `--exchange`,
+     `--base-url`, `--log-level`, and the credentials) are applied once by
      `AppContext::init`; a handler uses `ctx.store`, `ctx.base_url`, or
-     `ctx.exchange` (the exchange's connectors), and never declares them
-     again.
+     `ctx.exchange` (the selected exchange's connectors), and never declares
+     them again.
    - a handler, `handle_<group>_<name>`, that parses and validates every
-     argument at its top, before it reads the store or calls Binance, using
-     `parse_market`, `parse_positive_decimal`, and
+     argument at its top, before it reads the store or calls the exchange,
+     using `parse_market` (with `ctx.exchange_id()`, which keys the market to
+     the selected exchange), `parse_positive_decimal`, and
      `parse_non_negative_decimal`. Take money amounts as `String` flags and
      parse them into `Decimal`, never a float. Print results as `key: value`
      lines, and send diagnostics through `tracing`.
 2. Gate what needs gating. A command that sends signed requests gets the
    signed connectors from `ctx.require_signed("<group> <name> requires
-   Binance credentials")`, which fails with a remedy naming both credential
+   exchange credentials")`, which fails with a remedy naming both credential
    mechanisms; `monitor` commands skip this, because `run()` checks
    credentials once for the whole group. A command that changes exchange
    state flattens `ConfirmArgs` and, without `--yes`, prints what it would do
@@ -102,8 +105,8 @@ any code outside `src/exchange/` names a concrete adapter.
    - add the file to the tree in `docs/architecture.md`, with a note that
      starts with `quantforge <group> <name>:`;
    - add tests: argument validation and error text in `tests/cli.rs`, with
-     `--binance-base-url http://127.0.0.1:9/` so a validation-ordering bug
-     fails instead of reaching Binance, and exchange flows in
+     `--base-url http://127.0.0.1:9/` so a validation-ordering bug fails
+     instead of reaching the exchange, and exchange flows in
      `tests/e2e/offline.rs` against the mock server;
    - add a `CHANGELOG.md` entry.
 

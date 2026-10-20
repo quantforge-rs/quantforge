@@ -22,9 +22,11 @@
 //!   [`AccountConnector`] are what an exchange adapter provides, described by
 //!   [`ExchangeCapabilities`]; [`CandleStore`] and [`RunJournalStore`] are
 //!   what a persistence backend provides; plus their error types.
-//! - [`exchange`] — the connector registry ([`exchange::connect`]) and one
-//!   adapter namespace per exchange; [`exchange::binance`] is the only one
-//!   today, and nothing outside this module names it.
+//! - [`exchange`] — the connector registry, which names each exchange
+//!   ([`exchange::lookup`]) and builds its connectors
+//!   ([`exchange::connect`]), and one adapter namespace per exchange;
+//!   [`exchange::binance`] is the only one today, and nothing outside this
+//!   module names it.
 //! - [`storage`] — persistence adapters, one namespace per backend;
 //!   [`storage::sqlite`] is the only one today.
 //! - [`sdk`] — the [`Strategy`] contract, the indicator math it is built
@@ -47,8 +49,9 @@
 //! `trade close` and the six `monitor` subcommands have no engine behind
 //! them: they drive the connectors and [`RunJournalStore`] directly, so that
 //! orchestration lives in the binary. The global `--db` opens a
-//! [`SqliteStore`], and `--binance-base-url` with the credentials builds the
-//! exchange's connectors through [`exchange::connect`]; `--log-level` has no
+//! [`SqliteStore`]; `--exchange` selects an exchange by its registry name
+//! ([`exchange::lookup`]), and `--base-url` with the credentials builds its
+//! connectors through [`exchange::connect`]; `--log-level` has no
 //! counterpart here, because this crate emits `tracing` events and the binary
 //! installs the subscriber.
 //!
@@ -127,8 +130,10 @@ pub use ports::{
 };
 
 /// What building an exchange's connectors takes and returns. The registry
-/// functions themselves, `exchange::connect` and `exchange::factory`, are
-/// called through their module; the adapters stay behind it.
+/// itself — `exchange::lookup`, `exchange::name`, `exchange::registered`,
+/// `exchange::default_base_url`, `exchange::DEFAULT_EXCHANGE`,
+/// `exchange::connect`, and `exchange::factory` — is used through its
+/// module; the adapters stay behind it.
 pub use exchange::{ApiCredentials, ConnectorConfig, ExchangeConnectors};
 
 /// The persistence adapter, named for the same reason. The schema and the

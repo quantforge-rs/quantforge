@@ -14,7 +14,10 @@ use crate::mock_binance::{
 };
 use assert_cmd::Command;
 use predicates::prelude::*;
-use quantforge::{RunJournalStore, RunStatus};
+use quantforge::{
+    BotRunState, CandleStore, ExchangeId, ExecutionMode, Interval, MarketId, PositionState,
+    RunJournalStore, RunStatus, Symbol,
+};
 use rust_decimal::Decimal;
 use std::str::FromStr;
 
@@ -578,13 +581,11 @@ fn isolated_commands_do_not_inherit_shell_credentials() {
     // instead of reaching a real exchange.
     let bed = TestBed::new();
     let mut cmd = cli_cmd(&bed, "error");
-    cmd.arg("--binance-base-url")
-        .arg("http://127.0.0.1:9/")
-        .args([
-            "trade", "run", "--symbol", "BTCUSDT", "--mode", "live", "--yes",
-        ]);
+    cmd.arg("--base-url").arg("http://127.0.0.1:9/").args([
+        "trade", "run", "--symbol", "BTCUSDT", "--mode", "live", "--yes",
+    ]);
     cmd.assert().failure().stderr(predicate::str::contains(
-        "trade run --mode live requires Binance credentials",
+        "trade run --mode live requires exchange credentials",
     ));
 }
 
@@ -608,12 +609,7 @@ const SENTINELS: [(&str, &str); 4] = [
 ];
 
 const MONITOR_STATUS: [&str; 4] = ["monitor", "status", "--symbol", "BTCUSDT"];
-const FLAG_CREDENTIALS: [&str; 4] = [
-    "--binance-api-key",
-    KEY_FROM_FLAG,
-    "--binance-api-secret",
-    SECRET_FROM_FLAG,
-];
+const FLAG_CREDENTIALS: [&str; 4] = ["--api-key", KEY_FROM_FLAG, "--api-secret", SECRET_FROM_FLAG];
 
 #[test]
 fn monitor_status_authenticates_with_credential_flags_and_an_empty_environment() {
@@ -645,8 +641,8 @@ fn credential_flags_override_env_vars_on_either_side_of_the_subcommand() {
         let bed = TestBed::new();
 
         let mut cmd = mock_cmd(&bed, &mock, "error");
-        cmd.env("QF_BINANCE_API_KEY", KEY_FROM_ENV)
-            .env("QF_BINANCE_API_SECRET", SECRET_FROM_ENV);
+        cmd.env("QF_API_KEY", KEY_FROM_ENV)
+            .env("QF_API_SECRET", SECRET_FROM_ENV);
         if flags_first {
             cmd.args(FLAG_CREDENTIALS).args(MONITOR_STATUS);
         } else {
@@ -670,12 +666,12 @@ fn a_credential_flag_overrides_only_its_own_env_var() {
     let cases = [
         (
             "key flag over both env vars",
-            ["--binance-api-key", KEY_FROM_FLAG],
+            ["--api-key", KEY_FROM_FLAG],
             (KEY_FROM_FLAG, SECRET_FROM_ENV),
         ),
         (
             "secret flag over both env vars",
-            ["--binance-api-secret", SECRET_FROM_FLAG],
+            ["--api-secret", SECRET_FROM_FLAG],
             (KEY_FROM_ENV, SECRET_FROM_FLAG),
         ),
     ];
@@ -684,8 +680,8 @@ fn a_credential_flag_overrides_only_its_own_env_var() {
         let bed = TestBed::new();
 
         let mut cmd = mock_cmd(&bed, &mock, "error");
-        cmd.env("QF_BINANCE_API_KEY", KEY_FROM_ENV)
-            .env("QF_BINANCE_API_SECRET", SECRET_FROM_ENV)
+        cmd.env("QF_API_KEY", KEY_FROM_ENV)
+            .env("QF_API_SECRET", SECRET_FROM_ENV)
             .args(MONITOR_STATUS)
             .args(flag);
         cmd.assert().success();
@@ -699,17 +695,17 @@ fn missing_credentials_name_both_the_flags_and_the_env_vars() {
     let cases: [(&[&str], &str); 3] = [
         (
             &["monitor", "status", "--symbol", "BTCUSDT"],
-            "monitor commands require Binance credentials",
+            "monitor commands require exchange credentials",
         ),
         (
             &["trade", "close", "--symbol", "BTCUSDT", "--yes"],
-            "trade close requires Binance credentials",
+            "trade close requires exchange credentials",
         ),
         (
             &[
                 "trade", "run", "--symbol", "BTCUSDT", "--mode", "live", "--yes",
             ],
-            "trade run --mode live requires Binance credentials",
+            "trade run --mode live requires exchange credentials",
         ),
     ];
     for (args, subject) in cases {
@@ -717,14 +713,12 @@ fn missing_credentials_name_both_the_flags_and_the_env_vars() {
         // connection instead of reaching a real exchange.
         let bed = TestBed::new();
         let mut cmd = cli_cmd(&bed, "error");
-        cmd.arg("--binance-base-url")
-            .arg("http://127.0.0.1:9/")
-            .args(args);
+        cmd.arg("--base-url").arg("http://127.0.0.1:9/").args(args);
         cmd.assert()
             .failure()
             .stderr(predicate::str::contains(format!(
-                "{subject}: pass --binance-api-key and --binance-api-secret, or set \
-                 QF_BINANCE_API_KEY and QF_BINANCE_API_SECRET"
+                "{subject}: pass --api-key and --api-secret, or set \
+                 QF_API_KEY and QF_API_SECRET"
             )));
     }
 }
@@ -736,39 +730,39 @@ fn half_configured_or_blank_credentials_count_as_missing() {
         env: &'static [(&'static str, &'static str)],
         flags: &'static [&'static str],
     }
-    // The last case is a failed `--binance-api-key "$(cat missing-file)"`:
+    // The last case is a failed `--api-key "$(cat missing-file)"`:
     // the empty flag must fail closed instead of falling back to the valid
     // env key it overrides.
     let cases = [
         Case {
             name: "key flag only",
             env: &[],
-            flags: &["--binance-api-key", KEY_FROM_FLAG],
+            flags: &["--api-key", KEY_FROM_FLAG],
         },
         Case {
             name: "blank env key",
-            env: &[("QF_BINANCE_API_KEY", "")],
-            flags: &["--binance-api-secret", SECRET_FROM_FLAG],
+            env: &[("QF_API_KEY", "")],
+            flags: &["--api-secret", SECRET_FROM_FLAG],
         },
         Case {
             name: "blank key flag over a valid env pair",
             env: &[
-                ("QF_BINANCE_API_KEY", KEY_FROM_ENV),
-                ("QF_BINANCE_API_SECRET", SECRET_FROM_ENV),
+                ("QF_API_KEY", KEY_FROM_ENV),
+                ("QF_API_SECRET", SECRET_FROM_ENV),
             ],
-            flags: &["--binance-api-key", ""],
+            flags: &["--api-key", ""],
         },
     ];
     for case in cases {
         let bed = TestBed::new();
         let mut cmd = cli_cmd(&bed, "error");
         cmd.envs(case.env.iter().copied())
-            .arg("--binance-base-url")
+            .arg("--base-url")
             .arg("http://127.0.0.1:9/")
             .args(MONITOR_STATUS)
             .args(case.flags);
         let assert = cmd.assert().failure().stderr(predicate::str::contains(
-            "monitor commands require Binance credentials",
+            "monitor commands require exchange credentials",
         ));
 
         let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
@@ -786,13 +780,13 @@ fn half_configured_or_blank_credentials_count_as_missing() {
 fn help_never_prints_credential_env_values() {
     for args in [&["--help"][..], &["monitor", "status", "--help"][..]] {
         let mut cmd = isolated_cmd();
-        cmd.env("QF_BINANCE_API_KEY", KEY_FROM_ENV)
-            .env("QF_BINANCE_API_SECRET", SECRET_FROM_ENV)
+        cmd.env("QF_API_KEY", KEY_FROM_ENV)
+            .env("QF_API_SECRET", SECRET_FROM_ENV)
             .args(args);
         cmd.assert()
             .success()
-            .stdout(predicate::str::contains("[env: QF_BINANCE_API_KEY]"))
-            .stdout(predicate::str::contains("[env: QF_BINANCE_API_SECRET]"))
+            .stdout(predicate::str::contains("[env: QF_API_KEY]"))
+            .stdout(predicate::str::contains("[env: QF_API_SECRET]"))
             .stdout(predicate::str::contains(KEY_FROM_ENV).not())
             .stdout(predicate::str::contains(SECRET_FROM_ENV).not());
     }
@@ -806,8 +800,8 @@ fn credentials_never_appear_in_trace_output() {
     // The flags carry the values in use and the env vars a shadowed pair;
     // neither may surface in any log line or error.
     let mut cmd = mock_cmd(&bed, &mock, "trace");
-    cmd.env("QF_BINANCE_API_KEY", KEY_FROM_ENV)
-        .env("QF_BINANCE_API_SECRET", SECRET_FROM_ENV)
+    cmd.env("QF_API_KEY", KEY_FROM_ENV)
+        .env("QF_API_SECRET", SECRET_FROM_ENV)
         .args(MONITOR_STATUS)
         .args(FLAG_CREDENTIALS);
     let assert = cmd.assert().success();
@@ -831,5 +825,287 @@ fn credentials_never_appear_in_trace_output() {
             !printed.contains(value),
             "the {label} appeared in the output"
         );
+    }
+}
+
+// The released variable names are no longer read: a shell that still
+// exports them gets the missing-credentials error, which names the new
+// ones, before any request.
+#[test]
+fn the_released_credential_variable_names_are_no_longer_read() {
+    let mock = MockBinance::start(monitor_status_scenario());
+    let bed = TestBed::new();
+
+    let mut cmd = mock_cmd(&bed, &mock, "error");
+    cmd.env("QF_BINANCE_API_KEY", KEY_FROM_ENV)
+        .env("QF_BINANCE_API_SECRET", SECRET_FROM_ENV)
+        .args(MONITOR_STATUS);
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "monitor commands require exchange credentials: pass --api-key and --api-secret, \
+         or set QF_API_KEY and QF_API_SECRET",
+    ));
+    assert!(
+        mock.requests().is_empty(),
+        "a request went out without credentials"
+    );
+}
+
+// `trade close --run-id` sells this command's symbol, so a run recorded for
+// another market is refused before any request. The interval alone may
+// differ: it does not change what is sold.
+
+const CLOSE_RUN_ID: &str = "e2e-close-guard";
+
+/// A live run on BTCUSDT 1m holding 0.01 BTC bought at 10_000, journaled
+/// the way `trade run` leaves an open position.
+fn seed_open_live_run(bed: &TestBed) -> BotRunState {
+    let store = bed.store();
+    CandleStore::init(&store).expect("init store");
+    let state = BotRunState {
+        run_id: CLOSE_RUN_ID.to_string(),
+        market: MarketId::new(
+            ExchangeId::BinanceSpot,
+            Symbol::new("BTCUSDT").expect("symbol"),
+            Interval::M1,
+        ),
+        strategy_name: "sma_cross".to_string(),
+        strategy_config: serde_json::json!({"kind": "sma_cross", "fast": 20, "slow": 50}),
+        execution_mode: ExecutionMode::Live,
+        status: RunStatus::Running,
+        last_processed_open_time_ms: Some(1_704_067_200_000),
+        started_at_ms: 1_704_067_200_000,
+        updated_at_ms: 1_704_067_260_000,
+        stopped_at_ms: None,
+        last_error: None,
+        position: PositionState {
+            qty: Decimal::from_str("0.01").expect("decimal"),
+            entry_price: Some(Decimal::from(10_000)),
+            entry_time_ms: Some(1_704_067_200_000),
+            entry_order_id: Some(1_001),
+        },
+    };
+    store.save_run_state(&state).expect("save run");
+    state
+}
+
+#[test]
+fn trade_close_refuses_a_run_recorded_for_another_symbol_before_any_request() {
+    let mock = MockBinance::start(Scenario::new());
+    let bed = TestBed::new();
+    let seeded = seed_open_live_run(&bed);
+
+    let mut cmd = offline_cmd(&bed, &mock);
+    cmd.args([
+        "trade",
+        "close",
+        "--symbol",
+        "ETHUSDT",
+        "--run-id",
+        CLOSE_RUN_ID,
+        "--yes",
+    ]);
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "run e2e-close-guard was recorded for market binance_spot BTCUSDT, but this \
+         invocation targets binance_spot ETHUSDT; refusing to close it",
+    ));
+
+    assert!(
+        mock.requests().is_empty(),
+        "the refused close still sent a request"
+    );
+    let state = bed
+        .store()
+        .load_run_state(CLOSE_RUN_ID)
+        .expect("load run")
+        .expect("run state");
+    assert_eq!(state, seeded, "the refused close changed the run");
+}
+
+// The positive control: the guard compares the normalized symbol and
+// ignores the interval, so the close goes on to its two lookups and, without
+// --yes, previews the sell.
+#[test]
+fn trade_close_by_run_id_accepts_the_runs_symbol_in_any_case_at_any_interval() {
+    let mut scenario = Scenario::new();
+    scenario.exchange_info(exchange_info_btcusdt());
+    scenario.account(account_response("BTC", "0.01000000"));
+    let mock = MockBinance::start(scenario);
+    let bed = TestBed::new();
+    seed_open_live_run(&bed);
+
+    let mut cmd = offline_cmd(&bed, &mock);
+    cmd.args([
+        "trade",
+        "close",
+        "--symbol",
+        "btcusdt",
+        "--interval",
+        "5m",
+        "--run-id",
+        CLOSE_RUN_ID,
+    ]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("run_id: e2e-close-guard\n"))
+        .stdout(predicate::str::contains(
+            "No order sent. Re-run with --yes to execute the market sell.",
+        ));
+
+    let paths: Vec<String> = mock
+        .requests()
+        .into_iter()
+        .map(|request| request.path)
+        .collect();
+    assert_eq!(paths, ["/api/v3/exchangeInfo", "/api/v3/account"]);
+}
+
+// `--exchange binance` and `QF_EXCHANGE=binance` spell out the default
+// exchange, so every step must print and request exactly what the default
+// does. Each variant gets a fresh bed and a fresh mock with the same script.
+#[test]
+fn naming_the_default_exchange_changes_no_output_and_no_request() {
+    // Five closed 1m bars from 2024-01-01T00:00:00Z: fixed and long past,
+    // so every variant syncs, validates, and backtests the same candles.
+    fn scenario() -> Scenario {
+        let mut scenario = Scenario::new();
+        let closes = [
+            "100.00000000",
+            "101.00000000",
+            "102.00000000",
+            "101.00000000",
+            "100.00000000",
+        ];
+        scenario.klines_page(
+            (0i64..)
+                .zip(closes)
+                .map(|(index, close)| kline_row(1_704_067_200_000 + index * 60_000, close))
+                .collect(),
+        );
+        scenario.open_orders(serde_json::json!([]));
+        scenario
+    }
+    const STEPS: [&[&str]; 4] = [
+        &[
+            "data",
+            "sync",
+            "--symbol",
+            "BTCUSDT",
+            "--interval",
+            "1m",
+            "--start",
+            "2024-01-01T00:00:00Z",
+            "--end",
+            "2024-01-01T00:05:00Z",
+        ],
+        &[
+            "data",
+            "validate",
+            "--symbol",
+            "BTCUSDT",
+            "--interval",
+            "1m",
+        ],
+        &[
+            "backtest",
+            "--symbol",
+            "BTCUSDT",
+            "--interval",
+            "1m",
+            "--fast",
+            "2",
+            "--slow",
+            "3",
+        ],
+        &["monitor", "orders", "--symbol", "BTCUSDT"],
+    ];
+    // The live preview prints its endpoint, so it runs without the mock and
+    // shows the exchange's default base URL.
+    const PREVIEW: [&str; 6] = ["trade", "run", "--symbol", "BTCUSDT", "--mode", "live"];
+
+    type Select = fn(&mut Command);
+    let variants: [(&str, Select); 3] = [
+        ("the default", |_| {}),
+        ("--exchange binance", |cmd| {
+            cmd.args(["--exchange", "binance"]);
+        }),
+        ("QF_EXCHANGE=binance", |cmd| {
+            cmd.env("QF_EXCHANGE", "binance");
+        }),
+    ];
+
+    let mut runs = Vec::new();
+    for (variant, select) in variants {
+        let mock = MockBinance::start(scenario());
+        let bed = TestBed::new();
+        let mut outputs = Vec::new();
+        for step in STEPS {
+            let mut cmd = offline_cmd(&bed, &mock);
+            select(&mut cmd);
+            outputs.push(cmd.args(step).output().expect("run step"));
+        }
+        let mut cmd = cli_cmd(&bed, "error");
+        select(&mut cmd);
+        outputs.push(cmd.args(PREVIEW).output().expect("run preview"));
+
+        // Signed requests differ only in their clock and the signature over it.
+        let requests: Vec<_> = mock
+            .requests()
+            .into_iter()
+            .map(|request| {
+                let query: Vec<String> = request
+                    .query
+                    .split('&')
+                    .filter(|pair| {
+                        !pair.starts_with("timestamp=") && !pair.starts_with("signature=")
+                    })
+                    .map(str::to_string)
+                    .collect();
+                (request.method, request.path, query, request.api_key)
+            })
+            .collect();
+        runs.push((variant, outputs, requests));
+    }
+
+    let (_, expected_outputs, expected_requests) = &runs[0];
+    for (step, output) in expected_outputs.iter().enumerate() {
+        assert!(
+            output.status.success(),
+            "step {step} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    assert!(
+        String::from_utf8_lossy(&expected_outputs[STEPS.len()].stdout)
+            .contains("with REAL orders via https://api.binance.com/ (PRODUCTION)"),
+        "the preview did not show the default endpoint"
+    );
+    let paths: Vec<&str> = expected_requests
+        .iter()
+        .map(|(_, path, _, _)| path.as_str())
+        .collect();
+    assert!(
+        paths.contains(&"/api/v3/klines") && paths.contains(&"/api/v3/openOrders"),
+        "the steps did not reach the exchange: {paths:?}"
+    );
+
+    for (variant, outputs, requests) in &runs[1..] {
+        for (step, (output, expected)) in outputs.iter().zip(expected_outputs).enumerate() {
+            assert_eq!(
+                output.status.code(),
+                expected.status.code(),
+                "{variant}, step {step}: exit status"
+            );
+            assert_eq!(
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&expected.stdout),
+                "{variant}, step {step}: stdout"
+            );
+            assert_eq!(
+                String::from_utf8_lossy(&output.stderr),
+                String::from_utf8_lossy(&expected.stderr),
+                "{variant}, step {step}: stderr"
+            );
+        }
+        assert_eq!(requests, expected_requests, "{variant}: requests");
     }
 }

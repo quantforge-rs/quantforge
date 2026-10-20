@@ -1,4 +1,4 @@
-//! `quantforge monitor` — observe Binance state and manage orders
+//! `quantforge monitor` — observe exchange state and manage orders
 //! manually when needed. Every subcommand requires credentials, gated by
 //! the caller before dispatch.
 
@@ -31,7 +31,7 @@ pub(crate) enum MonitorCommand {
     /// List current open orders on the symbol.
     Orders(MonitorOrdersArgs),
 
-    /// List recent Binance trades on the symbol.
+    /// List the account's recent trades on the symbol.
     Trades(MonitorTradesArgs),
 
     /// Cancel a specific order manually.

@@ -19,7 +19,7 @@ pub(crate) struct DataValidateArgs {
 
 pub(crate) fn handle_data_validate(ctx: &AppContext, args: DataValidateArgs) -> Result<()> {
     let store = &ctx.store;
-    let market = parse_market(args.market.symbol, args.market.interval)?;
+    let market = parse_market(ctx.exchange_id(), args.market.symbol, args.market.interval)?;
     let candles = store.load_candles(
         &market,
         CandleQuery {

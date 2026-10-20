@@ -8,7 +8,7 @@ use crate::cli::common::{
 use crate::cli::context::{self, AppContext, display_url};
 use anyhow::Result;
 use clap::Args;
-use quantforge::{LiveTradeConfig, LiveTradeEngine, ms_to_rfc3339};
+use quantforge::{LiveTradeConfig, LiveTradeEngine, exchange, ms_to_rfc3339};
 use std::time::Duration;
 use tracing::warn;
 
@@ -46,7 +46,7 @@ pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Re
     let store = &ctx.store;
     let market_data = ctx.exchange.market_data.as_ref();
     let base_url = &ctx.base_url;
-    let market = parse_market(args.market.symbol, args.market.interval)?;
+    let market = parse_market(ctx.exchange_id(), args.market.symbol, args.market.interval)?;
     let quote_order_qty = parse_positive_decimal("--quote-order-qty", &args.quote_order_qty)?;
 
     if matches!(args.mode, CliExecutionMode::Live) {
@@ -87,8 +87,9 @@ pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Re
         }
         if market_data.is_production() {
             warn!(
+                exchange = exchange::name(market.exchange),
                 base_url = %display_url(base_url),
-                "live trading against PRODUCTION Binance; real funds at risk"
+                "live trading against a PRODUCTION endpoint; real funds at risk"
             );
         }
     }
@@ -98,7 +99,7 @@ pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Re
         store,
         store,
         if matches!(args.mode, CliExecutionMode::Live) {
-            Some(ctx.require_signed("trade run --mode live requires Binance credentials")?)
+            Some(ctx.require_signed("trade run --mode live requires exchange credentials")?)
         } else {
             None
         },

@@ -1,6 +1,6 @@
 # Configuration
 
-Every QuantForge setting is a command-line flag. The five global settings also
+Every QuantForge setting is a command-line flag. The six global settings also
 read a `QF_*` environment variable as a fallback; per-command options are flags
 only. QuantForge reads no other environment variable itself — the few its
 dependencies honor are listed at the end.
@@ -15,12 +15,18 @@ For each global setting, the first source present wins:
 2. its environment variable;
 3. the default.
 
+An exported variable is checked even when its flag is given: a value the
+setting rejects, such as `QF_EXCHANGE=nosuch`, fails the command until it is
+fixed or unset, whatever the flag says.
+
 A variable that is exported but empty is still set, so it never falls back to
 the default:
 
 - `QF_DB=` is a usage error (exit status 2, reported against `--db`);
-- `QF_BINANCE_BASE_URL=` fails with `failed to parse --binance-base-url`, so a
-  missing testnet URL can never quietly become production;
+- `QF_EXCHANGE=` is a usage error (exit status 2, reported against
+  `--exchange`);
+- `QF_BASE_URL=` fails with `failed to parse --base-url` before the database
+  is created, so a missing testnet URL can never quietly become production;
 - `QF_LOG=` is an empty filter, which turns log output off, warnings included;
 - an empty or whitespace-only API key or secret counts as missing, so commands
   that need credentials fail with the missing-credentials error.
@@ -29,7 +35,7 @@ the default:
 
 <!--
 The `configuration_doc_matches_every_flag_env_var_default_and_scope` unit test
-in src/cli/mod.rs compares this table with the clap definitions. One flag per
+in src/cli/tests.rs compares this table with the clap definitions. One flag per
 row, and no pipe inside a cell:
   Flag     a backticked `--name`, optionally followed by a <placeholder>
   Env var  a backticked variable name, or —
@@ -42,17 +48,18 @@ Explanations belong in the Setting cell.
 | Setting | Flag | Env var | Default | Scope |
 | --- | --- | --- | --- | --- |
 | SQLite database path, relative to the working directory; a missing parent directory is created | `--db <path>` | `QF_DB` | `data/market.sqlite` | global |
-| Binance API base URL; `https://testnet.binance.vision/` is the Spot testnet | `--binance-base-url <url>` | `QF_BINANCE_BASE_URL` | `https://api.binance.com/` | global |
+| Exchange to connect to, by its registry name; `binance` (Binance Spot) is the only one, and output names it by its storage name, `binance_spot` | `--exchange <name>` | `QF_EXCHANGE` | `binance` | global |
+| Exchange API base URL; omitted, the exchange's production endpoint — `https://api.binance.com/` for `binance`, whose Spot testnet is `https://testnet.binance.vision/` | `--base-url <url>` | `QF_BASE_URL` | none | global |
 | Log filter: `trace`, `debug`, `info`, `warn`, `error`, or a full tracing filter expression; log lines go to stdout | `--log-level <filter>` | `QF_LOG` | `info` | global |
-| Binance API key for signed endpoints (`monitor`, `trade close`, `trade run --mode live`); set both credentials or neither, and prefer the variable, since command-line values can land in shell history and process listings | `--binance-api-key <key>` | `QF_BINANCE_API_KEY` | none | global |
-| Binance API secret paired with the key; same rules | `--binance-api-secret <secret>` | `QF_BINANCE_API_SECRET` | none | global |
+| API key for the exchange's signed endpoints (`monitor`, `trade close`, `trade run --mode live`); set both credentials or neither, and prefer the variable, since command-line values can land in shell history and process listings | `--api-key <key>` | `QF_API_KEY` | none | global |
+| API secret paired with the key; same rules | `--api-secret <secret>` | `QF_API_SECRET` | none | global |
 | Trading pair such as `BTCUSDT`, trimmed and uppercased | `--symbol <symbol>` | — | required | every command |
 | Candle interval: `1s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `12h`, `1d`, `3d`, or `1w`; with `--strategy-name` it also selects the run that `trade close`, `monitor status`, and `monitor watch` act on | `--interval <interval>` | — | `1m` | `data sync`, `data validate`, `backtest`, `trade run`, `trade close`, `monitor status`, `monitor watch` |
 | RFC3339 time to start syncing from; omitted, syncing starts at the current time with no backfill | `--start <rfc3339>` | — | none | `data sync` |
 | RFC3339 time to stop syncing at; omitted, syncing runs until Ctrl-C | `--end <rfc3339>` | — | none | `data sync` |
 | RFC3339 start of the window over stored candles; omitted, from the first one | `--start <rfc3339>` | — | none | `data validate`, `backtest` |
 | RFC3339 end of the window over stored candles; omitted, through the last one | `--end <rfc3339>` | — | none | `data validate`, `backtest` |
-| Candles requested per Binance klines call | `--limit <count>` | — | `1000` | `data sync`, `trade run` |
+| Candles requested per klines call, capped at the exchange's page size | `--limit <count>` | — | `1000` | `data sync`, `trade run` |
 | With `--end`, keep polling until the end time is reached instead of stopping after one pass | `--follow` | — | `false` | `data sync` |
 | Seconds to wait between polls; at least 1 | `--poll-secs <seconds>` | — | `5` | `data sync`, `trade run`, `monitor watch` |
 | Stop after this many loop iterations; omitted, no limit | `--max-loops <count>` | — | none | `data sync`, `trade run`, `monitor watch` |
@@ -68,10 +75,27 @@ Explanations belong in the Setting cell.
 | Run to resume; omitted, a new run starts with a flat position | `--run-id <id>` | — | none | `trade run` |
 | Run to close; omitted, the latest run for the market and `--strategy-name` | `--run-id <id>` | — | none | `trade close` |
 | Strategy whose journaled runs are read | `--strategy-name <name>` | — | `sma_cross` | `trade close`, `monitor status`, `monitor watch` |
-| Recent Binance trades shown | `--recent-trades <count>` | — | `10` | `monitor status`, `monitor watch` |
-| Recent Binance trades listed | `--limit <count>` | — | `20` | `monitor trades` |
+| Recent account trades shown | `--recent-trades <count>` | — | `10` | `monitor status`, `monitor watch` |
+| Recent account trades listed | `--limit <count>` | — | `20` | `monitor trades` |
 | Exchange order id of the order to cancel; pass it or `--client-order-id` | `--order-id <id>` | — | none | `monitor cancel-order` |
 | Client order id of the order to cancel; pass it or `--order-id` | `--client-order-id <id>` | — | none | `monitor cancel-order` |
+
+## Renamed settings
+
+The exchange settings lost their Binance prefix when `--exchange` arrived:
+
+| Old | New |
+| --- | --- |
+| `--binance-base-url`, `QF_BINANCE_BASE_URL` | `--base-url`, `QF_BASE_URL` |
+| `--binance-api-key`, `QF_BINANCE_API_KEY` | `--api-key`, `QF_API_KEY` |
+| `--binance-api-secret`, `QF_BINANCE_API_SECRET` | `--api-secret`, `QF_API_SECRET` |
+
+The old base-URL flag and variable are still recognized, but only to be
+refused (exit status 2, naming the new name), because a testnet URL exported
+under the old name must not quietly leave the production default in charge.
+The old credential flags are unknown arguments, and the old credential
+variables are no longer read, so a command that needs credentials fails with
+the missing-credentials error, which names the new ones.
 
 ## Why per-command options have no environment variable
 
@@ -89,7 +113,7 @@ with no QuantForge-specific meaning, so they have no flags:
 | --- | --- | --- |
 | `NO_COLOR` | tracing-subscriber, clap | set and non-empty, removes ANSI colors; log lines carry them even when stdout is not a terminal |
 | `CLICOLOR`, `CLICOLOR_FORCE`, `TERM`, `CI` | clap | color choice for help and usage errors |
-| `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY`, and their lowercase forms | reqwest | route Binance requests through a proxy; all of them are ignored when `REQUEST_METHOD` is set, as under CGI |
+| `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY`, and their lowercase forms | reqwest | route exchange requests through a proxy; all of them are ignored when `REQUEST_METHOD` is set, as under CGI |
 | `RUST_BACKTRACE`, `RUST_LIB_BACKTRACE` | Rust standard library, anyhow | add backtraces to panics and error reports |
 | `TOKIO_WORKER_THREADS` | tokio | async runtime worker threads; a value that is not a positive integer makes QuantForge panic at startup |
 | `SQLITE_TMPDIR`, `TMPDIR` | SQLite | directory for SQLite's temporary files |
