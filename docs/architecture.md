@@ -78,7 +78,7 @@ src/
 │   │   └── status.rs           JobStatus, JobState, and the references to a job's results
 │   └── stream/                 bars as they close, over a WebSocket
 │       ├── mod.rs              the session flow, ClientFrame and ServerFrame, Ping and Pong
-│       ├── handshake.rs        Hello, Welcome, AuthToken, SessionId, SessionLimits
+│       ├── handshake.rs        Hello and HelloVersions, Welcome, AuthToken, SessionId, SessionLimits
 │       └── bars.rs             Subscribe, BarClosed, Bar, GapNotice, GapReason
 ├── model/                      domain types every layer speaks
 │   ├── mod.rs                  ModelError and the re-exports

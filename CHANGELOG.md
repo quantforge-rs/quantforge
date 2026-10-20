@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - `protocol` defines the wire format between QuantForge instances as serde types: a backtest job's submission (a Python bundle named by its content hash, the candles it runs on, and the backtest settings), its status and result references, the error envelope, candle segment index entries, and the live stream's frames; its rustdoc is the wire specification, and every JSON example in it is a doctest
-- the protocol is versioned: `protocol::PROTO_VERSION` and `protocol::MIN_SUPPORTED` bound the versions a build speaks, an HTTP request names its version in its path (`/v1/…`), and `VersionRange::negotiate` picks the newest version two peers share or says which side is too old
+- the protocol is versioned: `protocol::PROTO_VERSION` and `protocol::MIN_SUPPORTED` bound the versions a build speaks, an HTTP request names its version in its path (`/v1/…`), and `VersionRange::negotiate` picks the newest version two peers share or says which side is too old; `stream::HelloVersions` reads the versions out of a hello of any version, so that a server can refuse a client whose version it does not speak with its own range
 - protocol decimals travel as JSON strings and are read exactly: a JSON number, an exponent, or a value a decimal cannot hold without rounding is refused
 - a frame type, error code, gap reason, or job state a receiver does not know reads as `Unrecognized` instead of failing, so that a version can grow without breaking older peers
 - `tests/protocol_boundary.rs` compiles `src/protocol/` on its own and scans its sources, so that the module uses nothing else from the crate and depends only on `serde`, `rust_decimal`, and `thiserror`

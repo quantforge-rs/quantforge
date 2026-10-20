@@ -4,10 +4,11 @@
 //!
 //! 1. The client opens the WebSocket, at a URL that names no version, and
 //!    sends a [`Hello`] with the versions it speaks and its token.
-//! 2. The server answers with a [`Welcome`] naming the version the session
-//!    runs at. Or it refuses the session with an `error` frame, such as
-//!    `unsupported_version` with the versions it speaks, or `unauthorized`,
-//!    and closes the connection.
+//! 2. The server reads the hello's versions as [`HelloVersions`], which a
+//!    hello of any version decodes to, and answers with a [`Welcome`] naming
+//!    the version the session runs at. Or it refuses the session with an
+//!    `error` frame, such as `unsupported_version` with the versions it
+//!    speaks, or `unauthorized`, and closes the connection.
 //! 3. The client sends a [`Subscribe`] for each market it wants. The server
 //!    refuses one it cannot serve with an `error` frame, and the session goes
 //!    on.
@@ -35,7 +36,7 @@ use serde::{Deserialize, Serialize};
 use super::ErrorBody;
 
 pub use bars::{Bar, BarClosed, GapNotice, GapReason, Subscribe};
-pub use handshake::{AuthToken, Hello, SessionId, SessionLimits, Welcome};
+pub use handshake::{AuthToken, Hello, HelloVersions, SessionId, SessionLimits, Welcome};
 
 /// A frame the client sends.
 ///

@@ -8,7 +8,8 @@ use super::super::{ProtoVersion, ProtocolError, VersionRange, opaque_id};
 
 /// The client's first frame: the versions it speaks, its token, and the
 /// optional features it supports. Its `type`, `proto_version`, and
-/// `min_supported` are the same in every version.
+/// `min_supported` are the same in every version, and [`HelloVersions`]
+/// reads just those.
 ///
 /// ```
 /// use quantforge::protocol::ProtoVersion;
@@ -41,6 +42,48 @@ impl Hello {
     /// The versions the client speaks, to
     /// [`negotiate`](VersionRange::negotiate) with.
     pub fn versions(&self) -> VersionRange {
+        VersionRange {
+            min_supported: self.min_supported,
+            proto_version: self.proto_version,
+        }
+    }
+}
+
+/// The part of a [`Hello`] that is the same in every version: the versions
+/// the client speaks, and nothing else. A server decodes the first frame as
+/// this before anything else. A hello of any version decodes to it, even one
+/// whose other fields this build does not know, so a server can refuse a
+/// version it does not speak with `unsupported_version` and its own range.
+/// Only once the versions are agreed does it decode the frame as a
+/// [`ClientFrame`](super::ClientFrame).
+///
+/// ```
+/// use quantforge::protocol::stream::{Hello, HelloVersions};
+/// use quantforge::protocol::{ProtocolError, VersionRange};
+///
+/// // A hello from a later version, whose token this build cannot read.
+/// let json = r#"{"type":"hello","proto_version":9,"min_supported":7,"token":{"scheme":"later"}}"#;
+/// assert!(serde_json::from_str::<Hello>(json).is_err());
+///
+/// let hello: HelloVersions = serde_json::from_str(json)?;
+/// assert!(matches!(
+///     VersionRange::SUPPORTED.negotiate(hello.versions()),
+///     Err(ProtocolError::PeerTooNew { peer_oldest: 7, .. })
+/// ));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+pub struct HelloVersions {
+    /// The newest version the client speaks.
+    pub proto_version: ProtoVersion,
+    /// The oldest version the client speaks.
+    pub min_supported: ProtoVersion,
+}
+
+impl HelloVersions {
+    /// The versions the client speaks, to
+    /// [`negotiate`](VersionRange::negotiate) with.
+    pub fn versions(self) -> VersionRange {
         VersionRange {
             min_supported: self.min_supported,
             proto_version: self.proto_version,
@@ -194,6 +237,38 @@ mod tests {
             assert!(
                 serde_json::from_str::<Hello>(&json).is_err(),
                 "a hello without {field} must be refused"
+            );
+        }
+    }
+
+    // The fields every version shares are enough to negotiate with, whatever
+    // else a hello holds.
+    #[test]
+    fn the_versions_of_any_hello_decode_from_its_stable_fields_alone() {
+        let stable = r#"{"type":"hello","proto_version":3,"min_supported":2}"#;
+        let versions: HelloVersions = serde_json::from_str(stable).expect("stable fields");
+        assert_eq!(
+            versions.versions(),
+            VersionRange {
+                min_supported: ProtoVersion(2),
+                proto_version: ProtoVersion(3),
+            }
+        );
+        assert!(
+            serde_json::from_str::<Hello>(stable).is_err(),
+            "a whole hello also needs its token and capabilities"
+        );
+
+        let whole: HelloVersions = serde_json::from_str(HELLO).expect("a version 1 hello");
+        assert_eq!(whole, versions);
+
+        for missing in [
+            r#"{"type":"hello","proto_version":3}"#,
+            r#"{"type":"hello","min_supported":2}"#,
+        ] {
+            assert!(
+                serde_json::from_str::<HelloVersions>(missing).is_err(),
+                "{missing} must be refused"
             );
         }
     }
