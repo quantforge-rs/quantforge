@@ -3,7 +3,7 @@
 use crate::cli::common::SymbolArgs;
 use anyhow::Result;
 use clap::Args;
-use quantforge::{BinanceSpotClient, Symbol, TradingVenue, ms_to_rfc3339};
+use quantforge::{AccountConnector, Symbol, ms_to_rfc3339};
 
 #[derive(Args, Debug)]
 pub(crate) struct MonitorTradesArgs {
@@ -14,11 +14,11 @@ pub(crate) struct MonitorTradesArgs {
 }
 
 pub(crate) async fn handle_monitor_trades(
-    private_client: &BinanceSpotClient,
+    account: &dyn AccountConnector,
     args: MonitorTradesArgs,
 ) -> Result<()> {
     let symbol = Symbol::new(args.symbol.symbol)?;
-    let trades = private_client.recent_trades(&symbol, args.limit).await?;
+    let trades = account.recent_trades(&symbol, args.limit).await?;
     println!("recent_trades: {}", trades.len());
     for trade in trades {
         println!(

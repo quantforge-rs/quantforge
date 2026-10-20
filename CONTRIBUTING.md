@@ -51,9 +51,11 @@ The module tree under `src/cli/` mirrors the command tree (see
 at its mirroring path: `quantforge <group> <name>` lives in
 `src/cli/<group>/<name>.rs`, with dashes in the name turned into
 underscores. `src/cli/data/validate.rs` is a small complete command to copy
-from; `monitor` commands such as `src/cli/monitor/orders.rs` get the signed
-client (and the store, if they need it) from `monitor::dispatch` instead of
-`AppContext`.
+from; `monitor` commands such as `src/cli/monitor/orders.rs` get the
+connectors they need (and the store, if they need it) from
+`monitor::dispatch` instead of `AppContext`. Commands reach the exchange only
+through the `ports` connector traits; `tests/exchange_boundary.rs` fails if
+any code outside `src/exchange/` names a concrete adapter.
 
 1. Create the file. Start it with a module doc naming the command
    (`` //! `quantforge <group> <name>` — what it does ``), then add:
@@ -65,8 +67,8 @@ client (and the store, if they need it) from `monitor::dispatch` instead of
      Flattened flags appear in `--help` where their field sits, so field
      order is help order. The global flags (`--db`, `--binance-base-url`,
      `--log-level`, and the credentials) are applied once by
-     `AppContext::init`; a handler uses `ctx.store`, `ctx.base_url`,
-     `ctx.public_client`, or `ctx.private_client`, and never declares them
+     `AppContext::init`; a handler uses `ctx.store`, `ctx.base_url`, or
+     `ctx.exchange` (the exchange's connectors), and never declares them
      again.
    - a handler, `handle_<group>_<name>`, that parses and validates every
      argument at its top, before it reads the store or calls Binance, using
@@ -74,9 +76,9 @@ client (and the store, if they need it) from `monitor::dispatch` instead of
      `parse_non_negative_decimal`. Take money amounts as `String` flags and
      parse them into `Decimal`, never a float. Print results as `key: value`
      lines, and send diagnostics through `tracing`.
-2. Gate what needs gating. A command that sends signed requests gets its
-   client from `ctx.require_private_client("<group> <name> requires Binance
-   credentials")`, which fails with a remedy naming both credential
+2. Gate what needs gating. A command that sends signed requests gets the
+   signed connectors from `ctx.require_signed("<group> <name> requires
+   Binance credentials")`, which fails with a remedy naming both credential
    mechanisms; `monitor` commands skip this, because `run()` checks
    credentials once for the whole group. A command that changes exchange
    state flattens `ConfirmArgs` and, without `--yes`, prints what it would do

@@ -1,10 +1,15 @@
 //! Shared per-invocation construction: tracing, the SQLite store, and the
-//! Binance clients — built once from the parsed [`Cli`] and handed to the
-//! handlers, plus the interactive-session and confirmation helpers.
+//! exchange's connectors, built through the library's registry — once, from
+//! the parsed [`Cli`], and handed to the handlers — plus the
+//! interactive-session and confirmation helpers.
 
 use super::Cli;
 use anyhow::{Context, Result, anyhow};
-use quantforge::{BinanceCredentials, BinanceSpotClient, CandleStore, SqliteStore};
+use quantforge::exchange;
+use quantforge::{
+    ApiCredentials, CandleStore, ConnectorConfig, ExchangeConnectors, ExchangeId, SignedConnectors,
+    SqliteStore,
+};
 use std::io::{self, IsTerminal, Write};
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
@@ -21,13 +26,16 @@ const SHELL_HISTORY_WARNING: &str = "a Binance credential was passed on the comm
      literally typed value may be saved in shell history, and command-line values are visible \
      in process listings while quantforge runs; prefer QF_BINANCE_API_KEY/QF_BINANCE_API_SECRET";
 
+/// The exchange every command talks to: the only one so far, until a flag
+/// chooses it. Commands reach it through its connectors, never its adapter.
+pub(crate) const EXCHANGE: ExchangeId = ExchangeId::BinanceSpot;
+
 /// Everything a command handler needs, constructed once per invocation.
 #[derive(Debug)]
 pub(crate) struct AppContext {
     pub(crate) store: SqliteStore,
     pub(crate) base_url: Url,
-    pub(crate) public_client: BinanceSpotClient,
-    pub(crate) private_client: Option<BinanceSpotClient>,
+    pub(crate) exchange: ExchangeConnectors,
 }
 
 impl AppContext {
@@ -60,29 +68,31 @@ impl AppContext {
         let base_url =
             Url::parse(&cli.binance_base_url).context("failed to parse --binance-base-url")?;
         info!(base_url = %display_url(&base_url), "using Binance base URL");
-        let public_client = BinanceSpotClient::new(base_url.clone());
-        let private_client = BinanceCredentials::resolve(
+        let credentials = ApiCredentials::resolve(
             cli.credentials.binance_api_key.clone(),
             cli.credentials.binance_api_secret.clone(),
+        );
+        let exchange = exchange::connect(
+            EXCHANGE,
+            ConnectorConfig {
+                base_url: base_url.clone(),
+                credentials,
+            },
         )
-        .map(|credentials| BinanceSpotClient::new(base_url.clone()).with_credentials(credentials));
+        .context("failed to build the exchange connectors")?;
 
         Ok(Self {
             store,
             base_url,
-            public_client,
-            private_client,
+            exchange,
         })
     }
 
-    /// The authenticated client, or an error that opens with `subject` (the
+    /// The signed connectors, or an error that opens with `subject` (the
     /// command's tested wording) and names both ways to supply credentials.
-    pub(crate) fn require_private_client(
-        &self,
-        subject: &'static str,
-    ) -> Result<&BinanceSpotClient> {
-        self.private_client
-            .as_ref()
+    pub(crate) fn require_signed(&self, subject: &'static str) -> Result<SignedConnectors<'_>> {
+        self.exchange
+            .signed()
             .ok_or_else(|| anyhow!("{subject}: {CREDENTIALS_REMEDY}"))
     }
 }

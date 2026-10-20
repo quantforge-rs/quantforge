@@ -4,12 +4,13 @@
 //! symbol used here is part of the crate's public surface.
 
 use quantforge::{
-    AccountTrade, AssetBalance, BotRunState, BuiltInStrategyConfig, CancelOrderRequest, Candle,
-    CandleStore, ClosedTrade, EngineError, ExchangeError, ExchangeId, ExchangeOrder, ExecutionMode,
-    Interval, KlineRequest, LiveTradeConfig, LiveTradeEngine, LiveTradeSummary, MarketDataSource,
+    AccountConnector, AccountTrade, AssetBalance, BotRunState, BuiltInStrategyConfig,
+    CancelOrderRequest, Candle, CandleStore, ClosedTrade, EngineError, ExchangeCapabilities,
+    ExchangeConnector, ExchangeError, ExchangeId, ExchangeOrder, ExecutionMode, Interval,
+    KlineRequest, LiveTradeConfig, LiveTradeEngine, LiveTradeSummary, MarketDataConnector,
     MarketId, MarketOrderRequest, OrderQueryRequest, OrderStatus, PositionState, RunJournalStore,
-    RunStatus, Side, SqliteStore, StorageError, Symbol, SymbolRules, TimestampMs, TradingVenue,
-    now_utc_ms,
+    RunStatus, Side, SignedConnectors, SqliteStore, StorageError, Symbol, SymbolRules, TimestampMs,
+    TradingConnector, now_utc_ms,
 };
 use rust_decimal::Decimal;
 use std::collections::VecDeque;
@@ -46,8 +47,8 @@ fn rules() -> SymbolRules {
 
 // ── Execution-mode safety: engine-level behavior ─────────────────────
 //
-// The structural dry-run has two layers. The CLI wires trading_venue:
-// None for dry-run (handle_trade_run), so a dry-run process cannot even
+// The structural dry-run has two layers. The CLI wires no signed
+// connectors (None) for dry-run (handle_trade_run), so a dry-run process cannot even
 // hold an order endpoint. The tests below prove the second, engine-side
 // layer: even when a venue IS present, the ExecutionMode::DryRun arm of
 // execute_target never touches it (RefusingVenue panics on any call).
@@ -79,12 +80,38 @@ impl ScriptedMarketData {
     }
 }
 
-#[async_trait::async_trait]
-impl MarketDataSource for ScriptedMarketData {
-    fn exchange_id(&self) -> ExchangeId {
-        ExchangeId::BinanceSpot
-    }
+/// The identity every fake here shares: Binance's id, no declared
+/// capabilities, and a non-production endpoint.
+macro_rules! test_exchange {
+    ($($fake:ty),+) => {$(
+        impl ExchangeConnector for $fake {
+            fn exchange_id(&self) -> ExchangeId {
+                ExchangeId::BinanceSpot
+            }
 
+            fn capabilities(&self) -> ExchangeCapabilities {
+                ExchangeCapabilities::default()
+            }
+
+            fn is_production(&self) -> bool {
+                false
+            }
+        }
+    )+};
+}
+
+test_exchange!(ScriptedMarketData, RefusingVenue, ScriptedVenue);
+
+/// The signed connectors a fake venue provides, both halves from one value.
+fn signed<V: TradingConnector + AccountConnector>(venue: &V) -> SignedConnectors<'_> {
+    SignedConnectors {
+        trading: venue,
+        account: venue,
+    }
+}
+
+#[async_trait::async_trait]
+impl MarketDataConnector for ScriptedMarketData {
     async fn fetch_klines(&self, _request: &KlineRequest) -> Result<Vec<Candle>, ExchangeError> {
         Ok(self
             .batches
@@ -97,27 +124,20 @@ impl MarketDataSource for ScriptedMarketData {
     async fn fetch_symbol_rules(&self, _symbol: &Symbol) -> Result<SymbolRules, ExchangeError> {
         Ok(rules())
     }
+
+    async fn server_time(&self) -> Result<TimestampMs, ExchangeError> {
+        unreachable!("the trade engine never reads the server time")
+    }
 }
 
-// A venue whose every method panics: passed as Some(&RefusingVenue) to
+// A venue whose every method panics: passed as the signed connectors to
 // prove the DryRun arm of execute_target structurally never reaches the
 // venue, and that live mode leaves it untouched while no order is due.
 struct RefusingVenue;
 
 #[async_trait::async_trait]
-impl TradingVenue for RefusingVenue {
-    fn exchange_id(&self) -> ExchangeId {
-        ExchangeId::BinanceSpot
-    }
-
+impl AccountConnector for RefusingVenue {
     async fn account_balances(&self) -> Result<Vec<AssetBalance>, ExchangeError> {
-        unreachable!("dry-run must never call the trading venue")
-    }
-
-    async fn open_orders(
-        &self,
-        _symbol: Option<&Symbol>,
-    ) -> Result<Vec<ExchangeOrder>, ExchangeError> {
         unreachable!("dry-run must never call the trading venue")
     }
 
@@ -126,6 +146,16 @@ impl TradingVenue for RefusingVenue {
         _symbol: &Symbol,
         _limit: usize,
     ) -> Result<Vec<AccountTrade>, ExchangeError> {
+        unreachable!("dry-run must never call the trading venue")
+    }
+}
+
+#[async_trait::async_trait]
+impl TradingConnector for RefusingVenue {
+    async fn open_orders(
+        &self,
+        _symbol: Option<&Symbol>,
+    ) -> Result<Vec<ExchangeOrder>, ExchangeError> {
         unreachable!("dry-run must never call the trading venue")
     }
 
@@ -160,20 +190,9 @@ struct ScriptedVenue {
 }
 
 #[async_trait::async_trait]
-impl TradingVenue for ScriptedVenue {
-    fn exchange_id(&self) -> ExchangeId {
-        ExchangeId::BinanceSpot
-    }
-
+impl AccountConnector for ScriptedVenue {
     async fn account_balances(&self) -> Result<Vec<AssetBalance>, ExchangeError> {
         unreachable!("live entries size by quote_order_qty and never read balances")
-    }
-
-    async fn open_orders(
-        &self,
-        _symbol: Option<&Symbol>,
-    ) -> Result<Vec<ExchangeOrder>, ExchangeError> {
-        unreachable!("the trade engine submits market orders only")
     }
 
     async fn recent_trades(
@@ -181,6 +200,16 @@ impl TradingVenue for ScriptedVenue {
         _symbol: &Symbol,
         _limit: usize,
     ) -> Result<Vec<AccountTrade>, ExchangeError> {
+        unreachable!("the trade engine submits market orders only")
+    }
+}
+
+#[async_trait::async_trait]
+impl TradingConnector for ScriptedVenue {
+    async fn open_orders(
+        &self,
+        _symbol: Option<&Symbol>,
+    ) -> Result<Vec<ExchangeOrder>, ExchangeError> {
         unreachable!("the trade engine submits market orders only")
     }
 
@@ -384,7 +413,7 @@ async fn dry_run_entry_journals_synthetic_order_and_never_calls_the_trading_venu
     let source = ScriptedMarketData::new(vec![Vec::new(), vec![poll_bar.clone()]]);
     let venue = RefusingVenue;
 
-    let engine = LiveTradeEngine::new(&source, &store, &store, Some(&venue));
+    let engine = LiveTradeEngine::new(&source, &store, &store, Some(signed(&venue)));
     let summary = engine
         .run(&engine_config(ExecutionMode::DryRun, "run-dry-entry"))
         .await
@@ -451,7 +480,7 @@ async fn dry_run_exit_on_resume_sells_journaled_qty_and_writes_closed_trade_with
     let source = ScriptedMarketData::new(vec![Vec::new(), vec![poll_bar.clone()]]);
     let venue = RefusingVenue;
 
-    let engine = LiveTradeEngine::new(&source, &store, &store, Some(&venue));
+    let engine = LiveTradeEngine::new(&source, &store, &store, Some(signed(&venue)));
     let summary = engine.run(&cfg).await.expect("dry run");
 
     assert_eq!(
@@ -581,7 +610,7 @@ async fn live_entry_submits_one_market_order_and_records_venue_reported_quantity
         },
     };
 
-    let engine = LiveTradeEngine::new(&source, &store, &store, Some(&venue));
+    let engine = LiveTradeEngine::new(&source, &store, &store, Some(signed(&venue)));
     let summary = engine
         .run(&engine_config(ExecutionMode::Live, "run-live-1"))
         .await
@@ -629,7 +658,7 @@ async fn live_mode_with_no_target_change_never_touches_the_venue() {
     let source = ScriptedMarketData::new(vec![Vec::new(), vec![poll_bar.clone()]]);
     let venue = RefusingVenue;
 
-    let engine = LiveTradeEngine::new(&source, &store, &store, Some(&venue));
+    let engine = LiveTradeEngine::new(&source, &store, &store, Some(signed(&venue)));
     let summary = engine
         .run(&engine_config(ExecutionMode::Live, "run-live-idle"))
         .await
@@ -672,7 +701,7 @@ async fn dry_run_entry_persists_the_position_before_surfacing_a_journal_failure(
     let source = ScriptedMarketData::new(vec![Vec::new(), vec![poll_bar]]);
     let venue = RefusingVenue;
 
-    let engine = LiveTradeEngine::new(&source, &store, &journal, Some(&venue));
+    let engine = LiveTradeEngine::new(&source, &store, &journal, Some(signed(&venue)));
     let error = engine
         .run(&engine_config(ExecutionMode::DryRun, "run-journal-fail"))
         .await

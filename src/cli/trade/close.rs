@@ -7,10 +7,7 @@ use crate::cli::common::{
 use crate::cli::context::AppContext;
 use anyhow::{Result, anyhow, bail};
 use clap::Args;
-use quantforge::{
-    ClosedTrade, ExecutionMode, MarketDataSource, PositionState, RunJournalStore, Side,
-    TradingVenue, now_utc_ms,
-};
+use quantforge::{ClosedTrade, ExecutionMode, PositionState, RunJournalStore, Side, now_utc_ms};
 use rust_decimal::Decimal;
 use tracing::warn;
 
@@ -30,9 +27,13 @@ pub(crate) async fn handle_trade_close(ctx: &AppContext, args: TradeCloseArgs) -
     let store = &ctx.store;
     // Credential gate before parsing, preserving the pre-split dispatch
     // ordering.
-    let private_client = ctx.require_private_client("trade close requires Binance credentials")?;
+    let signed = ctx.require_signed("trade close requires Binance credentials")?;
     let market = parse_market(args.market.symbol, args.market.interval)?;
-    let rules = private_client.fetch_symbol_rules(&market.symbol).await?;
+    let rules = ctx
+        .exchange
+        .market_data
+        .fetch_symbol_rules(&market.symbol)
+        .await?;
     let mut run_state = if let Some(run_id) = args.run_id {
         store
             .load_run_state(&run_id)?
@@ -60,7 +61,7 @@ pub(crate) async fn handle_trade_close(ctx: &AppContext, args: TradeCloseArgs) -
         );
     }
 
-    let balances = private_client.account_balances().await?;
+    let balances = signed.account.account_balances().await?;
     let free_base_qty = balances
         .iter()
         .find(|balance| balance.asset.eq_ignore_ascii_case(&rules.base_asset))
@@ -86,7 +87,8 @@ pub(crate) async fn handle_trade_close(ctx: &AppContext, args: TradeCloseArgs) -
         );
     }
 
-    let order = private_client
+    let order = signed
+        .trading
         .submit_market_order(&quantforge::MarketOrderRequest {
             symbol: market.symbol.clone(),
             side: Side::Sell,

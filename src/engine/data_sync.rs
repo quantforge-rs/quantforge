@@ -1,10 +1,10 @@
 //! Historical and incremental candle ingestion: pulls klines from a
-//! [`MarketDataSource`] in bounded batches, writes them to a [`CandleStore`],
+//! [`MarketDataConnector`] in bounded batches, writes them to a [`CandleStore`],
 //! and optionally follows the tail. The range helpers below are `pub(crate)`
 //! — [`live`](super::live) drives them to keep its own poll loop fed.
 
 use crate::EngineError;
-use crate::{CandleStore, KlineRequest, MarketDataSource, MarketId, now_utc_ms};
+use crate::{CandleStore, KlineRequest, MarketDataConnector, MarketId, now_utc_ms};
 use std::time::Duration;
 use tracing::{info, warn};
 
@@ -39,7 +39,7 @@ pub(crate) struct SyncRangeOutcome {
 }
 
 pub struct DataSyncEngine<'a> {
-    source: &'a dyn MarketDataSource,
+    source: &'a dyn MarketDataConnector,
     store: &'a dyn CandleStore,
 }
 
@@ -50,7 +50,7 @@ impl<'a> std::fmt::Debug for DataSyncEngine<'a> {
 }
 
 impl<'a> DataSyncEngine<'a> {
-    pub fn new(source: &'a dyn MarketDataSource, store: &'a dyn CandleStore) -> Self {
+    pub fn new(source: &'a dyn MarketDataConnector, store: &'a dyn CandleStore) -> Self {
         Self { source, store }
     }
 
@@ -149,7 +149,7 @@ fn should_continue(cfg: &DataSyncConfig, next_start_time_ms: i64, loops: usize) 
 }
 
 pub(crate) async fn sync_market_range(
-    source: &dyn MarketDataSource,
+    source: &dyn MarketDataConnector,
     store: &dyn CandleStore,
     market: &MarketId,
     start_ms: i64,
@@ -273,7 +273,10 @@ mod tests {
         assert!(!should_continue(&cfg, 5_001, 1));
     }
 
-    use crate::{Candle, ExchangeError, SqliteStore, Symbol as ModelSymbol, SymbolRules};
+    use crate::{
+        Candle, ExchangeCapabilities, ExchangeConnector, ExchangeError, SqliteStore,
+        Symbol as ModelSymbol, SymbolRules, TimestampMs,
+    };
     use rust_decimal::Decimal;
     use std::collections::VecDeque;
     use std::sync::Mutex;
@@ -282,12 +285,22 @@ mod tests {
         batches: Mutex<VecDeque<Vec<Candle>>>,
     }
 
-    #[async_trait::async_trait]
-    impl MarketDataSource for ScriptedSource {
+    impl ExchangeConnector for ScriptedSource {
         fn exchange_id(&self) -> ExchangeId {
             ExchangeId::BinanceSpot
         }
 
+        fn capabilities(&self) -> ExchangeCapabilities {
+            ExchangeCapabilities::default()
+        }
+
+        fn is_production(&self) -> bool {
+            false
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl MarketDataConnector for ScriptedSource {
         async fn fetch_klines(
             &self,
             _request: &KlineRequest,
@@ -305,6 +318,10 @@ mod tests {
             _symbol: &ModelSymbol,
         ) -> Result<SymbolRules, ExchangeError> {
             unreachable!("data sync never fetches symbol rules")
+        }
+
+        async fn server_time(&self) -> Result<TimestampMs, ExchangeError> {
+            unreachable!("data sync never reads the server time")
         }
     }
 

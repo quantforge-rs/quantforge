@@ -5,7 +5,7 @@ use super::status;
 use crate::cli::common::{MarketArgs, PollArgs, StrategyArgs};
 use anyhow::Result;
 use clap::Args;
-use quantforge::{BinanceSpotClient, SqliteStore};
+use quantforge::{MarketDataConnector, SignedConnectors, SqliteStore};
 use std::time::Duration;
 
 #[derive(Args, Debug)]
@@ -22,7 +22,8 @@ pub(crate) struct MonitorWatchArgs {
 
 pub(crate) async fn handle_monitor_watch(
     store: &SqliteStore,
-    private_client: &BinanceSpotClient,
+    market_data: &dyn MarketDataConnector,
+    signed: SignedConnectors<'_>,
     args: MonitorWatchArgs,
 ) -> Result<()> {
     let mut loops = 0usize;
@@ -30,7 +31,8 @@ pub(crate) async fn handle_monitor_watch(
         println!("---");
         status::render_status(
             store,
-            private_client,
+            market_data,
+            signed,
             &args.market,
             &args.strategy.strategy_name,
             args.recent_trades,

@@ -8,10 +8,9 @@ use crate::cli::common::{
 use crate::cli::context::{self, AppContext, display_url};
 use anyhow::Result;
 use clap::Args;
-use quantforge::{LiveTradeConfig, LiveTradeEngine, TradingVenue, ms_to_rfc3339};
+use quantforge::{LiveTradeConfig, LiveTradeEngine, ms_to_rfc3339};
 use std::time::Duration;
 use tracing::warn;
-use url::Url;
 
 #[derive(Args, Debug)]
 pub(crate) struct TradeRunArgs {
@@ -45,7 +44,7 @@ pub(crate) struct TradeRunArgs {
 
 pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Result<()> {
     let store = &ctx.store;
-    let public_client = &ctx.public_client;
+    let market_data = ctx.exchange.market_data.as_ref();
     let base_url = &ctx.base_url;
     let market = parse_market(args.market.symbol, args.market.interval)?;
     let quote_order_qty = parse_positive_decimal("--quote-order-qty", &args.quote_order_qty)?;
@@ -53,7 +52,7 @@ pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Re
     if matches!(args.mode, CliExecutionMode::Live) {
         if !args.confirm.yes {
             let strategy_name = strategy_config(args.fast, args.slow).strategy_name();
-            let url_note = if is_production_binance_url(base_url) {
+            let url_note = if market_data.is_production() {
                 " (PRODUCTION)"
             } else {
                 ""
@@ -86,7 +85,7 @@ pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Re
                 return Ok(());
             }
         }
-        if is_production_binance_url(base_url) {
+        if market_data.is_production() {
             warn!(
                 base_url = %display_url(base_url),
                 "live trading against PRODUCTION Binance; real funds at risk"
@@ -95,14 +94,11 @@ pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Re
     }
 
     let engine = LiveTradeEngine::new(
-        public_client,
+        market_data,
         store,
         store,
         if matches!(args.mode, CliExecutionMode::Live) {
-            Some(
-                ctx.require_private_client("trade run --mode live requires Binance credentials")?
-                    as &dyn TradingVenue,
-            )
+            Some(ctx.require_signed("trade run --mode live requires Binance credentials")?)
         } else {
             None
         },
@@ -135,61 +131,4 @@ pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Re
             .unwrap_or_else(|| "none".to_string())
     );
     Ok(())
-}
-
-const PRODUCTION_BINANCE_DOMAINS: [&str; 2] = ["binance.com", "binance.us"];
-
-fn is_production_binance_url(url: &Url) -> bool {
-    let Some(host) = url.host_str() else {
-        return false;
-    };
-    let host = host.trim_end_matches('.').to_ascii_lowercase();
-    PRODUCTION_BINANCE_DOMAINS.iter().any(|domain| {
-        host == *domain
-            || host
-                .strip_suffix(domain)
-                .is_some_and(|prefix| prefix.ends_with('.'))
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn production_classifier_matches_production_hosts() {
-        for raw in [
-            "https://api.binance.com/",
-            "https://api1.binance.com/",
-            "https://api2.binance.com/",
-            "https://api3.binance.com/",
-            "https://api4.binance.com/",
-            "https://api-gcp.binance.com/",
-            "https://api5.binance.com/",
-            "https://api.binance.us/",
-            "https://binance.com/",
-            "https://API.BINANCE.COM/",
-            "https://api.binance.com:8443/",
-            "https://api.binance.com./",
-            "http://api1.binance.com/some/path",
-        ] {
-            let url = Url::parse(raw).expect("url");
-            assert!(is_production_binance_url(&url), "for input {raw:?}");
-        }
-    }
-
-    #[test]
-    fn production_classifier_rejects_testnet_local_and_lookalike_hosts() {
-        for raw in [
-            "https://testnet.binance.vision/",
-            "https://data-api.binance.vision/",
-            "http://127.0.0.1:9/",
-            "https://evil-binance.com/",
-            "https://api.binance.com.evil.example/",
-            "file:///tmp/no-host",
-        ] {
-            let url = Url::parse(raw).expect("url");
-            assert!(!is_production_binance_url(&url), "for input {raw:?}");
-        }
-    }
 }

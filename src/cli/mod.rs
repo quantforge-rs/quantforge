@@ -52,9 +52,14 @@ pub(crate) async fn run(cli: Cli) -> Result<()> {
         Command::Backtest(args) => handle_backtest(&ctx, args)?,
         Command::Trade { command } => trade::dispatch(&ctx, command).await?,
         Command::Monitor { command } => {
-            let private_client =
-                ctx.require_private_client("monitor commands require Binance credentials")?;
-            monitor::dispatch(&ctx.store, private_client, command).await?
+            let signed = ctx.require_signed("monitor commands require Binance credentials")?;
+            monitor::dispatch(
+                &ctx.store,
+                ctx.exchange.market_data.as_ref(),
+                signed,
+                command,
+            )
+            .await?
         }
     }
 

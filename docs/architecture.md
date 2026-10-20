@@ -72,20 +72,22 @@ src/
 │   ├── interval.rs             Interval: wire form, step duration, parsing
 │   ├── market.rs               Symbol, ExchangeId, MarketId
 │   ├── order.rs                Side, OrderStatus, Fill, ExchangeOrder, AccountTrade
+│   ├── request.rs              the exchange-agnostic requests a connector serves
 │   ├── rules.rs                SymbolRules and AssetBalance
 │   ├── run.rs                  BotRunState, PositionState, ClosedTrade, TargetPosition
 │   └── timestamp.rs            TimestampMs, now_utc_ms, RFC 3339 conversions
-├── ports.rs                    the seams: venue and storage traits, requests, errors
-├── exchange/                   venue adapters, one namespace per venue
-│   ├── mod.rs                  re-exports the Binance client and credentials
+├── ports.rs                    the seams: connector and storage traits, capabilities, errors
+├── exchange/                   the connector registry and one adapter per exchange
+│   ├── mod.rs                  the registry API: connect, factory, ExchangeConnectors
+│   ├── credentials.rs          ApiCredentials: an API key and secret, never printed
+│   ├── registry.rs             ExchangeId to connector factory; the only id-to-adapter map
 │   └── binance/                Binance Spot REST adapter
-│       ├── mod.rs              module root; only the client and credentials leave it
-│       ├── client.rs           HTTP transport: base URL, public and signed requests
+│       ├── mod.rs              module root and the registry's Binance factory
+│       ├── client.rs           HTTP transport, signed requests, production-host check
 │       ├── convert.rs          wire DTOs to domain types
-│       ├── credentials.rs      BinanceCredentials: resolving the API key and secret
 │       ├── signing.rs          HMAC-SHA256 query signing
 │       ├── types.rs            wire DTOs, the shapes the REST API returns
-│       └── venue.rs            the MarketDataSource and TradingVenue implementations
+│       └── venue.rs            the connector implementations and declared capabilities
 ├── storage/                    persistence adapters, one namespace per backend
 │   ├── mod.rs                  re-exports SqliteStore
 │   └── sqlite/                 SQLite backend
@@ -115,7 +117,10 @@ After `cli/`, the six library modules follow innermost first, as in the
 `exchange` and `storage` use `model` and `ports`, `sdk` uses `model`, and
 `engine` uses `model`, `ports`, and `sdk`. The engines reach the exchange
 and storage adapters only through the `ports` traits; the binary chooses
-which adapters to pass in.
+which adapters to pass in, building the exchange's connectors through
+`exchange::connect`. Nothing outside `src/exchange/` names a concrete
+exchange adapter, and `tests/exchange_boundary.rs` fails if anything
+does.
 
 ## Tests
 
@@ -130,6 +135,8 @@ which adapters to pass in.
 - `tests/backtest_engine.rs`, `tests/candle_validation.rs`,
   `tests/candle_batch.rs`, `tests/decimal_float.rs`, `tests/sqlite_store.rs`,
   and `tests/live_engine.rs`: library integration tests
+- `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
+  from naming a concrete exchange adapter
 - `tests/fixtures/`: data shared with the Python bindings' tests, starting
   with the decimal ↔ float64 conformance cases of
   [decimal-float-policy.md](decimal-float-policy.md)

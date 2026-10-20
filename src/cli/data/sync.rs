@@ -29,7 +29,7 @@ pub(crate) struct DataSyncArgs {
 
 pub(crate) async fn handle_data_sync(ctx: &AppContext, args: DataSyncArgs) -> Result<()> {
     let store = &ctx.store;
-    let client = &ctx.public_client;
+    let client = ctx.exchange.market_data.as_ref();
     let market = parse_market(args.market.symbol, args.market.interval)?;
     let engine = DataSyncEngine::new(client, store);
     let summary = engine

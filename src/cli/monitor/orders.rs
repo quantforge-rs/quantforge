@@ -3,7 +3,7 @@
 use crate::cli::common::{SymbolArgs, print_order};
 use anyhow::Result;
 use clap::Args;
-use quantforge::{BinanceSpotClient, Symbol, TradingVenue};
+use quantforge::{Symbol, TradingConnector};
 
 #[derive(Args, Debug)]
 pub(crate) struct MonitorOrdersArgs {
@@ -12,11 +12,11 @@ pub(crate) struct MonitorOrdersArgs {
 }
 
 pub(crate) async fn handle_monitor_orders(
-    private_client: &BinanceSpotClient,
+    trading: &dyn TradingConnector,
     args: MonitorOrdersArgs,
 ) -> Result<()> {
     let symbol = Symbol::new(args.symbol.symbol)?;
-    let orders = private_client.open_orders(Some(&symbol)).await?;
+    let orders = trading.open_orders(Some(&symbol)).await?;
     println!("open_orders: {}", orders.len());
     for order in orders {
         print_order(&order);

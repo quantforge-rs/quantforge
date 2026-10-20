@@ -9,16 +9,16 @@ use reqwest::{Method, StatusCode};
 use serde_json::Value;
 use url::Url;
 
-use super::credentials::BinanceCredentials;
 use super::signing;
 use super::types::BinanceApiError;
+use crate::exchange::ApiCredentials;
 use crate::{ExchangeError, now_utc_ms};
 
 #[derive(Clone, Debug)]
 pub struct BinanceSpotClient {
     base_url: Url,
     http: reqwest::Client,
-    credentials: Option<BinanceCredentials>,
+    credentials: Option<ApiCredentials>,
     recv_window_ms: u64,
 }
 
@@ -37,9 +37,15 @@ impl BinanceSpotClient {
         }
     }
 
-    pub fn with_credentials(mut self, credentials: BinanceCredentials) -> Self {
+    pub fn with_credentials(mut self, credentials: ApiCredentials) -> Self {
         self.credentials = Some(credentials);
         self
+    }
+
+    /// Whether this client talks to Binance's production system rather than
+    /// a testnet or a local stand-in.
+    pub(super) fn production_endpoint(&self) -> bool {
+        is_production_binance_url(&self.base_url)
     }
 
     /// Swaps in a caller-built HTTP client. One built with reqwest's
@@ -142,4 +148,74 @@ async fn decode_json(response: reqwest::Response) -> Result<Value, ExchangeError
 
 fn status_to_code(status: StatusCode) -> Option<i64> {
     Some(i64::from(status.as_u16()))
+}
+
+const PRODUCTION_BINANCE_DOMAINS: [&str; 2] = ["binance.com", "binance.us"];
+
+fn is_production_binance_url(url: &Url) -> bool {
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    PRODUCTION_BINANCE_DOMAINS.iter().any(|domain| {
+        host == *domain
+            || host
+                .strip_suffix(domain)
+                .is_some_and(|prefix| prefix.ends_with('.'))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn production_classifier_matches_production_hosts() {
+        for raw in [
+            "https://api.binance.com/",
+            "https://api1.binance.com/",
+            "https://api2.binance.com/",
+            "https://api3.binance.com/",
+            "https://api4.binance.com/",
+            "https://api-gcp.binance.com/",
+            "https://api5.binance.com/",
+            "https://api.binance.us/",
+            "https://binance.com/",
+            "https://API.BINANCE.COM/",
+            "https://api.binance.com:8443/",
+            "https://api.binance.com./",
+            "http://api1.binance.com/some/path",
+        ] {
+            let url = Url::parse(raw).expect("url");
+            assert!(is_production_binance_url(&url), "for input {raw:?}");
+        }
+    }
+
+    #[test]
+    fn production_classifier_rejects_testnet_local_and_lookalike_hosts() {
+        for raw in [
+            "https://testnet.binance.vision/",
+            "https://data-api.binance.vision/",
+            "http://127.0.0.1:9/",
+            "https://evil-binance.com/",
+            "https://api.binance.com.evil.example/",
+            "file:///tmp/no-host",
+        ] {
+            let url = Url::parse(raw).expect("url");
+            assert!(!is_production_binance_url(&url), "for input {raw:?}");
+        }
+    }
+
+    // The client's own base URL gains a trailing slash in `new`; the host,
+    // and so the classification, is unaffected.
+    #[test]
+    fn the_client_classifies_its_own_base_url() {
+        for (raw, production) in [
+            ("https://api.binance.com", true),
+            ("https://testnet.binance.vision", false),
+        ] {
+            let client = BinanceSpotClient::new(Url::parse(raw).expect("url"));
+            assert_eq!(client.production_endpoint(), production, "for {raw}");
+        }
+    }
 }

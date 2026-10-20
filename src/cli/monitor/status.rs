@@ -5,8 +5,7 @@ use crate::cli::common::{MarketArgs, StrategyArgs, parse_market};
 use anyhow::Result;
 use clap::Args;
 use quantforge::{
-    BinanceSpotClient, MarketDataSource, RunJournalStore, SqliteStore, TradingVenue, ms_to_rfc3339,
-    now_utc_ms,
+    MarketDataConnector, RunJournalStore, SignedConnectors, SqliteStore, ms_to_rfc3339, now_utc_ms,
 };
 
 #[derive(Args, Debug)]
@@ -21,12 +20,14 @@ pub(crate) struct MonitorStatusArgs {
 
 pub(crate) async fn handle_monitor_status(
     store: &SqliteStore,
-    private_client: &BinanceSpotClient,
+    market_data: &dyn MarketDataConnector,
+    signed: SignedConnectors<'_>,
     args: MonitorStatusArgs,
 ) -> Result<()> {
     render_status(
         store,
-        private_client,
+        market_data,
+        signed,
         &args.market,
         &args.strategy.strategy_name,
         args.recent_trades,
@@ -38,16 +39,18 @@ pub(crate) async fn handle_monitor_status(
 /// and every iteration of `monitor watch`.
 pub(super) async fn render_status(
     store: &SqliteStore,
-    private_client: &BinanceSpotClient,
+    market_data: &dyn MarketDataConnector,
+    signed: SignedConnectors<'_>,
     market_args: &MarketArgs,
     strategy_name: &str,
     recent_trades: usize,
 ) -> Result<()> {
     let market = parse_market(market_args.symbol.clone(), market_args.interval.clone())?;
-    let rules = private_client.fetch_symbol_rules(&market.symbol).await?;
-    let balances = private_client.account_balances().await?;
-    let open_orders = private_client.open_orders(Some(&market.symbol)).await?;
-    let trades = private_client
+    let rules = market_data.fetch_symbol_rules(&market.symbol).await?;
+    let balances = signed.account.account_balances().await?;
+    let open_orders = signed.trading.open_orders(Some(&market.symbol)).await?;
+    let trades = signed
+        .account
         .recent_trades(&market.symbol, recent_trades)
         .await?;
     let run = store.latest_run_for_market(&market, strategy_name)?;
