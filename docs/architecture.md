@@ -65,6 +65,21 @@ src/
 │       ├── trades.rs           quantforge monitor trades: recent account trades
 │       ├── cancel_order.rs     quantforge monitor cancel-order: cancel one order
 │       └── close_position.rs   quantforge monitor close-position: market-sell the free balance
+├── protocol/                   the wire format between instances; uses no other module
+│   ├── mod.rs                  the wire spec: encoding, versions, compatibility; ProtocolError
+│   ├── version.rs              ProtoVersion, PROTO_VERSION, MIN_SUPPORTED, VersionRange negotiation
+│   ├── decimal.rs              ExactDecimal: exact decimals as JSON strings, never numbers
+│   ├── hash.rs                 ContentHash: the sha256: names of stored content
+│   ├── errors.rs               the error envelope every surface answers with, and its HTTP statuses
+│   ├── segments.rs             candle segment index entries and their range metadata
+│   ├── jobs/                   remote backtests of a Python bundle, over HTTP
+│   │   ├── mod.rs              the job surface and JobId
+│   │   ├── submission.rs       JobSubmission: the bundle's hash, the candles, the backtest settings
+│   │   └── status.rs           JobStatus, JobState, and the references to a job's results
+│   └── stream/                 bars as they close, over a WebSocket
+│       ├── mod.rs              the session flow, ClientFrame and ServerFrame, Ping and Pong
+│       ├── handshake.rs        Hello, Welcome, AuthToken, SessionId, SessionLimits
+│       └── bars.rs             Subscribe, BarClosed, Bar, GapNotice, GapReason
 ├── model/                      domain types every layer speaks
 │   ├── mod.rs                  ModelError and the re-exports
 │   ├── candle.rs               Candle and validate_candles
@@ -124,8 +139,9 @@ src/
         └── state.rs            run identity: create, resume, and resume checks
 ```
 
-After `cli/`, the six library modules follow innermost first, as in the
-`src/lib.rs` docs: `model` uses no other module, `ports` uses `model`,
+After `cli/`, the seven library modules follow innermost first, as in the
+`src/lib.rs` docs. `protocol` stands apart: it uses no other module, and no
+module uses it yet. Then `model` uses no other module, `ports` uses `model`,
 `exchange` and `storage` use `model` and `ports`, `sdk` uses `model`, and
 `engine` uses `model`, `ports`, and `sdk`. The engines reach the exchange
 and storage adapters only through the `ports` traits; the binary chooses
@@ -137,7 +153,11 @@ Binance adapter hardcodes Binance beyond the registry entry and the
 does. What a connector must do for the engines is written down once, as
 the checks in `exchange::conformance`; every registered exchange passes
 them, and [exchange-feature-matrix.md](exchange-feature-matrix.md) shows
-the results beside each exchange's capabilities.
+the results beside each exchange's capabilities. `tests/protocol_boundary.rs`
+compiles `protocol` on its own and scans its sources, so it fails if
+`protocol` uses anything else in the crate, or a dependency beyond `serde`,
+`rust_decimal`, and `thiserror`: the module is meant to become a crate of
+its own.
 
 ## Tests
 
@@ -155,6 +175,9 @@ the results beside each exchange's capabilities.
 - `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
   from naming a concrete exchange adapter, and the code and `--help`
   outside the Binance adapter from hardcoding Binance
+- `tests/protocol_boundary.rs`: compiles `src/protocol/` as the only module
+  of a crate and scans its sources, so the wire format never comes to
+  depend on the rest of QuantForge
 - `tests/conformance/`: the conformance suite against every registered
   exchange — replayed from the recorded or hand-written fixtures in
   `tests/conformance/fixtures/`, or live against a testnet when

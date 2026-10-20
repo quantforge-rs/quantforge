@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `protocol` defines the wire format between QuantForge instances as serde types: a backtest job's submission (a Python bundle named by its content hash, the candles it runs on, and the backtest settings), its status and result references, the error envelope, candle segment index entries, and the live stream's frames; its rustdoc is the wire specification, and every JSON example in it is a doctest
+- the protocol is versioned: `protocol::PROTO_VERSION` and `protocol::MIN_SUPPORTED` bound the versions a build speaks, an HTTP request names its version in its path (`/v1/…`), and `VersionRange::negotiate` picks the newest version two peers share or says which side is too old
+- protocol decimals travel as JSON strings and are read exactly: a JSON number, an exponent, or a value a decimal cannot hold without rounding is refused
+- a frame type, error code, gap reason, or job state a receiver does not know reads as `Unrecognized` instead of failing, so that a version can grow without breaking older peers
+- `tests/protocol_boundary.rs` compiles `src/protocol/` on its own and scans its sources, so that the module uses nothing else from the crate and depends only on `serde`, `rust_decimal`, and `thiserror`
+
 - `exchange::conformance` writes down what every exchange connector must do for the engines as checks: candles on the UTC-millisecond grid with exact decimals and closed-bar semantics, kline window bounds, paging, and gaps, the symbol rules and the trading rules they impose, the market-order lifecycle, the error kinds, and the exchange clock; `exchange::conformance::run` runs a check against any connector factory and refuses a production endpoint before sending anything
 - `tests/conformance/` runs every check against every registered exchange, replayed by `cargo test` from fixtures recorded on the testnet or, for the fault checks no testnet produces on demand, written by hand; `CONFORMANCE_MODE=testnet` runs every other check live against the testnet, and `CONFORMANCE_MODE=record` re-records the fixtures through a proxy that strips the credentials, signatures, and account id, and writes only checks that replay exactly as they ran
 - each check is proven able to fail: a control corrupts the connector the way that check exists to catch, and the check must fail naming it
