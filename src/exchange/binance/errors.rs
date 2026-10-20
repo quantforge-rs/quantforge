@@ -18,6 +18,9 @@ pub(super) fn classify(status: StatusCode, code: Option<i64>, message: &str) -> 
         return ExchangeErrorKind::RateLimited;
     }
     if let Some(kind) = code.and_then(|code| classify_code(code, message)) {
+        if kind == ExchangeErrorKind::Unavailable && status.is_server_error() {
+            return ExchangeErrorKind::OutcomeUnknown;
+        }
         return kind;
     }
     match status.as_u16() {
