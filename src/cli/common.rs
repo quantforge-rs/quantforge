@@ -6,11 +6,11 @@
 //! fields were already adjacent and in this order, keeping every command's
 //! `--help` byte-identical to the pre-split output.
 
-use super::context::EXCHANGE;
 use anyhow::{Context, Result, bail};
 use clap::{Args, ValueEnum};
 use quantforge::{
-    BuiltInStrategyConfig, ExecutionMode, Interval, MarketId, Symbol, round_down_to_step,
+    BuiltInStrategyConfig, ExchangeId, ExecutionMode, Interval, MarketId, Symbol,
+    round_down_to_step,
 };
 use rust_decimal::Decimal;
 
@@ -71,10 +71,16 @@ impl From<CliExecutionMode> for ExecutionMode {
     }
 }
 
-pub(crate) fn parse_market(symbol: String, interval: String) -> Result<MarketId> {
+/// The market `--symbol` and `--interval` name on `exchange`: the key its
+/// candles and runs are stored under.
+pub(crate) fn parse_market(
+    exchange: ExchangeId,
+    symbol: String,
+    interval: String,
+) -> Result<MarketId> {
     let symbol = Symbol::new(symbol)?;
     let interval = interval.parse::<Interval>()?;
-    Ok(MarketId::new(EXCHANGE, symbol, interval))
+    Ok(MarketId::new(exchange, symbol, interval))
 }
 
 pub(crate) fn parse_positive_decimal(flag: &str, raw: &str) -> Result<Decimal> {

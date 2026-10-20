@@ -32,7 +32,7 @@ pub(crate) struct BacktestArgs {
 
 pub(crate) fn handle_backtest(ctx: &AppContext, args: BacktestArgs) -> Result<()> {
     let store = &ctx.store;
-    let market = parse_market(args.market.symbol, args.market.interval)?;
+    let market = parse_market(ctx.exchange_id(), args.market.symbol, args.market.interval)?;
     let initial_cash = parse_positive_decimal("--cash", &args.cash)?;
     let fee_bps = parse_non_negative_decimal("--fee-bps", &args.fee_bps)?;
     let candles = store.load_candles(

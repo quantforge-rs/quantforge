@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `--exchange` selects the exchange by its registry name, with `QF_EXCHANGE` as its fallback and `binance` as the default; any other value fails before anything runs, listing the registered exchanges
+- the registry names its exchanges: `exchange::lookup` and `exchange::name` map between an `ExchangeId` and the name operators select it by, `exchange::registered` lists every exchange, `exchange::DEFAULT_EXCHANGE` is the default, and `exchange::default_base_url` gives each one's production endpoint
+- `tests/exchange_boundary.rs` also fails when code or `--help` outside `src/exchange/binance/` names Binance beyond the registry entry, the `ExchangeId` variant, and the refused old base-URL names
+
 - `ExchangeCapabilities` describes what an exchange supports — market orders sized by base or quote quantity, client order ids, the candle page size, symbol rules, server time, and streams — so callers branch on capabilities instead of on `ExchangeId`; Binance Spot declares its own
 - `exchange::connect` builds an exchange's connectors from an `ExchangeId` and a `ConnectorConfig` through a registry that maps every exchange id to a factory; `ExchangeConnectors::signed` returns the trading and account connectors only when credentials were supplied
 - `MarketDataConnector::server_time` reads the exchange clock, `GET /api/v3/time` on Binance
@@ -22,7 +26,7 @@ All notable changes to this project will be documented in this file.
 - `scripts/file-size-check.sh` enforces a line budget on every `src/**/*.rs` file, counting raw lines including in-file tests: more than 400 lines warns and more than 600 fails; ci runs it on pull requests targeting `main`, and `scripts/release-check.sh` runs it before building
 - `scripts/file-size-allowlist.txt` grants a file a justified ceiling above 600 lines; the file still fails above that ceiling, and its entry fails once the file is back within 600 lines or no longer exists
 - `docs/configuration.md` lists every setting with its flag, environment variable, default, and scope, plus the environment variables read by dependencies; the `README.md` configuration section links to it
-- `--binance-api-key` and `--binance-api-secret` global flags supply Binance credentials on the command line; `QF_BINANCE_API_KEY` and `QF_BINANCE_API_SECRET` remain as fallbacks, and a flag wins over its environment variable
+- `--api-key` and `--api-secret` global flags supply the exchange's API credentials on the command line, with `QF_API_KEY` and `QF_API_SECRET` as fallbacks; a flag wins over its environment variable
 - `--help` names the credential environment variables but never prints their values
 - a credential passed as a flag on an interactive terminal logs a one-line warning that it may be saved in shell history and is visible in process listings, recommending the environment variables instead
 - codeql static analysis workflow running on pull requests targeting `main`, pushes to `main`, and a weekly schedule
@@ -30,6 +34,11 @@ All notable changes to this project will be documented in this file.
 - ci, codeql, and gitleaks status badges in `README.md`
 
 ### Changed
+
+- `--binance-base-url` and `QF_BINANCE_BASE_URL` are renamed `--base-url` and `QF_BASE_URL`, and `QF_BINANCE_API_KEY` and `QF_BINANCE_API_SECRET` are renamed `QF_API_KEY` and `QF_API_SECRET`; rename exported variables — the old base-URL flag and variable now fail with a rename hint, so a testnet URL exported under the old name can never quietly become production, while the old credential variables are no longer read
+- an omitted `--base-url` is the selected exchange's production endpoint, `https://api.binance.com/` for `binance` as before
+- `--base-url` is checked before the database is created, so a URL that does not parse no longer leaves an empty database behind
+- help, credential errors, and logs describe the exchange instead of naming Binance: the credentials are listed under "Exchange credentials", a missing pair fails with "requires exchange credentials", and a confirmed live run against production warns "live trading against a PRODUCTION endpoint"
 
 - `MarketDataSource` is now `MarketDataConnector`, and `TradingVenue` is split into `TradingConnector` (market orders, cancel, query, open orders) and `AccountConnector` (balances, account trades); all three extend the new `ExchangeConnector`, which reports the exchange id, its capabilities, and whether the endpoint is production
 - `KlineRequest`, `MarketOrderRequest`, `CancelOrderRequest`, and `OrderQueryRequest` moved from `ports` to `model`; their crate-root names are unchanged, but `quantforge::ports::KlineRequest` becomes `quantforge::model::KlineRequest`
@@ -60,11 +69,11 @@ All notable changes to this project will be documented in this file.
 - opening a database with a mismatched schema version fails with actionable guidance instead of proceeding silently
 - the SQLite schema version is now 3 (`BotRunState` gained a required `execution_mode` field); until 1.0.0 schema changes are not backward compatible and there are no migrations — delete the database and re-sync
 - data sync summaries report the first synced candle, and bounded syncs warn when the exchange returned no candles for part of the requested window
-- startup logs the effective Binance base URL and warns when the database file did not exist and was created empty
+- startup logs the exchange and its effective base URL, and warns when the database file did not exist and was created empty
 - `ms_to_rfc3339` renders out-of-range timestamps as an explicit `invalid-ms(...)` marker instead of a plausible epoch date
 - backtests reject non-positive initial cash and negative fees at the engine level; the live bootstrap window uses checked arithmetic
 - `trade run --mode live` requires explicit confirmation: an interactive `yes` prompt on a terminal, or `--yes` for unattended runs; non-interactive runs without `--yes` print a preview of the would-be live run and exit without trading
-- live-mode confirmations and logs mark production Binance endpoints with `(PRODUCTION)` and a confirmed live run against one logs a warning, replacing the previous default-URL-only startup warning; printed base URLs have userinfo removed
+- live-mode confirmations and logs mark production exchange endpoints with `(PRODUCTION)` and a confirmed live run against one logs a warning, replacing the previous default-URL-only startup warning; printed base URLs have userinfo removed
 - `data validate` flags non-positive `open`/`high`/`low`/`close` prices and negative volume; zero volume remains valid
 - candle gap detection no longer overflows on open times near the representable maximum; an unrepresentable expected open time is reported as a gap
 
@@ -74,6 +83,8 @@ All notable changes to this project will be documented in this file.
 - `BacktestConfig` no longer implements `Default`; construct its fields explicitly instead of relying on fabricated cash and fee values
 
 ### Fixed
+
+- `trade close --run-id` refuses a run recorded for a different exchange or symbol instead of selling this command's symbol against that run's position, and settles every refusal before contacting the exchange
 
 - a backtest whose fill or equity arithmetic leaves the decimal range (for example an entry at a price so small that the quantity cannot be represented) returns the new `EngineError::Overflow` instead of panicking
 

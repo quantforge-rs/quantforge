@@ -1,6 +1,6 @@
 //! Shared per-invocation construction: tracing, the SQLite store, and the
-//! exchange's connectors, built through the library's registry — once, from
-//! the parsed [`Cli`], and handed to the handlers — plus the
+//! selected exchange's connectors, built through the library's registry —
+//! once, from the parsed [`Cli`], and handed to the handlers — plus the
 //! interactive-session and confirmation helpers.
 
 use super::Cli;
@@ -17,18 +17,14 @@ use url::Url;
 
 /// Appended to every missing-credentials error so it names both ways to
 /// supply them.
-const CREDENTIALS_REMEDY: &str = "pass --binance-api-key and --binance-api-secret, or set \
-     QF_BINANCE_API_KEY and QF_BINANCE_API_SECRET";
+const CREDENTIALS_REMEDY: &str =
+    "pass --api-key and --api-secret, or set QF_API_KEY and QF_API_SECRET";
 
 /// Logged when a credential came from the command line of an interactive
 /// session. It never includes the value itself.
-const SHELL_HISTORY_WARNING: &str = "a Binance credential was passed on the command line; a \
+const SHELL_HISTORY_WARNING: &str = "an API credential was passed on the command line; a \
      literally typed value may be saved in shell history, and command-line values are visible \
-     in process listings while quantforge runs; prefer QF_BINANCE_API_KEY/QF_BINANCE_API_SECRET";
-
-/// The exchange every command talks to: the only one so far, until a flag
-/// chooses it. Commands reach it through its connectors, never its adapter.
-pub(crate) const EXCHANGE: ExchangeId = ExchangeId::BinanceSpot;
+     in process listings while quantforge runs; prefer QF_API_KEY/QF_API_SECRET";
 
 /// Everything a command handler needs, constructed once per invocation.
 #[derive(Debug)]
@@ -40,13 +36,22 @@ pub(crate) struct AppContext {
 
 impl AppContext {
     /// Build the context in startup order: tracing first (so the credential
-    /// and store warnings can be emitted), then the database, then the
-    /// clients.
+    /// and store warnings can be emitted), then the base URL, which is
+    /// validated before anything is created, then the database, then the
+    /// connectors.
     pub(crate) fn init(cli: &Cli) -> Result<Self> {
         init_tracing(&cli.log_level)?;
         if cli.credentials.on_command_line && is_interactive() {
             warn!("{SHELL_HISTORY_WARNING}");
         }
+
+        // Without a flag or variable, the exchange's own production
+        // endpoint, as its registry entry names it.
+        let base_url = match &cli.base_url {
+            Some(raw) => Url::parse(raw).context("failed to parse --base-url")?,
+            None => Url::parse(exchange::default_base_url(cli.exchange))
+                .context("failed to parse the exchange's default base URL")?,
+        };
 
         let db_existed = cli.db.exists();
         if let Some(parent) = cli.db.parent() {
@@ -65,15 +70,17 @@ impl AppContext {
             );
         }
 
-        let base_url =
-            Url::parse(&cli.binance_base_url).context("failed to parse --binance-base-url")?;
-        info!(base_url = %display_url(&base_url), "using Binance base URL");
+        info!(
+            exchange = exchange::name(cli.exchange),
+            base_url = %display_url(&base_url),
+            "using exchange base URL"
+        );
         let credentials = ApiCredentials::resolve(
-            cli.credentials.binance_api_key.clone(),
-            cli.credentials.binance_api_secret.clone(),
+            cli.credentials.api_key.clone(),
+            cli.credentials.api_secret.clone(),
         );
         let exchange = exchange::connect(
-            EXCHANGE,
+            cli.exchange,
             ConnectorConfig {
                 base_url: base_url.clone(),
                 credentials,
@@ -86,6 +93,12 @@ impl AppContext {
             base_url,
             exchange,
         })
+    }
+
+    /// The exchange the connectors talk to: the exchange of every market a
+    /// command keys candles and runs by.
+    pub(crate) fn exchange_id(&self) -> ExchangeId {
+        self.exchange.market_data.exchange_id()
     }
 
     /// The signed connectors, or an error that opens with `subject` (the

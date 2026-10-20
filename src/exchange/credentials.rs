@@ -1,8 +1,8 @@
 //! An exchange API key and secret. [`ApiCredentials::resolve`] owns the
 //! both-or-nothing rule; where the two values come from is the caller's
-//! business. The CLI takes them from `--binance-api-key`/`--binance-api-secret`
-//! with `QF_BINANCE_API_KEY`/`QF_BINANCE_API_SECRET` as env fallbacks, so the
-//! library never reads credentials from the process environment.
+//! business. The CLI takes them from `--api-key`/`--api-secret` with
+//! `QF_API_KEY`/`QF_API_SECRET` as env fallbacks, so the library never reads
+//! credentials from the process environment.
 
 use std::fmt;
 
@@ -25,7 +25,7 @@ impl ApiCredentials {
     /// Both-or-nothing: a half-configured pair is no credentials at all, so a
     /// missing secret can never silently pair with a leftover key and send a
     /// request that fails only at the exchange. A blank value (empty or
-    /// whitespace-only, such as an exported `QF_BINANCE_API_KEY=`) counts as
+    /// whitespace-only, such as an exported `QF_API_KEY=`) counts as
     /// missing for the same reason; any other value is used verbatim.
     pub fn resolve(api_key: Option<String>, secret: Option<String>) -> Option<Self> {
         let present = |value: Option<String>| value.filter(|value| !value.trim().is_empty());

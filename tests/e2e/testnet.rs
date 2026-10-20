@@ -1,7 +1,7 @@
 //! Testnet tier: read-only smoke against the real Binance Spot testnet.
 //!
 //! Gated by [`crate::harness::skip_unless_testnet!`]: without
-//! `QF_BINANCE_API_KEY`/`QF_BINANCE_API_SECRET` in the test runner's
+//! `QF_API_KEY`/`QF_API_SECRET` in the test runner's
 //! environment, each test returns early with a `SKIP (testnet tier)`
 //! marker on stderr. The gate keys on credentials even for public
 //! endpoints — exported testnet keys are the operator's opt-in to network

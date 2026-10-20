@@ -1,4 +1,4 @@
-Observe Binance state and manage orders manually when needed
+Observe exchange state and manage orders manually when needed
 
 Usage: quantforge monitor [OPTIONS] <COMMAND>
 
@@ -6,23 +6,18 @@ Commands:
   status          Print balances, latest run state, open orders, and recent trades
   watch           Poll status repeatedly
   orders          List current open orders on the symbol
-  trades          List recent Binance trades on the symbol
+  trades          List the account's recent trades on the symbol
   cancel-order    Cancel a specific order manually
   close-position  Close the current free base-asset balance for the symbol
   help            Print this message or the help of the given subcommand(s)
 
 Options:
-      --db <DB>
-          SQLite database path [env: QF_DB=] [default: data/market.sqlite]
-      --binance-base-url <BINANCE_BASE_URL>
-          Binance API base URL. Use https://testnet.binance.vision/ for Spot testnet [env: QF_BINANCE_BASE_URL=] [default: https://api.binance.com/]
-      --log-level <LOG_LEVEL>
-          Log filter (trace, debug, info, warn, error or a full tracing filter expression) [env: QF_LOG=] [default: info]
-  -h, --help
-          Print help
+      --db <DB>                SQLite database path [env: QF_DB=] [default: data/market.sqlite]
+      --exchange <EXCHANGE>    Exchange to connect to [env: QF_EXCHANGE=] [default: binance] [possible values: binance]
+      --base-url <BASE_URL>    Exchange API base URL; omitted, the exchange's production endpoint [env: QF_BASE_URL=]
+      --log-level <LOG_LEVEL>  Log filter (trace, debug, info, warn, error or a full tracing filter expression) [env: QF_LOG=] [default: info]
+  -h, --help                   Print help
 
-Binance credentials:
-      --binance-api-key <BINANCE_API_KEY>
-          Binance API key for signed endpoints (monitor, trade close, trade run --mode live); prefer QF_BINANCE_API_KEY: command-line values can land in shell history and process listings [env: QF_BINANCE_API_KEY]
-      --binance-api-secret <BINANCE_API_SECRET>
-          Binance API secret paired with --binance-api-key; prefer QF_BINANCE_API_SECRET: command-line values can land in shell history and process listings [env: QF_BINANCE_API_SECRET]
+Exchange credentials:
+      --api-key <API_KEY>        API key for the exchange's signed endpoints (monitor, trade close, trade run --mode live); prefer QF_API_KEY: command-line values can land in shell history and process listings [env: QF_API_KEY]
+      --api-secret <API_SECRET>  API secret paired with --api-key; prefer QF_API_SECRET: command-line values can land in shell history and process listings [env: QF_API_SECRET]

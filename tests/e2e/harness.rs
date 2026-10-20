@@ -153,8 +153,8 @@ pub fn offline_cmd_with_log(
     log_level: &str,
 ) -> Command {
     let mut cmd = mock_cmd(bed, mock, log_level);
-    cmd.env("QF_BINANCE_API_KEY", FAKE_API_KEY)
-        .env("QF_BINANCE_API_SECRET", FAKE_API_SECRET);
+    cmd.env("QF_API_KEY", FAKE_API_KEY)
+        .env("QF_API_SECRET", FAKE_API_SECRET);
     cmd
 }
 
@@ -166,7 +166,7 @@ pub fn mock_cmd(
     log_level: &str,
 ) -> Command {
     let mut cmd = cli_cmd(bed, log_level);
-    cmd.arg("--binance-base-url").arg(mock.base_url());
+    cmd.arg("--base-url").arg(mock.base_url());
     cmd
 }
 
@@ -175,8 +175,8 @@ pub fn mock_cmd(
 /// client has no timeouts of its own).
 pub fn testnet_cmd(bed: &TestBed, testnet: &TestnetEnv) -> Command {
     let mut cmd = testnet_base_cmd(bed);
-    cmd.env("QF_BINANCE_API_KEY", &testnet.api_key)
-        .env("QF_BINANCE_API_SECRET", &testnet.api_secret);
+    cmd.env("QF_API_KEY", &testnet.api_key)
+        .env("QF_API_SECRET", &testnet.api_secret);
     cmd
 }
 
@@ -184,16 +184,16 @@ pub fn testnet_cmd(bed: &TestBed, testnet: &TestnetEnv) -> Command {
 /// child environment holds no `QF_*` value at all.
 pub fn testnet_flag_cmd(bed: &TestBed, testnet: &TestnetEnv) -> Command {
     let mut cmd = testnet_base_cmd(bed);
-    cmd.arg("--binance-api-key")
+    cmd.arg("--api-key")
         .arg(&testnet.api_key)
-        .arg("--binance-api-secret")
+        .arg("--api-secret")
         .arg(&testnet.api_secret);
     cmd
 }
 
 fn testnet_base_cmd(bed: &TestBed) -> Command {
     let mut cmd = cli_cmd(bed, "error");
-    cmd.arg("--binance-base-url")
+    cmd.arg("--base-url")
         .arg(TESTNET_BASE_URL)
         .timeout(Duration::from_secs(30));
     cmd
@@ -240,8 +240,8 @@ pub fn testnet_env() -> Option<TestnetEnv> {
             .filter(|value| !value.trim().is_empty())
     };
     Some(TestnetEnv {
-        api_key: present("QF_BINANCE_API_KEY")?,
-        api_secret: present("QF_BINANCE_API_SECRET")?,
+        api_key: present("QF_API_KEY")?,
+        api_secret: present("QF_API_SECRET")?,
     })
 }
 
@@ -256,7 +256,7 @@ macro_rules! skip_unless_testnet {
                 use std::io::Write as _;
                 let _ = writeln!(
                     std::io::stderr(),
-                    "SKIP (testnet tier) {}:{}: QF_BINANCE_API_KEY/QF_BINANCE_API_SECRET not set; \
+                    "SKIP (testnet tier) {}:{}: QF_API_KEY/QF_API_SECRET not set; \
                      export Spot testnet keys to run",
                     module_path!(),
                     line!(),

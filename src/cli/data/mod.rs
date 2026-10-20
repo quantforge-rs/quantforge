@@ -13,7 +13,7 @@ use validate::{DataValidateArgs, handle_data_validate};
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum DataCommand {
-    /// Sync candles from Binance into SQLite.
+    /// Sync candles from the exchange into SQLite.
     Sync(DataSyncArgs),
 
     /// Validate stored candles for duplicates, gaps, ordering, and OHLC sanity.

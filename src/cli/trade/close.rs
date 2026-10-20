@@ -27,13 +27,10 @@ pub(crate) async fn handle_trade_close(ctx: &AppContext, args: TradeCloseArgs) -
     let store = &ctx.store;
     // Credential gate before parsing, preserving the pre-split dispatch
     // ordering.
-    let signed = ctx.require_signed("trade close requires Binance credentials")?;
-    let market = parse_market(args.market.symbol, args.market.interval)?;
-    let rules = ctx
-        .exchange
-        .market_data
-        .fetch_symbol_rules(&market.symbol)
-        .await?;
+    let signed = ctx.require_signed("trade close requires exchange credentials")?;
+    let market = parse_market(ctx.exchange_id(), args.market.symbol, args.market.interval)?;
+    // The run is settled before the first request, so every refusal below
+    // leaves the exchange untouched.
     let mut run_state = if let Some(run_id) = args.run_id {
         store
             .load_run_state(&run_id)?
@@ -53,6 +50,21 @@ pub(crate) async fn handle_trade_close(ctx: &AppContext, args: TradeCloseArgs) -
             })?
     };
 
+    // A run picked by --run-id may belong to another market, and selling
+    // this command's symbol would then rewrite that run's position. The
+    // interval is not compared: it does not change what is sold.
+    if run_state.market.exchange != market.exchange || run_state.market.symbol != market.symbol {
+        bail!(
+            "run {} was recorded for market {} {}, but this invocation targets {} {}; \
+             refusing to close it",
+            run_state.run_id,
+            run_state.market.exchange,
+            run_state.market.symbol,
+            market.exchange,
+            market.symbol
+        );
+    }
+
     if run_state.execution_mode == ExecutionMode::DryRun {
         bail!(
             "run {} was recorded in dry-run mode; its position is synthetic and there is \
@@ -61,6 +73,11 @@ pub(crate) async fn handle_trade_close(ctx: &AppContext, args: TradeCloseArgs) -
         );
     }
 
+    let rules = ctx
+        .exchange
+        .market_data
+        .fetch_symbol_rules(&market.symbol)
+        .await?;
     let balances = signed.account.account_balances().await?;
     let free_base_qty = balances
         .iter()

@@ -4,9 +4,27 @@ use quantforge::{Candle, CandleStore, ExchangeId, Interval, MarketId, SqliteStor
 use rust_decimal::Decimal;
 use tempfile::tempdir;
 
+/// The binary with every exchange setting a shell could leak in removed,
+/// so each test supplies the ones it needs by flag. The renamed
+/// `QF_BINANCE_BASE_URL` goes too: the binary refuses to run while it is
+/// set.
+fn quantforge() -> Command {
+    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
+    for variable in [
+        "QF_EXCHANGE",
+        "QF_BASE_URL",
+        "QF_BINANCE_BASE_URL",
+        "QF_API_KEY",
+        "QF_API_SECRET",
+    ] {
+        cmd.env_remove(variable);
+    }
+    cmd
+}
+
 #[test]
 fn help_lists_v020_command_groups() {
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
+    let mut cmd = quantforge();
     cmd.arg("--help");
     cmd.assert()
         .success()
@@ -21,9 +39,8 @@ fn data_validate_reports_the_requested_interval() {
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("market.sqlite");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .arg("--db")
+    let mut cmd = quantforge();
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("error")
@@ -73,9 +90,8 @@ fn data_validate_exits_non_zero_when_issues_found() {
         .upsert_candles(&market, &candles)
         .expect("seed candles");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .arg("--db")
+    let mut cmd = quantforge();
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("error")
@@ -100,9 +116,8 @@ fn backtest_rejects_zero_cash() {
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("market.sqlite");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .arg("--db")
+    let mut cmd = quantforge();
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("error")
@@ -125,9 +140,8 @@ fn backtest_rejects_negative_fee_bps() {
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("market.sqlite");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .arg("--db")
+    let mut cmd = quantforge();
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("error")
@@ -149,15 +163,14 @@ fn trade_run_rejects_zero_quote_order_qty_before_any_network() {
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("market.sqlite");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
+    let mut cmd = quantforge();
     // Unroutable base URL: if argument validation ever regresses, this test
     // fails on a refused connection instead of touching the real API.
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .arg("--db")
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("error")
-        .arg("--binance-base-url")
+        .arg("--base-url")
         .arg("http://127.0.0.1:9/")
         .args([
             "trade",
@@ -179,13 +192,12 @@ fn data_sync_rejects_zero_poll_secs() {
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("market.sqlite");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .arg("--db")
+    let mut cmd = quantforge();
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("error")
-        .arg("--binance-base-url")
+        .arg("--base-url")
         .arg("http://127.0.0.1:9/")
         .args(["data", "sync", "--symbol", "BTCUSDT", "--poll-secs", "0"]);
     cmd.assert().failure().stderr(predicate::str::contains(
@@ -198,9 +210,8 @@ fn monitor_watch_rejects_zero_poll_secs_without_credentials() {
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("market.sqlite");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .arg("--db")
+    let mut cmd = quantforge();
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("error")
@@ -222,18 +233,15 @@ fn trade_run_live_without_yes_prints_preview_and_exits_zero_before_any_network()
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("market.sqlite");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
+    let mut cmd = quantforge();
     // Credentials are removed so a gate regression degrades to the offline
     // credentials error instead of reaching the network; the unroutable URL
     // backstops that. Piped stdio means the non-interactive preview branch.
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .env_remove("QF_BINANCE_API_KEY")
-        .env_remove("QF_BINANCE_API_SECRET")
-        .arg("--db")
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("error")
-        .arg("--binance-base-url")
+        .arg("--base-url")
         .arg("http://127.0.0.1:9/")
         .args(["trade", "run", "--symbol", "BTCUSDT", "--mode", "live"]);
     cmd.assert()
@@ -258,17 +266,14 @@ fn trade_run_live_preview_marks_production_endpoints() {
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("market.sqlite");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
+    let mut cmd = quantforge();
     // The preview returns before any client use, so the production URL is
     // never contacted.
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .env_remove("QF_BINANCE_API_KEY")
-        .env_remove("QF_BINANCE_API_SECRET")
-        .arg("--db")
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("error")
-        .arg("--binance-base-url")
+        .arg("--base-url")
         .arg("https://api.binance.com/")
         .args(["trade", "run", "--symbol", "BTCUSDT", "--mode", "live"]);
     cmd.assert().success().stdout(predicate::str::contains(
@@ -281,21 +286,18 @@ fn trade_run_live_with_yes_requires_credentials_before_any_network() {
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("market.sqlite");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .env_remove("QF_BINANCE_API_KEY")
-        .env_remove("QF_BINANCE_API_SECRET")
-        .arg("--db")
+    let mut cmd = quantforge();
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("error")
-        .arg("--binance-base-url")
+        .arg("--base-url")
         .arg("http://127.0.0.1:9/")
         .args([
             "trade", "run", "--symbol", "BTCUSDT", "--mode", "live", "--yes",
         ]);
     cmd.assert().failure().stderr(predicate::str::contains(
-        "trade run --mode live requires Binance credentials",
+        "trade run --mode live requires exchange credentials",
     ));
 }
 
@@ -304,17 +306,14 @@ fn trade_run_live_with_yes_warns_on_production_endpoint_and_still_requires_crede
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("market.sqlite");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
+    let mut cmd = quantforge();
     // The credentials error fires while constructing the engine, before any
     // request, so the production URL is never contacted.
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .env_remove("QF_BINANCE_API_KEY")
-        .env_remove("QF_BINANCE_API_SECRET")
-        .arg("--db")
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("warn")
-        .arg("--binance-base-url")
+        .arg("--base-url")
         .arg("https://api.binance.com/")
         .args([
             "trade", "run", "--symbol", "BTCUSDT", "--mode", "live", "--yes",
@@ -324,10 +323,10 @@ fn trade_run_live_with_yes_warns_on_production_endpoint_and_still_requires_crede
     cmd.assert()
         .failure()
         .stdout(predicate::str::contains(
-            "live trading against PRODUCTION Binance",
+            "live trading against a PRODUCTION endpoint",
         ))
         .stderr(predicate::str::contains(
-            "trade run --mode live requires Binance credentials",
+            "trade run --mode live requires exchange credentials",
         ));
 }
 
@@ -336,31 +335,27 @@ fn trade_run_defaults_to_dry_run_and_never_engages_live_gates() {
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("market.sqlite");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
+    let mut cmd = quantforge();
     // Dry-run proceeds to the bootstrap sync and dies on the unroutable URL;
     // the connection-error text differs per OS, so only the absence of the
     // live gates is asserted.
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .env_remove("QF_BINANCE_API_KEY")
-        .env_remove("QF_BINANCE_API_SECRET")
-        .arg("--db")
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("error")
-        .arg("--binance-base-url")
+        .arg("--base-url")
         .arg("http://127.0.0.1:9/")
         .args(["trade", "run", "--symbol", "BTCUSDT", "--max-loops", "1"]);
     cmd.assert()
         .failure()
         .stdout(predicate::str::contains("refusing to start live trading").not())
-        .stderr(predicate::str::contains("requires Binance credentials").not());
+        .stderr(predicate::str::contains("requires exchange credentials").not());
 }
 
 #[test]
 fn trade_run_help_documents_dry_run_as_the_default_mode() {
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .args(["trade", "run", "--help"]);
+    let mut cmd = quantforge();
+    cmd.args(["trade", "run", "--help"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("[default: dry-run]"))
@@ -372,9 +367,8 @@ fn data_validate_rejects_invalid_interval_with_clear_error() {
     let tempdir = tempdir().expect("tempdir");
     let db_path = tempdir.path().join("market.sqlite");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .arg("--db")
+    let mut cmd = quantforge();
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("error")
@@ -447,9 +441,8 @@ fn backtest_reproduces_pinned_summary_for_seeded_fixture() {
         .upsert_candles(&market, &candles)
         .expect("seed candles");
 
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
-    cmd.env_remove("QF_BINANCE_BASE_URL")
-        .arg("--db")
+    let mut cmd = quantforge();
+    cmd.arg("--db")
         .arg(&db_path)
         .arg("--log-level")
         .arg("error")

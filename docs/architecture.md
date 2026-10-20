@@ -45,10 +45,11 @@ src/
 ├── cli/                        the command tree, binary only
 │   ├── mod.rs                  quantforge: root parser, global flags, dispatch into groups
 │   ├── common.rs               shared flattened args, execution-mode enum, parse and print helpers
-│   ├── context.rs              AppContext: tracing, SQLite store, Binance clients, prompts
+│   ├── context.rs              AppContext: tracing, SQLite store, exchange connectors, prompts
+│   ├── tests.rs                root-parser unit tests and the config-matrix and README drift checks
 │   ├── data/                   market-data commands
 │   │   ├── mod.rs              quantforge data: subcommand enum and dispatch
-│   │   ├── sync.rs             quantforge data sync: pull klines from Binance into SQLite
+│   │   ├── sync.rs             quantforge data sync: pull klines from the exchange into SQLite
 │   │   └── validate.rs         quantforge data validate: check stored candles
 │   ├── backtest/               a leaf command in directory form
 │   │   └── mod.rs              quantforge backtest: simulate the strategy on stored candles
@@ -78,11 +79,11 @@ src/
 │   └── timestamp.rs            TimestampMs, now_utc_ms, RFC 3339 conversions
 ├── ports.rs                    the seams: connector and storage traits, capabilities, errors
 ├── exchange/                   the connector registry and one adapter per exchange
-│   ├── mod.rs                  the registry API: connect, factory, ExchangeConnectors
+│   ├── mod.rs                  the registry API: lookup, name, connect, ExchangeConnectors
 │   ├── credentials.rs          ApiCredentials: an API key and secret, never printed
-│   ├── registry.rs             ExchangeId to connector factory; the only id-to-adapter map
+│   ├── registry.rs             ExchangeId to name, default endpoint, factory; the only id-to-adapter map
 │   └── binance/                Binance Spot REST adapter
-│       ├── mod.rs              module root and the registry's Binance factory
+│       ├── mod.rs              module root and Binance's registry entry
 │       ├── client.rs           HTTP transport, signed requests, production-host check
 │       ├── convert.rs          wire DTOs to domain types
 │       ├── signing.rs          HMAC-SHA256 query signing
@@ -117,9 +118,11 @@ After `cli/`, the six library modules follow innermost first, as in the
 `exchange` and `storage` use `model` and `ports`, `sdk` uses `model`, and
 `engine` uses `model`, `ports`, and `sdk`. The engines reach the exchange
 and storage adapters only through the `ports` traits; the binary chooses
-which adapters to pass in, building the exchange's connectors through
-`exchange::connect`. Nothing outside `src/exchange/` names a concrete
-exchange adapter, and `tests/exchange_boundary.rs` fails if anything
+which adapters to pass in, building the connectors of the exchange that
+`--exchange` names through `exchange::connect`. Nothing outside
+`src/exchange/` names a concrete exchange adapter, nothing outside the
+Binance adapter hardcodes Binance beyond the registry entry and the
+`ExchangeId` variant, and `tests/exchange_boundary.rs` fails if anything
 does.
 
 ## Tests
@@ -136,12 +139,14 @@ does.
   `tests/candle_batch.rs`, `tests/decimal_float.rs`, `tests/sqlite_store.rs`,
   and `tests/live_engine.rs`: library integration tests
 - `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
-  from naming a concrete exchange adapter
+  from naming a concrete exchange adapter, and the code and `--help`
+  outside the Binance adapter from hardcoding Binance
 - `tests/fixtures/`: data shared with the Python bindings' tests, starting
   with the decimal ↔ float64 conformance cases of
   [decimal-float-policy.md](decimal-float-policy.md)
 - unit tests sit at the bottom of the module they test, in
-  `#[cfg(test)] mod tests`
+  `#[cfg(test)] mod tests`, or in a `tests.rs` beside it once they would
+  push the file over its line budget (`src/cli/tests.rs`)
 
 To add a command, follow the recipe in
 [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-cli-command).

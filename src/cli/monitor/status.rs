@@ -45,7 +45,11 @@ pub(super) async fn render_status(
     strategy_name: &str,
     recent_trades: usize,
 ) -> Result<()> {
-    let market = parse_market(market_args.symbol.clone(), market_args.interval.clone())?;
+    let market = parse_market(
+        market_data.exchange_id(),
+        market_args.symbol.clone(),
+        market_args.interval.clone(),
+    )?;
     let rules = market_data.fetch_symbol_rules(&market.symbol).await?;
     let balances = signed.account.account_balances().await?;
     let open_orders = signed.trading.open_orders(Some(&market.symbol)).await?;

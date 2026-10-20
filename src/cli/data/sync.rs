@@ -1,4 +1,4 @@
-//! `quantforge data sync` — pull klines from Binance into SQLite, bounded
+//! `quantforge data sync` — pull klines from the exchange into SQLite, bounded
 //! or following, resuming from the stored high-water mark.
 
 use crate::cli::common::{MarketArgs, PollArgs, parse_market};
@@ -30,7 +30,7 @@ pub(crate) struct DataSyncArgs {
 pub(crate) async fn handle_data_sync(ctx: &AppContext, args: DataSyncArgs) -> Result<()> {
     let store = &ctx.store;
     let client = ctx.exchange.market_data.as_ref();
-    let market = parse_market(args.market.symbol, args.market.interval)?;
+    let market = parse_market(ctx.exchange_id(), args.market.symbol, args.market.interval)?;
     let engine = DataSyncEngine::new(client, store);
     let summary = engine
         .run(&DataSyncConfig {
