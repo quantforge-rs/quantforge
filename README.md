@@ -42,7 +42,7 @@ The public surface is layered as Rust modules, innermost first:
 - `storage` - persistence adapters, one namespace per backend; `sqlite` is the only one
 - `sdk` - the strategy trait and its context, indicator math, and built-in strategies
 - `engine` - the drivers: `engine::backtest`, `engine::data_sync`, and `engine::live`
-- `protocol` - stands apart from the layers above: the versioned wire types between QuantForge instances, for remote backtest jobs, candle segments, and the live bar stream; its rustdoc is the wire specification
+- `protocol` - stands apart from the layers above: the versioned wire types between QuantForge instances, for remote backtest jobs, candle segments, and the live bar stream, and the [strategy bundle](https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md) a remote backtest runs; its rustdoc is the wire specification
 
 The `quantforge` binary adds `cli`, a module tree that mirrors the command
 tree: `quantforge monitor cancel-order` lives in

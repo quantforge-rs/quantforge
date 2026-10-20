@@ -6,7 +6,9 @@ use super::super::{ContentHash, ExactDecimal};
 
 /// A backtest to run: the bundle, the candles it runs on, and how fills are
 /// simulated. Strategy parameters belong to the bundle, so the bundle's hash
-/// and these fields together say everything the run depends on.
+/// and these fields together say everything the client asks for. A bundle
+/// accepts a range of engine versions, so which engine, Python, and packages
+/// actually ran the job is the server's to record.
 ///
 /// ```
 /// use quantforge::protocol::jobs::JobSubmission;
@@ -20,7 +22,9 @@ use super::super::{ContentHash, ExactDecimal};
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobSubmission {
-    /// The strategy bundle, by its hash. The server must hold it already.
+    /// The strategy bundle, by its code hash
+    /// ([`Bundle::code_hash`](super::super::bundle::Bundle::code_hash)). The
+    /// server must hold it already.
     pub bundle: ContentHash,
     /// The candles to run it on.
     pub data: DataSelection,

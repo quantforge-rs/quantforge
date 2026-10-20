@@ -38,8 +38,8 @@
 //! - [`engine`] — the drivers: [`engine::backtest`], [`engine::data_sync`]
 //!   and [`engine::live`].
 //! - [`protocol`] — the versioned wire types of remote backtest jobs,
-//!   candle segments, and the live bar stream; its documentation is the wire
-//!   specification.
+//!   candle segments, and the live bar stream, and the strategy bundle a job
+//!   runs; its documentation is the wire specification.
 //!
 //! # The command tree it answers to
 //!

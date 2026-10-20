@@ -38,6 +38,7 @@ sha2 = "0.10"
 thiserror = "1"
 time = { version = "0.3", features = ["formatting", "macros", "parsing"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal"] }
+toml = { version = "0.8", default-features = false, features = ["parse"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = "2"

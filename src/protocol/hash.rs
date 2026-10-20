@@ -15,8 +15,10 @@ const PREFIX: &str = "sha256:";
 /// Stored content never changes, so its hash names it for good, and whoever
 /// fetches it can check what arrived. Which bytes are hashed is up to the
 /// surface that names them: a [`ResultRef`](super::jobs::ResultRef) covers
-/// the bytes a download returns, and a segment's
-/// [`format`](super::segments::SegmentEntry::format) fixes its bytes.
+/// the bytes a download returns, a segment's
+/// [`format`](super::segments::SegmentEntry::format) fixes its bytes, and a
+/// bundle's code hash covers its canonical tar
+/// ([`Bundle::code_hash`](super::bundle::Bundle::code_hash)).
 ///
 /// ```
 /// use quantforge::protocol::ContentHash;

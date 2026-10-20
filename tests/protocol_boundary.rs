@@ -23,7 +23,14 @@ mod scan {
     use std::path::Path;
 
     /// The dependencies the protocol may use besides the standard library.
-    const ALLOWED_DEPENDENCIES: [&str; 3] = ["rust_decimal", "serde", "thiserror"];
+    const ALLOWED_DEPENDENCIES: [&str; 6] = [
+        "rust_decimal",
+        "serde",
+        "serde_json",
+        "sha2",
+        "thiserror",
+        "toml",
+    ];
 
     /// The only file whose code may name `rust_decimal`'s `Decimal`.
     const DECIMAL_FILE: &str = "src/protocol/decimal.rs";
@@ -90,12 +97,18 @@ mod scan {
         line.contains("crate::")
     }
 
-    /// `quantforge` other than as `quantforge::protocol` or a hyphenated name
-    /// such as `quantforge-protocol`.
+    /// `quantforge` other than as `quantforge::protocol`, a hyphenated name
+    /// such as `quantforge-protocol`, the manifest's name `quantforge.toml`,
+    /// or the repository in a link to its docs.
     fn names_quantforge_beyond_the_protocol(line: &str) -> bool {
         line.match_indices("quantforge").any(|(at, word)| {
             let rest = &line[at + word.len()..];
-            !(rest.starts_with("::protocol") || rest.starts_with('-'))
+            let in_repository_link =
+                line[..at].ends_with("github.com/quantforge-rs/") && rest.starts_with('/');
+            !(rest.starts_with("::protocol")
+                || rest.starts_with('-')
+                || rest.starts_with(".toml")
+                || in_repository_link)
         })
     }
 
@@ -224,8 +237,9 @@ mod scan {
     #[test]
     fn the_scan_reads_the_whole_protocol_and_the_manifest() {
         let files = protocol_sources();
-        assert!(files.len() >= 12, "scanned only {files:?}");
+        assert!(files.len() >= 25, "scanned only {files:?}");
         assert!(files.contains_key(DECIMAL_FILE));
+        assert!(files.contains_key("src/protocol/bundle/mod.rs"));
         assert!(
             files.values().any(|text| text
                 .lines()
@@ -258,6 +272,15 @@ mod scan {
         ));
         assert!(!names_quantforge_beyond_the_protocol(
             "//! become the `quantforge-protocol` crate"
+        ));
+        assert!(!names_quantforge_beyond_the_protocol(
+            r#"pub const MANIFEST_FILE: &str = "quantforge.toml";"#
+        ));
+        assert!(!names_quantforge_beyond_the_protocol(
+            "//! [spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md>"
+        ));
+        assert!(names_quantforge_beyond_the_protocol(
+            "//! [spec]: <https://example.com/quantforge/blob/main/x.md>"
         ));
 
         assert!(gates_code("#[cfg(not(test))]"));

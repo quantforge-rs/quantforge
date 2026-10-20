@@ -12,15 +12,21 @@
 //! # Surfaces
 //!
 //! - [`jobs`]: remote backtests of a Python strategy bundle, over HTTP.
+//! - [`bundle`]: the strategy bundle a job runs, uploaded as its canonical
+//!   tar and named by its code hash; its rules are the [bundle spec].
 //! - [`segments`]: stored candles, as immutable segments named by their
 //!   content hash, over HTTP.
 //! - [`stream`]: bars as they close, over a WebSocket.
+//!
+//! [bundle spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md>
 //!
 //! # Encoding
 //!
 //! - Every message is one JSON object in UTF-8: an HTTP body, or a WebSocket
 //!   text frame. A list is never sent bare but inside an object, such as
-//!   [`segments::SegmentIndex`], so that fields can join it later.
+//!   [`segments::SegmentIndex`], so that fields can join it later. The one
+//!   body that is not JSON is a bundle upload: its canonical tar, as
+//!   [`bundle::BUNDLE_MEDIA_TYPE`].
 //! - Field names and enum values are `snake_case`. In Rust, the serde name
 //!   of each field and variant here is its wire name.
 //! - Every integer is below 2^53 in magnitude, so JavaScript reads it
@@ -71,7 +77,9 @@
 //! Any other change needs a new version: a field removed, renamed, or
 //! retyped, a new required field, or a field whose meaning changes. Unlike
 //! the run state QuantForge stores, which is never read across schema
-//! versions, the wire grows by optional fields.
+//! versions, the wire grows by optional fields. A bundle's manifest is the
+//! exception: it refuses keys it does not know, and grows only by a new
+//! bundle format.
 //!
 //! Version 1 may still change until QuantForge 0.3.0 is released.
 //!
@@ -93,6 +101,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs, missing_debug_implementations)]
 
+pub mod bundle;
 mod decimal;
 mod errors;
 mod hash;
@@ -156,6 +165,61 @@ pub enum ProtocolError {
         min_supported: u32,
         /// The range's newest version.
         proto_version: u32,
+    },
+
+    /// An engine version that is not `MAJOR.MINOR.PATCH`.
+    #[error("invalid engine version {input:?}: expected MAJOR.MINOR.PATCH, such as \"0.3.0\"")]
+    InvalidEngineVersion {
+        /// The text that was refused.
+        input: String,
+    },
+
+    /// An engine requirement that is not comparators on engine versions.
+    #[error(
+        "invalid engine requirement {input:?}: {reason}; write comparators on MAJOR.MINOR.PATCH \
+         versions, such as \">=0.3.0, <0.4.0\""
+    )]
+    InvalidEngineRequirement {
+        /// The text that was refused.
+        input: String,
+        /// What is wrong with it.
+        reason: String,
+    },
+
+    /// A Python version that is not `MAJOR.MINOR`.
+    #[error("invalid python version {input:?}: expected MAJOR.MINOR, such as \"3.12\"")]
+    InvalidPythonVersion {
+        /// The text that was refused.
+        input: String,
+    },
+
+    /// A package name that is not in its normalized form.
+    #[error("invalid package name {input:?}: {reason}")]
+    InvalidPackageName {
+        /// The text that was refused.
+        input: String,
+        /// What is wrong with it, and the normalized spelling when there is
+        /// one.
+        reason: String,
+    },
+
+    /// A package version that is not in its canonical form.
+    #[error(
+        "invalid package version {input:?}: expected a canonical version such as \"2.1.3\", \
+         \"1.0rc1\", or \"2.0.post1\""
+    )]
+    InvalidPackageVersion {
+        /// The text that was refused.
+        input: String,
+    },
+
+    /// A bundle entry that does not name an importable module and a class.
+    #[error("invalid entry {input:?}: {reason}")]
+    InvalidEntry {
+        /// The text that was refused.
+        input: String,
+        /// What is wrong with it.
+        reason: String,
     },
 
     /// The peer's newest version is older than the oldest this side speaks.

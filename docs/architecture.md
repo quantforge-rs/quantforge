@@ -72,6 +72,20 @@ src/
 │   ├── hash.rs                 ContentHash: the sha256: names of stored content
 │   ├── errors.rs               the error envelope every surface answers with, and its HTTP statuses
 │   ├── segments.rs             candle segment index entries and their range metadata
+│   ├── bundle/                 Python strategy bundles: the files, the manifest, the canonical tar
+│   │   ├── mod.rs              Bundle: build, read back, hash, and admit a bundle; the spec's constants
+│   │   ├── path.rs             BundlePath and BundleFile: the path rules that extract anywhere
+│   │   ├── files.rs            BundleLimits, and the checks each file and the whole set pass
+│   │   ├── dir.rs              collecting a bundle from a directory, never following a link
+│   │   ├── archive.rs          the canonical tar writer and the code hash
+│   │   ├── reader.rs           the strict reader a server checks an upload with
+│   │   ├── manifest.rs         Manifest: quantforge.toml as bundle TOML, checked key by key
+│   │   ├── entry.rs            Entry: the module and class the worker runs
+│   │   ├── params.rs           Params: the strategy's parameters as JSON
+│   │   ├── requirement.rs      EngineVersion, EngineRequirement, PythonVersion
+│   │   ├── package.rs          PackageName and PackageVersion, normalized and canonical
+│   │   ├── runtime.rs          Runtime: what a server runs bundles on, and admission
+│   │   └── problems.rs         BundleProblem, ProblemCode, BundleError: why a bundle is refused
 │   ├── jobs/                   remote backtests of a Python bundle, over HTTP
 │   │   ├── mod.rs              the job surface and JobId
 │   │   ├── submission.rs       JobSubmission: the bundle's hash, the candles, the backtest settings
@@ -156,8 +170,9 @@ them, and [exchange-feature-matrix.md](exchange-feature-matrix.md) shows
 the results beside each exchange's capabilities. `tests/protocol_boundary.rs`
 compiles `protocol` on its own and scans its sources, so it fails if
 `protocol` uses anything else in the crate, or a dependency beyond `serde`,
-`rust_decimal`, and `thiserror`: the module is meant to become a crate of
-its own.
+`serde_json`, `rust_decimal`, `sha2`, `thiserror`, and `toml`: the module is
+meant to become a crate of its own. The strategy bundle format it carries
+is written down in [bundle-spec.md](bundle-spec.md).
 
 ## Tests
 
@@ -178,6 +193,10 @@ its own.
 - `tests/protocol_boundary.rs`: compiles `src/protocol/` as the only module
   of a crate and scans its sources, so the wire format never comes to
   depend on the rest of QuantForge
+- `tests/bundle/`: the strategy bundle spec — the shared cases of
+  `tests/fixtures/bundle_cases.json`, bundles built from real directories,
+  the messages a refused bundle shows, a canonical tar read by the system
+  `tar`, and [bundle-spec.md](bundle-spec.md) held to the code
 - `tests/conformance/`: the conformance suite against every registered
   exchange — replayed from the recorded or hand-written fixtures in
   `tests/conformance/fixtures/`, or live against a testnet when
