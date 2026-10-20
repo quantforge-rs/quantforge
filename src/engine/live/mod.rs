@@ -10,8 +10,8 @@ mod state;
 
 use crate::EngineError;
 use crate::{
-    BuiltInStrategyConfig, CandleStore, ExecutionMode, MarketDataSource, MarketId, RunJournalStore,
-    RunStatus, TradingVenue, now_utc_ms,
+    BuiltInStrategyConfig, CandleStore, ExecutionMode, MarketDataConnector, MarketId,
+    RunJournalStore, RunStatus, SignedConnectors, now_utc_ms,
 };
 use rust_decimal::Decimal;
 use std::time::Duration;
@@ -41,10 +41,10 @@ pub struct LiveTradeSummary {
 }
 
 pub struct LiveTradeEngine<'a> {
-    market_data: &'a dyn MarketDataSource,
+    market_data: &'a dyn MarketDataConnector,
     candle_store: &'a dyn CandleStore,
     journal_store: &'a dyn RunJournalStore,
-    trading_venue: Option<&'a dyn TradingVenue>,
+    signed: Option<SignedConnectors<'a>>,
 }
 
 impl<'a> std::fmt::Debug for LiveTradeEngine<'a> {
@@ -55,16 +55,16 @@ impl<'a> std::fmt::Debug for LiveTradeEngine<'a> {
 
 impl<'a> LiveTradeEngine<'a> {
     pub fn new(
-        market_data: &'a dyn MarketDataSource,
+        market_data: &'a dyn MarketDataConnector,
         candle_store: &'a dyn CandleStore,
         journal_store: &'a dyn RunJournalStore,
-        trading_venue: Option<&'a dyn TradingVenue>,
+        signed: Option<SignedConnectors<'a>>,
     ) -> Self {
         Self {
             market_data,
             candle_store,
             journal_store,
-            trading_venue,
+            signed,
         }
     }
 

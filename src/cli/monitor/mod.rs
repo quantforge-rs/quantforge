@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use clap::Subcommand;
-use quantforge::{BinanceSpotClient, SqliteStore};
+use quantforge::{MarketDataConnector, SignedConnectors, SqliteStore};
 
 mod cancel_order;
 mod close_position;
@@ -43,19 +43,22 @@ pub(crate) enum MonitorCommand {
 
 pub(crate) async fn dispatch(
     store: &SqliteStore,
-    private_client: &BinanceSpotClient,
+    market_data: &dyn MarketDataConnector,
+    signed: SignedConnectors<'_>,
     command: MonitorCommand,
 ) -> Result<()> {
     match command {
-        MonitorCommand::Status(args) => handle_monitor_status(store, private_client, args).await,
-        MonitorCommand::Watch(args) => handle_monitor_watch(store, private_client, args).await,
-        MonitorCommand::Orders(args) => handle_monitor_orders(private_client, args).await,
-        MonitorCommand::Trades(args) => handle_monitor_trades(private_client, args).await,
+        MonitorCommand::Status(args) => {
+            handle_monitor_status(store, market_data, signed, args).await
+        }
+        MonitorCommand::Watch(args) => handle_monitor_watch(store, market_data, signed, args).await,
+        MonitorCommand::Orders(args) => handle_monitor_orders(signed.trading, args).await,
+        MonitorCommand::Trades(args) => handle_monitor_trades(signed.account, args).await,
         MonitorCommand::CancelOrder(args) => {
-            handle_monitor_cancel_order(private_client, args).await
+            handle_monitor_cancel_order(signed.trading, args).await
         }
         MonitorCommand::ClosePosition(args) => {
-            handle_monitor_close_position(private_client, args).await
+            handle_monitor_close_position(market_data, signed, args).await
         }
     }
 }

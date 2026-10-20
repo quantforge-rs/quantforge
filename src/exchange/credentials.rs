@@ -1,4 +1,4 @@
-//! Binance API credentials. [`BinanceCredentials::resolve`] owns the
+//! An exchange API key and secret. [`ApiCredentials::resolve`] owns the
 //! both-or-nothing rule; where the two values come from is the caller's
 //! business. The CLI takes them from `--binance-api-key`/`--binance-api-secret`
 //! with `QF_BINANCE_API_KEY`/`QF_BINANCE_API_SECRET` as env fallbacks, so the
@@ -7,20 +7,21 @@
 use std::fmt;
 
 #[derive(Clone)]
-pub struct BinanceCredentials {
+pub struct ApiCredentials {
     pub api_key: String,
     pub secret: String,
 }
 
-/// Prints neither the key nor the secret, so the clients and contexts that
-/// derive `Debug` around these credentials cannot leak them into logs.
-impl fmt::Debug for BinanceCredentials {
+/// Prints neither the key nor the secret, so the clients, connectors, and
+/// contexts that derive `Debug` around these credentials cannot leak them
+/// into logs.
+impl fmt::Debug for ApiCredentials {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("BinanceCredentials").finish_non_exhaustive()
+        f.debug_struct("ApiCredentials").finish_non_exhaustive()
     }
 }
 
-impl BinanceCredentials {
+impl ApiCredentials {
     /// Both-or-nothing: a half-configured pair is no credentials at all, so a
     /// missing secret can never silently pair with a leftover key and send a
     /// request that fails only at the exchange. A blank value (empty or
@@ -38,11 +39,13 @@ impl BinanceCredentials {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ExchangeId;
+    use crate::exchange::{ConnectorConfig, connect};
 
     #[test]
     fn resolve_takes_a_complete_pair() {
         let credentials =
-            BinanceCredentials::resolve(Some("key".to_string()), Some("secret".to_string()))
+            ApiCredentials::resolve(Some("key".to_string()), Some("secret".to_string()))
                 .expect("credentials");
 
         assert_eq!(credentials.api_key, "key");
@@ -51,9 +54,9 @@ mod tests {
 
     #[test]
     fn resolve_rejects_a_half_configured_pair() {
-        assert!(BinanceCredentials::resolve(Some("key".to_string()), None).is_none());
-        assert!(BinanceCredentials::resolve(None, Some("secret".to_string())).is_none());
-        assert!(BinanceCredentials::resolve(None, None).is_none());
+        assert!(ApiCredentials::resolve(Some("key".to_string()), None).is_none());
+        assert!(ApiCredentials::resolve(None, Some("secret".to_string())).is_none());
+        assert!(ApiCredentials::resolve(None, None).is_none());
     }
 
     // clap hands over an exported-but-empty env var as `Some("")`; it must
@@ -62,13 +65,12 @@ mod tests {
     fn resolve_treats_blank_values_as_missing() {
         for blank in ["", "  ", "\t\n"] {
             assert!(
-                BinanceCredentials::resolve(Some(blank.to_string()), Some("secret".to_string()))
+                ApiCredentials::resolve(Some(blank.to_string()), Some("secret".to_string()))
                     .is_none(),
                 "blank key {blank:?}"
             );
             assert!(
-                BinanceCredentials::resolve(Some("key".to_string()), Some(blank.to_string()))
-                    .is_none(),
+                ApiCredentials::resolve(Some("key".to_string()), Some(blank.to_string())).is_none(),
                 "blank secret {blank:?}"
             );
         }
@@ -76,21 +78,32 @@ mod tests {
 
     #[test]
     fn debug_output_never_contains_the_key_or_secret() {
-        let credentials = BinanceCredentials::resolve(
+        let credentials = ApiCredentials::resolve(
             Some("key-sentinel".to_string()),
             Some("secret-sentinel".to_string()),
         )
         .expect("credentials");
-        let client = crate::BinanceSpotClient::new(
-            url::Url::parse("https://api.binance.com/").expect("url"),
-        )
-        .with_credentials(credentials.clone());
+        let base_url = url::Url::parse("https://api.binance.com/").expect("url");
+        let client = crate::exchange::binance::BinanceSpotClient::new(base_url.clone())
+            .with_credentials(credentials.clone());
+        let config = ConnectorConfig {
+            base_url,
+            credentials: Some(credentials.clone()),
+        };
+        let connectors = connect(ExchangeId::BinanceSpot, config.clone()).expect("connectors");
+        assert!(connectors.signed().is_some(), "credentials were supplied");
+        assert_eq!(
+            connectors.market_data.exchange_id(),
+            ExchangeId::BinanceSpot
+        );
 
         // Failure messages name the owner, never the output: a failing run
         // must not print what leaked.
         for (owner, debug) in [
             ("credentials", format!("{credentials:?}")),
             ("client", format!("{client:?}")),
+            ("config", format!("{config:?}")),
+            ("connectors", format!("{connectors:?}")),
         ] {
             assert!(
                 !debug.contains("key-sentinel"),

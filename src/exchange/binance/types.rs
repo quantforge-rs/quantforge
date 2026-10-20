@@ -108,3 +108,9 @@ pub(super) struct BinanceKlineRow(
     pub(super) String,
     pub(super) String,
 );
+
+#[derive(Debug, Deserialize)]
+pub(super) struct BinanceServerTime {
+    #[serde(rename = "serverTime")]
+    pub(super) server_time: i64,
+}

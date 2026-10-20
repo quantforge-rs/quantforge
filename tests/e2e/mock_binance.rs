@@ -4,7 +4,8 @@
 //! ephemeral `127.0.0.1` port) implementing the Binance Spot surface the
 //! CLI touches:
 //!
-//! - `GET  /api/v3/klines` and `GET /api/v3/exchangeInfo` (public)
+//! - `GET  /api/v3/klines`, `GET /api/v3/exchangeInfo`, and `GET /api/v3/time`
+//!   (public)
 //! - `GET  /api/v3/account`, `GET /api/v3/openOrders`, `GET /api/v3/myTrades`
 //! - `POST /api/v3/order`, `DELETE /api/v3/order`, `GET /api/v3/order`
 //!
@@ -208,6 +209,15 @@ impl Scenario {
     /// Queue a response for the next `GET /api/v3/order`.
     pub fn order_query_response(&mut self, order: Value) {
         self.enqueue("GET", "/api/v3/order", CannedResponse::json(order));
+    }
+
+    /// Queue a `time` payload reporting `server_time_ms`.
+    pub fn server_time(&mut self, server_time_ms: i64) {
+        self.enqueue(
+            "GET",
+            "/api/v3/time",
+            CannedResponse::json(json!({ "serverTime": server_time_ms })),
+        );
     }
 }
 

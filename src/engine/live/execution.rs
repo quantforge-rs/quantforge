@@ -39,12 +39,13 @@ impl<'a> LiveTradeEngine<'a> {
                 reference_bar,
             )?,
             ExecutionMode::Live => {
-                let venue = self.trading_venue.ok_or_else(|| {
+                let venue = self.signed.ok_or_else(|| {
                     EngineError::InvalidConfig("live mode requires a trading venue".to_string())
                 })?;
                 match target {
                     TargetPosition::LongAllIn => {
                         venue
+                            .trading
                             .submit_market_order(&MarketOrderRequest {
                                 symbol: cfg.market.symbol.clone(),
                                 side: Side::Buy,
@@ -58,7 +59,7 @@ impl<'a> LiveTradeEngine<'a> {
                             .await?
                     }
                     TargetPosition::Flat => {
-                        let balances = venue.account_balances().await?;
+                        let balances = venue.account.account_balances().await?;
                         let free_base_qty = balances
                             .into_iter()
                             .find(|balance| balance.asset.eq_ignore_ascii_case(&rules.base_asset))
@@ -92,6 +93,7 @@ impl<'a> LiveTradeEngine<'a> {
                         }
 
                         venue
+                            .trading
                             .submit_market_order(&MarketOrderRequest {
                                 symbol: cfg.market.symbol.clone(),
                                 side: Side::Sell,

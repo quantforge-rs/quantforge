@@ -217,7 +217,7 @@ pub fn assert_testnet_success(cmd: &mut Command) -> Output {
 
 /// The operator's testnet credentials, read from the real (test-runner)
 /// environment. Both-or-nothing with blank values counting as unset,
-/// mirroring `BinanceCredentials::resolve`. An environment read rather than
+/// mirroring `ApiCredentials::resolve`. An environment read rather than
 /// a flag because libtest owns the test binary's arguments; it is the
 /// runner's opt-in to the testnet tier, not a quantforge setting.
 pub struct TestnetEnv {

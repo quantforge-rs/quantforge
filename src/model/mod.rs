@@ -1,7 +1,8 @@
 //! Normalized domain types shared by every layer: market identity, the
 //! candle grid and its validation, the columnar candle batch, exchange
-//! orders, bot-run state, and the timestamp and decimal helpers they are
-//! built from, including the decimal ↔ float64 conversions.
+//! orders and the exchange-agnostic requests that produce them, bot-run
+//! state, and the timestamp and decimal helpers they are built from,
+//! including the decimal ↔ float64 conversions.
 
 pub mod candle;
 pub mod candle_batch;
@@ -9,6 +10,7 @@ pub mod decimal;
 pub mod interval;
 pub mod market;
 pub mod order;
+pub mod request;
 pub mod rules;
 pub mod run;
 pub mod timestamp;
@@ -21,6 +23,7 @@ pub use decimal::{decimal_from_f64, decimal_to_f64, round_down_to_step};
 pub use interval::Interval;
 pub use market::{ExchangeId, MarketId, Symbol};
 pub use order::{AccountTrade, ExchangeOrder, Fill, OrderStatus, Side};
+pub use request::{CancelOrderRequest, KlineRequest, MarketOrderRequest, OrderQueryRequest};
 pub use rules::{AssetBalance, SymbolRules};
 pub use run::{BotRunState, ClosedTrade, ExecutionMode, PositionState, RunStatus, TargetPosition};
 pub use timestamp::{TimestampMs, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms};

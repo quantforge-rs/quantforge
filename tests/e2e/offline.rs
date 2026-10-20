@@ -453,14 +453,15 @@ async fn order_query_without_fills_parses_as_missing_fill_data() {
     scenario.order_query_response(order_query_response("SELL", 77, "0.01000000"));
     let mock = MockBinance::start(scenario);
 
-    let client =
-        quantforge::BinanceSpotClient::new(url::Url::parse(&mock.base_url()).expect("mock url"))
-            .with_credentials(quantforge::BinanceCredentials {
-                api_key: FAKE_API_KEY.to_string(),
-                secret: FAKE_API_SECRET.to_string(),
-            });
+    let client = quantforge::exchange::binance::BinanceSpotClient::new(
+        url::Url::parse(&mock.base_url()).expect("mock url"),
+    )
+    .with_credentials(quantforge::ApiCredentials {
+        api_key: FAKE_API_KEY.to_string(),
+        secret: FAKE_API_SECRET.to_string(),
+    });
 
-    let order = quantforge::TradingVenue::query_order(
+    let order = quantforge::TradingConnector::query_order(
         &client,
         &quantforge::OrderQueryRequest {
             symbol: quantforge::Symbol::new("BTCUSDT").expect("symbol"),
@@ -478,6 +479,51 @@ async fn order_query_without_fills_parses_as_missing_fill_data() {
         Some(Decimal::from_str("0.01").expect("decimal"))
     );
     assert!(order.average_price().is_some());
+}
+
+// No command reads the exchange clock yet, so this drives it from the
+// library, the way bindings will: through the registry, never the adapter.
+// Signed connectors share the client, so the credentials must still stay
+// off this public endpoint.
+#[tokio::test]
+async fn server_time_reads_the_exchange_clock_through_the_registry() {
+    let mut scenario = Scenario::new();
+    scenario.server_time(1_499_827_319_559);
+    let mock = MockBinance::start(scenario);
+
+    let connectors = quantforge::exchange::connect(
+        quantforge::ExchangeId::BinanceSpot,
+        quantforge::ConnectorConfig {
+            base_url: url::Url::parse(&mock.base_url()).expect("mock url"),
+            credentials: Some(quantforge::ApiCredentials {
+                api_key: FAKE_API_KEY.to_string(),
+                secret: FAKE_API_SECRET.to_string(),
+            }),
+        },
+    )
+    .expect("connectors");
+    assert!(
+        connectors
+            .market_data
+            .capabilities()
+            .market_data
+            .server_time
+    );
+
+    let server_time = connectors
+        .market_data
+        .server_time()
+        .await
+        .expect("server time");
+
+    assert_eq!(server_time, 1_499_827_319_559);
+    let requests = mock.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        (requests[0].method.as_str(), requests[0].path.as_str()),
+        ("GET", "/api/v3/time")
+    );
+    assert_eq!(requests[0].api_key, None, "a public endpoint");
 }
 
 // The named trivial offline-tier e2e: TestBed + isolation + parser, no

@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `ExchangeCapabilities` describes what an exchange supports — market orders sized by base or quote quantity, client order ids, the candle page size, symbol rules, server time, and streams — so callers branch on capabilities instead of on `ExchangeId`; Binance Spot declares its own
+- `exchange::connect` builds an exchange's connectors from an `ExchangeId` and a `ConnectorConfig` through a registry that maps every exchange id to a factory; `ExchangeConnectors::signed` returns the trading and account connectors only when credentials were supplied
+- `MarketDataConnector::server_time` reads the exchange clock, `GET /api/v3/time` on Binance
+- `tests/exchange_boundary.rs` fails when any code outside `src/exchange/` names a concrete exchange adapter
+
 - `BacktestEngine` documents its execution model — bar-close signals, next-open fills, the basis-point fee on every fill, close-out at the last close, close-marked equity — and its determinism guarantee, with a runnable example that backtests a strategy defined outside the crate
 
 - `CandleBatch` holds candles as parallel columns — `open_time_ms`, `close_time_ms`, `open`, `high`, `low`, `close`, `volume`, and `trades` — for the planned Python bindings, and converts to and from `Vec<Candle>` without loss; `CandleBatch::from_columns` builds one from a `CandleColumns` and rejects columns of different lengths
@@ -26,6 +31,11 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- `MarketDataSource` is now `MarketDataConnector`, and `TradingVenue` is split into `TradingConnector` (market orders, cancel, query, open orders) and `AccountConnector` (balances, account trades); all three extend the new `ExchangeConnector`, which reports the exchange id, its capabilities, and whether the endpoint is production
+- `KlineRequest`, `MarketOrderRequest`, `CancelOrderRequest`, and `OrderQueryRequest` moved from `ports` to `model`; their crate-root names are unchanged, but `quantforge::ports::KlineRequest` becomes `quantforge::model::KlineRequest`
+- `BinanceCredentials` is now the exchange-agnostic `ApiCredentials`, and the crate root no longer re-exports it or `BinanceSpotClient`; build connectors through `exchange::connect`, or reach the adapter at `quantforge::exchange::binance::BinanceSpotClient`
+- `DataSyncEngine::new` takes a `&dyn MarketDataConnector`, and `LiveTradeEngine::new` takes a `&dyn MarketDataConnector` and an `Option<SignedConnectors>` instead of a `TradingVenue`
+- the CLI reaches the exchange only through the connector traits; every command sends the same requests as before, and the `(PRODUCTION)` marker asks the connector whether its endpoint is production
 - `README.md` documents passing credentials as flags or environment variables, their precedence, and how to keep secrets out of shell history and process listings, with a fully flag-driven `monitor status` example
 - missing-credential errors from `monitor`, `trade close`, and `trade run --mode live` name both the flags and the environment variables
 - an empty or whitespace-only credential counts as missing instead of being sent to the exchange; an empty flag never falls back to the environment variable it overrides

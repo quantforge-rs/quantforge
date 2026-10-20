@@ -4,7 +4,7 @@
 use crate::cli::common::{ConfirmArgs, SymbolArgs, print_order};
 use anyhow::Result;
 use clap::Args;
-use quantforge::{BinanceSpotClient, Symbol, TradingVenue};
+use quantforge::{Symbol, TradingConnector};
 
 #[derive(Args, Debug)]
 pub(crate) struct MonitorCancelOrderArgs {
@@ -19,7 +19,7 @@ pub(crate) struct MonitorCancelOrderArgs {
 }
 
 pub(crate) async fn handle_monitor_cancel_order(
-    private_client: &BinanceSpotClient,
+    trading: &dyn TradingConnector,
     args: MonitorCancelOrderArgs,
 ) -> Result<()> {
     let symbol = Symbol::new(args.symbol.symbol)?;
@@ -27,7 +27,7 @@ pub(crate) async fn handle_monitor_cancel_order(
         println!("No order canceled. Re-run with --yes to execute the cancel.");
         return Ok(());
     }
-    let order = private_client
+    let order = trading
         .cancel_order(&quantforge::CancelOrderRequest {
             symbol,
             order_id: args.order_id,

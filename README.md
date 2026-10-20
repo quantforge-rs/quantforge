@@ -34,9 +34,9 @@ publishing, installation, and contributor onboarding remain simple.
 
 The public surface is layered as Rust modules, innermost first:
 
-- `model` - normalized market types, validation, the columnar candle batch, timestamp and decimal helpers
-- `ports` - the exchange and storage traits every adapter implements, plus request types
-- `exchange` - venue adapters, one namespace per venue; `binance` is the only one today
+- `model` - normalized market types, validation, the columnar candle batch, the exchange-agnostic requests, timestamp and decimal helpers
+- `ports` - the exchange connector and storage traits every adapter implements, and the capability descriptor that says what an exchange supports
+- `exchange` - the connector registry and one adapter namespace per exchange; `binance` is the only one today, and nothing outside `exchange` names it
 - `storage` - persistence adapters, one namespace per backend; `sqlite` is the only one
 - `sdk` - the strategy trait and its context, indicator math, and built-in strategies
 - `engine` - the drivers: `engine::backtest`, `engine::data_sync`, and `engine::live`

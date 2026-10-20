@@ -15,14 +15,16 @@
 //! [`engine`] drives all of them.
 //!
 //! - [`model`] — market identity, the candle grid and its validation, the
-//!   columnar [`CandleBatch`], exchange orders, bot-run state, and the
-//!   timestamp and decimal helpers, including the decimal ↔ float64
-//!   conversions.
-//! - [`ports`] — [`MarketDataSource`] and [`TradingVenue`] are what a venue
-//!   adapter provides, [`CandleStore`] and [`RunJournalStore`] what a
-//!   persistence backend provides, plus their request and error types.
-//! - [`exchange`] — venue adapters, one namespace per venue;
-//!   [`exchange::binance`] is the only one today.
+//!   columnar [`CandleBatch`], exchange orders and the exchange-agnostic
+//!   requests behind them, bot-run state, and the timestamp and decimal
+//!   helpers, including the decimal ↔ float64 conversions.
+//! - [`ports`] — [`MarketDataConnector`], [`TradingConnector`] and
+//!   [`AccountConnector`] are what an exchange adapter provides, described by
+//!   [`ExchangeCapabilities`]; [`CandleStore`] and [`RunJournalStore`] are
+//!   what a persistence backend provides; plus their error types.
+//! - [`exchange`] — the connector registry ([`exchange::connect`]) and one
+//!   adapter namespace per exchange; [`exchange::binance`] is the only one
+//!   today, and nothing outside this module names it.
 //! - [`storage`] — persistence adapters, one namespace per backend;
 //!   [`storage::sqlite`] is the only one today.
 //! - [`sdk`] — the [`Strategy`] contract, the indicator math it is built
@@ -43,11 +45,12 @@
 //! | `quantforge trade run` | [`LiveTradeEngine`] |
 //!
 //! `trade close` and the six `monitor` subcommands have no engine behind
-//! them: they drive [`MarketDataSource`], [`TradingVenue`] and
-//! [`RunJournalStore`] directly, so that orchestration lives in the binary.
-//! The global `--db` opens a [`SqliteStore`] and `--binance-base-url` builds
-//! a [`BinanceSpotClient`]; `--log-level` has no counterpart here, because
-//! this crate emits `tracing` events and the binary installs the subscriber.
+//! them: they drive the connectors and [`RunJournalStore`] directly, so that
+//! orchestration lives in the binary. The global `--db` opens a
+//! [`SqliteStore`], and `--binance-base-url` with the credentials builds the
+//! exchange's connectors through [`exchange::connect`]; `--log-level` has no
+//! counterpart here, because this crate emits `tracing` events and the binary
+//! installs the subscriber.
 //!
 //! [`model`], [`ports`] and [`sdk`] answer to no single command — every
 //! command crosses them.
@@ -78,7 +81,9 @@
 //!   [decimal and float64 policy](https://github.com/quantforge-rs/quantforge/blob/main/docs/decimal-float-policy.md).
 //!
 //! Everything else is internal and moves without notice: the Binance wire
-//! DTOs, request signing and HTTP transport; the SQLite schema and row
+//! DTOs, request signing and HTTP transport behind
+//! [`exchange::binance::BinanceSpotClient`], which stays reachable under its
+//! module for code that drives the adapter directly; the SQLite schema and row
 //! decoders; and the live engine's poll loop, order execution and run-state
 //! handling.
 //!
@@ -101,25 +106,30 @@ pub mod storage;
 /// `CandleColumns`, `decimal_to_f64` and `decimal_from_f64` are the Python
 /// interchange, which no command uses yet.
 pub use model::{
-    AccountTrade, AssetBalance, BotRunState, Candle, CandleBatch, CandleColumns, ClosedTrade,
-    ExchangeId, ExchangeOrder, ExecutionMode, Fill, Interval, MarketId, ModelError, OrderStatus,
+    AccountTrade, AssetBalance, BotRunState, CancelOrderRequest, Candle, CandleBatch,
+    CandleColumns, ClosedTrade, ExchangeId, ExchangeOrder, ExecutionMode, Fill, Interval,
+    KlineRequest, MarketId, MarketOrderRequest, ModelError, OrderQueryRequest, OrderStatus,
     PositionState, RunStatus, Side, Symbol, SymbolRules, TargetPosition, TimestampMs,
     ValidationIssue, ValidationReport, decimal_from_f64, decimal_to_f64, ms_to_rfc3339, now_utc_ms,
     parse_rfc3339_to_ms, round_down_to_step, validate_candles,
 };
 
-/// The seams. An out-of-tree venue or storage backend implements these four
-/// traits; the engines are written against them and never against an
-/// adapter. `ExchangeError` and `StorageError` are the two failure channels
-/// they report through.
+/// The seams. An out-of-tree exchange or storage backend implements these
+/// seven traits; the engines are written against them and never against an
+/// adapter. `ExchangeCapabilities` describes what an exchange supports,
+/// `SignedConnectors` pairs the two connectors that need credentials, and
+/// `ExchangeError` and `StorageError` are the two failure channels they
+/// report through.
 pub use ports::{
-    CancelOrderRequest, CandleQuery, CandleStore, ExchangeError, KlineRequest, MarketDataSource,
-    MarketOrderRequest, OrderQueryRequest, RunJournalStore, StorageError, TradingVenue,
+    AccountConnector, CandleQuery, CandleStore, ExchangeCapabilities, ExchangeConnector,
+    ExchangeError, MarketDataCapabilities, MarketDataConnector, OrderCapabilities, RunJournalStore,
+    SignedConnectors, StorageError, StreamCapabilities, TradingConnector,
 };
 
-/// The venue adapter, named because a caller has to construct one. The wire
-/// DTOs, request signing and HTTP transport behind it stay private.
-pub use exchange::{BinanceCredentials, BinanceSpotClient};
+/// What building an exchange's connectors takes and returns. The registry
+/// functions themselves, `exchange::connect` and `exchange::factory`, are
+/// called through their module; the adapters stay behind it.
+pub use exchange::{ApiCredentials, ConnectorConfig, ExchangeConnectors};
 
 /// The persistence adapter, named for the same reason. The schema and the
 /// row decoders behind it stay private.

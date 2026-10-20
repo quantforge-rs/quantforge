@@ -4,7 +4,7 @@
 use crate::cli::common::{ConfirmArgs, SymbolArgs, print_order, round_quantity_for_rules};
 use anyhow::{Result, bail};
 use clap::Args;
-use quantforge::{BinanceSpotClient, MarketDataSource, Side, Symbol, TradingVenue, now_utc_ms};
+use quantforge::{MarketDataConnector, Side, SignedConnectors, Symbol, now_utc_ms};
 use rust_decimal::Decimal;
 
 #[derive(Args, Debug)]
@@ -16,12 +16,13 @@ pub(crate) struct MonitorClosePositionArgs {
 }
 
 pub(crate) async fn handle_monitor_close_position(
-    private_client: &BinanceSpotClient,
+    market_data: &dyn MarketDataConnector,
+    signed: SignedConnectors<'_>,
     args: MonitorClosePositionArgs,
 ) -> Result<()> {
     let symbol = Symbol::new(args.symbol.symbol)?;
-    let rules = private_client.fetch_symbol_rules(&symbol).await?;
-    let balances = private_client.account_balances().await?;
+    let rules = market_data.fetch_symbol_rules(&symbol).await?;
+    let balances = signed.account.account_balances().await?;
     let free_base_qty = balances
         .iter()
         .find(|balance| balance.asset.eq_ignore_ascii_case(&rules.base_asset))
@@ -39,7 +40,8 @@ pub(crate) async fn handle_monitor_close_position(
         bail!("no sellable quantity available for {}", rules.base_asset);
     }
 
-    let order = private_client
+    let order = signed
+        .trading
         .submit_market_order(&quantforge::MarketOrderRequest {
             symbol,
             side: Side::Sell,

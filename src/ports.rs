@@ -1,19 +1,24 @@
-//! The seams every adapter plugs into: [`MarketDataSource`] and
-//! [`TradingVenue`] are what a venue must provide, [`CandleStore`] and
-//! [`RunJournalStore`] what a persistence backend must, and
+//! The seams every adapter plugs into. An exchange adapter provides
+//! [`MarketDataConnector`], [`TradingConnector`] and [`AccountConnector`],
+//! all three on the shared [`ExchangeConnector`] base that names the
+//! exchange and describes it with [`ExchangeCapabilities`]. A persistence
+//! backend provides [`CandleStore`] and [`RunJournalStore`].
 //! [`ExchangeError`] and [`StorageError`] are the two failure channels an
-//! engine folds into its own. One flat file on purpose — the four traits
-//! share the request types in this file, so splitting them would only buy
-//! imports.
+//! engine folds into its own.
+//!
+//! The requests and responses crossing these traits are plain domain types
+//! from [`crate::model`]; nothing here names a concrete exchange. Callers
+//! obtain connectors from the registry in [`crate::exchange`].
 
 use async_trait::async_trait;
-use rust_decimal::Decimal;
 use std::error::Error as StdError;
+use std::fmt;
 use thiserror::Error;
 
 use crate::model::{
-    AccountTrade, AssetBalance, BotRunState, Candle, ClosedTrade, ExchangeId, ExchangeOrder,
-    Interval, MarketId, ModelError, Side, Symbol, SymbolRules, TimestampMs,
+    AccountTrade, AssetBalance, BotRunState, CancelOrderRequest, Candle, ClosedTrade, ExchangeId,
+    ExchangeOrder, KlineRequest, MarketId, MarketOrderRequest, ModelError, OrderQueryRequest,
+    Symbol, SymbolRules, TimestampMs,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -21,38 +26,6 @@ pub struct CandleQuery {
     pub start_time_ms: Option<TimestampMs>,
     pub end_time_ms: Option<TimestampMs>,
     pub limit: Option<usize>,
-}
-
-#[derive(Clone, Debug)]
-pub struct KlineRequest {
-    pub symbol: Symbol,
-    pub interval: Interval,
-    pub start_time_ms: Option<TimestampMs>,
-    pub end_time_ms: Option<TimestampMs>,
-    pub limit: Option<u16>,
-}
-
-#[derive(Clone, Debug)]
-pub struct MarketOrderRequest {
-    pub symbol: Symbol,
-    pub side: Side,
-    pub quantity: Option<Decimal>,
-    pub quote_order_qty: Option<Decimal>,
-    pub new_client_order_id: Option<String>,
-}
-
-#[derive(Clone, Debug)]
-pub struct CancelOrderRequest {
-    pub symbol: Symbol,
-    pub order_id: Option<i64>,
-    pub client_order_id: Option<String>,
-}
-
-#[derive(Clone, Debug)]
-pub struct OrderQueryRequest {
-    pub symbol: Symbol,
-    pub order_id: Option<i64>,
-    pub client_order_id: Option<String>,
 }
 
 #[derive(Error, Debug)]
@@ -115,26 +88,86 @@ impl StorageError {
     }
 }
 
-#[async_trait]
-pub trait MarketDataSource: Send + Sync {
-    fn exchange_id(&self) -> ExchangeId;
-    async fn fetch_klines(&self, request: &KlineRequest) -> Result<Vec<Candle>, ExchangeError>;
-    async fn fetch_symbol_rules(&self, symbol: &Symbol) -> Result<SymbolRules, ExchangeError>;
+/// What an exchange supports. Each connector reports the capabilities of
+/// the exchange behind it, and callers branch on these — never on
+/// [`ExchangeId`] — so a second exchange slots in without touching them.
+///
+/// A capability that is `false` describes a request the connector rejects
+/// or cannot serve. [`Default`] is the empty descriptor, supporting
+/// nothing; the structs are `#[non_exhaustive]`, so a connector written
+/// outside this crate starts from it and switches on what it supports, and
+/// a capability added later cannot break it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ExchangeCapabilities {
+    pub orders: OrderCapabilities,
+    pub market_data: MarketDataCapabilities,
+    pub streams: StreamCapabilities,
 }
 
-#[async_trait]
-pub trait TradingVenue: Send + Sync {
+/// The orders [`TradingConnector`] can place, and how it identifies them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct OrderCapabilities {
+    /// Market orders sized in the base asset:
+    /// [`MarketOrderRequest::quantity`].
+    pub market_by_base_quantity: bool,
+    /// Market orders sized in the quote asset:
+    /// [`MarketOrderRequest::quote_order_qty`].
+    pub market_by_quote_quantity: bool,
+    /// Caller-chosen client order ids on new orders, and cancelling or
+    /// querying an order by one.
+    pub client_order_ids: bool,
+}
+
+/// What [`MarketDataConnector`] can serve.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct MarketDataCapabilities {
+    /// The most candles one [`MarketDataConnector::fetch_klines`] call
+    /// returns; a larger [`KlineRequest::limit`] is capped to it.
+    pub max_klines_per_request: u16,
+    /// [`MarketDataConnector::fetch_symbol_rules`]: the exchange's trading
+    /// rules for a symbol.
+    pub symbol_rules: bool,
+    /// [`MarketDataConnector::server_time`]: the exchange's clock.
+    pub server_time: bool,
+}
+
+/// Pushed updates, as opposed to polling. No connector streams yet.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct StreamCapabilities {
+    /// Candle updates pushed as they form.
+    pub klines: bool,
+    /// Account and order updates pushed as they happen.
+    pub user_data: bool,
+}
+
+/// The base every exchange connector shares: which exchange it talks to,
+/// what that exchange supports, and whether its endpoint moves real funds.
+pub trait ExchangeConnector: Send + Sync {
     fn exchange_id(&self) -> ExchangeId;
-    async fn account_balances(&self) -> Result<Vec<AssetBalance>, ExchangeError>;
-    async fn open_orders(
-        &self,
-        symbol: Option<&Symbol>,
-    ) -> Result<Vec<ExchangeOrder>, ExchangeError>;
-    async fn recent_trades(
-        &self,
-        symbol: &Symbol,
-        limit: usize,
-    ) -> Result<Vec<AccountTrade>, ExchangeError>;
+
+    fn capabilities(&self) -> ExchangeCapabilities;
+
+    /// Whether the endpoint is the exchange's production system, where
+    /// orders trade real funds — as opposed to a testnet.
+    fn is_production(&self) -> bool;
+}
+
+/// Public market data: candles, trading rules, and the exchange clock. No
+/// credentials needed.
+#[async_trait]
+pub trait MarketDataConnector: ExchangeConnector {
+    async fn fetch_klines(&self, request: &KlineRequest) -> Result<Vec<Candle>, ExchangeError>;
+    async fn fetch_symbol_rules(&self, symbol: &Symbol) -> Result<SymbolRules, ExchangeError>;
+    async fn server_time(&self) -> Result<TimestampMs, ExchangeError>;
+}
+
+/// Placing, cancelling, and looking up orders. Needs credentials.
+#[async_trait]
+pub trait TradingConnector: ExchangeConnector {
     async fn submit_market_order(
         &self,
         request: &MarketOrderRequest,
@@ -147,6 +180,37 @@ pub trait TradingVenue: Send + Sync {
         &self,
         request: &OrderQueryRequest,
     ) -> Result<ExchangeOrder, ExchangeError>;
+    async fn open_orders(
+        &self,
+        symbol: Option<&Symbol>,
+    ) -> Result<Vec<ExchangeOrder>, ExchangeError>;
+}
+
+/// The account: balances and the trade history. Needs credentials.
+#[async_trait]
+pub trait AccountConnector: ExchangeConnector {
+    async fn account_balances(&self) -> Result<Vec<AssetBalance>, ExchangeError>;
+    async fn recent_trades(
+        &self,
+        symbol: &Symbol,
+        limit: usize,
+    ) -> Result<Vec<AccountTrade>, ExchangeError>;
+}
+
+/// The signed half of an exchange, which needs credentials: the live
+/// engine and the operator commands both place orders and read the account.
+#[derive(Clone, Copy)]
+pub struct SignedConnectors<'a> {
+    pub trading: &'a dyn TradingConnector,
+    pub account: &'a dyn AccountConnector,
+}
+
+impl fmt::Debug for SignedConnectors<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SignedConnectors")
+            .field("exchange", &self.trading.exchange_id())
+            .finish_non_exhaustive()
+    }
 }
 
 pub trait CandleStore: Send + Sync {
