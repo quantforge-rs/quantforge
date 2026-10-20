@@ -1,0 +1,28 @@
+{
+  "check": "errors.malformed_response",
+  "exchange": "binance",
+  "source": "authored",
+  "note": "Responses no Binance client can read: klines of the wrong shape, and an HTML maintenance page where the account belongs.",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/klines"
+      },
+      "response": {
+        "status": 200,
+        "json": [["not a candle"]]
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/account"
+      },
+      "response": {
+        "status": 200,
+        "text": "<html><body>The system is under maintenance.</body></html>"
+      }
+    }
+  ]
+}

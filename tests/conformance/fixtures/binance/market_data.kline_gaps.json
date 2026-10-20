@@ -1,0 +1,73 @@
+{
+  "check": "market_data.kline_gaps",
+  "exchange": "binance",
+  "source": "recorded",
+  "recorded_on": "2026-10-20",
+  "recorded_from": "https://testnet.binance.vision/",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/time",
+        "query": [],
+        "credentials": false
+      },
+      "response": {
+        "status": 200,
+        "json": {"serverTime":1792515934258}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/klines",
+        "query": [
+          "symbol=BTCUSDT",
+          "interval=1m",
+          "startTime=1792575900000",
+          "endTime=1792576500000"
+        ],
+        "credentials": false
+      },
+      "response": {
+        "status": 200,
+        "json": []
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/klines",
+        "query": [
+          "symbol=BTCUSDT",
+          "interval=1m",
+          "startTime=946684800000",
+          "endTime=946685400000"
+        ],
+        "credentials": false
+      },
+      "response": {
+        "status": 200,
+        "json": []
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/klines",
+        "query": [
+          "symbol=BTCUSDT",
+          "interval=1m",
+          "startTime=946684800000",
+          "endTime=1792515780000",
+          "limit=3"
+        ],
+        "credentials": false
+      },
+      "response": {
+        "status": 200,
+        "json": [[1791369120000,"83732.02000000","83732.02000000","83732.02000000","83732.02000000","0.00006000",1791369179999,"5.02392120",1,"0.00000000","0.00000000","0"],[1791369180000,"83766.00000000","83766.00000000","83736.98000000","83736.98000000","0.01277000",1791369239999,"1069.57370860",3,"0.00000000","0.00000000","0"],[1791369240000,"83736.98000000","83736.98000000","78412.12000000","83704.10000000","2.76382000",1791369299999,"231301.11721900",164,"0.27069000","22649.98347220","0"]]
+      }
+    }
+  ]
+}

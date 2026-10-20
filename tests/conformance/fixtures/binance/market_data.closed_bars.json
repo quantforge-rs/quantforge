@@ -1,0 +1,49 @@
+{
+  "check": "market_data.closed_bars",
+  "exchange": "binance",
+  "source": "recorded",
+  "recorded_on": "2026-10-20",
+  "recorded_from": "https://testnet.binance.vision/",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/time",
+        "query": [],
+        "credentials": false
+      },
+      "response": {
+        "status": 200,
+        "json": {"serverTime":1792515929959}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/klines",
+        "query": [
+          "symbol=BTCUSDT",
+          "interval=1m",
+          "limit=3"
+        ],
+        "credentials": false
+      },
+      "response": {
+        "status": 200,
+        "json": [[1792515780000,"82703.96000000","82732.28000000","82703.95000000","82721.37000000","0.04140000",1792515839999,"3424.44047280",36,"0.03367000","2785.06419530","0"],[1792515840000,"82721.89000000","82775.98000000","82721.89000000","82775.98000000","0.10742000",1792515899999,"8889.99332130",44,"0.02816000","2330.13486000","0"],[1792515900000,"82775.98000000","82798.05000000","82773.84000000","82798.05000000","0.52180000",1792515959999,"43193.78362590",26,"0.23593000","19528.91038410","0"]]
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/time",
+        "query": [],
+        "credentials": false
+      },
+      "response": {
+        "status": 200,
+        "json": {"serverTime":1792515930524}
+      }
+    }
+  ]
+}

@@ -26,7 +26,8 @@
 //!   ([`exchange::lookup`]) and builds its connectors
 //!   ([`exchange::connect`]), and one adapter namespace per exchange;
 //!   [`exchange::binance`] is the only one today, and nothing outside this
-//!   module names it.
+//!   module names it. [`exchange::conformance`] writes down what every
+//!   adapter must do, as checks each one passes.
 //! - [`storage`] — persistence adapters, one namespace per backend;
 //!   [`storage::sqlite`] is the only one today.
 //! - [`sdk`] — the [`Strategy`] contract, the indicator math it is built
@@ -65,7 +66,7 @@
 //! paths are supported too, and are how the tree above is read —
 //! `quantforge::Candle` and `quantforge::model::Candle` are one type.
 //!
-//! A name is public here for one of four reasons:
+//! A name is public here for one of five reasons:
 //!
 //! - the binary or the integration tests name it, and both consume this
 //!   crate externally, so `pub(crate)` is not available for it;
@@ -81,7 +82,10 @@
 //! - it is the Python interchange, published ahead of the bindings that
 //!   will use it: [`CandleBatch`], [`CandleColumns`], [`decimal_to_f64`] and
 //!   [`decimal_from_f64`], which follow the
-//!   [decimal and float64 policy](https://github.com/quantforge-rs/quantforge/blob/main/docs/decimal-float-policy.md).
+//!   [decimal and float64 policy](https://github.com/quantforge-rs/quantforge/blob/main/docs/decimal-float-policy.md);
+//! - it is the conformance suite, published for adapters written outside
+//!   this repository: [`exchange::conformance`] runs against any connector
+//!   factory, not only the registered ones.
 //!
 //! Everything else is internal and moves without notice: the Binance wire
 //! DTOs, request signing and HTTP transport behind
@@ -122,11 +126,13 @@ pub use model::{
 /// adapter. `ExchangeCapabilities` describes what an exchange supports,
 /// `SignedConnectors` pairs the two connectors that need credentials, and
 /// `ExchangeError` and `StorageError` are the two failure channels they
-/// report through.
+/// report through, with `ExchangeErrorKind` classifying an exchange's
+/// failures in terms every exchange shares.
 pub use ports::{
     AccountConnector, CandleQuery, CandleStore, ExchangeCapabilities, ExchangeConnector,
-    ExchangeError, MarketDataCapabilities, MarketDataConnector, OrderCapabilities, RunJournalStore,
-    SignedConnectors, StorageError, StreamCapabilities, TradingConnector,
+    ExchangeError, ExchangeErrorKind, MarketDataCapabilities, MarketDataConnector,
+    OrderCapabilities, RunJournalStore, SignedConnectors, StorageError, StreamCapabilities,
+    TradingConnector,
 };
 
 /// What building an exchange's connectors takes and returns. The registry

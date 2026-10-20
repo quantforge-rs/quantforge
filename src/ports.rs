@@ -4,7 +4,8 @@
 //! exchange and describes it with [`ExchangeCapabilities`]. A persistence
 //! backend provides [`CandleStore`] and [`RunJournalStore`].
 //! [`ExchangeError`] and [`StorageError`] are the two failure channels an
-//! engine folds into its own.
+//! engine folds into its own; [`ExchangeErrorKind`] classifies an exchange
+//! failure the same way for every exchange.
 //!
 //! The requests and responses crossing these traits are plain domain types
 //! from [`crate::model`]; nothing here names a concrete exchange. Callers
@@ -33,8 +34,17 @@ pub enum ExchangeError {
     #[error("transport error")]
     Transport(#[source] Box<dyn StdError + Send + Sync>),
 
+    /// An error the exchange reported: `kind` is the adapter's
+    /// classification of it, `code` the exchange's own error code when it
+    /// sent one, and `message` its text. Built with [`ExchangeError::api`],
+    /// so a field added later breaks no adapter outside this crate.
     #[error("api error: code={code:?} message={message}")]
-    Api { code: Option<i64>, message: String },
+    #[non_exhaustive]
+    Api {
+        kind: ExchangeErrorKind,
+        code: Option<i64>,
+        message: String,
+    },
 
     #[error("missing credentials")]
     MissingCredentials,
@@ -52,6 +62,106 @@ impl ExchangeError {
         E: StdError + Send + Sync + 'static,
     {
         Self::Transport(Box::new(err))
+    }
+
+    /// An error the exchange reported, classified as `kind`.
+    pub fn api(kind: ExchangeErrorKind, code: Option<i64>, message: impl Into<String>) -> Self {
+        Self::Api {
+            kind,
+            code,
+            message: message.into(),
+        }
+    }
+
+    /// What kind of failure this is, in the terms every exchange shares.
+    pub fn kind(&self) -> ExchangeErrorKind {
+        match self {
+            Self::Transport(_) => ExchangeErrorKind::Transport,
+            Self::Api { kind, .. } => *kind,
+            Self::MissingCredentials => ExchangeErrorKind::MissingCredentials,
+            Self::InvalidResponse { .. } => ExchangeErrorKind::InvalidResponse,
+            Self::InvalidRequest { .. } => ExchangeErrorKind::InvalidRequest,
+        }
+    }
+}
+
+/// What kind of failure an [`ExchangeError`] is, in terms every exchange
+/// shares, so a caller reacts the same way whichever exchange failed. Each
+/// adapter maps its own error codes onto these kinds, and the conformance
+/// suite in [`crate::exchange::conformance`] checks the mapping.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ExchangeErrorKind {
+    /// No response arrived: connecting, TLS, or the transfer failed. Unless
+    /// the connection was never made, an order sent this way may still
+    /// have reached the exchange.
+    Transport,
+    /// The exchange answered with something the connector could not read.
+    InvalidResponse,
+    /// The request was malformed: refused before it was sent, or rejected
+    /// by the exchange for its parameters.
+    InvalidRequest,
+    /// A signed request was attempted without credentials.
+    MissingCredentials,
+    /// The exchange rejected the credentials, the signature, or their
+    /// permissions.
+    Unauthorized,
+    /// The request's timestamp fell outside the exchange's window: the
+    /// local clock disagrees with the exchange's.
+    ClockSkew,
+    /// Too many requests or too much request weight; back off before
+    /// sending more.
+    RateLimited,
+    /// The exchange refused the request without processing it, because it
+    /// is overloaded or shutting down; sending it again is safe.
+    Unavailable,
+    /// The exchange failed while handling the request, which may still have
+    /// taken effect: look an order up before sending it again, or it may be
+    /// placed twice.
+    OutcomeUnknown,
+    /// The exchange does not list the symbol.
+    UnknownSymbol,
+    /// No order matches: it never existed, or a cancel found it no longer
+    /// open.
+    UnknownOrder,
+    /// The account lacks the funds for the order.
+    InsufficientBalance,
+    /// The order breaks the symbol's trading rules: the quantity step or
+    /// limits, the price tick, the minimum notional, or the precision.
+    RuleViolation,
+    /// The exchange refused the request for another reason, such as a
+    /// closed market or a duplicate client order id.
+    Rejected,
+    /// An exchange error the adapter does not classify.
+    Other,
+}
+
+impl ExchangeErrorKind {
+    /// The kind's name as reports print it, such as `rate_limited`.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Transport => "transport",
+            Self::InvalidResponse => "invalid_response",
+            Self::InvalidRequest => "invalid_request",
+            Self::MissingCredentials => "missing_credentials",
+            Self::Unauthorized => "unauthorized",
+            Self::ClockSkew => "clock_skew",
+            Self::RateLimited => "rate_limited",
+            Self::Unavailable => "unavailable",
+            Self::OutcomeUnknown => "outcome_unknown",
+            Self::UnknownSymbol => "unknown_symbol",
+            Self::UnknownOrder => "unknown_order",
+            Self::InsufficientBalance => "insufficient_balance",
+            Self::RuleViolation => "rule_violation",
+            Self::Rejected => "rejected",
+            Self::Other => "other",
+        }
+    }
+}
+
+impl fmt::Display for ExchangeErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 

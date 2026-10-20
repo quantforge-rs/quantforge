@@ -77,15 +77,26 @@ src/
 │   ├── rules.rs                SymbolRules and AssetBalance
 │   ├── run.rs                  BotRunState, PositionState, ClosedTrade, TargetPosition
 │   └── timestamp.rs            TimestampMs, now_utc_ms, RFC 3339 conversions
-├── ports.rs                    the seams: connector and storage traits, capabilities, errors
-├── exchange/                   the connector registry and one adapter per exchange
+├── ports.rs                    the seams: connector and storage traits, capabilities, error kinds
+├── exchange/                   the connector registry, one adapter per exchange, and the conformance suite
 │   ├── mod.rs                  the registry API: lookup, name, connect, ExchangeConnectors
 │   ├── credentials.rs          ApiCredentials: an API key and secret, never printed
 │   ├── registry.rs             ExchangeId to name, default endpoint, factory; the only id-to-adapter map
+│   ├── conformance/            the contract every exchange connector meets, written as checks
+│   │   ├── mod.rs              the contract itself, Target, Outcome, run, and the safety refusals
+│   │   ├── check.rs            Check: each check's id, summary, and what it needs to run
+│   │   ├── support.rs          the check context, how a check fails, and the requests checks share
+│   │   ├── clock.rs            the exchange clock and closed-bar checks
+│   │   ├── klines.rs           candle shape, window bounds and limit, paging, and gaps
+│   │   ├── rules.rs            the symbol rules, and the trading rules orders must meet
+│   │   ├── orders.rs           a filled market order, from the buy to the sell-back
+│   │   ├── errors.rs           the error kinds, provoked live or scripted
+│   │   └── matrix.rs           the feature matrix: capabilities beside the results
 │   └── binance/                Binance Spot REST adapter
 │       ├── mod.rs              module root and Binance's registry entry
 │       ├── client.rs           HTTP transport, signed requests, production-host check
 │       ├── convert.rs          wire DTOs to domain types
+│       ├── errors.rs           Binance error codes and HTTP statuses to ExchangeErrorKind
 │       ├── signing.rs          HMAC-SHA256 query signing
 │       ├── types.rs            wire DTOs, the shapes the REST API returns
 │       └── venue.rs            the connector implementations and declared capabilities
@@ -123,7 +134,10 @@ which adapters to pass in, building the connectors of the exchange that
 `src/exchange/` names a concrete exchange adapter, nothing outside the
 Binance adapter hardcodes Binance beyond the registry entry and the
 `ExchangeId` variant, and `tests/exchange_boundary.rs` fails if anything
-does.
+does. What a connector must do for the engines is written down once, as
+the checks in `exchange::conformance`; every registered exchange passes
+them, and [exchange-feature-matrix.md](exchange-feature-matrix.md) shows
+the results beside each exchange's capabilities.
 
 ## Tests
 
@@ -141,6 +155,11 @@ does.
 - `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
   from naming a concrete exchange adapter, and the code and `--help`
   outside the Binance adapter from hardcoding Binance
+- `tests/conformance/`: the conformance suite against every registered
+  exchange — replayed from the recorded fixtures in
+  `tests/conformance/fixtures/`, or live against a testnet when
+  `CONFORMANCE_MODE` asks for it — plus the controls that prove each check
+  can fail, the recorder, and the generated feature matrix
 - `tests/fixtures/`: data shared with the Python bindings' tests, starting
   with the decimal ↔ float64 conformance cases of
   [decimal-float-policy.md](decimal-float-policy.md)

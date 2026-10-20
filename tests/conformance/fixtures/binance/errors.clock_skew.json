@@ -1,0 +1,28 @@
+{
+  "check": "errors.clock_skew",
+  "exchange": "binance",
+  "source": "authored",
+  "note": "Binance's two -1021 rejections, worded as in the Spot API error codes; no testnet rejects a request's timestamp on demand.",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/account"
+      },
+      "response": {
+        "status": 400,
+        "json": {"code":-1021,"msg":"Timestamp for this request is outside of the recvWindow."}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/account"
+      },
+      "response": {
+        "status": 400,
+        "json": {"code":-1021,"msg":"Timestamp for this request was 1000ms ahead of the server's time."}
+      }
+    }
+  ]
+}

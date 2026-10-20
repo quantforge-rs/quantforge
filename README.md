@@ -36,7 +36,7 @@ The public surface is layered as Rust modules, innermost first:
 
 - `model` - normalized market types, validation, the columnar candle batch, the exchange-agnostic requests, timestamp and decimal helpers
 - `ports` - the exchange connector and storage traits every adapter implements, and the capability descriptor that says what an exchange supports
-- `exchange` - the connector registry, which names each exchange (`--exchange binance`) and builds its connectors, and one adapter namespace per exchange; `binance` is the only one today, and nothing outside `exchange` names it
+- `exchange` - the connector registry, which names each exchange (`--exchange binance`) and builds its connectors, and one adapter namespace per exchange; `binance` is the only one today, and nothing outside `exchange` names it. `exchange::conformance` writes down what every adapter must do as checks, and the [feature matrix](https://github.com/quantforge-rs/quantforge/blob/main/docs/exchange-feature-matrix.md) shows each exchange's results
 - `storage` - persistence adapters, one namespace per backend; `sqlite` is the only one
 - `sdk` - the strategy trait and its context, indicator math, and built-in strategies
 - `engine` - the drivers: `engine::backtest`, `engine::data_sync`, and `engine::live`
@@ -281,6 +281,12 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 ./scripts/release-check.sh
 ```
+
+`cargo test` also runs the exchange conformance suite, replaying every
+exchange's recorded testnet traffic with no network; a scheduled workflow
+runs the same checks live against each testnet.
+[CONTRIBUTING.md](https://github.com/quantforge-rs/quantforge/blob/main/CONTRIBUTING.md#the-conformance-suite)
+explains the live modes and how to re-record.
 
 ## Roadmap
 

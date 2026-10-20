@@ -1,0 +1,39 @@
+{
+  "check": "errors.unknown_symbol",
+  "exchange": "binance",
+  "source": "recorded",
+  "recorded_on": "2026-10-20",
+  "recorded_from": "https://testnet.binance.vision/",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/klines",
+        "query": [
+          "symbol=QFNOSUCHSYMBOL",
+          "interval=1m",
+          "limit=1"
+        ],
+        "credentials": false
+      },
+      "response": {
+        "status": 400,
+        "json": {"code":-1121,"msg":"Invalid symbol."}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/exchangeInfo",
+        "query": [
+          "symbol=QFNOSUCHSYMBOL"
+        ],
+        "credentials": false
+      },
+      "response": {
+        "status": 400,
+        "json": {"code":-1121,"msg":"Invalid symbol."}
+      }
+    }
+  ]
+}

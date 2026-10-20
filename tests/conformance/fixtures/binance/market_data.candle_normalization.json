@@ -1,0 +1,52 @@
+{
+  "check": "market_data.candle_normalization",
+  "exchange": "binance",
+  "source": "recorded",
+  "recorded_on": "2026-10-20",
+  "recorded_from": "https://testnet.binance.vision/",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/exchangeInfo",
+        "query": [
+          "symbol=BTCUSDT"
+        ],
+        "credentials": false
+      },
+      "response": {
+        "status": 200,
+        "json": {"timezone":"UTC","serverTime":1792515928684,"rateLimits":[{"rateLimitType":"REQUEST_WEIGHT","interval":"MINUTE","intervalNum":1,"limit":6000},{"rateLimitType":"ORDERS","interval":"SECOND","intervalNum":10,"limit":50},{"rateLimitType":"ORDERS","interval":"DAY","intervalNum":1,"limit":160000},{"rateLimitType":"RAW_REQUESTS","interval":"MINUTE","intervalNum":5,"limit":300000}],"exchangeFilters":[],"symbols":[{"symbol":"BTCUSDT","status":"TRADING","baseAsset":"BTC","baseAssetPrecision":8,"quoteAsset":"USDT","quotePrecision":8,"quoteAssetPrecision":8,"baseCommissionPrecision":8,"quoteCommissionPrecision":8,"orderTypes":["LIMIT","LIMIT_MAKER","MARKET","STOP_LOSS","STOP_LOSS_LIMIT","TAKE_PROFIT","TAKE_PROFIT_LIMIT"],"icebergAllowed":true,"ocoAllowed":true,"otoAllowed":true,"opoAllowed":true,"quoteOrderQtyMarketAllowed":true,"allowTrailingStop":true,"cancelReplaceAllowed":true,"amendAllowed":true,"pegInstructionsAllowed":true,"isSpotTradingAllowed":true,"isMarginTradingAllowed":false,"filters":[{"filterType":"PRICE_FILTER","minPrice":"0.01000000","maxPrice":"1000000.00000000","tickSize":"0.01000000"},{"filterType":"LOT_SIZE","minQty":"0.00001000","maxQty":"9000.00000000","stepSize":"0.00001000"},{"filterType":"ICEBERG_PARTS","limit":100},{"filterType":"MARKET_LOT_SIZE","minQty":"0.00000000","maxQty":"133.97193096","stepSize":"0.00000000"},{"filterType":"TRAILING_DELTA","minTrailingAboveDelta":10,"maxTrailingAboveDelta":2000,"minTrailingBelowDelta":10,"maxTrailingBelowDelta":2000},{"filterType":"PERCENT_PRICE_BY_SIDE","bidMultiplierUp":"1.2","bidMultiplierDown":"0.5","askMultiplierUp":"2","askMultiplierDown":"0.8","avgPriceMins":5},{"filterType":"NOTIONAL","minNotional":"5.00000000","applyMinToMarket":true,"maxNotional":"9000000.00000000","applyMaxToMarket":false,"avgPriceMins":5},{"filterType":"MAX_NUM_ORDERS","maxNumOrders":200},{"filterType":"MAX_NUM_ORDER_LISTS","maxNumOrderLists":20},{"filterType":"MAX_NUM_ALGO_ORDERS","maxNumAlgoOrders":5},{"filterType":"MAX_NUM_ORDER_AMENDS","maxNumOrderAmends":10}],"permissions":[],"permissionSets":[["SPOT"]],"defaultSelfTradePreventionMode":"EXPIRE_MAKER","allowedSelfTradePreventionModes":["NONE","EXPIRE_TAKER","EXPIRE_MAKER","EXPIRE_BOTH","DECREMENT","TRANSFER"]}]}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/time",
+        "query": [],
+        "credentials": false
+      },
+      "response": {
+        "status": 200,
+        "json": {"serverTime":1792515928935}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/klines",
+        "query": [
+          "symbol=BTCUSDT",
+          "interval=1m",
+          "startTime=1792515120000",
+          "endTime=1792515780000"
+        ],
+        "credentials": false
+      },
+      "response": {
+        "status": 200,
+        "json": [[1792515120000,"82819.02000000","82840.01000000","82809.94000000","82840.01000000","0.07977000",1792515179999,"6606.44410250",45,"0.05189000","4297.62435130","0"],[1792515180000,"82840.00000000","82842.01000000","82761.34000000","82761.34000000","1.30331000",1792515239999,"107964.64935150",54,"0.03947000","3268.00711930","0"],[1792515240000,"82761.34000000","82761.34000000","82717.89000000","82717.90000000","2.07187000",1792515299999,"171453.84965760",40,"0.99412000","82258.57456660","0"],[1792515300000,"82717.89000000","82806.48000000","82717.89000000","82797.15000000","0.53396000",1792515359999,"44191.55799190",60,"0.39183000","32428.75965040","0"],[1792515360000,"82797.16000000","82811.19000000","82791.71000000","82811.18000000","0.04678000",1792515419999,"3873.29290180",40,"0.02872000","2378.06816280","0"],[1792515420000,"82811.18000000","82811.19000000","82797.48000000","82797.48000000","0.07625000",1792515479999,"6313.93010850",42,"0.03540000","2931.26471190","0"],[1792515480000,"82797.48000000","82803.32000000","82796.88000000","82803.32000000","0.04660000",1792515539999,"3858.40482300",42,"0.02158000","1786.79831740","0"],[1792515540000,"82803.33000000","82807.57000000","82764.33000000","82764.86000000","0.07760000",1792515599999,"6424.33721800",47,"0.05357000","4434.86071400","0"],[1792515600000,"82778.40000000","82778.40000000","82766.33000000","82766.34000000","0.90984000",1792515659999,"75314.32860970",64,"0.20443000","16921.91837540","0"],[1792515660000,"82766.33000000","82766.33000000","82696.72000000","82696.72000000","0.16482000",1792515719999,"13632.98230470",49,"0.12702000","10506.42662580","0"],[1792515720000,"82696.73000000","82719.73000000","82696.73000000","82703.96000000","0.13001000",1792515779999,"10752.42075420",40,"0.12661000","10471.20734260","0"],[1792515780000,"82703.96000000","82732.28000000","82703.95000000","82721.37000000","0.04140000",1792515839999,"3424.44047280",36,"0.03367000","2785.06419530","0"]]
+      }
+    }
+  ]
+}

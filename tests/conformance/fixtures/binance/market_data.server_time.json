@@ -1,0 +1,33 @@
+{
+  "check": "market_data.server_time",
+  "exchange": "binance",
+  "source": "recorded",
+  "recorded_on": "2026-10-20",
+  "recorded_from": "https://testnet.binance.vision/",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/time",
+        "query": [],
+        "credentials": false
+      },
+      "response": {
+        "status": 200,
+        "json": {"serverTime":1792515927709}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/time",
+        "query": [],
+        "credentials": false
+      },
+      "response": {
+        "status": 200,
+        "json": {"serverTime":1792515927958}
+      }
+    }
+  ]
+}

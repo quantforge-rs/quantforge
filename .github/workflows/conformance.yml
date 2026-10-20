@@ -1,0 +1,47 @@
+name: conformance
+
+# the conformance suite live against each exchange's testnet. never on pull
+# requests: a testnet outage must not block a merge, and the checks place
+# market orders on a testnet account. record mode never runs here; fixtures
+# are recorded by hand and reviewed in a pull request
+on:
+  schedule:
+    - cron: "43 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# one live run at a time, never cancelled midway: a run stopped between its
+# buy and its sell-back leaves the position open
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  testnet:
+    if: github.repository == 'quantforge-rs/quantforge'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # each exchange's keys live in its own environment, so a job sees
+          # only the secrets of the exchange it tests
+          - exchange: binance
+            environment: testnet-binance
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # only the conformance binary: exported keys would also switch on the
+      # e2e testnet tier
+      - name: conformance (testnet)
+        run: "cargo test --locked --test conformance live:: -- --nocapture"
+        env:
+          CONFORMANCE_MODE: testnet
+          CONFORMANCE_EXCHANGE: ${{ matrix.exchange }}
+          QF_API_KEY: ${{ secrets.TESTNET_API_KEY }}
+          QF_API_SECRET: ${{ secrets.TESTNET_API_SECRET }}

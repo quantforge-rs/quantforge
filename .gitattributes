@@ -2,3 +2,7 @@
 tests/snapshots/*.txt text eol=lf
 # Fixtures are shared with the Python tests; the same bytes everywhere.
 tests/fixtures/*.csv text eol=lf
+# Conformance fixtures and the matrix doc generated from them are compared
+# byte for byte too.
+tests/conformance/fixtures/**/*.json text eol=lf
+docs/exchange-feature-matrix.md text eol=lf

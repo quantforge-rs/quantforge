@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `exchange::conformance` writes down what every exchange connector must do for the engines as checks: candles on the UTC-millisecond grid with exact decimals and closed-bar semantics, kline window bounds, paging, and gaps, the symbol rules and the trading rules they impose, the market-order lifecycle, the error kinds, and the exchange clock; `exchange::conformance::run` runs a check against any connector factory and refuses a production endpoint before sending anything
+- `tests/conformance/` runs every check against every registered exchange: replayed by `cargo test` from fixtures recorded on the testnet, or live against the testnet with `CONFORMANCE_MODE=testnet`; `CONFORMANCE_MODE=record` re-records the fixtures through a proxy that strips the credentials, signatures, and account id, and writes only checks that replay exactly as they ran
+- each check is proven able to fail: a control corrupts the connector the way that check exists to catch, and the check must fail naming it
+- `ExchangeErrorKind` classifies every `ExchangeError` in terms every exchange shares (`ExchangeError::kind`), and tells a request the exchange refused before processing it (`unavailable`, safe to resend) from one that may have taken effect (`outcome_unknown`, so an order is looked up before it is sent again); Binance maps its documented error codes and HTTP statuses onto the kinds
+- `ExchangeError::api` builds the error an exchange reported
+- `docs/exchange-feature-matrix.md`, generated from the fixtures, lists each exchange's capabilities beside its conformance results, and `docs/adding-an-exchange.md` describes adding an exchange
+- a scheduled `conformance` workflow runs the suite live against Binance Spot testnet every day, outside the pull-request checks
+
 - `--exchange` selects the exchange by its registry name, with `QF_EXCHANGE` as its fallback and `binance` as the default; any other value fails before anything runs, listing the registered exchanges
 - the registry names its exchanges: `exchange::lookup` and `exchange::name` map between an `ExchangeId` and the name operators select it by, `exchange::registered` lists every exchange, `exchange::DEFAULT_EXCHANGE` is the default, and `exchange::default_base_url` gives each one's production endpoint
 - `tests/exchange_boundary.rs` also fails when code or `--help` outside `src/exchange/binance/` names Binance beyond the registry entry, the `ExchangeId` variant, and the refused old base-URL names
@@ -34,6 +42,8 @@ All notable changes to this project will be documented in this file.
 - ci, codeql, and gitleaks status badges in `README.md`
 
 ### Changed
+
+- `ExchangeError::Api` carries the error's `kind` and is `#[non_exhaustive]`: build it with `ExchangeError::api`, and match it with `..`
 
 - `--binance-base-url` and `QF_BINANCE_BASE_URL` are renamed `--base-url` and `QF_BASE_URL`, and `QF_BINANCE_API_KEY` and `QF_BINANCE_API_SECRET` are renamed `QF_API_KEY` and `QF_API_SECRET`; rename exported variables — the old base-URL flag and variable now fail with a rename hint, so a testnet URL exported under the old name can never quietly become production, while the old credential variables are no longer read
 - an omitted `--base-url` is the selected exchange's production endpoint, `https://api.binance.com/` for `binance` as before
