@@ -282,9 +282,13 @@ cargo test --all-features
 ./scripts/release-check.sh
 ```
 
-`cargo test` also runs the exchange conformance suite, replaying every
-exchange's recorded testnet traffic with no network; a scheduled workflow
-runs the same checks live against each testnet.
+`cargo test` also runs the exchange conformance suite with no network,
+replaying recorded testnet traffic for most checks and hand-written
+responses for the fault checks no testnet produces on demand. A scheduled
+workflow runs every check except those fault checks live against each
+testnet; the
+[feature matrix](https://github.com/quantforge-rs/quantforge/blob/main/docs/exchange-feature-matrix.md)
+marks which is which.
 [CONTRIBUTING.md](https://github.com/quantforge-rs/quantforge/blob/main/CONTRIBUTING.md#the-conformance-suite)
 explains the live modes and how to re-record.
 

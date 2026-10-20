@@ -42,21 +42,31 @@ impl Provenance {
     }
 }
 
-const INTRO: &str = "\
+/// The doc's opening, with the live and fixtures-only checks counted from
+/// the suite itself.
+fn intro() -> String {
+    let live = Check::ALL.iter().filter(|check| check.runs_live()).count();
+    let fixtures_only = Check::ALL.len() - live;
+    format!(
+        "\
 # Exchange feature matrix
 
 What each registered exchange supports, and how its connector fares
 against the conformance suite in
 [`src/exchange/conformance/`](../src/exchange/conformance/mod.rs), whose
 module docs state the contract. The results below replay each exchange's
-committed fixtures; the scheduled `conformance` workflow runs the same
-checks live against each testnet every day.
+committed fixtures. The scheduled `conformance` workflow also runs the
+{live} checks marked `testnet` live against each testnet every day; the
+{fixtures_only} marked `fixtures only` script faults no testnet produces on
+demand, so they run against hand-written fixtures alone.
 
 This page is generated: refresh it with
 `UPDATE_SNAPSHOTS=1 cargo test --test conformance`, never by hand. To add
 an exchange, see [adding-an-exchange.md](adding-an-exchange.md).
 
-";
+"
+    )
+}
 
 const FIXTURES_NOTE: &str = "
 A recorded fixture is the transcript of a passing live run against the
@@ -79,7 +89,7 @@ const NOT_COVERED: &str = "
 
 /// The feature matrix doc.
 pub(crate) fn document(reports: &[ExchangeReport], provenance: &[Provenance]) -> String {
-    let mut doc = String::from(INTRO);
+    let mut doc = intro();
     doc.push_str(&render_matrix(reports));
     doc.push_str(
         "\n## Fixtures\n\n\

@@ -56,7 +56,8 @@ table test like the one in `src/exchange/binance/errors.rs`. The kinds that
 matter most to a caller are `Unavailable`, a request the exchange refused
 before processing it and so safe to resend, and `OutcomeUnknown`, a request
 that may have taken effect, so an order is looked up before it is sent
-again.
+again. Where the exchange's documentation leaves doubt — a server error,
+say, even one whose code asks for a retry — report `OutcomeUnknown`.
 
 ## 3. Register it
 

@@ -5,7 +5,8 @@
 //!   network. [`offline`] also keeps the feature matrix doc, the fixtures,
 //!   and the recorder honest, and [`controls`] proves every check can fail.
 //! - **Testnet mode**, `CONFORMANCE_MODE=testnet`: [`live`] runs every check
-//!   against the testnet of the exchange `CONFORMANCE_EXCHANGE` names,
+//!   that can run live against the testnet of the exchange
+//!   `CONFORMANCE_EXCHANGE` names,
 //!   signing with that exchange's testnet keys from `QF_API_KEY` and
 //!   `QF_API_SECRET`. The checks place small market orders there.
 //! - **Record mode**, `CONFORMANCE_MODE=record`: testnet mode, and every

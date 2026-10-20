@@ -4,8 +4,10 @@ What each registered exchange supports, and how its connector fares
 against the conformance suite in
 [`src/exchange/conformance/`](../src/exchange/conformance/mod.rs), whose
 module docs state the contract. The results below replay each exchange's
-committed fixtures; the scheduled `conformance` workflow runs the same
-checks live against each testnet every day.
+committed fixtures. The scheduled `conformance` workflow also runs the
+13 checks marked `testnet` live against each testnet every day; the
+5 marked `fixtures only` script faults no testnet produces on
+demand, so they run against hand-written fixtures alone.
 
 This page is generated: refresh it with
 `UPDATE_SNAPSHOTS=1 cargo test --test conformance`, never by hand. To add
@@ -44,7 +46,7 @@ an exchange, see [adding-an-exchange.md](adding-an-exchange.md).
 | `errors.clock_skew`: a request outside the exchange's time window fails as `clock_skew` | fixtures only | pass |
 | `errors.rate_limited`: rate-limit and ban responses fail as `rate_limited` | fixtures only | pass |
 | `errors.unavailable`: an exchange refusing work it did not start fails as `unavailable`, safe to retry | fixtures only | pass |
-| `errors.outcome_unknown`: an exchange failing mid-request fails as `outcome_unknown`, so an order is looked up before it is sent again | fixtures only | pass |
+| `errors.outcome_unknown`: an exchange failing mid-request fails as `outcome_unknown`, even when its code asks for a retry, so an order is looked up before it is sent again | fixtures only | pass |
 | `errors.malformed_response`: a response that cannot be read fails as `invalid_response` | fixtures only | pass |
 
 ## Fixtures

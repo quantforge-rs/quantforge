@@ -12,12 +12,16 @@ use crate::ExchangeErrorKind;
 ///
 /// The status decides first when it is a rate limit, since Binance answers
 /// 429 and 418 before looking at the request; then a code Binance
-/// documents; then the status class; anything left is `Other`.
+/// documents, except that a refusal it asks to be retried still reads as
+/// `OutcomeUnknown` on a server error, because Binance documents every 5xx
+/// as an unknown execution status; then the status class; anything left is
+/// `Other`.
 pub(super) fn classify(status: StatusCode, code: Option<i64>, message: &str) -> ExchangeErrorKind {
     if status == StatusCode::TOO_MANY_REQUESTS || status.as_u16() == 418 {
         return ExchangeErrorKind::RateLimited;
     }
     if let Some(kind) = code.and_then(|code| classify_code(code, message)) {
+        // Only safe to resend when no server error leaves the outcome open.
         if kind == ExchangeErrorKind::Unavailable && status.is_server_error() {
             return ExchangeErrorKind::OutcomeUnknown;
         }
@@ -208,19 +212,39 @@ mod tests {
         );
     }
 
-    // A documented code says more than its status: -1001 arrives as a 5xx
-    // but promises the request was not processed.
+    // A documented code says more than its status: -1021 on a 401 is a
+    // skewed clock, not rejected credentials.
     #[test]
     fn a_known_code_wins_over_the_status_class() {
+        assert_eq!(classify(status(401), Some(-1021), "Timestamp"), ClockSkew);
         assert_eq!(
-            classify(status(500), Some(-1001), "Internal error"),
+            classify(status(400), Some(-1001), "Internal error"),
             Unavailable
         );
         assert_eq!(
             classify(status(503), Some(-1007), "Timeout"),
             OutcomeUnknown
         );
-        assert_eq!(classify(status(401), Some(-1021), "Timestamp"), ClockSkew);
+    }
+
+    // Binance documents every 5xx as an unknown execution status, so even a
+    // code asking for a retry cannot promise that nothing was done.
+    #[test]
+    fn a_server_error_is_never_safe_to_resend() {
+        for code in [-1001, -1008, -1016] {
+            for server_error in [500, 502, 503, 504] {
+                assert_eq!(
+                    classify(status(server_error), Some(code), "Please try again."),
+                    OutcomeUnknown,
+                    "{code} at {server_error}"
+                );
+            }
+            assert_eq!(
+                classify(status(400), Some(code), "Please try again."),
+                Unavailable,
+                "{code} at 400"
+            );
+        }
     }
 
     #[test]

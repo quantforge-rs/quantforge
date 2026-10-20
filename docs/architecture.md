@@ -156,7 +156,7 @@ the results beside each exchange's capabilities.
   from naming a concrete exchange adapter, and the code and `--help`
   outside the Binance adapter from hardcoding Binance
 - `tests/conformance/`: the conformance suite against every registered
-  exchange — replayed from the recorded fixtures in
+  exchange — replayed from the recorded or hand-written fixtures in
   `tests/conformance/fixtures/`, or live against a testnet when
   `CONFORMANCE_MODE` asks for it — plus the controls that prove each check
   can fail, the recorder, and the generated feature matrix

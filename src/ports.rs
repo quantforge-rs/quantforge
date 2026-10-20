@@ -113,7 +113,9 @@ pub enum ExchangeErrorKind {
     /// sending more.
     RateLimited,
     /// The exchange refused the request without processing it, because it
-    /// is overloaded or shutting down; sending it again is safe.
+    /// is overloaded or shutting down; sending it again is safe. Reported
+    /// only when the exchange guarantees nothing was done, so never for a
+    /// server error.
     Unavailable,
     /// The exchange failed while handling the request, which may still have
     /// taken effect: look an order up before sending it again, or it may be

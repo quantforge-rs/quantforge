@@ -146,8 +146,8 @@ impl Check {
                 "an exchange refusing work it did not start fails as `unavailable`, safe to retry"
             }
             Self::OutcomeUnknown => {
-                "an exchange failing mid-request fails as `outcome_unknown`, so an order is looked \
-                 up before it is sent again"
+                "an exchange failing mid-request fails as `outcome_unknown`, even when its code \
+                 asks for a retry, so an order is looked up before it is sent again"
             }
             Self::MalformedResponse => "a response that cannot be read fails as `invalid_response`",
         }

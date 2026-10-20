@@ -213,6 +213,10 @@ pub(super) async fn outcome_unknown(ctx: &Ctx<'_>) -> Verdict {
                 "fetching klines from an exchange failing mid-request",
             ),
             (Request::Order, "placing an order the exchange timed out on"),
+            (
+                Request::Balances,
+                "reading the balances when a server error carries a code asking for a retry",
+            ),
         ],
         ExchangeErrorKind::OutcomeUnknown,
     )

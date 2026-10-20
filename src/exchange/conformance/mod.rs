@@ -4,10 +4,10 @@
 //!
 //! [`run`] runs one [`Check`] against a [`Target`]: a connector factory,
 //! the market to test on, and where the exchange is. The repository runs
-//! every check against every registered exchange twice over — replayed
-//! from recorded fixtures in CI, and live against each exchange's testnet
-//! on a schedule — and [`render_matrix`] lays the results out next to each
-//! exchange's [`crate::ExchangeCapabilities`].
+//! every check against every registered exchange from committed fixtures
+//! in CI, and the ones that [`Check::runs_live`] allows live against each
+//! exchange's testnet on a schedule; [`render_matrix`] lays the results
+//! out next to each exchange's [`crate::ExchangeCapabilities`].
 //!
 //! # The contract
 //!
@@ -51,7 +51,8 @@
 //!   shares: unknown symbols and orders, a short balance, rejected
 //!   credentials, clock skew, rate limits, an exchange refusing work, an
 //!   exchange failing mid-request, and unreadable responses each fail as
-//!   their own kind.
+//!   their own kind. A server error is never safe to resend, whatever its
+//!   code says: it fails as [`crate::ExchangeErrorKind::OutcomeUnknown`].
 //!
 //! Faults no live exchange can be made to produce on demand — clock skew,
 //! rate limits, outages, garbled responses — are checked against scripted

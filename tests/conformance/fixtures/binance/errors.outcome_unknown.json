@@ -2,7 +2,7 @@
   "check": "errors.outcome_unknown",
   "exchange": "binance",
   "source": "authored",
-  "note": "Binance failing mid-request: a bare 503 page, which its Spot API documents as an unknown execution status, and the -1007 timeout on an order.",
+  "note": "Binance failing mid-request: a bare 503 page, which its Spot API documents as an unknown execution status, the -1007 timeout on an order, and a -1008 that asks for a retry but arrives as a 503, which leaves the outcome just as open.",
   "interactions": [
     {
       "request": {
@@ -22,6 +22,16 @@
       "response": {
         "status": 503,
         "json": {"code":-1007,"msg":"Timeout waiting for response from backend server. Send status unknown; execution status unknown."}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/api/v3/account"
+      },
+      "response": {
+        "status": 503,
+        "json": {"code":-1008,"msg":"Server is currently overloaded with other requests. Please try again in a few minutes."}
       }
     }
   ]
