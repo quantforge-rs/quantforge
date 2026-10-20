@@ -180,7 +180,10 @@ async fn recording_a_replayed_check_reproduces_its_fixture_without_the_credentia
 
             let recording = serde_json::to_string(&proxy.take()).expect("recording json");
             for secret in [SENTINEL_KEY, SENTINEL_SECRET] {
-                assert!(!recording.contains(secret), "{id}: {secret} was recorded");
+                assert!(
+                    !recording.contains(secret),
+                    "{id}: a sentinel secret was recorded"
+                );
             }
             assert!(
                 !recording.contains("354937868"),
