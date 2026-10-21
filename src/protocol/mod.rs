@@ -24,9 +24,10 @@
 //!
 //! - Every message is one JSON object in UTF-8: an HTTP body, or a WebSocket
 //!   text frame. A list is never sent bare but inside an object, such as
-//!   [`segments::SegmentIndex`], so that fields can join it later. The one
-//!   body that is not JSON is a bundle upload: its canonical tar, as
-//!   [`bundle::BUNDLE_MEDIA_TYPE`].
+//!   [`segments::SegmentIndex`], so that fields can join it later. Two
+//!   bodies are not JSON: a bundle upload, which is its canonical tar, as
+//!   [`bundle::BUNDLE_MEDIA_TYPE`], and the plain-text `ok` of
+//!   `GET /healthz`.
 //! - Field names and enum values are `snake_case`. In Rust, the serde name
 //!   of each field and variant here is its wire name.
 //! - Every integer is below 2^53 in magnitude, so JavaScript reads it
@@ -57,6 +58,11 @@
 //!   in `/v1/jobs` ([`ProtoVersion::path_segment`]). A server that does not
 //!   speak that version answers [`ErrorCode::UnsupportedVersion`], with the
 //!   versions it does speak in [`ErrorBody::supported`].
+//! - Two HTTP paths name no version, and every version answers them alike.
+//!   `GET /version` answers a [`ServerVersion`]: the server's release and
+//!   the versions it speaks, so that a client can choose the version for its
+//!   paths before its first request under one. `GET /healthz` answers `ok`
+//!   while the server runs, for liveness probes.
 //! - The stream's URL names no version. The client's [`stream::Hello`] states
 //!   the versions it speaks, and the server's [`stream::Welcome`] names the
 //!   newest one both sides speak ([`VersionRange::negotiate`]), or an `error`
@@ -65,8 +71,8 @@
 //! A few shapes are the same in every version, so that peers of any two
 //! versions can still tell each other where they stand: the `hello` frame's
 //! `type`, `proto_version`, and `min_supported`; the `welcome` frame's
-//! `negotiated_version`; the `error` frame and [`ErrorBody`]; and
-//! [`VersionRange`].
+//! `negotiated_version`; the `error` frame and [`ErrorBody`];
+//! [`ServerVersion`]; and [`VersionRange`].
 //!
 //! # Compatibility
 //!
@@ -103,6 +109,7 @@
 
 pub mod bundle;
 mod decimal;
+mod discovery;
 mod errors;
 mod hash;
 pub mod jobs;
@@ -113,6 +120,7 @@ mod version;
 use thiserror::Error;
 
 pub use decimal::ExactDecimal;
+pub use discovery::ServerVersion;
 pub use errors::{ErrorBody, ErrorCode, ErrorEnvelope};
 pub use hash::ContentHash;
 pub use version::{MIN_SUPPORTED, PROTO_VERSION, ProtoVersion, VersionRange};

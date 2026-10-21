@@ -4,8 +4,8 @@ use quantforge::{Candle, CandleStore, ExchangeId, Interval, MarketId, SqliteStor
 use rust_decimal::Decimal;
 use tempfile::tempdir;
 
-/// The binary with every exchange setting a shell could leak in removed,
-/// so each test supplies the ones it needs by flag. The renamed
+/// The binary with every exchange and server setting a shell could leak in
+/// removed, so each test supplies the ones it needs by flag. The renamed
 /// `QF_BINANCE_BASE_URL` goes too: the binary refuses to run while it is
 /// set.
 fn quantforge() -> Command {
@@ -16,6 +16,8 @@ fn quantforge() -> Command {
         "QF_BINANCE_BASE_URL",
         "QF_API_KEY",
         "QF_API_SECRET",
+        "QF_LISTEN",
+        "QF_SEGMENT_CACHE_DIR",
     ] {
         cmd.env_remove(variable);
     }
@@ -226,6 +228,24 @@ fn monitor_watch_rejects_zero_poll_secs_without_credentials() {
     cmd.assert().failure().stderr(predicate::str::contains(
         "invalid value '0' for '--poll-secs",
     ));
+}
+
+// --listen takes an IP address, never a name to resolve.
+#[test]
+fn serve_run_rejects_a_listen_address_that_is_not_an_ip_and_port_before_creating_anything() {
+    let tempdir = tempdir().expect("tempdir");
+    let db_path = tempdir.path().join("market.sqlite");
+
+    let mut cmd = quantforge();
+    cmd.arg("--db")
+        .arg(&db_path)
+        .arg("--log-level")
+        .arg("error")
+        .args(["serve", "run", "--listen", "localhost:9600"]);
+    cmd.assert().code(2).stderr(predicate::str::contains(
+        "invalid value 'localhost:9600' for '--listen <LISTEN>': invalid socket address syntax",
+    ));
+    assert!(!db_path.exists(), "a refused address created a database");
 }
 
 #[test]

@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `serve run` starts the server other QuantForge instances connect to: it listens on `--listen` (`QF_LISTEN`, default `127.0.0.1:9600`, an IP address and a port; port 0 picks a free one) and prints the address it listens on as `listening: http://…`
+- the server answers `GET /healthz` with `ok` while it runs, and `GET /version` with a `protocol::ServerVersion`: its release and the protocol versions it speaks, in a shape that is the same in every protocol version, so that a client can choose its version before its first versioned request
+- `serve run` stops on SIGINT or SIGTERM (Ctrl-C on Windows): it stops accepting connections, finishes the requests in progress, prints `shutdown:` and `stopped:` lines, and exits 0; a second signal stops it without waiting for them, and it exits 1
+- `--segment-cache-dir` (`QF_SEGMENT_CACHE_DIR`, default `data/segments`) names the directory `serve run` keeps candle segments in, and is created at startup; like `--listen`, it reads its variable only when the flag is absent, and every other per-command option is still a flag only
+
 - `protocol` defines the wire format between QuantForge instances as serde types: a backtest job's submission (a Python bundle named by its content hash, the candles it runs on, and the backtest settings), its status and result references, the error envelope, candle segment index entries, and the live stream's frames; its rustdoc is the wire specification, and every JSON example in it is a doctest
 - the protocol is versioned: `protocol::PROTO_VERSION` and `protocol::MIN_SUPPORTED` bound the versions a build speaks, an HTTP request names its version in its path (`/v1/…`), and `VersionRange::negotiate` picks the newest version two peers share or says which side is too old; `stream::HelloVersions` reads the versions out of a hello of any version, so that a server can refuse a client whose version it does not speak with its own range
 - protocol decimals travel as JSON strings and are read exactly: a JSON number, an exponent, or a value a decimal cannot hold without rounding is refused

@@ -7,6 +7,7 @@ Commands:
   backtest  Deterministic backtest using locally stored candles
   trade     Run or manually close the strategy bot
   monitor   Observe exchange state and manage orders manually when needed
+  serve     Run the server other QuantForge instances connect to
   help      Print this message or the help of the given subcommand(s)
 
 Options:
