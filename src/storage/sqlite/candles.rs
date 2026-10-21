@@ -1,9 +1,11 @@
 //! Candle table: its schema, the `CandleStore` implementation, and the row
 //! decoder shared by the two read paths.
 
-use super::{SqliteStore, parse_decimal_str};
+use super::{SqliteStore, parse_decimal_str, segments};
+use crate::storage::segments as format;
 use crate::{Candle, CandleQuery, CandleStore, MarketId, StorageError, TimestampMs};
 use rusqlite::{ToSql, params, params_from_iter};
+use std::collections::BTreeSet;
 
 // Indentation inside this literal is load-bearing: SQLite records the exact
 // statement text in `sqlite_master`, so reformatting it would change the
@@ -37,12 +39,25 @@ impl CandleStore for SqliteStore {
         if candles.is_empty() {
             return Ok(0);
         }
+        // Every candle belongs to a segment window, found before anything is
+        // written.
+        let window_starts = candles
+            .iter()
+            .map(|candle| {
+                format::window(market.interval, candle.open_time_ms)
+                    .map(|window| window.start)
+                    .ok_or_else(|| segments::out_of_range(candle.open_time_ms))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         let mut connection = self.open()?;
         let transaction = connection.transaction().map_err(StorageError::other)?;
         let mut written = 0usize;
+        let mut changed = BTreeSet::new();
 
         {
+            // The update runs only when a column differs, so an identical
+            // re-sync changes no row and marks no window dirty.
             let mut stmt = transaction
                 .prepare_cached(
                     r#"
@@ -59,29 +74,41 @@ impl CandleStore for SqliteStore {
                       close = excluded.close,
                       volume = excluded.volume,
                       trades = excluded.trades
+                    WHERE candles.close_time_ms IS NOT excluded.close_time_ms
+                      OR candles.open IS NOT excluded.open
+                      OR candles.high IS NOT excluded.high
+                      OR candles.low IS NOT excluded.low
+                      OR candles.close IS NOT excluded.close
+                      OR candles.volume IS NOT excluded.volume
+                      OR candles.trades IS NOT excluded.trades
                     "#,
                 )
                 .map_err(StorageError::other)?;
 
-            for candle in candles {
-                stmt.execute(params![
-                    market.exchange.as_str(),
-                    market.symbol.as_str(),
-                    market.interval.as_str(),
-                    candle.open_time_ms,
-                    candle.close_time_ms,
-                    candle.open.to_string(),
-                    candle.high.to_string(),
-                    candle.low.to_string(),
-                    candle.close.to_string(),
-                    candle.volume.to_string(),
-                    candle.trades.map(|value| value as i64),
-                ])
-                .map_err(StorageError::other)?;
+            for (candle, window_start) in candles.iter().zip(window_starts) {
+                let rows = stmt
+                    .execute(params![
+                        market.exchange.as_str(),
+                        market.symbol.as_str(),
+                        market.interval.as_str(),
+                        candle.open_time_ms,
+                        candle.close_time_ms,
+                        candle.open.to_string(),
+                        candle.high.to_string(),
+                        candle.low.to_string(),
+                        candle.close.to_string(),
+                        candle.volume.to_string(),
+                        candle.trades.map(|value| value as i64),
+                    ])
+                    .map_err(StorageError::other)?;
+                if rows > 0 {
+                    changed.insert(window_start);
+                }
                 written += 1;
             }
         }
 
+        segments::mark_dirty(&transaction, market, &changed)?;
         transaction.commit().map_err(StorageError::other)?;
         Ok(written)
     }

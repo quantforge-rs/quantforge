@@ -1,11 +1,13 @@
 //! SQLite-backed store: connection setup, schema initialization, and the
-//! row-decoding helpers shared by both responsibilities. The work is split
+//! row-decoding helpers shared by its responsibilities. The work is split
 //! across private sibling modules — `candles` implements `CandleStore`,
-//! `journal` implements `RunJournalStore`. Only [`SqliteStore`] leaves this
-//! namespace; the schema and the row decoders are not API.
+//! `journal` implements `RunJournalStore`, and `segments` implements
+//! `SegmentStore`. Only [`SqliteStore`] leaves this namespace; the schema
+//! and the row decoders are not API.
 
 mod candles;
 mod journal;
+mod segments;
 
 use crate::StorageError;
 use rusqlite::{Connection, OptionalExtension};
@@ -23,7 +25,7 @@ use tracing::info;
 /// `state_json`/`raw_json`, changes incompatibly. Until 1.0.0 there is no
 /// backward compatibility and no migrations: a version mismatch means delete
 /// the database and re-sync.
-const SCHEMA_VERSION: &str = "3";
+const SCHEMA_VERSION: &str = "4";
 
 // Indentation inside this literal is load-bearing: SQLite records the exact
 // statement text in `sqlite_master`, so reformatting it would change the
@@ -65,7 +67,12 @@ impl SqliteStore {
 
     fn initialize_schema(&self) -> Result<(), StorageError> {
         let connection = self.open()?;
-        for ddl in [META_DDL, candles::SCHEMA_DDL, journal::SCHEMA_DDL] {
+        for ddl in [
+            META_DDL,
+            candles::SCHEMA_DDL,
+            journal::SCHEMA_DDL,
+            segments::SCHEMA_DDL,
+        ] {
             connection.execute_batch(ddl).map_err(StorageError::other)?;
         }
 

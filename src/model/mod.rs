@@ -1,8 +1,9 @@
 //! Normalized domain types shared by every layer: market identity, the
-//! candle grid and its validation, the columnar candle batch, exchange
-//! orders and the exchange-agnostic requests that produce them, bot-run
-//! state, and the timestamp and decimal helpers they are built from,
-//! including the decimal ↔ float64 conversions.
+//! candle grid and its validation, the columnar candle batch, the candle
+//! segments a store packs, exchange orders and the exchange-agnostic
+//! requests that produce them, bot-run state, and the timestamp and decimal
+//! helpers they are built from, including the decimal ↔ float64
+//! conversions.
 
 pub mod candle;
 pub mod candle_batch;
@@ -13,6 +14,7 @@ pub mod order;
 pub mod request;
 pub mod rules;
 pub mod run;
+pub mod segment;
 pub mod timestamp;
 
 use thiserror::Error;
@@ -26,6 +28,7 @@ pub use order::{AccountTrade, ExchangeOrder, Fill, OrderStatus, Side};
 pub use request::{CancelOrderRequest, KlineRequest, MarketOrderRequest, OrderQueryRequest};
 pub use rules::{AssetBalance, SymbolRules};
 pub use run::{BotRunState, ClosedTrade, ExecutionMode, PositionState, RunStatus, TargetPosition};
+pub use segment::{SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh, SegmentTip};
 pub use timestamp::{TimestampMs, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms};
 
 #[derive(Error, Debug)]
@@ -38,6 +41,9 @@ pub enum ModelError {
 
     #[error("invalid side: {0}")]
     InvalidSide(String),
+
+    #[error("invalid segment hash {0:?}: expected sha256: and 64 lowercase hex digits")]
+    InvalidSegmentHash(String),
 
     #[error("invalid rfc3339 timestamp: {0}")]
     InvalidTimestamp(String),

@@ -2,7 +2,8 @@
 //! [`MarketDataConnector`], [`TradingConnector`] and [`AccountConnector`],
 //! all three on the shared [`ExchangeConnector`] base that names the
 //! exchange and describes it with [`ExchangeCapabilities`]. A persistence
-//! backend provides [`CandleStore`] and [`RunJournalStore`].
+//! backend provides [`CandleStore`], [`RunJournalStore`] and
+//! [`SegmentStore`].
 //! [`ExchangeError`] and [`StorageError`] are the two failure channels an
 //! engine folds into its own; [`ExchangeErrorKind`] classifies an exchange
 //! failure the same way for every exchange.
@@ -19,7 +20,7 @@ use thiserror::Error;
 use crate::model::{
     AccountTrade, AssetBalance, BotRunState, CancelOrderRequest, Candle, ClosedTrade, ExchangeId,
     ExchangeOrder, KlineRequest, MarketId, MarketOrderRequest, ModelError, OrderQueryRequest,
-    Symbol, SymbolRules, TimestampMs,
+    SegmentHash, SegmentPlan, SegmentRefresh, Symbol, SymbolRules, TimestampMs,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -339,6 +340,27 @@ pub trait CandleStore: Send + Sync {
         limit: usize,
     ) -> Result<Vec<Candle>, StorageError>;
     fn max_open_time_ms(&self, market: &MarketId) -> Result<Option<TimestampMs>, StorageError>;
+}
+
+/// A market's closed candles packed window by window into immutable
+/// segments, each named by the hash of its payload, beside the candles they
+/// are built from. [`crate::storage::segments`] is the format.
+pub trait SegmentStore: Send + Sync {
+    /// Packs every closed window whose candles changed since it was last
+    /// packed. The window holding the newest candle is the tip, and stays
+    /// unpacked.
+    fn refresh_segments(&self, market: &MarketId) -> Result<SegmentRefresh, StorageError>;
+    /// The segments, and the tip after them, holding `market`'s candles with
+    /// open times from `first_open_ms` to `last_open_ms`.
+    fn resolve_segments(
+        &self,
+        market: &MarketId,
+        first_open_ms: TimestampMs,
+        last_open_ms: TimestampMs,
+    ) -> Result<SegmentPlan, StorageError>;
+    /// A segment's stored bytes, its payload zstd-compressed, or `None` when
+    /// no segment has that name.
+    fn load_segment(&self, hash: &SegmentHash) -> Result<Option<Vec<u8>>, StorageError>;
 }
 
 pub trait RunJournalStore: Send + Sync {

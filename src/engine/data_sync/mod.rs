@@ -1,10 +1,19 @@
 //! Historical and incremental candle ingestion: pulls klines from a
-//! [`MarketDataConnector`] in bounded batches, writes them to a [`CandleStore`],
-//! and optionally follows the tail. The range helpers below are `pub(crate)`
-//! — [`live`](super::live) drives them to keep its own poll loop fed.
+//! [`MarketDataConnector`] in bounded batches, writes the settled ones to a
+//! [`CandleStore`], optionally follows the tail, and keeps the market's
+//! segments packed in a [`SegmentStore`]. The range fetch is `pub(crate)` —
+//! [`live`](super::live) drives it to keep its own poll loop fed.
+//!
+//! A candle is stored only once it has settled, a second after its close:
+//! the one still forming is fetched again on a later pass. Every stored
+//! candle is then final, which is what lets a segment pack it for good.
+
+mod range;
+
+pub(crate) use range::{sleep_or_shutdown, sync_market_range};
 
 use crate::EngineError;
-use crate::{CandleStore, KlineRequest, MarketDataConnector, MarketId, now_utc_ms};
+use crate::{CandleStore, MarketDataConnector, MarketId, SegmentStore, now_utc_ms};
 use std::time::Duration;
 use tracing::{info, warn};
 
@@ -28,19 +37,15 @@ pub struct DataSyncSummary {
     /// can be smaller than the requested one when the exchange has no data.
     pub first_synced_open_time_ms: Option<i64>,
     pub last_open_time_ms: Option<i64>,
-}
-
-/// Coverage achieved by a single `sync_market_range` call.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct SyncRangeOutcome {
-    pub written: usize,
-    pub first_open_time_ms: Option<i64>,
-    pub last_open_time_ms: Option<i64>,
+    /// Windows packed into a new segment, for the first time or because
+    /// their candles changed. Always 0 without [`DataSyncEngine::with_segments`].
+    pub segments_built: usize,
 }
 
 pub struct DataSyncEngine<'a> {
     source: &'a dyn MarketDataConnector,
     store: &'a dyn CandleStore,
+    segments: Option<&'a dyn SegmentStore>,
 }
 
 impl<'a> std::fmt::Debug for DataSyncEngine<'a> {
@@ -51,7 +56,18 @@ impl<'a> std::fmt::Debug for DataSyncEngine<'a> {
 
 impl<'a> DataSyncEngine<'a> {
     pub fn new(source: &'a dyn MarketDataConnector, store: &'a dyn CandleStore) -> Self {
-        Self { source, store }
+        Self {
+            source,
+            store,
+            segments: None,
+        }
+    }
+
+    /// Packs the market's segments after the first pass and after every
+    /// pass that writes candles.
+    pub fn with_segments(mut self, segments: &'a dyn SegmentStore) -> Self {
+        self.segments = Some(segments);
+        self
     }
 
     pub async fn run(&self, cfg: &DataSyncConfig) -> Result<DataSyncSummary, EngineError> {
@@ -61,6 +77,8 @@ impl<'a> DataSyncEngine<'a> {
         let mut next_start_time_ms = initial_start_time_ms(cfg, now_utc_ms());
         // Assigned on every loop iteration; the loop body runs at least once.
         let mut last_effective_end_ms: i64;
+        let mut unsettled_from_ms = None;
+        let mut refreshed = false;
 
         loop {
             let now_ms = now_utc_ms();
@@ -82,6 +100,29 @@ impl<'a> DataSyncEngine<'a> {
                     summary.first_synced_open_time_ms = outcome.first_open_time_ms;
                 }
                 summary.last_open_time_ms = self.store.max_open_time_ms(&cfg.market)?;
+                unsettled_from_ms = outcome.unsettled_from_ms;
+
+                if let Some(segments) = self.segments {
+                    if outcome.written > 0 || !refreshed {
+                        match segments.refresh_segments(&cfg.market) {
+                            Ok(refresh) => {
+                                refreshed = true;
+                                summary.segments_built += refresh.built;
+                                info!(
+                                    built = refresh.built,
+                                    unchanged = refresh.unchanged,
+                                    blocked = refresh.blocked,
+                                    "segments refreshed"
+                                );
+                            }
+                            Err(error) => {
+                                // The dirty marks remain; a later pass repacks them.
+                                refreshed = false;
+                                warn!(%error, "segment refresh failed; candles are stored");
+                            }
+                        }
+                    }
+                }
 
                 if let Some(max_open_time_ms) = summary.last_open_time_ms {
                     next_start_time_ms = next_start_time_ms.max(max_open_time_ms + step_ms);
@@ -114,7 +155,12 @@ impl<'a> DataSyncEngine<'a> {
 
         // A bounded sync that ends before reaching its end boundary leaves a
         // gap the operator would otherwise only discover via `data validate`.
-        if cfg.end_time_ms.is_some() && next_start_time_ms <= last_effective_end_ms {
+        if is_uncovered(
+            cfg,
+            next_start_time_ms,
+            last_effective_end_ms,
+            unsettled_from_ms,
+        ) {
             warn!(
                 uncovered_start_ms = next_start_time_ms,
                 uncovered_end_ms = last_effective_end_ms,
@@ -137,6 +183,20 @@ fn effective_end_time_ms(cfg: &DataSyncConfig, now_ms: i64) -> i64 {
         .unwrap_or(now_ms)
 }
 
+/// Whether a bounded sync ended short of its end with candles missing:
+/// not when the range left over starts at a candle held back only because
+/// it had not settled yet.
+fn is_uncovered(
+    cfg: &DataSyncConfig,
+    next_start_time_ms: i64,
+    last_effective_end_ms: i64,
+    unsettled_from_ms: Option<i64>,
+) -> bool {
+    cfg.end_time_ms.is_some()
+        && next_start_time_ms <= last_effective_end_ms
+        && unsettled_from_ms != Some(next_start_time_ms)
+}
+
 fn should_continue(cfg: &DataSyncConfig, next_start_time_ms: i64, loops: usize) -> bool {
     if cfg.max_loops.map(|max| loops >= max).unwrap_or(false) {
         return false;
@@ -145,65 +205,6 @@ fn should_continue(cfg: &DataSyncConfig, next_start_time_ms: i64, loops: usize) 
     match cfg.end_time_ms {
         None => true,
         Some(end_time_ms) => cfg.follow && next_start_time_ms <= end_time_ms,
-    }
-}
-
-pub(crate) async fn sync_market_range(
-    source: &dyn MarketDataConnector,
-    store: &dyn CandleStore,
-    market: &MarketId,
-    start_ms: i64,
-    end_ms: i64,
-    batch_limit: u16,
-) -> Result<SyncRangeOutcome, EngineError> {
-    let mut outcome = SyncRangeOutcome::default();
-    if end_ms < start_ms {
-        return Ok(outcome);
-    }
-
-    let step_ms = market.interval.step_ms();
-    let mut cursor = start_ms;
-
-    while cursor <= end_ms {
-        let batch = source
-            .fetch_klines(&KlineRequest {
-                symbol: market.symbol.clone(),
-                interval: market.interval,
-                start_time_ms: Some(cursor),
-                end_time_ms: Some(end_ms),
-                limit: Some(batch_limit.min(1000)),
-            })
-            .await?;
-
-        if batch.is_empty() {
-            break;
-        }
-
-        outcome.written += store.upsert_candles(market, &batch)?;
-        if outcome.first_open_time_ms.is_none() {
-            outcome.first_open_time_ms = batch.first().map(|candle| candle.open_time_ms);
-        }
-
-        let last_open_time_ms = batch
-            .last()
-            .map(|candle| candle.open_time_ms)
-            .ok_or_else(|| EngineError::InvalidState("expected non-empty batch".to_string()))?;
-        outcome.last_open_time_ms = Some(last_open_time_ms);
-        let next_cursor = last_open_time_ms + step_ms;
-        if next_cursor <= cursor {
-            warn!(cursor, next_cursor, "data sync cursor did not advance");
-            break;
-        }
-        cursor = next_cursor;
-    }
-
-    Ok(outcome)
-}
-
-pub(crate) async fn sleep_or_shutdown(duration: Duration) -> bool {
-    tokio::select! {
-        _ = tokio::time::sleep(duration) => false,
-        _ = tokio::signal::ctrl_c() => true,
     }
 }
 
@@ -273,8 +274,20 @@ mod tests {
         assert!(!should_continue(&cfg, 5_001, 1));
     }
 
+    #[test]
+    fn a_range_left_over_at_a_candle_still_settling_is_not_uncovered() {
+        let bounded = config(Some(0), Some(300_000), false);
+        assert!(is_uncovered(&bounded, 120_000, 300_000, None));
+        // Candles are missing before the one held back.
+        assert!(is_uncovered(&bounded, 120_000, 300_000, Some(180_000)));
+        assert!(!is_uncovered(&bounded, 120_000, 300_000, Some(120_000)));
+        assert!(!is_uncovered(&bounded, 300_001, 300_000, None));
+        let unbounded = config(Some(0), None, false);
+        assert!(!is_uncovered(&unbounded, 120_000, 300_000, None));
+    }
+
     use crate::{
-        Candle, ExchangeCapabilities, ExchangeConnector, ExchangeError, SqliteStore,
+        Candle, ExchangeCapabilities, ExchangeConnector, ExchangeError, KlineRequest, SqliteStore,
         Symbol as ModelSymbol, SymbolRules, TimestampMs,
     };
     use rust_decimal::Decimal;

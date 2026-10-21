@@ -19,21 +19,25 @@
 //! nothing else.
 //!
 //! - [`model`] — market identity, the candle grid and its validation, the
-//!   columnar [`CandleBatch`], exchange orders and the exchange-agnostic
-//!   requests behind them, bot-run state, and the timestamp and decimal
-//!   helpers, including the decimal ↔ float64 conversions.
+//!   columnar [`CandleBatch`], the candle segments a store hands out,
+//!   exchange orders and the exchange-agnostic requests behind them, bot-run
+//!   state, and the timestamp and decimal helpers, including the decimal ↔
+//!   float64 conversions.
 //! - [`ports`] — [`MarketDataConnector`], [`TradingConnector`] and
 //!   [`AccountConnector`] are what an exchange adapter provides, described by
-//!   [`ExchangeCapabilities`]; [`CandleStore`] and [`RunJournalStore`] are
-//!   what a persistence backend provides; plus their error types.
+//!   [`ExchangeCapabilities`]; [`CandleStore`], [`RunJournalStore`] and
+//!   [`SegmentStore`] are what a persistence backend provides; plus their
+//!   error types.
 //! - [`exchange`] — the connector registry, which names each exchange
 //!   ([`exchange::lookup`]) and builds its connectors
 //!   ([`exchange::connect`]), and one adapter namespace per exchange;
 //!   [`exchange::binance`] is the only one today, and nothing outside this
 //!   module names it. [`exchange::conformance`] writes down what every
 //!   adapter must do, as checks each one passes.
-//! - [`storage`] — persistence adapters, one namespace per backend;
-//!   [`storage::sqlite`] is the only one today.
+//! - [`storage`] — persistence adapters, one namespace per backend, with
+//!   [`storage::sqlite`] the only one today; and [`storage::segments`], the
+//!   format every backend packs a market's closed candles into, window by
+//!   window, as immutable segments named by their hash.
 //! - [`sdk`] — the [`Strategy`] contract, the indicator math it is built
 //!   from, and the built-in SMA crossover the CLI runs.
 //! - [`engine`] — the drivers: [`engine::backtest`], [`engine::data_sync`]
@@ -131,13 +135,14 @@ pub use model::{
     AccountTrade, AssetBalance, BotRunState, CancelOrderRequest, Candle, CandleBatch,
     CandleColumns, ClosedTrade, ExchangeId, ExchangeOrder, ExecutionMode, Fill, Interval,
     KlineRequest, MarketId, MarketOrderRequest, ModelError, OrderQueryRequest, OrderStatus,
-    PositionState, RunStatus, Side, Symbol, SymbolRules, TargetPosition, TimestampMs,
-    ValidationIssue, ValidationReport, decimal_from_f64, decimal_to_f64, ms_to_rfc3339, now_utc_ms,
-    parse_rfc3339_to_ms, round_down_to_step, validate_candles,
+    PositionState, RunStatus, SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh, SegmentTip,
+    Side, Symbol, SymbolRules, TargetPosition, TimestampMs, ValidationIssue, ValidationReport,
+    decimal_from_f64, decimal_to_f64, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms,
+    round_down_to_step, validate_candles,
 };
 
 /// The seams. An out-of-tree exchange or storage backend implements these
-/// six traits; the engines are written against them and never against an
+/// seven traits; the engines are written against them and never against an
 /// adapter. `ExchangeCapabilities` describes what an exchange supports,
 /// `SignedConnectors` pairs the two connectors that need credentials, and
 /// `ExchangeError` and `StorageError` are the two failure channels they
@@ -146,8 +151,8 @@ pub use model::{
 pub use ports::{
     AccountConnector, CandleQuery, CandleStore, ExchangeCapabilities, ExchangeConnector,
     ExchangeError, ExchangeErrorKind, MarketDataCapabilities, MarketDataConnector,
-    OrderCapabilities, RunJournalStore, SignedConnectors, StorageError, StreamCapabilities,
-    TradingConnector,
+    OrderCapabilities, RunJournalStore, SegmentStore, SignedConnectors, StorageError,
+    StreamCapabilities, TradingConnector,
 };
 
 /// What building an exchange's connectors takes and returns. The registry

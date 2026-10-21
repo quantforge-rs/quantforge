@@ -1,5 +1,6 @@
 //! `quantforge data sync` — pull klines from the exchange into SQLite, bounded
-//! or following, resuming from the stored high-water mark.
+//! or following, resuming from the stored high-water mark, and pack each
+//! closed window into a segment.
 
 use crate::cli::common::{MarketArgs, PollArgs, parse_market};
 use crate::cli::context::AppContext;
@@ -31,7 +32,7 @@ pub(crate) async fn handle_data_sync(ctx: &AppContext, args: DataSyncArgs) -> Re
     let store = &ctx.store;
     let client = ctx.exchange.market_data.as_ref();
     let market = parse_market(ctx.exchange_id(), args.market.symbol, args.market.interval)?;
-    let engine = DataSyncEngine::new(client, store);
+    let engine = DataSyncEngine::new(client, store).with_segments(store);
     let summary = engine
         .run(&DataSyncConfig {
             market,
@@ -70,5 +71,6 @@ pub(crate) async fn handle_data_sync(ctx: &AppContext, args: DataSyncArgs) -> Re
             .map(ms_to_rfc3339)
             .unwrap_or_else(|| "none".to_string())
     );
+    println!("segments_built: {}", summary.segments_built);
     Ok(())
 }

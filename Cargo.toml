@@ -44,6 +44,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
+# Without the defaults: no decoders for zstd's pre-1.0 formats.
+zstd = { version = "0.14", default-features = false }
 
 [dev-dependencies]
 assert_cmd = "2"

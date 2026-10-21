@@ -109,6 +109,7 @@ src/
 │   ├── request.rs              the exchange-agnostic requests a connector serves
 │   ├── rules.rs                SymbolRules and AssetBalance
 │   ├── run.rs                  BotRunState, PositionState, ClosedTrade, TargetPosition
+│   ├── segment.rs              SegmentHash, SegmentRef, SegmentPlan: what the segment store hands out
 │   └── timestamp.rs            TimestampMs, now_utc_ms, RFC 3339 conversions
 ├── ports.rs                    the seams: connector and storage traits, capabilities, error kinds
 ├── exchange/                   the connector registry, one adapter per exchange, and the conformance suite
@@ -133,12 +134,19 @@ src/
 │       ├── signing.rs          HMAC-SHA256 query signing
 │       ├── types.rs            wire DTOs, the shapes the REST API returns
 │       └── venue.rs            the connector implementations and declared capabilities
-├── storage/                    persistence adapters, one namespace per backend
-│   ├── mod.rs                  re-exports SqliteStore
+├── storage/                    persistence: one namespace per backend, and the segment format
+│   ├── mod.rs                  declares them; re-exports SqliteStore
+│   ├── segments/               segment format 1: a window of candles, packed and named by its hash
+│   │   ├── mod.rs              windows, compression, the hash, opening a fetched segment, SegmentError
+│   │   └── payload.rs          the payload: candles as columns, exact decimal text, strict decoding
 │   └── sqlite/                 SQLite backend
 │       ├── mod.rs              SqliteStore: connections, schema version, row helpers
-│       ├── candles.rs          candle table and the CandleStore implementation
-│       └── journal.rs          run, order-event, and trade tables: RunJournalStore
+│       ├── candles.rs          candle table and the CandleStore implementation; marks changed windows
+│       ├── journal.rs          run, order-event, and trade tables: RunJournalStore
+│       └── segments/           segment tables and the SegmentStore implementation
+│           ├── mod.rs          the tables, the dirty marks, resolving a range, loading a segment
+│           ├── build.rs        refresh: packs each dirty closed window outside the write lock
+│           └── tests.rs        a refresh racing writers and other refreshes, step by step
 ├── sdk/                        the strategy boundary
 │   ├── mod.rs                  StrategyError and the re-exports
 │   ├── strategy.rs             the Strategy trait and its StrategyContext
@@ -149,7 +157,9 @@ src/
 ├── engine/                     the drivers: backtest, ingestion, live trading
 │   ├── mod.rs                  EngineError, which every engine returns
 │   ├── backtest.rs             BacktestEngine: fills at the next bar's open
-│   ├── data_sync.rs            DataSyncEngine: historical and incremental ingestion
+│   ├── data_sync/              DataSyncEngine: historical and incremental ingestion
+│   │   ├── mod.rs              the engine and its pass loop, which keeps the segments packed
+│   │   └── range.rs            fetching one range, settled candles only; live trading shares it
 │   └── live/                   LiveTradeEngine: the polling live and dry-run trader
 │       ├── mod.rs              public surface and the run lifecycle
 │       ├── runner.rs           the poll loop: bootstrap, bars, closed-bar detection
@@ -180,7 +190,9 @@ compiles `protocol` on its own and scans its sources, so it fails if
 `protocol` uses anything else in the crate, or a dependency beyond `serde`,
 `serde_json`, `rust_decimal`, `sha2`, `thiserror`, and `toml`: the module is
 meant to become a crate of its own. The strategy bundle format it carries
-is written down in [bundle-spec.md](bundle-spec.md).
+is written down in [bundle-spec.md](bundle-spec.md). The candle segments
+`storage` packs, and a server will serve, are written down in
+[segment-spec.md](segment-spec.md).
 
 ## Tests
 
@@ -206,14 +218,20 @@ is written down in [bundle-spec.md](bundle-spec.md).
   `tests/fixtures/bundle_cases.json`, bundles built from real directories,
   the messages a refused bundle shows, a canonical tar read by the system
   `tar`, and [bundle-spec.md](bundle-spec.md) held to the code
+- `tests/segments/`: candle segments — the shared cases of
+  `tests/fixtures/segment_cases.json` and every payload a reader refuses,
+  [segment-spec.md](segment-spec.md) held to the code, the SQLite store
+  packing and resolving segments as candles change, and data sync storing
+  settled candles only
 - `tests/conformance/`: the conformance suite against every registered
   exchange — replayed from the recorded or hand-written fixtures in
   `tests/conformance/fixtures/`, or live against a testnet when
   `CONFORMANCE_MODE` asks for it — plus the controls that prove each check
   can fail, the recorder, and the generated feature matrix
-- `tests/fixtures/`: data shared with the Python bindings' tests, starting
-  with the decimal ↔ float64 conformance cases of
-  [decimal-float-policy.md](decimal-float-policy.md)
+- `tests/fixtures/`: data shared with the Python bindings' tests: the
+  decimal ↔ float64 conformance cases of
+  [decimal-float-policy.md](decimal-float-policy.md), and the shared cases
+  of the bundle and segment specs
 - unit tests sit at the bottom of the module they test, in
   `#[cfg(test)] mod tests`, or in a `tests.rs` beside it once they would
   push the file over its line budget (`src/cli/tests.rs`)
