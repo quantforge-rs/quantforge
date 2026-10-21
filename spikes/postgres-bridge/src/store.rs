@@ -108,7 +108,7 @@ impl CandleStore for PgCandleStore {
                 Box::pin(async move {
                     client
                         .batch_execute(&format!(
-                            "SELECT pg_advisory_lock(4003);
+                            "SELECT pg_advisory_xact_lock(4003);
                              CREATE SCHEMA IF NOT EXISTS {schema};
                              CREATE TABLE IF NOT EXISTS {table} (
                                exchange TEXT NOT NULL,
@@ -123,8 +123,7 @@ impl CandleStore for PgCandleStore {
                                volume TEXT NOT NULL,
                                trades BIGINT,
                                PRIMARY KEY (exchange, symbol, interval, open_time_ms)
-                             );
-                             SELECT pg_advisory_unlock(4003);"
+                             );"
                         ))
                         .await
                 })
