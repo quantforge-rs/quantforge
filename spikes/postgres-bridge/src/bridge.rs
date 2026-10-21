@@ -220,7 +220,9 @@ impl PgBridge {
                 PoolError::Timeout(TimeoutType::Wait) => {
                     PgError::Unavailable("no free connection in time".to_string())
                 }
-                PoolError::Backend(error) => PgError::from_driver(Effect::Read, error),
+                PoolError::Backend(error) => {
+                    PgError::Unavailable(format!("cannot get a connection: {error}"))
+                }
                 other => PgError::Unavailable(other.to_string()),
             })?;
             let token = client.cancel_token();
