@@ -324,7 +324,7 @@ explains the live modes and how to re-record.
 - additional exchanges such as Bybit
 - restart reconciliation between local bot state and exchange state
 - richer indicators and more built-in strategies
-- alternative storage backends such as Postgres
+- PostgreSQL as a second storage backend, with SQLite staying the default; how the storage ports reach it is decided in [ADR 0001](https://github.com/quantforge-rs/quantforge/blob/main/docs/adr/0001-postgres-client-strategy.md)
 - research-oriented parameter sweeps and snapshot reports
 
 ## License

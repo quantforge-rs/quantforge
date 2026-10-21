@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `docs/adr/` records architecture decisions; ADR 0001 decides how the synchronous storage ports will reach PostgreSQL: tokio-postgres with a deadpool pool on a small runtime the store owns, so no context that calls the ports can hit a nested-runtime panic, rustls with `ring` for TLS, a default-on `postgres` cargo feature, and PostgreSQL 16 to 18; compiling spikes in `spikes/postgres-bridge/` back each rule, and SQLite-only builds are unaffected
+
 - candle segments: a market's closed candles are packed window by window, 1,440 bars of the interval counted from the Unix epoch (one UTC day of `1m` candles), into immutable segments named `sha256:` and the hash of their payload; `docs/segment-spec.md` specifies segment format 1 and records why it is not Arrow IPC
 - `storage::segments` implements the format: `encode` writes a window's candles as columns, with every decimal as its exact text so that `1.10` and `1.1` pack differently, `decode` refuses any payload `encode` would not write, `compress` and `decompress` wrap the payload in exactly one zstd frame, and `open` reads a fetched segment back, checking it against its name
 - `SegmentStore` is the port for packed segments, and `SqliteStore` implements it: `refresh_segments` packs every closed window whose candles changed since it was last packed, `resolve_segments` resolves a range of open times to the segments that hold it and the tip after them, whose candles are read from the candle store, and `load_segment` returns a segment's stored bytes by name

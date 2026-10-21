@@ -192,7 +192,9 @@ compiles `protocol` on its own and scans its sources, so it fails if
 meant to become a crate of its own. The strategy bundle format it carries
 is written down in [bundle-spec.md](bundle-spec.md). The candle segments
 `storage` packs, and a server will serve, are written down in
-[segment-spec.md](segment-spec.md).
+[segment-spec.md](segment-spec.md). Decisions that shape more than one
+change, such as how the storage ports reach PostgreSQL, are recorded in
+[adr/](adr/README.md).
 
 ## Tests
 
