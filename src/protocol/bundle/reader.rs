@@ -63,7 +63,9 @@ pub(super) fn read(tar: &[u8], limits: &BundleLimits) -> Result<Vec<Candidate>, 
             .position(|&byte| byte == 0)
             .unwrap_or(100);
         let name = &header[..name_length];
-        let shown = String::from_utf8_lossy(name).into_owned();
+        let shown = std::str::from_utf8(name)
+            .map(str::to_owned)
+            .map_err(|_| not_canonical(format!("entry {index} has a non-UTF-8 name")))?;
         let entry = format!("entry {index} ({shown:?})");
         if name.is_empty() {
             return Err(not_canonical(format!("entry {index} has no name")));
