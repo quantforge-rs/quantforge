@@ -1109,3 +1109,46 @@ fn naming_the_default_exchange_changes_no_output_and_no_request() {
         assert_eq!(requests, expected_requests, "{variant}: requests");
     }
 }
+
+// A day of closed 1m bars and the first minute of the next: data sync packs
+// the day into a segment and leaves the minute as the tip. Syncing the same
+// bars again changes no candle, so it packs nothing.
+#[test]
+fn data_sync_packs_each_closed_day_into_a_segment_once() {
+    const DAY_START: i64 = 1_704_067_200_000; // 2024-01-01T00:00:00Z
+    let bars = || {
+        (0..1441)
+            .map(|minute| kline_row(DAY_START + minute * 60_000, "100.00000000"))
+            .collect::<Vec<_>>()
+    };
+    let mut scenario = Scenario::new();
+    scenario.klines_page(bars());
+    scenario.klines_page(bars());
+    let mock = MockBinance::start(scenario);
+    let bed = TestBed::new();
+    let sync = || {
+        let mut cmd = offline_cmd(&bed, &mock);
+        cmd.args([
+            "data",
+            "sync",
+            "--symbol",
+            "BTCUSDT",
+            "--interval",
+            "1m",
+            "--start",
+            "2024-01-01T00:00:00Z",
+            "--end",
+            "2024-01-02T00:00:00Z",
+        ]);
+        CliOutput::from_assert(&cmd.assert().success())
+    };
+
+    let first = sync();
+    assert_eq!(first.get("written"), Some("1441"));
+    assert_eq!(first.get("last_open_time"), Some("2024-01-02T00:00:00Z"));
+    assert_eq!(first.get("segments_built"), Some("1"));
+
+    let again = sync();
+    assert_eq!(again.get("written"), Some("1441"));
+    assert_eq!(again.get("segments_built"), Some("0"));
+}

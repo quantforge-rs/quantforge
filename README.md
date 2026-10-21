@@ -39,7 +39,7 @@ The public surface is layered as Rust modules, innermost first:
 - `model` - normalized market types, validation, the columnar candle batch, the exchange-agnostic requests, timestamp and decimal helpers
 - `ports` - the exchange connector and storage traits every adapter implements, and the capability descriptor that says what an exchange supports
 - `exchange` - the connector registry, which names each exchange (`--exchange binance`) and builds its connectors, and one adapter namespace per exchange; `binance` is the only one today, and nothing outside `exchange` names it. `exchange::conformance` writes down what every adapter must do as checks, and the [feature matrix](https://github.com/quantforge-rs/quantforge/blob/main/docs/exchange-feature-matrix.md) shows each exchange's results
-- `storage` - persistence adapters, one namespace per backend; `sqlite` is the only one
+- `storage` - persistence adapters, one namespace per backend, with `sqlite` the only one; and `segments`, the [segment format](https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md) every backend packs a market's closed candles into, window by window, as immutable segments named by their hash
 - `sdk` - the strategy trait and its context, indicator math, and built-in strategies
 - `engine` - the drivers: `engine::backtest`, `engine::data_sync`, and `engine::live`
 - `protocol` - stands apart from the layers above: the versioned wire types between QuantForge instances, for remote backtest jobs, candle segments, and the live bar stream, and the [strategy bundle](https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md) a remote backtest runs; its rustdoc is the wire specification
@@ -165,6 +165,14 @@ historical backfill — pass `--start` to backfill), and omitting `--end` keeps
 the sync running until interrupted. A bounded sync reports the covered range
 in its summary and warns when the exchange returned no candles for part of
 the requested window.
+
+Only settled candles are stored: a candle is written once a second has
+passed since its close, and the one still forming is fetched again on a later
+pass, so every stored candle is final. After each pass, `data sync` packs
+each closed window, such as one UTC day of `1m` candles, into an immutable
+segment for the server to serve. It packs a window again only when its
+candles change, and its summary counts the windows it packed as
+`segments_built`.
 
 Validate the stored series:
 

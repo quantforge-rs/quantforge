@@ -15,10 +15,11 @@
 //! - [`bundle`]: the strategy bundle a job runs, uploaded as its canonical
 //!   tar and named by its code hash; its rules are the [bundle spec].
 //! - [`segments`]: stored candles, as immutable segments named by their
-//!   content hash, over HTTP.
+//!   content hash, over HTTP; a segment's bytes are the [segment spec].
 //! - [`stream`]: bars as they close, over a WebSocket.
 //!
 //! [bundle spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md>
+//! [segment spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md>
 //!
 //! # Encoding
 //!

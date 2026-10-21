@@ -6,10 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- candle segments: a market's closed candles are packed window by window, 1,440 bars of the interval counted from the Unix epoch (one UTC day of `1m` candles), into immutable segments named `sha256:` and the hash of their payload; `docs/segment-spec.md` specifies segment format 1 and records why it is not Arrow IPC
+- `storage::segments` implements the format: `encode` writes a window's candles as columns, with every decimal as its exact text so that `1.10` and `1.1` pack differently, `decode` refuses any payload `encode` would not write, `compress` and `decompress` wrap the payload in exactly one zstd frame, and `open` reads a fetched segment back, checking it against its name
+- `SegmentStore` is the port for packed segments, and `SqliteStore` implements it: `refresh_segments` packs every closed window whose candles changed since it was last packed, `resolve_segments` resolves a range of open times to the segments that hold it and the tip after them, whose candles are read from the candle store, and `load_segment` returns a segment's stored bytes by name
+- writing candles marks the windows whose candles changed, in the same transaction, so a refresh repacks exactly those, and a plan never serves a segment older than its candles; a window that cannot be packed, such as one holding more than 1,440 candles, stays unpacked, keeps every later window in the tip, and is logged as a warning naming `data validate`
+- `data sync` packs the market's segments after its first pass and after every pass that writes candles, and prints `segments_built: N`; `DataSyncEngine::with_segments` turns this on for library callers
+- `tests/fixtures/segment_cases.json` holds the segment spec's shared cases for every implementation, with payloads and names computed by an independent Python implementation
+
 - `serve run` starts the server other QuantForge instances connect to: it listens on `--listen` (`QF_LISTEN`, default `127.0.0.1:9600`, an IP address and a port; port 0 picks a free one) and prints the address it listens on as `listening: http://…`
 - the server answers `GET /healthz` with `ok` while it runs, and `GET /version` with a `protocol::ServerVersion`: its release and the protocol versions it speaks, in a shape that is the same in every protocol version, so that a client can choose its version before its first versioned request
 - `serve run` stops on SIGINT or SIGTERM (Ctrl-C on Windows): it stops accepting connections, finishes the requests in progress, prints `shutdown:` and `stopped:` lines, and exits 0; a second signal stops it without waiting for them, and it exits 1
-- `--segment-cache-dir` (`QF_SEGMENT_CACHE_DIR`, default `data/segments`) names the directory `serve run` keeps candle segments in, and is created at startup; like `--listen`, it reads its variable only when the flag is absent, and every other per-command option is still a flag only
+- `--segment-cache-dir` (`QF_SEGMENT_CACHE_DIR`, default `data/segments`) names the directory `serve run` caches candle segments in, and is created at startup; like `--listen`, it reads its variable only when the flag is absent, and every other per-command option is still a flag only
 
 - `protocol` defines the wire format between QuantForge instances as serde types: a backtest job's submission (a Python bundle named by its content hash, the candles it runs on, and the backtest settings), its status and result references, the error envelope, candle segment index entries, and the live stream's frames; its rustdoc is the wire specification, and every JSON example in it is a doctest
 - the protocol is versioned: `protocol::PROTO_VERSION` and `protocol::MIN_SUPPORTED` bound the versions a build speaks, an HTTP request names its version in its path (`/v1/…`), and `VersionRange::negotiate` picks the newest version two peers share or says which side is too old; `stream::HelloVersions` reads the versions out of a hello of any version, so that a server can refuse a client whose version it does not speak with its own range
@@ -59,6 +66,11 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- a candle is stored only once it has settled, a second after its close, so `trade run` acts on a just-closed bar about a second later on average, and at most one poll later; its bootstrap now replays `--bootstrap-bars` closed bars, where it used to replay one fewer when the newest stored candle was still forming, which can change what `--bootstrap-enter` decides
+- `data sync --follow` with an `--end` at or after the current time keeps polling until the candle at the end has settled
+- re-syncing candles that are already stored no longer rewrites their rows; `written` still counts every candle sent to the database
+- `upsert_candles` refuses a candle whose open time lies too close to either end of the timestamp range for its segment window to be written
+
 - `ExchangeError::Api` carries the error's `kind` and is `#[non_exhaustive]`: build it with `ExchangeError::api`, and match it with `..`
 
 - `--binance-base-url` and `QF_BINANCE_BASE_URL` are renamed `--base-url` and `QF_BASE_URL`, and `QF_BINANCE_API_KEY` and `QF_BINANCE_API_SECRET` are renamed `QF_API_KEY` and `QF_API_SECRET`; rename exported variables — the old base-URL flag and variable now fail with a rename hint, so a testnet URL exported under the old name can never quietly become production, while the old credential variables are no longer read
@@ -93,7 +105,7 @@ All notable changes to this project will be documented in this file.
 - an executed order is always reflected in position state even when journaling the order event fails; the journaling failure is surfaced afterwards with reconciliation guidance
 - an unsellable dust remnant left after an exit or manual close is written off with a warning instead of wedging the run in a permanently open position
 - opening a database with a mismatched schema version fails with actionable guidance instead of proceeding silently
-- the SQLite schema version is now 3 (`BotRunState` gained a required `execution_mode` field); until 1.0.0 schema changes are not backward compatible and there are no migrations — delete the database and re-sync
+- the SQLite schema version is now 4 (`BotRunState` gained a required `execution_mode` field, and the database holds the candle segment tables); until 1.0.0 schema changes are not backward compatible and there are no migrations — delete the database and re-sync, which also replaces the still-forming candles earlier versions stored
 - data sync summaries report the first synced candle, and bounded syncs warn when the exchange returned no candles for part of the requested window
 - startup logs the exchange and its effective base URL, and warns when the database file did not exist and was created empty
 - `ms_to_rfc3339` renders out-of-range timestamps as an explicit `invalid-ms(...)` marker instead of a plausible epoch date
@@ -109,6 +121,8 @@ All notable changes to this project will be documented in this file.
 - `BacktestConfig` no longer implements `Default`; construct its fields explicitly instead of relying on fabricated cash and fee values
 
 ### Fixed
+
+- `data sync` stored the candle still forming at the end of each pass and never fetched it again, so a following sync kept a snapshot of nearly every candle taken seconds after it opened; it now stores a candle only once it has settled, and fetches the forming one again on a later pass
 
 - `trade close --run-id` refuses a run recorded for a different exchange or symbol instead of selling this command's symbol against that run's position, and settles every refusal before contacting the exchange
 

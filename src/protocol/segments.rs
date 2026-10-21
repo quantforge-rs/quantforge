@@ -1,18 +1,24 @@
 //! Stored candles, served as segments.
 //!
-//! A segment is one market's closed bars between two open times, encoded
-//! once and never changed afterwards, so its [`ContentHash`] names it for
-//! good. A server lists the segments it holds as a [`SegmentIndex`] and
-//! serves each one by its hash. How a segment's bytes are laid out, and so
-//! which bytes its hash covers, is fixed by its
-//! [`format`](SegmentEntry::format). This module defines the bodies; the
-//! routes that list and fetch segments come with the server that holds them.
+//! A segment is one market's closed bars from one window of open times,
+//! encoded once and never changed afterwards, so its [`ContentHash`] names
+//! it for good. A server lists the segments it holds as a [`SegmentIndex`]
+//! and serves each one by its hash. How a segment's bytes are laid out, and
+//! so which bytes its hash covers, is fixed by its
+//! [`format`](SegmentEntry::format): format 1 is the [segment spec]. Its
+//! hash covers the segment's payload, and the payload travels as one zstd
+//! frame, so a client decompresses what it fetched before checking the hash.
+//! This module defines the bodies; the routes that list and fetch segments
+//! come with the server that holds them.
+//!
+//! [segment spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md>
 
 use serde::{Deserialize, Serialize};
 
 use super::ContentHash;
 
-/// The segment format this build writes and reads.
+/// The segment format this build writes and reads: format 1, the
+/// [segment spec](https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md).
 pub const SEGMENT_FORMAT: u32 = 1;
 
 /// The segments a server holds.
@@ -36,7 +42,8 @@ pub struct SegmentIndex {
 /// One segment: which bars it holds, and the name to fetch them by.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SegmentEntry {
-    /// The segment's name, which the fetched bytes must hash to.
+    /// The segment's name: the SHA-256 of its payload, which the fetched
+    /// bytes must decompress to.
     pub hash: ContentHash,
     /// How the segment's bytes are laid out, which also fixes the bytes
     /// `hash` covers: [`SEGMENT_FORMAT`] today. A reader refuses a format it
@@ -50,8 +57,8 @@ pub struct SegmentEntry {
     pub interval: String,
     /// The bars it holds.
     pub range: SegmentRange,
-    /// The size of the segment's bytes as served, to check a download
-    /// against.
+    /// The size of the segment's bytes as served, compressed, to check a
+    /// download against.
     pub size_bytes: u64,
 }
 
