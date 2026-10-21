@@ -55,7 +55,27 @@ pub(super) fn collect(root: &Path, limits: &BundleLimits) -> Result<Collected, B
                     .problems
                     .push(not_regular(&relative, "not a regular file"));
             } else if collected.candidates.len() >= max_files.saturating_add(1) {
-                // Enough to know the bundle holds too many files.
+                // Enough to know the bundle holds too many files. The root
+                // manifest is still collected, so its problems match those
+                // for the same files given in memory.
+                if !collected.candidates.iter().any(|c| c.path == MANIFEST_FILE) {
+                    let manifest = root.join(MANIFEST_FILE);
+                    if let Ok(meta) = fs::symlink_metadata(&manifest) {
+                        if meta.file_type().is_file() {
+                            let size = meta.len();
+                            let contents = if size <= limits.file_limit() {
+                                Some(read_at_most(&manifest, limits.file_limit())?)
+                            } else {
+                                None
+                            };
+                            collected.candidates.push(Candidate {
+                                path: MANIFEST_FILE.to_string(),
+                                size,
+                                contents,
+                            });
+                        }
+                    }
+                }
                 return Ok(collected);
             } else {
                 let size = metadata.len();
