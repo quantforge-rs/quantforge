@@ -42,11 +42,15 @@ fn verify_full_with_the_clusters_ca_connects_over_tls() {
 #[test]
 fn without_the_ca_the_servers_certificate_is_refused() {
     let Some(url) = tls_url_or_skip() else { return };
-    let without_ca = url
-        .split('&')
-        .filter(|part| !part.starts_with("sslrootcert="))
-        .collect::<Vec<_>>()
-        .join("&");
+    let mut parsed = url::Url::parse(&url).expect("a URL");
+    let kept: Vec<(String, String)> = parsed
+        .query_pairs()
+        .filter(|(key, _)| key != "sslrootcert")
+        .map(|(key, value)| (key.into_owned(), value.into_owned()))
+        .collect();
+    parsed.query_pairs_mut().clear().extend_pairs(kept);
+    let without_ca = parsed.to_string();
+    assert!(!without_ca.contains("sslrootcert"), "{without_ca}");
     let refused = PgBridge::connect(&BridgeConfig::new(&without_ca, unique("tls_no_ca")))
         .expect_err("an untrusted certificate");
     assert_eq!(refused.kind(), "unavailable", "{refused}");
