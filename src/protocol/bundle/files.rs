@@ -190,6 +190,31 @@ fn collisions(paths: &[BundlePath]) -> Vec<BundleProblem> {
             }
         }
     }
+    // Directories whose names differ only in case merge on a case-insensitive filesystem.
+    let mut spellings: BTreeMap<String, &str> = BTreeMap::new();
+    let mut reported: BTreeSet<String> = BTreeSet::new();
+    for path in paths {
+        let text = path.as_str();
+        for (at, _) in text.match_indices('/') {
+            let directory = &text[..at];
+            let folded = directory.to_ascii_lowercase();
+            match spellings.get(&folded) {
+                Some(&first) if first != directory && reported.insert(folded.clone()) => {
+                    problems.push(BundleProblem::new(
+                        ProblemCode::PathCollision,
+                        format!(
+                            "the directories {first:?} and {directory:?} differ only in case, \
+                             which a case-insensitive filesystem cannot hold; rename one"
+                        ),
+                    ));
+                }
+                Some(_) => {}
+                None => {
+                    spellings.insert(folded, directory);
+                }
+            }
+        }
+    }
     problems
 }
 
