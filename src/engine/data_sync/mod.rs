@@ -104,15 +104,23 @@ impl<'a> DataSyncEngine<'a> {
 
                 if let Some(segments) = self.segments {
                     if outcome.written > 0 || !refreshed {
-                        let refresh = segments.refresh_segments(&cfg.market)?;
-                        refreshed = true;
-                        summary.segments_built += refresh.built;
-                        info!(
-                            built = refresh.built,
-                            unchanged = refresh.unchanged,
-                            blocked = refresh.blocked,
-                            "segments refreshed"
-                        );
+                        match segments.refresh_segments(&cfg.market) {
+                            Ok(refresh) => {
+                                refreshed = true;
+                                summary.segments_built += refresh.built;
+                                info!(
+                                    built = refresh.built,
+                                    unchanged = refresh.unchanged,
+                                    blocked = refresh.blocked,
+                                    "segments refreshed"
+                                );
+                            }
+                            Err(error) => {
+                                // The dirty marks remain; a later pass repacks them.
+                                refreshed = false;
+                                warn!(%error, "segment refresh failed; candles are stored");
+                            }
+                        }
                     }
                 }
 
