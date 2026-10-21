@@ -1,0 +1,1309 @@
+{
+  "format": 1,
+  "note": "Shared test cases of the QuantForge bundle spec (docs/bundle-spec.md), for every implementation. A case gives a bundle's files, or an archive derived from another case's canonical tar by the listed ops in order, with optional limits (else the defaults) and runtime. It expects a code_hash, or the sorted problem codes. Expected code hashes were computed by an independent Python implementation of the canonical tar, not by the Rust code under test.",
+  "cases": [
+    {
+      "name": "minimal",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "code_hash": "sha256:59f8dcaea45590e10e16199eb6b856deb440a52844e69514fa372f909340d4f3"
+    },
+    {
+      "name": "package with params and deps",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"pkg/breakout.py:Breakout\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n\n# Parameters reach the strategy as JSON.\n[params]\nlookback = 20\nthreshold = 0.25\nlabel = \"daily\"\nsides = [\"long\", \"short\"]\nexits = { stop_bps = 150, trail = true }\n\n[deps]\nnumpy = \"2.1.3\"\n"
+        },
+        {
+          "path": "pkg/__init__.py",
+          "text": ""
+        },
+        {
+          "path": "pkg/breakout.py",
+          "text": "import numpy\n\n\nclass Breakout:\n    pass\n"
+        },
+        {
+          "path": "pkg/levels.json",
+          "text": "{\"levels\": [1, 2, 3]}\n"
+        },
+        {
+          "path": "NOTES.txt",
+          "text": "Breakout on the daily close.\n"
+        }
+      ],
+      "code_hash": "sha256:1bee3a498afaadbf66bf2189e7a50c227d9efb8bde23db4d1c29b0c92d71eb6e"
+    },
+    {
+      "name": "files at block edges",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        },
+        {
+          "path": "empty.txt",
+          "text": ""
+        },
+        {
+          "path": "e511.txt",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        },
+        {
+          "path": "e512.txt",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        },
+        {
+          "path": "e513.txt",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ],
+      "code_hash": "sha256:53e64e1074e57cb63eb9c2b8c81042fa8d61230f366f708800b73bdfc9470e59"
+    },
+    {
+      "name": "a 100-byte path",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        },
+        {
+          "path": "deep/nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn.txt",
+          "text": "n\n"
+        }
+      ],
+      "code_hash": "sha256:ec3448784c3dcf0c33d04fd20389fca1b99ee7a7380636ca9de24ff23c3629fc"
+    },
+    {
+      "name": "paths sort by their bytes",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        },
+        {
+          "path": "a_b.py",
+          "text": ""
+        },
+        {
+          "path": "a/b.py",
+          "text": ""
+        },
+        {
+          "path": "a.py",
+          "text": ""
+        },
+        {
+          "path": "Z.py",
+          "text": ""
+        }
+      ],
+      "code_hash": "sha256:90f82e4468c1743e93672a348ed1491276e472efa0c89c9d02a8e50634fa4102"
+    },
+    {
+      "name": "file order does not matter",
+      "files": [
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        },
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        }
+      ],
+      "code_hash": "sha256:59f8dcaea45590e10e16199eb6b856deb440a52844e69514fa372f909340d4f3"
+    },
+    {
+      "name": "line endings are hashed as they are",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\r\n    pass\r\n"
+        }
+      ],
+      "code_hash": "sha256:1a586d8e53207afd65e5915017bd5fc4703660d9ce09da2c5d62a56c2052b20c"
+    },
+    {
+      "name": "any bytes in a data file",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        },
+        {
+          "path": "blob.txt",
+          "hex": "00ff10e30d0a"
+        }
+      ],
+      "code_hash": "sha256:75d7cc0450157694271214cd0904c7e966bb0314bc978d8df565f71bd6db418a"
+    },
+    {
+      "name": "admitted",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"pkg/breakout.py:Breakout\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n\n# Parameters reach the strategy as JSON.\n[params]\nlookback = 20\nthreshold = 0.25\nlabel = \"daily\"\nsides = [\"long\", \"short\"]\nexits = { stop_bps = 150, trail = true }\n\n[deps]\nnumpy = \"2.1.3\"\n"
+        },
+        {
+          "path": "pkg/__init__.py",
+          "text": ""
+        },
+        {
+          "path": "pkg/breakout.py",
+          "text": "import numpy\n\n\nclass Breakout:\n    pass\n"
+        },
+        {
+          "path": "pkg/levels.json",
+          "text": "{\"levels\": [1, 2, 3]}\n"
+        },
+        {
+          "path": "NOTES.txt",
+          "text": "Breakout on the daily close.\n"
+        }
+      ],
+      "runtime": {
+        "engine": "0.3.2",
+        "python": "3.12",
+        "packages": {
+          "numpy": [
+            "2.1.3"
+          ],
+          "pandas": [
+            "2.2.3"
+          ]
+        }
+      },
+      "admission": [],
+      "code_hash": "sha256:1bee3a498afaadbf66bf2189e7a50c227d9efb8bde23db4d1c29b0c92d71eb6e"
+    },
+    {
+      "name": "the wrong engine, python, and packages",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"pkg/breakout.py:Breakout\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n\n# Parameters reach the strategy as JSON.\n[params]\nlookback = 20\nthreshold = 0.25\nlabel = \"daily\"\nsides = [\"long\", \"short\"]\nexits = { stop_bps = 150, trail = true }\n\n[deps]\nnumpy = \"2.1.3\"\n"
+        },
+        {
+          "path": "pkg/__init__.py",
+          "text": ""
+        },
+        {
+          "path": "pkg/breakout.py",
+          "text": "import numpy\n\n\nclass Breakout:\n    pass\n"
+        },
+        {
+          "path": "pkg/levels.json",
+          "text": "{\"levels\": [1, 2, 3]}\n"
+        },
+        {
+          "path": "NOTES.txt",
+          "text": "Breakout on the daily close.\n"
+        }
+      ],
+      "runtime": {
+        "engine": "0.4.0",
+        "python": "3.11",
+        "packages": {
+          "pandas": [
+            "2.2.3"
+          ]
+        }
+      },
+      "admission": [
+        "dependency_not_allowed",
+        "engine_mismatch",
+        "python_mismatch"
+      ],
+      "code_hash": "sha256:1bee3a498afaadbf66bf2189e7a50c227d9efb8bde23db4d1c29b0c92d71eb6e"
+    },
+    {
+      "name": "a pinned version the server lacks",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"pkg/breakout.py:Breakout\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n\n# Parameters reach the strategy as JSON.\n[params]\nlookback = 20\nthreshold = 0.25\nlabel = \"daily\"\nsides = [\"long\", \"short\"]\nexits = { stop_bps = 150, trail = true }\n\n[deps]\nnumpy = \"2.1.3\"\n"
+        },
+        {
+          "path": "pkg/__init__.py",
+          "text": ""
+        },
+        {
+          "path": "pkg/breakout.py",
+          "text": "import numpy\n\n\nclass Breakout:\n    pass\n"
+        },
+        {
+          "path": "pkg/levels.json",
+          "text": "{\"levels\": [1, 2, 3]}\n"
+        },
+        {
+          "path": "NOTES.txt",
+          "text": "Breakout on the daily close.\n"
+        }
+      ],
+      "runtime": {
+        "engine": "0.3.0",
+        "python": "3.12",
+        "packages": {
+          "numpy": [
+            "2.0.0",
+            "2.1.2"
+          ]
+        }
+      },
+      "admission": [
+        "dependency_version_unavailable"
+      ],
+      "code_hash": "sha256:1bee3a498afaadbf66bf2189e7a50c227d9efb8bde23db4d1c29b0c92d71eb6e"
+    },
+    {
+      "name": "paths that break a path rule",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        },
+        {
+          "path": "../up.py",
+          "text": ""
+        },
+        {
+          "path": "/abs.py",
+          "text": ""
+        },
+        {
+          "path": "a\\b.py",
+          "text": ""
+        },
+        {
+          "path": "é.py",
+          "text": ""
+        },
+        {
+          "path": "a//b.py",
+          "text": ""
+        },
+        {
+          "path": ".hidden.py",
+          "text": ""
+        },
+        {
+          "path": "dir./x.py",
+          "text": ""
+        },
+        {
+          "path": "__pycache__/x.py",
+          "text": ""
+        },
+        {
+          "path": "aux.py",
+          "text": ""
+        },
+        {
+          "path": "pkg/LPT3.txt",
+          "text": ""
+        },
+        {
+          "path": "a b.py",
+          "text": ""
+        },
+        {
+          "path": "deep/nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn.txt",
+          "text": ""
+        }
+      ],
+      "problems": [
+        "path_invalid",
+        "path_invalid",
+        "path_invalid",
+        "path_invalid",
+        "path_invalid",
+        "path_invalid",
+        "path_invalid",
+        "path_invalid",
+        "path_invalid",
+        "path_invalid",
+        "path_invalid",
+        "path_invalid"
+      ]
+    },
+    {
+      "name": "extensions a bundle does not hold",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        },
+        {
+          "path": "notes.md",
+          "text": ""
+        },
+        {
+          "path": "Makefile",
+          "text": ""
+        },
+        {
+          "path": "model.pkl",
+          "text": ""
+        },
+        {
+          "path": "x.PY",
+          "text": ""
+        }
+      ],
+      "problems": [
+        "extension_not_allowed",
+        "extension_not_allowed",
+        "extension_not_allowed",
+        "extension_not_allowed"
+      ]
+    },
+    {
+      "name": "paths that collide",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        },
+        {
+          "path": "Lib.py",
+          "text": ""
+        },
+        {
+          "path": "lib.py",
+          "text": ""
+        },
+        {
+          "path": "util.py",
+          "text": ""
+        },
+        {
+          "path": "util.py/x.py",
+          "text": ""
+        },
+        {
+          "path": "dup.py",
+          "text": ""
+        },
+        {
+          "path": "dup.py",
+          "text": ""
+        }
+      ],
+      "problems": [
+        "path_collision",
+        "path_collision",
+        "path_collision"
+      ]
+    },
+    {
+      "name": "every limit broken",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        },
+        {
+          "path": "big.txt",
+          "text": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        {
+          "path": "more.txt",
+          "text": "mmmmmmmmmm"
+        }
+      ],
+      "limits": {
+        "max_file_bytes": 100,
+        "max_total_bytes": 150,
+        "max_files": 3
+      },
+      "problems": [
+        "bundle_too_large",
+        "file_too_large",
+        "too_many_files"
+      ]
+    },
+    {
+      "name": "no manifest",
+      "files": [
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "manifest_missing"
+      ]
+    },
+    {
+      "name": "a manifest over the file limit is not parsed",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "limits": {
+        "max_file_bytes": 50,
+        "max_total_bytes": 8388608,
+        "max_files": 256
+      },
+      "problems": [
+        "file_too_large"
+      ]
+    },
+    {
+      "name": "a byte-order mark",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "﻿format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "manifest_invalid"
+      ]
+    },
+    {
+      "name": "not UTF-8",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "hex": "666f726d6174203d20310a656e747279203d202273747261746567792e70793a486f6c64220a656e67696e65203d20223e3d302e332e302c203c302e342e30220a707974686f6e203d2022332e3132220a2320ff0a"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "manifest_invalid"
+      ]
+    },
+    {
+      "name": "a TOML syntax error",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry =\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "manifest_invalid"
+      ]
+    },
+    {
+      "name": "TOML 1.1 syntax",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\nparams = { lookback = 20, }\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "manifest_invalid"
+      ]
+    },
+    {
+      "name": "a NaN",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n[params]\nratio = nan\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "manifest_invalid"
+      ]
+    },
+    {
+      "name": "an infinity",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n[params]\nratio = -inf\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "manifest_invalid"
+      ]
+    },
+    {
+      "name": "nested 33 levels deep",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n[params]\nnest = [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[1]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "manifest_invalid"
+      ]
+    },
+    {
+      "name": "no format",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "entry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "manifest_invalid"
+      ]
+    },
+    {
+      "name": "a format that is a string",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = \"1\"\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "manifest_invalid"
+      ]
+    },
+    {
+      "name": "a later format",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 2\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "format_unsupported"
+      ]
+    },
+    {
+      "name": "an unknown key",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\nparms = 1\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "manifest_invalid"
+      ]
+    },
+    {
+      "name": "no entry",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "entry_invalid"
+      ]
+    },
+    {
+      "name": "an entry without a class",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "entry_invalid"
+      ]
+    },
+    {
+      "name": "an entry that cannot be imported",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"my-strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        },
+        {
+          "path": "my-strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "entry_invalid"
+      ]
+    },
+    {
+      "name": "an entry naming a keyword",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:class\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "entry_invalid"
+      ]
+    },
+    {
+      "name": "an entry naming a missing file",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"missing.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "entry_not_found"
+      ]
+    },
+    {
+      "name": "no engine",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "engine_invalid"
+      ]
+    },
+    {
+      "name": "an engine without a patch version",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "engine_invalid"
+      ]
+    },
+    {
+      "name": "a caret engine",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \"^0.3.0\"\npython = \"3.12\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "engine_invalid"
+      ]
+    },
+    {
+      "name": "a python without a minor version",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "python_invalid"
+      ]
+    },
+    {
+      "name": "a python that is a number",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = 3.12\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "python_invalid"
+      ]
+    },
+    {
+      "name": "a date param",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n[params]\nstart = 2024-01-01\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "param_not_json"
+      ]
+    },
+    {
+      "name": "an integer beyond 2^53",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n[params]\nseed = 9007199254740992\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "param_not_json"
+      ]
+    },
+    {
+      "name": "a reserved key",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n[params]\n\"$ref\" = 1\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "param_not_json"
+      ]
+    },
+    {
+      "name": "params that are not a table",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\nparams = 1\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "param_not_json"
+      ]
+    },
+    {
+      "name": "a dependency not normalized",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n[deps]\nPyYAML = \"6.0.2\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "dependency_invalid"
+      ]
+    },
+    {
+      "name": "a dependency range",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n[deps]\nnumpy = \">=2.1\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "dependency_invalid"
+      ]
+    },
+    {
+      "name": "a dependency version that is a number",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\n[deps]\nnumpy = 2\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "dependency_invalid"
+      ]
+    },
+    {
+      "name": "deps that are not a table",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py:Hold\"\nengine = \">=0.3.0, <0.4.0\"\npython = \"3.12\"\ndeps = \"numpy\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "dependency_invalid"
+      ]
+    },
+    {
+      "name": "every key wrong at once",
+      "files": [
+        {
+          "path": "quantforge.toml",
+          "text": "format = 1\nentry = \"strategy.py\"\nengine = \"*\"\npython = \"3\"\nflavor = \"x\"\n[params]\nstart = 2024-01-01\n[deps]\nNumPy = \"2.1.3\"\n"
+        },
+        {
+          "path": "strategy.py",
+          "text": "class Hold:\n    pass\n"
+        }
+      ],
+      "problems": [
+        "dependency_invalid",
+        "engine_invalid",
+        "entry_invalid",
+        "manifest_invalid",
+        "param_not_json",
+        "python_invalid"
+      ]
+    },
+    {
+      "name": "an mtime",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "patch": {
+              "offset": 136,
+              "hex": "313430303030303030303000"
+            }
+          },
+          {
+            "fix_checksum": 0
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "mode 0755",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "patch": {
+              "offset": 100,
+              "hex": "3030303037353500"
+            }
+          },
+          {
+            "fix_checksum": 0
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "an owner",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "patch": {
+              "offset": 108,
+              "hex": "3030303137353000"
+            }
+          },
+          {
+            "fix_checksum": 0
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "a user name",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "patch": {
+              "offset": 265,
+              "hex": "726f6f74"
+            }
+          },
+          {
+            "fix_checksum": 0
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "a pax header",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "patch": {
+              "offset": 156,
+              "hex": "78"
+            }
+          },
+          {
+            "fix_checksum": 0
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "a symlink",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "patch": {
+              "offset": 1180,
+              "hex": "32"
+            }
+          },
+          {
+            "fix_checksum": 2
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "device numbers written out",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "patch": {
+              "offset": 329,
+              "hex": "3030303030303000"
+            }
+          },
+          {
+            "patch": {
+              "offset": 337,
+              "hex": "3030303030303000"
+            }
+          },
+          {
+            "fix_checksum": 0
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "a wrong checksum",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "patch": {
+              "offset": 148,
+              "hex": "3030303030300020"
+            }
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "a size padded with spaces",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "patch": {
+              "offset": 124,
+              "hex": "202020202020202031323120"
+            }
+          },
+          {
+            "fix_checksum": 0
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "record padding",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "append_zeros": 7168
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "one closing block",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "truncate": 512
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "bytes after the end",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "append_hex": "0100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "padding that is not zero",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "patch": {
+              "offset": 593,
+              "hex": "21"
+            }
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "entries out of order",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "swap": {
+              "a": 0,
+              "b": 1024,
+              "length": 1024
+            }
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "an archive too large for the limits",
+      "archive": {
+        "of": "minimal",
+        "ops": []
+      },
+      "limits": {
+        "max_file_bytes": 64,
+        "max_total_bytes": 64,
+        "max_files": 1
+      },
+      "problems": [
+        "bundle_too_large"
+      ]
+    },
+    {
+      "name": "bytes after the name's NUL",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "patch": {
+              "offset": 0,
+              "hex": "2e2e2f712e746f6d6c00"
+            }
+          },
+          {
+            "fix_checksum": 0
+          }
+        ]
+      },
+      "problems": [
+        "archive_not_canonical"
+      ]
+    },
+    {
+      "name": "a canonical archive whose path escapes the bundle",
+      "archive": {
+        "of": "minimal",
+        "ops": [
+          {
+            "patch": {
+              "offset": 0,
+              "hex": "2e2e2f712e746f6d6c000000000000"
+            }
+          },
+          {
+            "fix_checksum": 0
+          }
+        ]
+      },
+      "problems": [
+        "manifest_missing",
+        "path_invalid"
+      ]
+    }
+  ]
+}
