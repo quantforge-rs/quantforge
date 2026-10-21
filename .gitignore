@@ -9,3 +9,5 @@
 # IDE
 .idea
 .vscode
+# The spikes are standalone Cargo projects with their own target directories.
+/spikes/*/target/
