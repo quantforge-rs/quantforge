@@ -5,6 +5,11 @@
 //! clap rejects fails the command even beside a valid flag: clap checks it
 //! at every command level.
 //!
+//! `serve run`'s two settings follow the same order, but their flags go
+//! after `serve run`, and clap reads their variables only when the flag is
+//! absent. Each of those runs stops at the bind, on a port the test holds,
+//! so that no server is left running.
+//!
 //! The renamed `--binance-base-url` and `QF_BINANCE_BASE_URL` are refused
 //! here too, from either source.
 //!
@@ -422,6 +427,97 @@ fn rust_log_never_sets_the_log_filter() {
     );
 }
 
+// serve run: the address a failed bind names, and the cache directory a
+// run creates before it binds, show which source won.
+
+const SERVE_RUN: [&str; 2] = ["serve", "run"];
+const FLAG_SEGMENTS: &str = "from-flag-segments";
+const ENV_SEGMENTS: &str = "from-env-segments";
+const DEFAULT_SEGMENTS: &str = "data/segments";
+
+/// A loopback port held for the rest of the test, so that `serve run`
+/// fails to bind it.
+fn held_port() -> std::net::TcpListener {
+    std::net::TcpListener::bind("127.0.0.1:0").expect("a listener")
+}
+
+fn address_of(port: &std::net::TcpListener) -> String {
+    port.local_addr().expect("its address").to_string()
+}
+
+/// Every setting but `serve run`'s pinned.
+fn serve_cmd(bed: &TestBed) -> Command {
+    let mut cmd = unpinned_cmd(bed);
+    cmd.args(["--log-level", "error", "--db"])
+        .arg(bed.db_path());
+    cmd
+}
+
+#[test]
+fn listen_flag_beats_qf_listen_and_qf_listen_is_read_without_it() {
+    let held = [held_port(), held_port()];
+    let [flag, env] = held.each_ref().map(address_of);
+
+    let bed = TestBed::new();
+    let mut cmd = serve_cmd(&bed);
+    cmd.env("QF_LISTEN", &env)
+        .args(SERVE_RUN)
+        .args(["--listen", &flag]);
+    cmd.assert()
+        .code(1)
+        .stderr(predicate::str::contains(format!(
+            "failed to listen on {flag}"
+        )));
+
+    let bed = TestBed::new();
+    let mut cmd = serve_cmd(&bed);
+    cmd.env("QF_LISTEN", &env).args(SERVE_RUN);
+    cmd.assert()
+        .code(1)
+        .stderr(predicate::str::contains(format!(
+            "failed to listen on {env}"
+        )));
+
+    // Unlike a global's, the variable is not even read beside the flag.
+    let bed = TestBed::new();
+    let mut cmd = serve_cmd(&bed);
+    cmd.env("QF_LISTEN", "nonsense")
+        .args(SERVE_RUN)
+        .args(["--listen", &flag]);
+    cmd.assert()
+        .code(1)
+        .stderr(predicate::str::contains(format!(
+            "failed to listen on {flag}"
+        )));
+}
+
+#[test]
+fn segment_cache_dir_flag_beats_its_variable_and_the_variable_beats_the_default() {
+    let held = held_port();
+    let listen = address_of(&held);
+    for (flag, env, expected) in [
+        (Some(FLAG_SEGMENTS), Some(ENV_SEGMENTS), FLAG_SEGMENTS),
+        (None, Some(ENV_SEGMENTS), ENV_SEGMENTS),
+        (None, None, DEFAULT_SEGMENTS),
+    ] {
+        let bed = TestBed::new();
+        let mut cmd = serve_cmd(&bed);
+        if let Some(env) = env {
+            cmd.env("QF_SEGMENT_CACHE_DIR", bed.dir().join(env));
+        }
+        cmd.args(SERVE_RUN).args(["--listen", &listen]);
+        if let Some(flag) = flag {
+            cmd.arg("--segment-cache-dir").arg(bed.dir().join(flag));
+        }
+        cmd.assert().code(1);
+        let created: Vec<&str> = [FLAG_SEGMENTS, ENV_SEGMENTS, DEFAULT_SEGMENTS]
+            .into_iter()
+            .filter(|dir| bed.dir().join(dir).is_dir())
+            .collect();
+        assert_eq!(created, [expected], "flag {flag:?}, variable {env:?}");
+    }
+}
+
 #[test]
 fn an_exported_but_empty_variable_never_falls_back_to_the_default() {
     // clap rejects the empty path before anything is opened or created.
@@ -472,5 +568,32 @@ fn an_exported_but_empty_variable_never_falls_back_to_the_default() {
     assert!(
         !logs_startup_info(&mut cmd),
         "an empty QF_LOG fell back to the default info level"
+    );
+
+    // An empty address is no address, and an empty path no path: clap
+    // refuses both before anything is opened or bound.
+    let bed = TestBed::new();
+    let mut cmd = serve_cmd(&bed);
+    cmd.env("QF_LISTEN", "").args(SERVE_RUN);
+    cmd.assert().code(2).stderr(predicate::str::contains(
+        "invalid value '' for '--listen <LISTEN>'",
+    ));
+    assert!(
+        !bed.db_path().exists(),
+        "an empty QF_LISTEN created a database"
+    );
+
+    let bed = TestBed::new();
+    let held = held_port();
+    let mut cmd = serve_cmd(&bed);
+    cmd.env("QF_SEGMENT_CACHE_DIR", "")
+        .args(SERVE_RUN)
+        .args(["--listen", &address_of(&held)]);
+    cmd.assert().code(2).stderr(predicate::str::contains(
+        "a value is required for '--segment-cache-dir <SEGMENT_CACHE_DIR>'",
+    ));
+    assert!(
+        !bed.db_path().exists(),
+        "an empty QF_SEGMENT_CACHE_DIR created a database"
     );
 }

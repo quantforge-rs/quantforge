@@ -9,13 +9,14 @@
 //!
 //! # Module tree
 //!
-//! Seven modules. Six of them layer innermost first: [`model`] names the
+//! Eight modules. Six of them layer innermost first: [`model`] names the
 //! domain, [`ports`] names the seams over it, [`exchange`] and [`storage`]
 //! are the adapters behind those seams, [`sdk`] is the boundary a strategy
-//! is written against, and [`engine`] drives all of them. The seventh,
-//! [`protocol`], stands apart: it is the wire format between QuantForge
-//! instances, it uses nothing else in the crate, and nothing uses it yet, so
-//! that it can become a crate of its own.
+//! is written against, and [`engine`] drives all of them. [`protocol`]
+//! stands apart: it is the wire format between QuantForge instances, and it
+//! uses nothing else in the crate, so that it can become a crate of its own.
+//! [`server`] answers other instances in that format, and so far uses
+//! nothing else.
 //!
 //! - [`model`] — market identity, the candle grid and its validation, the
 //!   columnar [`CandleBatch`], exchange orders and the exchange-agnostic
@@ -40,10 +41,12 @@
 //! - [`protocol`] — the versioned wire types of remote backtest jobs,
 //!   candle segments, and the live bar stream, and the strategy bundle a job
 //!   runs; its documentation is the wire specification.
+//! - [`server`] — the HTTP server that `quantforge serve run` hosts: its
+//!   routes, and how it stops ([`server::serve`]).
 //!
 //! # The command tree it answers to
 //!
-//! The mirror is real but partial. Four subcommands are a shell over one
+//! The mirror is real but partial. Five subcommands are a shell over one
 //! library entry point each:
 //!
 //! | Command | Entry point |
@@ -52,6 +55,7 @@
 //! | `quantforge data validate` | [`validate_candles`] |
 //! | `quantforge backtest` | [`BacktestEngine`] |
 //! | `quantforge trade run` | [`LiveTradeEngine`] |
+//! | `quantforge serve run` | [`server::serve`] |
 //!
 //! `trade close` and the six `monitor` subcommands have no engine behind
 //! them: they drive the connectors and [`RunJournalStore`] directly, so that
@@ -94,7 +98,7 @@
 //!   factory, not only the registered ones;
 //! - it is the wire protocol, published for clients and servers written
 //!   outside this repository: [`protocol`] is used through its module, and
-//!   nothing in the crate names it yet.
+//!   in the crate only [`server`] names it.
 //!
 //! Everything else is internal and moves without notice: the Binance wire
 //! DTOs, request signing and HTTP transport behind
@@ -114,6 +118,7 @@ pub mod model;
 pub mod ports;
 pub mod protocol;
 pub mod sdk;
+pub mod server;
 pub mod storage;
 
 /// Domain vocabulary. Every layer speaks it, and every command parses its

@@ -5,11 +5,13 @@
 //!
 //! - Every [`TestBed`] owns a fresh temp directory and database path;
 //!   nothing is shared between tests and everything is deleted on drop.
-//! - Every command starts from [`isolated_cmd`]: `env_clear()` plus an
-//!   explicit allowlist, so the parent shell's environment (notably a
-//!   sourced `.env` with real credentials and a base-URL override) can
-//!   never leak into a test. The only `QF_*` values a child sees are the
-//!   ones a builder injects explicitly.
+//! - Every command starts from [`isolated_cmd`], or from
+//!   [`isolated_std_cmd`] when it must keep running while the test talks
+//!   to it (`serve run`): `env_clear()` plus an explicit allowlist, so the
+//!   parent shell's environment (notably a sourced `.env` with real
+//!   credentials and a base-URL override) can never leak into a test. The
+//!   only `QF_*` values a child sees are the ones a builder injects
+//!   explicitly.
 //! - Every builder from [`cli_cmd`] up passes `--db` and `--log-level` as
 //!   flags, so even a hypothetical `QF_DB`/`QF_LOG` leak would be inert
 //!   (flags win). Precedence tests pin nothing and start from
@@ -107,7 +109,14 @@ impl Default for TestBed {
 /// database, no log level — build on this only when a builder below does
 /// not fit.
 pub fn isolated_cmd() -> Command {
-    let mut cmd = Command::cargo_bin("quantforge").expect("binary");
+    Command::from_std(isolated_std_cmd())
+}
+
+/// Level 0 as a [`std::process::Command`], for a child that keeps running
+/// while the test talks to it: `assert_cmd` only runs a command to
+/// completion. [`isolated_cmd`] is built on it.
+pub fn isolated_std_cmd() -> std::process::Command {
+    let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_quantforge"));
     cmd.env_clear();
     // Windows children need SystemRoot for winsock and PATH/TEMP for the
     // CRT (rust-lang/rust#114737; the empty-env spawn failure itself was

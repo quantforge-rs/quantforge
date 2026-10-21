@@ -57,17 +57,21 @@ src/
 │   │   ├── mod.rs              quantforge trade: subcommand enum and dispatch
 │   │   ├── run.rs              quantforge trade run: the polling bot, dry-run by default
 │   │   └── close.rs            quantforge trade close: market-sell the bot's position
-│   └── monitor/                account commands; every one needs credentials
-│       ├── mod.rs              quantforge monitor: subcommand enum and dispatch
-│       ├── status.rs           quantforge monitor status: balances, run, orders, trades
-│       ├── watch.rs            quantforge monitor watch: repeat the status report
-│       ├── orders.rs           quantforge monitor orders: open orders on a symbol
-│       ├── trades.rs           quantforge monitor trades: recent account trades
-│       ├── cancel_order.rs     quantforge monitor cancel-order: cancel one order
-│       └── close_position.rs   quantforge monitor close-position: market-sell the free balance
+│   ├── monitor/                account commands; every one needs credentials
+│   │   ├── mod.rs              quantforge monitor: subcommand enum and dispatch
+│   │   ├── status.rs           quantforge monitor status: balances, run, orders, trades
+│   │   ├── watch.rs            quantforge monitor watch: repeat the status report
+│   │   ├── orders.rs           quantforge monitor orders: open orders on a symbol
+│   │   ├── trades.rs           quantforge monitor trades: recent account trades
+│   │   ├── cancel_order.rs     quantforge monitor cancel-order: cancel one order
+│   │   └── close_position.rs   quantforge monitor close-position: market-sell the free balance
+│   └── serve/                  the server other instances connect to
+│       ├── mod.rs              quantforge serve: subcommand enum and dispatch
+│       └── run.rs              quantforge serve run: listen, answer, and stop on a signal
 ├── protocol/                   the wire format between instances; uses no other module
 │   ├── mod.rs                  the wire spec: encoding, versions, compatibility; ProtocolError
 │   ├── version.rs              ProtoVersion, PROTO_VERSION, MIN_SUPPORTED, VersionRange negotiation
+│   ├── discovery.rs            ServerVersion: what GET /version answers, the same in every version
 │   ├── decimal.rs              ExactDecimal: exact decimals as JSON strings, never numbers
 │   ├── hash.rs                 ContentHash: the sha256: names of stored content
 │   ├── errors.rs               the error envelope every surface answers with, and its HTTP statuses
@@ -142,22 +146,26 @@ src/
 │   └── builtin/                strategies that ship with the crate
 │       ├── mod.rs              BuiltInStrategyConfig: names and builds one
 │       └── sma_cross.rs        SmaCrossStrategy, the strategy the CLI runs
-└── engine/                     the drivers: backtest, ingestion, live trading
-    ├── mod.rs                  EngineError, which every engine returns
-    ├── backtest.rs             BacktestEngine: fills at the next bar's open
-    ├── data_sync.rs            DataSyncEngine: historical and incremental ingestion
-    └── live/                   LiveTradeEngine: the polling live and dry-run trader
-        ├── mod.rs              public surface and the run lifecycle
-        ├── runner.rs           the poll loop: bootstrap, bars, closed-bar detection
-        ├── execution.rs        order placement, exchange rules, dry-run vs live
-        └── state.rs            run identity: create, resume, and resume checks
+├── engine/                     the drivers: backtest, ingestion, live trading
+│   ├── mod.rs                  EngineError, which every engine returns
+│   ├── backtest.rs             BacktestEngine: fills at the next bar's open
+│   ├── data_sync.rs            DataSyncEngine: historical and incremental ingestion
+│   └── live/                   LiveTradeEngine: the polling live and dry-run trader
+│       ├── mod.rs              public surface and the run lifecycle
+│       ├── runner.rs           the poll loop: bootstrap, bars, closed-bar detection
+│       ├── execution.rs        order placement, exchange rules, dry-run vs live
+│       └── state.rs            run identity: create, resume, and resume checks
+└── server/                     the HTTP server other instances connect to
+    └── mod.rs                  serve: the routes, and the shutdown that finishes requests in progress
 ```
 
-After `cli/`, the seven library modules follow innermost first, as in the
-`src/lib.rs` docs. `protocol` stands apart: it uses no other module, and no
-module uses it yet. Then `model` uses no other module, `ports` uses `model`,
-`exchange` and `storage` use `model` and `ports`, `sdk` uses `model`, and
-`engine` uses `model`, `ports`, and `sdk`. The engines reach the exchange
+After `cli/` come the eight library modules: `protocol` first, which stands
+apart and uses no other module, then the six layers innermost first, as in
+the `src/lib.rs` docs, then `server`. `model` uses no other module, `ports`
+uses `model`, `exchange` and `storage` use `model` and `ports`, `sdk` uses
+`model`, and `engine` uses `model`, `ports`, and `sdk`. `server` uses
+`protocol` and, so far, nothing else; `serve run` binds the address and
+hands it the listener. The engines reach the exchange
 and storage adapters only through the `ports` traits; the binary chooses
 which adapters to pass in, building the connectors of the exchange that
 `--exchange` names through `exchange::connect`. Nothing outside
@@ -180,8 +188,9 @@ is written down in [bundle-spec.md](bundle-spec.md).
   and exit codes
 - `tests/e2e/`: end-to-end tiers — `offline.rs` against a mock Binance
   server, `testnet.rs` against Binance Spot testnet, `precedence.rs` for
-  flag, environment, and default precedence, and `snapshot.rs` and
-  `layout.rs` for the CLI surface and this document
+  flag, environment, and default precedence, `serve.rs` for `serve run` as
+  a running process — its routes, and how it stops on a signal — and
+  `snapshot.rs` and `layout.rs` for the CLI surface and this document
 - `tests/snapshots/`: the committed `--help` output of every command, plus
   `version.txt` for `--version`
 - `tests/backtest_engine.rs`, `tests/candle_validation.rs`,

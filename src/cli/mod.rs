@@ -1,6 +1,7 @@
 //! Command-line interface: the root parser and its `parse()` entry point,
 //! the command tree, and the `run()` dispatch. Each command group owns a
-//! module mirroring its command path (`backtest`, `data`, `monitor`, `trade`).
+//! module mirroring its command path (`backtest`, `data`, `monitor`, `serve`,
+//! `trade`).
 
 use anyhow::Result;
 use clap::builder::{PossibleValuesParser, TypedValueParser};
@@ -16,6 +17,7 @@ mod common;
 mod context;
 mod data;
 mod monitor;
+mod serve;
 mod trade;
 
 use context::AppContext;
@@ -25,6 +27,7 @@ use context::AppContext;
 use backtest::{BacktestArgs, handle_backtest};
 use data::DataCommand;
 use monitor::MonitorCommand;
+use serve::ServeCommand;
 use trade::TradeCommand;
 
 /// Parse the process arguments exactly like clap's `Parser::parse()`, then
@@ -100,6 +103,7 @@ pub(crate) async fn run(cli: Cli) -> Result<()> {
             )
             .await?
         }
+        Command::Serve { command } => serve::dispatch(command).await?,
     }
 
     Ok(())
@@ -228,6 +232,12 @@ pub(crate) enum Command {
     Monitor {
         #[command(subcommand)]
         command: MonitorCommand,
+    },
+
+    /// Run the server other QuantForge instances connect to.
+    Serve {
+        #[command(subcommand)]
+        command: ServeCommand,
     },
 }
 

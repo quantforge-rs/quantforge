@@ -237,7 +237,7 @@ mod scan {
     #[test]
     fn the_scan_reads_the_whole_protocol_and_the_manifest() {
         let files = protocol_sources();
-        assert!(files.len() >= 25, "scanned only {files:?}");
+        assert!(files.len() >= 26, "scanned only {files:?}");
         assert!(files.contains_key(DECIMAL_FILE));
         assert!(files.contains_key("src/protocol/bundle/mod.rs"));
         assert!(

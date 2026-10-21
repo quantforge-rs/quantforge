@@ -1,9 +1,10 @@
 # Configuration
 
-Every QuantForge setting is a command-line flag. The six global settings also
-read a `QF_*` environment variable as a fallback; per-command options are flags
-only. QuantForge reads no other environment variable itself — the few its
-dependencies honor are listed at the end.
+Every QuantForge setting is a command-line flag. The six global settings and
+the two settings of `serve run` also read a `QF_*` environment variable as a
+fallback; every other per-command option is a flag only. QuantForge reads no
+other environment variable itself — the few its dependencies honor are listed
+at the end.
 
 ## Precedence
 
@@ -19,6 +20,11 @@ An exported variable is checked even when its flag is given: a value the
 setting rejects, such as `QF_EXCHANGE=nosuch`, fails the command until it is
 fixed or unset, whatever the flag says.
 
+`serve run`'s settings follow the same order, with two differences: their
+flags go after `serve run`, and their variables are read, and checked, only
+when the flag is absent, so `QF_LISTEN=nonsense` is ignored beside
+`--listen 127.0.0.1:9600`.
+
 A variable that is exported but empty is still set, so it never falls back to
 the default:
 
@@ -28,6 +34,9 @@ the default:
 - `QF_BASE_URL=` fails with `failed to parse --base-url` before the database
   is created, so a missing testnet URL can never quietly become production;
 - `QF_LOG=` is an empty filter, which turns log output off, warnings included;
+- without its flag, `QF_LISTEN=` is a usage error (exit status 2, reported
+  against `--listen`), and so is `QF_SEGMENT_CACHE_DIR=` (reported against
+  `--segment-cache-dir`);
 - an empty or whitespace-only API key or secret counts as missing, so commands
   that need credentials fail with the missing-credentials error.
 
@@ -53,7 +62,7 @@ Explanations belong in the Setting cell.
 | Log filter: `trace`, `debug`, `info`, `warn`, `error`, or a full tracing filter expression; log lines go to stdout | `--log-level <filter>` | `QF_LOG` | `info` | global |
 | API key for the exchange's signed endpoints (`monitor`, `trade close`, `trade run --mode live`); set both credentials or neither, and prefer the variable, since command-line values can land in shell history and process listings | `--api-key <key>` | `QF_API_KEY` | none | global |
 | API secret paired with the key; same rules | `--api-secret <secret>` | `QF_API_SECRET` | none | global |
-| Trading pair such as `BTCUSDT`, trimmed and uppercased | `--symbol <symbol>` | — | required | every command |
+| Trading pair such as `BTCUSDT`, trimmed and uppercased | `--symbol <symbol>` | — | required | `data sync`, `data validate`, `backtest`, `trade run`, `trade close`, `monitor status`, `monitor watch`, `monitor orders`, `monitor trades`, `monitor cancel-order`, `monitor close-position` |
 | Candle interval: `1s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `12h`, `1d`, `3d`, or `1w`; with `--strategy-name` it also selects the run that `trade close`, `monitor status`, and `monitor watch` act on | `--interval <interval>` | — | `1m` | `data sync`, `data validate`, `backtest`, `trade run`, `trade close`, `monitor status`, `monitor watch` |
 | RFC3339 time to start syncing from; omitted, syncing starts at the current time with no backfill | `--start <rfc3339>` | — | none | `data sync` |
 | RFC3339 time to stop syncing at; omitted, syncing runs until Ctrl-C | `--end <rfc3339>` | — | none | `data sync` |
@@ -79,6 +88,8 @@ Explanations belong in the Setting cell.
 | Recent account trades listed | `--limit <count>` | — | `20` | `monitor trades` |
 | Exchange order id of the order to cancel; pass it or `--client-order-id` | `--order-id <id>` | — | none | `monitor cancel-order` |
 | Client order id of the order to cancel; pass it or `--order-id` | `--client-order-id <id>` | — | none | `monitor cancel-order` |
+| Address to listen on: an IP address and a port, such as `0.0.0.0:9600` for every interface; a host name is refused; the default accepts connections from this machine only, and port 0 picks a free port, which the `listening:` line shows | `--listen <addr>` | `QF_LISTEN` | `127.0.0.1:9600` | `serve run` |
+| Directory for cached candle segments, relative to the working directory; created at startup if missing | `--segment-cache-dir <path>` | `QF_SEGMENT_CACHE_DIR` | `data/segments` | `serve run` |
 
 ## Renamed settings
 
@@ -97,12 +108,16 @@ The old credential flags are unknown arguments, and the old credential
 variables are no longer read, so a command that needs credentials fails with
 the missing-credentials error, which names the new ones.
 
-## Why per-command options have no environment variable
+## Why most per-command options have no environment variable
 
 A per-command option describes one invocation. An exported variable would
 outlive the command it was meant for, and one that silently changed what a
 command does to an account — `--mode live`, `--yes`, a larger
 `--quote-order-qty` — is exactly the mistake the guardrails exist to prevent.
+
+`serve run`'s settings are the exception. A server is set up once for the
+place it runs, often by a service manager or container that configures it
+through its environment, and neither of its settings can touch an account.
 
 ## Environment variables QuantForge does not own
 
