@@ -202,16 +202,38 @@ Bybit's position stops carry no client ID.
 - `userTrades` reaches back 3 months.
 
 **Retention on Bybit:**
+- `GET /v5/order/realtime` finds an order by client ID while it is open, and
+  after it ends while it is among the account's last 500 closed orders in its
+  category. When Bybit restarts the service for an update, those closed orders
+  are cleared.
+- `GET /v5/order/history` keeps orders that ended unfilled (cancelled, rejected
+  or deactivated) for 24 hours and other closed orders for 7 days; after that,
+  only orders with fills.
 - Executions and closed PnL reach back 2 years, in 7-day windows.
 - Demo keeps orders for 7 days.
-
-So a "not found" is evidence only inside these windows, and only after the
-venue has had time to record the order.
 
 **Acknowledgements are not fills:**
 - Binance's acknowledgements carry no fills since 2026-06-30.
 - Bybit's `create-order` returns only the IDs, and says to confirm the order on
   the stream.
+
+### Unknown outcomes
+
+ADR 0002 §9 settles an unknown outcome within two bounds, timed from when the
+request was sent and the same on every row below:
+- **Propagation delay, 30 seconds:** before it, "not found" proves nothing.
+- **Settle window, 60 seconds:** an entry still unsettled then raises an
+  incident.
+
+A "not found" also counts only inside the retention windows above.
+
+| Venue | Families | Environments | Query by client ID | "Not found" | Stated visibility delay |
+| --- | --- | --- | --- | --- | --- |
+| Binance | linear, inverse | mainnet, demo | `GET /fapi/v1/order` or `GET /dapi/v1/order` with `origClientOrderId` | −2013 `NO_SUCH_ORDER` | None. After −1007 or a 503 "Unknown error", the order may have executed, and Binance says to check the user stream or query the order before resending |
+| Bybit | linear, inverse | mainnet, testnet, demo | `GET /v5/order/realtime`, then `GET /v5/order/history`, with `orderLinkId` | An empty list from both | None. The history may lag because order handling is asynchronous, and the realtime query may lag in extreme volatility |
+
+No venue states how long an accepted order can stay invisible, so the adapters
+measure it on each test environment (unverified item 15).
 
 ## Stops and liquidation
 
@@ -288,6 +310,7 @@ answer, in this table and in its own evidence.
 | 12 | The error a portfolio-margin key gets from `fapi` | Portfolio margin is detected up front and refused | ALG-759 |
 | 13 | Which Bybit transaction-log type carries inverse funding | Funding comes from whichever type the evidence shows; nothing is counted twice | ALG-764, ALG-747 |
 | 14 | Whether `newOrderRespType=RESULT` still returns fills on Binance | Acknowledgements are never read as fills | ALG-762 |
+| 15 | How long an accepted order can stay invisible to a query by client ID, on each venue, family and environment | ADR 0002 §9's bounds apply, and the ADR says what changes if a venue exceeds them | ALG-740, ALG-762 |
 
 ## Sources
 
@@ -297,12 +320,17 @@ answer, in this table and in its own evidence.
 - [USDⓈ-M WebSocket change notice](https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/websocket-market-streams/Important-WebSocket-Change-Notice)
 - [new algo order](https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/New-Algo-Order)
 - [USDⓈ-M general info](https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info)
+- [USDⓈ-M query order](https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/Query-Order)
+- [COIN-M query order](https://developers.binance.com/docs/derivatives/coin-margined-futures/trade/rest-api/Query-Order)
+- [USDⓈ-M error codes](https://developers.binance.com/docs/derivatives/usds-margined-futures/error-code)
 
 **Bybit:**
 - [instruments](https://bybit-exchange.github.io/docs/v5/market/instrument)
 - [positions](https://bybit-exchange.github.io/docs/v5/position)
 - [trading stop](https://bybit-exchange.github.io/docs/v5/position/trading-stop)
 - [create order](https://bybit-exchange.github.io/docs/v5/order/create-order)
+- [open orders](https://bybit-exchange.github.io/docs/v5/order/open-order)
+- [order history](https://bybit-exchange.github.io/docs/v5/order/order-list)
 - [account modes](https://bybit-exchange.github.io/docs/v5/acct-mode)
 - [demo trading](https://bybit-exchange.github.io/docs/v5/demo)
 - [change log](https://bybit-exchange.github.io/docs/changelog/v5)

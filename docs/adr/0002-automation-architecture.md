@@ -340,8 +340,9 @@ check blocks entries and says why.
   other entry on its `PositionKey`.
   - An exit that arrives meanwhile waits until the entry settles, then applies
     to the cycle it opened.
-  - If the settle window (§9) ends without an answer, the key raises an incident
-    and its entries halt until reconciliation shows the position.
+  - If the entry is still unsettled when §9's 60-second settle window ends, the
+    key raises an incident and its entries halt until reconciliation shows the
+    position.
 
 **Arming:**
 - **Profiles start disarmed.**
@@ -527,9 +528,15 @@ flat or protected.
 ### 9. Signals
 
 **Stale entries** (Marko's choice) are refused when:
-- **Age:** the alert's `{{timenow}}` is more than 60 seconds old at admission or
-  at submission, or more than 5 seconds in the future. The limit can be set per
-  profile, from 5 to 300 seconds.
+- **Age:** the alert's `{{timenow}}` is older than the profile's age limit, or
+  more than 5 seconds in the future.
+  - **The limit** is 60 seconds unless the profile sets another, from 5 to 300
+    seconds. The 5-second allowance for the future is fixed.
+  - **At admission** both are checked, and an entry that fails is `rejected`.
+  - **Just before submission** the age is checked again against the same
+    limit, and an admitted entry that has grown too old is `expired`.
+  - **A limit above 60 seconds** only admits alerts that TradingView delivered
+    late. The price checks below still run before submission.
 - **The stop has been crossed:** a mark price or a touch (the bid for LONG, the
   ask for SHORT), fetched just before submission, is at or past the stop. A
   price that cannot be fetched fresh refuses the entry too. The stop itself
@@ -538,7 +545,8 @@ flat or protected.
   exceeds 1.25 × R.
 
 TradingView resends a failed delivery at most three times, five seconds apart.
-So 60 seconds admits every legitimate delivery and refuses late replays.
+So the default of 60 seconds admits every legitimate delivery and refuses late
+replays.
 
 **Exits:**
 - An exit carries the side it closes.
@@ -547,13 +555,28 @@ So 60 seconds admits every legitimate delivery and refuses late replays.
 - Exits never expire.
 
 **Unknown outcomes:**
-- **How they are settled:** within a bounded window, from the order query, the
-  private stream and the change in the position.
-- **When "not found" counts:** only inside the venue's retention window, and
-  only after its propagation delay.
+- **Evidence:** the order query by client ID, the private stream, the fill
+  records and the position. Finding the order, an event or a fill for the
+  client ID settles the outcome at once.
+- **Two bounds** are timed from when the request was sent, on the injected
+  clock. They are the same on every venue, family and environment:
+  - **Propagation delay, 30 seconds.** Before it, "not found" proves nothing.
+  - **Settle window, 60 seconds.** An entry still unsettled then raises §5's
+    incident. Queries continue with backoff, and an exit held for the entry
+    waits until it settles.
+- **"Not found" settles an entry** as never placed only when all of these
+  hold:
+  - the propagation delay has passed;
+  - the query falls inside the venue's retention window;
+  - a position snapshot taken after the delay still shows the position flat.
 - **An entry is never resubmitted after an unknown outcome.**
-- **Closes and stops** (reduce-only) may be retried once a query has settled the
-  previous attempt.
+- **Closes and stops** (reduce-only) may be retried after one answered query
+  of the previous attempt, without waiting for the propagation delay. That
+  keeps §8's 10-second windows, and it is safe because a duplicate can only
+  reduce and cleanup cancels a spare stop.
+- [futures-venues.md](../futures-venues.md#unknown-outcomes) records each
+  venue's query, its "not found" and its retention, for every family and
+  environment.
 
 **Duplicates and recording:**
 - **Duplicates:**
@@ -571,8 +594,8 @@ So 60 seconds admits every legitimate delivery and refuses late replays.
 - **Signal ID:** stable across resends, built from fields TradingView renders
   the same way each time: the template's constant alert name, the side,
   `{{ticker}}` and `{{time}}`.
-- **Profile:** the webhook route's token chooses the profile. An alias in the
-  payload must agree with it.
+- **Profile:** the webhook route's token, a secret (§15), chooses the profile.
+  An alias in the payload must agree with it.
 - **Content:**
   - The ticker resolves through the profile's asset table, never by guesswork.
   - Prices are decimal strings.
@@ -723,17 +746,20 @@ never deleted:
 
 **Decimals** stay exact TEXT, scale included.
 
-**Credentials and the Telegram token:**
+**Secrets:** exchange credentials, the Telegram token and each profile's
+webhook token.
 - They live only in the trusted owner process, as per-profile references
-  (ALG-750, ALG-754).
+  (ALG-743, ALG-750, ALG-754).
 - They never appear in payloads, the database, logs, notifications or workers.
+- Wherever one is shown, it is redacted.
 
 **Webhooks:**
 - They arrive over HTTPS on port 443, over IPv4.
 - The TLS edge verifies TradingView's client certificate: its chain to a
   trusted certificate authority, and its subject, CN
   `webhook-server@tradingview.com`.
-- The route also carries a token, which is redacted wherever it is shown.
+- The route carries the profile's webhook token, the secret that selects the
+  profile (§9). The inbox records the profile it selected, never the token.
 - An allowlist of TradingView's four source addresses is optional.
 - Admission answers within TradingView's 3-second limit.
 
@@ -754,6 +780,7 @@ outcome changes nothing, are in that table.
 | Bybit attaches a stop to a market entry on its test environments | Attached at entry | Placed after the first fill |
 | A venue tells who cancelled a stop | §10's rule for user cancels applies | §8's repair, plus ALG-746's command to leave a position unprotected on purpose |
 | Bybit's demo trades inverse contracts through the API | Demo provides the inverse evidence | Testnet does |
+| A query by client ID finds an accepted order within §9's 30-second propagation delay, on each venue, family and environment | §9's bounds stand | On that venue, "not found" settles no entry. An entry settles only when its order, an event or a fill appears; otherwise it raises the incident, which the operator clears |
 
 ## Evidence
 
@@ -875,6 +902,12 @@ answered too:
 - **ALG-743:** admission under §9 and §15.
 - **ALG-744 and ALG-764:** monitoring under §10 and §11.
 - **ALG-745 to ALG-748:** entry, protection, exit and recovery under §5 to §10.
+- **ALG-745 and ALG-748:** tests of §9's bounds on the injected clock:
+  - a "not found" before 30 seconds settles nothing;
+  - after 30 seconds, with the position flat, it settles the entry as never
+    placed;
+  - an entry unsettled at 60 seconds raises the incident and halts its key,
+    and a held exit keeps waiting.
 - **ALG-749 to ALG-755:** notifications, the CLI, the lifecycle and arming,
   under §5 and §12.
 - **ALG-756:** freeze §3's rule and its dated list, and build the matrix of §13.
@@ -893,9 +926,16 @@ answered too:
 - **ALG-736** takes Bybit's face value from the venue's documented rule, since
   no metadata field carries it.
 - **ALG-737** takes §9's payload rules.
+- **ALG-740 and ALG-762** measure how long an accepted order stays invisible to
+  a query, on each test environment (unverified item 15 in
+  [futures-venues.md](../futures-venues.md#unverified-items)).
 - **ALG-741 and ALG-746** use §1's `protection_unknown` as their unknown
   protection state.
 - **ALG-745** serializes per `PositionKey`.
+- **ALG-745 and ALG-748** test §9's bounds and the incident at the end of the
+  settle window.
+- **ALG-750** configures each profile's webhook token as a secret reference
+  (§15).
 - **ALG-763** follows §7: the algo API for both families, and the bridge for a
   replacement.
 - **ALG-767** keys leases by `PositionKey`, recording the profile in each.
