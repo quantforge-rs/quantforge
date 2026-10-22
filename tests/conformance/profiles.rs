@@ -39,8 +39,8 @@ impl Profile {
 }
 
 pub(crate) fn profile(exchange: ExchangeId) -> Profile {
-    // Exhaustive on purpose: a new exchange does not compile until it has
-    // a profile.
+    // `ExchangeId` is non-exhaustive outside the crate, so a registered
+    // exchange without a profile fails here, in every conformance run.
     match exchange {
         ExchangeId::BinanceSpot => Profile {
             testnet_base_url: "https://testnet.binance.vision/",
@@ -51,6 +51,7 @@ pub(crate) fn profile(exchange: ExchangeId) -> Profile {
             credential_headers: &["x-mbx-apikey"],
             account_fields: &["uid"],
         },
+        other => panic!("{other} has no conformance profile"),
     }
 }
 

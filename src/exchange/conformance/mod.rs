@@ -130,7 +130,7 @@ impl Target {
         environment: Environment,
     ) -> Self {
         Self {
-            factory: Arc::new(super::factory(exchange)),
+            factory: Arc::new(move |config| super::connect(exchange, config)),
             symbol,
             interval,
             base_url,
@@ -282,12 +282,13 @@ mod tests {
     async fn production_endpoints_are_refused_before_any_request() {
         for &exchange in registered() {
             for environment in [Environment::Live, Environment::Replay] {
-                let mut production = target(exchange, default_base_url(exchange), environment);
+                let base_url = default_base_url(exchange).expect("default base url");
+                let mut production = target(exchange, base_url, environment);
                 if environment == Environment::Replay {
                     // Past the local-server refusal, so the production one
                     // is what answers.
                     production.factory = Arc::new(move |mut config: ConnectorConfig| {
-                        config.base_url = Url::parse(default_base_url(exchange)).expect("url");
+                        config.base_url = Url::parse(base_url).expect("url");
                         connect(exchange, config)
                     });
                     production.base_url = Url::parse("http://127.0.0.1:9/").expect("url");

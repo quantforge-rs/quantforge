@@ -14,10 +14,16 @@ quirks.
 
 ## 1. Name the exchange
 
-Add a variant to `ExchangeId` in `src/model/market.rs`, with the storage name
-`ExchangeId::as_str` returns for it, such as `bybit_spot`. Candles and runs
-are stored under that name, so it never changes once released. The compiler
-then lists every exhaustive match that needs the new exchange.
+An exchange is a `Venue` in `src/model/market.rs`, and each product it
+sells is a product line in `ExchangeId`: the venue with a category, `spot`,
+`linear` or `inverse`. The venue's `as_str` is the name operators select it
+by, and each line's `as_str` is the storage name its candles and runs are
+kept under, such as `bybit_spot`. Neither changes once released.
+
+Bybit's lines already exist, waiting for their adapter. A new venue adds a
+`Venue` variant and its lines to the one table in `ExchangeId::parts`; the
+compiler then lists every exhaustive match that needs them, the registry's
+among them.
 
 ## 2. Write the adapter
 
@@ -61,10 +67,13 @@ say, even one whose code asks for a retry — report `OutcomeUnknown`.
 
 ## 3. Register it
 
-In the adapter's `mod.rs`, declare its `REGISTRATION`: the name operators
-select it by with `--exchange`, its production base URL, and its connector
-factory. In `src/exchange/registry.rs`, add its arm to `registration()` and
-its id to `EXCHANGES`; the registry's completeness test counts them.
+In the adapter's `mod.rs`, declare its `REGISTRATION`: its production base
+URL and its connector factory. Operators select it with `--exchange` by its
+venue's name. In `src/exchange/registry.rs`, turn the line's `None` arm in
+`registration()` into `Some` of the adapter's `REGISTRATION`, and add the
+line to `EXCHANGES`. The registry's tests check that the two agree, and that
+the registered lines are Spot lines of distinct venues: how `--exchange`
+selects a futures line comes with the first futures adapter.
 
 `tests/exchange_boundary.rs` keeps every other module from naming an
 adapter. Give the new exchange the same scan Binance has, so that nothing

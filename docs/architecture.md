@@ -103,19 +103,42 @@ src/
 │   ├── candle.rs               Candle and validate_candles
 │   ├── candle_batch.rs         CandleBatch: candles as columns, the Python interchange
 │   ├── decimal.rs              round_down_to_step and the decimal ↔ float64 conversions
+│   ├── identity.rs             Environment, InstrumentId, AccountRef, venue ids as text, OperationId
 │   ├── interval.rs             Interval: wire form, step duration, parsing
-│   ├── market.rs               Symbol, ExchangeId, MarketId
+│   ├── market.rs               Symbol, Venue, Category, ExchangeId (the product lines), MarketId
+│   ├── money.rs                Asset and Money: amounts that never mix assets
 │   ├── order.rs                Side, OrderStatus, Fill, ExchangeOrder, AccountTrade
+│   ├── refusal.rs              Refusal: why a request stops short of a venue
 │   ├── request.rs              the exchange-agnostic requests a connector serves
 │   ├── rules.rs                SymbolRules and AssetBalance
 │   ├── run.rs                  BotRunState, PositionState, ClosedTrade, TargetPosition
 │   ├── segment.rs              SegmentHash, SegmentRef, SegmentPlan: what the segment store hands out
-│   └── timestamp.rs            TimestampMs, now_utc_ms, RFC 3339 conversions
-├── ports.rs                    the seams: connector and storage traits, capabilities, error kinds
+│   ├── timestamp.rs            TimestampMs, now_utc_ms, RFC 3339 conversions
+│   ├── units.rs                Price, BaseQty, Contracts, Quantity, FaceValue, Leverage, PositionSide
+│   └── futures/                the futures contract of ADR 0002, used through its module
+│       ├── mod.rs              the contract's two rules, and the re-exports
+│       ├── identity.rs         PositionKey, ProfileId, OwnerTag, ProfileIdentity, epochs, cycles, signals
+│       ├── client_order_id.rs  ClientOrderId: layout 1, at most 36 characters both venues accept
+│       ├── instrument.rs       a futures instrument's rules, universe rule 1, PriceSnapshot
+│       ├── account.rs          the account, its settings, brackets and fee rates, its positions
+│       ├── order.rs            entry and reduce-only orders, acknowledgements, orders, fills, Rejection
+│       ├── stop.rs             the exchange-held stop: requests, read-backs, placements
+│       ├── coverage.rs         CoveredStop: the read-back that alone makes a position protected
+│       ├── ledger.rs           funding, fee and PnL records, closed-PnL summaries, TimeWindow
+│       ├── events.rs           an account's private events
+│       ├── intent_state.rs     IntentState: the signal_intent machine, gated on evidence
+│       ├── intent.rs           ExternalIntent: a signal's versioned record, and §9's bounds
+│       ├── protection_state.rs ProtectionState: the futures_position machine, gated on evidence
+│       ├── position.rs         PositionCycle, CloseReason, OperatorRemoval
+│       └── accounting.rs       RealizedPnl and AccountingStatus: net PnL per settlement asset
+├── ports/                      the seams: connector and storage traits, capabilities, error kinds
+│   ├── mod.rs                  Spot connector and storage traits, their capabilities and errors
+│   ├── clock.rs                Clock, the injected time source, and SystemClock
+│   └── futures.rs              futures ports by capability, FuturesCapabilities, FuturesConnectors
 ├── exchange/                   the connector registry, one adapter per exchange, and the conformance suite
 │   ├── mod.rs                  the registry API: lookup, name, connect, ExchangeConnectors
 │   ├── credentials.rs          ApiCredentials: an API key and secret, never printed
-│   ├── registry.rs             ExchangeId to name, default endpoint, factory; the only id-to-adapter map
+│   ├── registry.rs             product line to name, default endpoint, factory; the only line-to-adapter map
 │   ├── conformance/            the contract every exchange connector meets, written as checks
 │   │   ├── mod.rs              the contract itself, Target, Outcome, run, and the safety refusals
 │   │   ├── check.rs            Check: each check's id, summary, and what it needs to run
@@ -180,12 +203,17 @@ and storage adapters only through the `ports` traits; the binary chooses
 which adapters to pass in, building the connectors of the exchange that
 `--exchange` names through `exchange::connect`. Nothing outside
 `src/exchange/` names a concrete exchange adapter, nothing outside the
-Binance adapter hardcodes Binance beyond the registry entry and the
-`ExchangeId` variant, and `tests/exchange_boundary.rs` fails if anything
-does. What a connector must do for the engines is written down once, as
-the checks in `exchange::conformance`; every registered exchange passes
-them, and [exchange-feature-matrix.md](exchange-feature-matrix.md) shows
-the results beside each exchange's capabilities. `tests/protocol_boundary.rs`
+Binance adapter hardcodes Binance beyond the registry's entries and the
+`Venue` that names it with its product lines in `ExchangeId`, no venue's
+own position field leaves its adapter, and `tests/exchange_boundary.rs`
+fails if anything does. The futures contract of ADR 0002 is types in
+`model::futures` and ports in `ports::futures`, which no adapter
+implements yet; [shared-model.md](shared-model.md) says what it changes for
+Spot, the Python bindings and the wire. What a connector must do for the
+engines is written down once, as the checks in `exchange::conformance`;
+every registered exchange passes them, and
+[exchange-feature-matrix.md](exchange-feature-matrix.md) shows the results
+beside each exchange's capabilities. `tests/protocol_boundary.rs`
 compiles `protocol` on its own and scans its sources, so it fails if
 `protocol` uses anything else in the crate, or a dependency beyond `serde`,
 `serde_json`, `rust_decimal`, `sha2`, `thiserror`, and `toml`: the module is
@@ -211,8 +239,15 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   `tests/candle_batch.rs`, `tests/decimal_float.rs`, `tests/sqlite_store.rs`,
   and `tests/live_engine.rs`: library integration tests
 - `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
-  from naming a concrete exchange adapter, and the code and `--help`
-  outside the Binance adapter from hardcoding Binance
+  from naming a concrete exchange adapter, the code and `--help` outside
+  the Binance adapter from hardcoding Binance, and each venue's own
+  position fields inside its adapter
+- `tests/futures_contract.rs`: the futures contract end to end against a
+  hand-written fake venue: every port implemented outside the crate, and
+  intents and positions that move only on the venue's evidence
+- `tests/parity/`: the parity matrix in `docs/parity/` — its rules, the cell
+  and evidence ledgers, the dated universe list, the rendered `matrix.md`,
+  and the code that implements its state machines and vocabularies
 - `tests/protocol_boundary.rs`: compiles `src/protocol/` as the only module
   of a crate and scans its sources, so the wire format never comes to
   depend on the rest of QuantForge

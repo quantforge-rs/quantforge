@@ -124,14 +124,24 @@ Two rules hold throughout:
   states, transitions, refusals and errors. Live prices, fees and PnL are never
   compared for equality.
 
-The state machines and error vocabularies already in code are pinned to it:
+The state machines and vocabularies in code are pinned to it, so the two
+cannot drift apart:
 - `OrderStatus`;
 - `RunStatus`;
 - the protocol's job kinds;
 - `ExchangeErrorKind`;
-- the wire `ErrorCode`.
+- the wire `ErrorCode`;
+- since ALG-733, the futures contract's machines in `model::futures`:
+  `IntentState` (`signal_intent`), `ProtectionState` (`futures_position`)
+  and `AccountingStatus` (`accounting`);
+- the shared `Refusal` (`refusal`);
+- the venue, family and side axes, the environments, the position and
+  margin modes, the account and profile identity fields, §9's two bounds,
+  and the universe rule's version.
 
-ALG-733 implements the rest, using the names here.
+The rest are pinned by the stories that implement them: `spot_replace` by
+ALG-766, `notification` by ALG-749, `incident` by ALG-746, `profile` by
+ALG-750, `service` by ALG-752, and the `storage` errors by ALG-404.
 
 ## Evidence
 
