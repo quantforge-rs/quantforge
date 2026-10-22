@@ -808,12 +808,13 @@ case below with `Decimal` at 60 digits.
   - on the tick and the step;
   - within budget;
   - one more step would exceed the budget;
-  - the stop on the protective side.
+  - the stop on the protective side;
+  - the position within its leverage bracket.
 - It computes every number again in exact rational arithmetic, with code that
   shares nothing with the first computation.
 - It checks the stops, the quantities and the linear amounts against values
   computed by hand.
-- Five planted defects, among them a one-in-ten-million error in the inverse
+- Ten planted defects, among them a one-in-ten-million error in the inverse
   formula, each made it fail.
 - It writes
   [`sizing-cases.json`](../../spikes/futures-contract/sizing-cases.json) for
@@ -830,7 +831,7 @@ case below with `Decimal` at 60 digits.
 | 10 USD contracts | Binance ETHUSD_PERP, SHORT | 0.5 % of 2 ETH; E 3,012.34; stop 3,105.555 | stop 3,105.56; 100 contracts; risk 0.009964721966 ETH |
 | An inverse SHORT | Bybit SOLUSD, SHORT | 1 % of 20 SOL; E 187.45; 2 % | stop 191.20; 1,911 contracts; risk 0.199948717147 SOL |
 | Drift at submission | Binance SOLUSDT, LONG, 0.43 SOL | ask 243.00, then 244.00 | risk 18.49, within 1.25 × 15 = 18.75: accepted; risk 18.92: refused |
-| Refusals | | | a stop on the wrong side; no stop; below the minimum quantity; below the minimum notional; above the market-order maximum; margin short once a reservation is counted; a settlement wallet below R, in USDT and in the coin; capital in the wrong currency; a stop the book or the mark price has already crossed |
+| Refusals | | | a stop on the wrong side; no stop; below the minimum quantity; below the minimum notional; above the market-order maximum; a position above its leverage bracket, in USDT and in the coin; margin short once a reservation is counted; a settlement wallet below R, in USDT and in the coin; capital in the wrong currency; a stop the book or the mark price has already crossed |
 | The PRD's p.10 closes | 4.38 SOL from 234.23 | exits at 250.00 and at 200.00 | gross +69.0726 (+6.73 %) and −149.9274 (−14.61 %), matching the PRD's figures |
 
 **A design review** checked this record's plan against the PRD, the venue facts

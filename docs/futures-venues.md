@@ -124,7 +124,7 @@ production, so the futures adapters do not use it.
 | Instruments | `GET /fapi/v1/exchangeInfo` | `GET /dapi/v1/exchangeInfo` | `GET /v5/market/instruments-info` (by category, following `nextPageCursor`) |
 | Position mode | `GET/POST /fapi/v1/positionSide/dual` (shared with COIN-M) | `GET/POST /dapi/v1/positionSide/dual` (shared with USDⓈ-M) | `POST /v5/position/switch-mode`; read `positionIdx` from `/v5/position/list` or `/v5/position/symbol-info` |
 | Account and margin mode | `GET /fapi/v1/multiAssetsMargin`; per-symbol `marginType` in `GET /fapi/v1/symbolConfig` | `marginType` in `GET /dapi/v1/positionRisk` | `GET /v5/account/info`: `unifiedMarginStatus`, `marginMode` |
-| Leverage | `POST /fapi/v1/leverage`; brackets `GET /fapi/v1/leverageBracket` | `POST /dapi/v1/leverage`; brackets `GET /dapi/v2/leverageBracket` | `POST /v5/position/set-leverage` |
+| Leverage | `POST /fapi/v1/leverage`; brackets `GET /fapi/v1/leverageBracket`, signed and per account, cap the notional in USDT (`notionalCap`) | `POST /dapi/v1/leverage`; brackets `GET /dapi/v2/leverageBracket`, signed and per account, cap the quantity in the coin (`qtyCap`) | `POST /v5/position/set-leverage`; risk-limit tiers `GET /v5/market/risk-limit`, public, cap the position in USDT for linear and in the coin for inverse (`riskLimitValue`) |
 | Market entry | `POST /fapi/v1/order` | `POST /dapi/v1/order` | `POST /v5/order/create` (category, `positionIdx` 0) |
 | Order query | `GET /fapi/v1/order` (by client id) | `GET /dapi/v1/order` | `GET /v5/order/realtime`, `/v5/order/history` (by `orderLinkId`) |
 | Native stop | `POST /fapi/v1/algoOrder`: `CONDITIONAL`, `STOP_MARKET`, `closePosition`, `workingType=MARK_PRICE`, `priceProtect` | `POST /dapi/v1/algoOrder` (partly documented); stops never go to the ordinary order endpoint | `POST /v5/position/trading-stop`: `tpslMode=Full`, `slOrderType=Market`, `slTriggerBy=MarkPrice` |
@@ -323,6 +323,8 @@ answer, in this table and in its own evidence.
 - [USDⓈ-M query order](https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/Query-Order)
 - [COIN-M query order](https://developers.binance.com/docs/derivatives/coin-margined-futures/trade/rest-api/Query-Order)
 - [USDⓈ-M error codes](https://developers.binance.com/docs/derivatives/usds-margined-futures/error-code)
+- [USDⓈ-M leverage brackets](https://developers.binance.com/docs/derivatives/usds-margined-futures/account/rest-api/Notional-and-Leverage-Brackets)
+- [COIN-M leverage brackets](https://developers.binance.com/docs/derivatives/coin-margined-futures/account/rest-api/Notional-Bracket-for-Pair)
 
 **Bybit:**
 - [instruments](https://bybit-exchange.github.io/docs/v5/market/instrument)
@@ -331,6 +333,7 @@ answer, in this table and in its own evidence.
 - [create order](https://bybit-exchange.github.io/docs/v5/order/create-order)
 - [open orders](https://bybit-exchange.github.io/docs/v5/order/open-order)
 - [order history](https://bybit-exchange.github.io/docs/v5/order/order-list)
+- [risk limit](https://bybit-exchange.github.io/docs/v5/market/risk-limit)
 - [account modes](https://bybit-exchange.github.io/docs/v5/acct-mode)
 - [demo trading](https://bybit-exchange.github.io/docs/v5/demo)
 - [change log](https://bybit-exchange.github.io/docs/changelog/v5)

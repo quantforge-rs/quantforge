@@ -15,6 +15,9 @@ the cases below. The rules are:
 - inverse contracts are R / (F x |1/E - 1/S'|);
 - both are floored to the market step, then checked against the minimum
   quantity, minimum notional and market-order maximum;
+- the position, in the settlement asset at E, must fit the leverage bracket:
+  at most the largest cap among the tiers whose maximum leverage is at least
+  the chosen one;
 - the initial margin plus taker fees for opening and closing must fit the
   available margin minus reservations;
 - an entry is refused when the settlement asset's wallet holds less than R,
@@ -24,7 +27,8 @@ the cases below. The rules are:
 
 It checks itself in three ways:
 - each result is tested for the invariants the rules promise: on the grid,
-  within budget, the floor is tight, and the stop is on the protective side;
+  within budget, the floor is tight, the stop on the protective side, and the
+  position within its leverage bracket;
 - every number is computed again in exact rational arithmetic (fractions), a
   second implementation that shares no code with the first;
 - hand-computed expectations (stops, quantities, linear amounts) are compared
@@ -71,6 +75,47 @@ SETTLE = {
     "bybit inverse BTCUSD": "BTC",
     "bybit inverse ETHUSD": "ETH",
     "bybit inverse SOLUSD": "SOL",
+}
+
+# Leverage brackets as tiers of (maximum leverage, cap). A cap bounds the
+# position in its settlement asset at E: USDT for linear, the coin for
+# inverse. A leverage may hold up to the largest cap among the tiers that
+# allow it. Bybit's tiers are its public risk limits on 2026-10-22. Binance
+# serves brackets per account, to signed requests only, so the Binance tiers
+# here are illustrative.
+BRACKETS = {
+    "binance linear BTCUSDT": [
+        ("125", "50000"), ("100", "600000"), ("50", "3000000"), ("20", "12000000"), ("10", "70000000"),
+        ("5", "100000000"),
+    ],
+    "binance linear SOLUSDT": [("75", "10000"), ("50", "100000"), ("25", "500000"), ("10", "2000000"), ("5", "10000000")],
+    "binance inverse BTCUSD_PERP": [("125", "50"), ("100", "100"), ("50", "200"), ("20", "500"), ("10", "1000")],
+    "binance inverse ETHUSD_PERP": [("75", "500"), ("50", "2000"), ("25", "5000"), ("10", "20000")],
+    "bybit linear SOLUSDT": [
+        ("100.00", "50000"), ("90.00", "100000"), ("80.00", "250000"), ("75.00", "400000"),
+        ("70.00", "550000"), ("65.00", "700000"), ("55.00", "850000"), ("50.00", "1000000"),
+        ("45.00", "2000000"), ("40.00", "3000000"), ("35.00", "4000000"), ("30.00", "6000000"),
+        ("25.00", "8000000"), ("20.00", "10000000"), ("19.00", "12000000"), ("18.00", "14000000"),
+        ("17.00", "16000000"), ("16.00", "18000000"), ("15.00", "20000000"), ("14.00", "22000000"),
+        ("13.00", "24000000"), ("12.00", "26000000"), ("11.00", "28000000"), ("10.00", "30000000"),
+        ("9.00", "35000000"), ("8.00", "40000000"), ("7.00", "45000000"), ("6.00", "50000000"),
+        ("5.00", "60000000"), ("4.00", "80000000"), ("3.00", "100000000"), ("2.00", "150000000"),
+        ("1.43", "200000000"), ("1.28", "250000000"), ("1.00", "300000000"),
+    ],
+    "bybit inverse BTCUSD": [
+        ("100.00", "150"), ("66.67", "300"), ("50.00", "450"), ("40.00", "600"), ("33.34", "750"),
+        ("28.58", "900"), ("25.00", "1050"), ("22.23", "1200"), ("20.00", "1350"), ("18.19", "1500"),
+    ],
+    "bybit inverse ETHUSD": [
+        ("100.00", "500"), ("50.00", "3000"), ("33.34", "6000"), ("25.00", "9000"), ("20.00", "12000"),
+        ("16.67", "15000"), ("14.29", "18000"), ("12.50", "21000"), ("11.12", "24000"), ("10.00", "27000"),
+        ("9.10", "30000"),
+    ],
+    "bybit inverse SOLUSD": [
+        ("50.00", "200"), ("45.00", "400"), ("40.00", "700"), ("35.00", "1100"), ("30.00", "1500"),
+        ("25.00", "1900"), ("20.00", "2300"), ("15.00", "3100"), ("10.00", "4600"), ("5.00", "6100"),
+        ("4.00", "7600"), ("3.00", "38000"), ("2.00", "76000"), ("1.50", "115000"), ("1.00", "150000"),
+    ],
 }
 
 
@@ -157,6 +202,24 @@ SIZING_CASES = [
           "binance linear BTCUSDT", "short", {"asset": "USDT", "amount": "10000000"}, "5", "84123.45",
           {"status": "refused", "reason": "above_market_max", "qty": "198.117"},
           stop_percent="3", leverage="10", taker_fee="0.0005", available_margin="10000000", settlement_wallet="10000000"),
+    entry("refuse-above-leverage-bracket",
+          "At 100x Bybit's lowest risk tier caps SOLUSDT at 50,000 USDT, far below this 190,428.99 USDT position",
+          "bybit linear SOLUSDT", "long", {"asset": "USDT", "amount": "100000"}, "1", "234.23",
+          {"status": "refused", "reason": "above_leverage_bracket", "qty": "813.0", "notional": "190428.99",
+           "bracket_cap": "50000"},
+          stop="233.00", leverage="100", taker_fee="0.00055", available_margin="100000", settlement_wallet="100000"),
+    entry("leverage-bracket-fits-at-20x",
+          "The same position at 20x, whose tiers reach 10,000,000 USDT",
+          "bybit linear SOLUSDT", "long", {"asset": "USDT", "amount": "100000"}, "1", "234.23",
+          {"status": "sized", "stop": "233.000", "qty": "813.0", "risk": "999.99", "notional": "190428.99",
+           "bracket_cap": "10000000"},
+          stop="233.00", leverage="20", taker_fee="0.00055", available_margin="100000", settlement_wallet="100000"),
+    entry("refuse-inverse-above-leverage-bracket",
+          "At 50x Bybit caps SOLUSD at 200 SOL, and 75,135 contracts are 400.83 SOL",
+          "bybit inverse SOLUSD", "short", {"asset": "SOL", "amount": "200"}, "1", "187.45",
+          {"status": "refused", "reason": "above_leverage_bracket", "stop": "188.39", "qty": "75135",
+           "bracket_cap": "200"},
+          stop_percent="0.5", leverage="50", taker_fee="0.00055", available_margin="200", settlement_wallet="200"),
     entry("refuse-insufficient-margin",
           "331.36226955 USDT needed; 400 available minus a 100 USDT reservation leaves 300",
           "binance linear BTCUSDT", "short", {"asset": "USDT", "amount": "10000"}, "1", "84123.45",
@@ -241,6 +304,13 @@ def to_grid(value, grid, rounding):
     return (value / grid).to_integral_value(rounding=rounding) * grid
 
 
+def bracket_cap(instrument, leverage):
+    """The largest position, in the settlement asset, that `leverage` may
+    hold: the highest cap among the tiers that allow it, or None."""
+    caps = [D(cap) for most, cap in BRACKETS[instrument] if D(most) >= leverage]
+    return max(caps) if caps else None
+
+
 def size(case):
     rules = RULES[case["instrument"]]
     settle = SETTLE[case["instrument"]]
@@ -305,6 +375,13 @@ def size(case):
         fee_allowance=show(fee_allowance),
         required_margin=show(required),
     )
+    # Leverage changes the margin, never the quantity: a position that its
+    # leverage's bracket cannot hold is refused, never shrunk.
+    cap = bracket_cap(case["instrument"], leverage)
+    if cap is not None:
+        out["bracket_cap"] = show(cap)
+    if cap is None or notional_settle > cap:
+        return dict(out, status="refused", reason="above_leverage_bracket")
     if required > available:
         return dict(out, status="refused", reason="insufficient_margin")
 
@@ -356,6 +433,10 @@ def check_sizing(case, result):
         assert pnl_at_stop < 0, "a stop-out must lose"
         assert -pnl_at_stop <= budget, "risk above the budget"
         assert (qty + step) * loss_per_unit > budget, "the floor is not tight"
+        # The position fits the bracket of its leverage.
+        notional = qty * e if family == "linear" else qty * face / e
+        allowed = [D(cap) for most, cap in BRACKETS[case["instrument"]] if D(most) >= D(case["leverage"])]
+        assert allowed and notional <= max(allowed), "position above its leverage bracket"
     for key, value in case["expect"].items():
         assert result.get(key) == value, "{}: {} is {!r}, expected {!r}".format(case["id"], key, result.get(key), value)
 
@@ -406,6 +487,10 @@ def exact_sizing(case, result):
     same("initial_margin", margin)
     same("fee_allowance", fees)
     same("required_margin", margin + fees)
+    caps = [fr(cap) for most, cap in BRACKETS[case["instrument"]] if fr(most) >= fr(case["leverage"])]
+    assert caps or "bracket_cap" not in result, "{}: bracket_cap".format(case["id"])
+    if caps:
+        same("bracket_cap", max(caps))
     if "risk_at_fill" in result:
         fill = fr(case["quote"]["ask"] if long else case["quote"]["bid"])
         same("risk_at_fill", qty * abs(fill - stop) if family == "linear" else qty * face * abs(1 / fill - 1 / stop))
@@ -516,6 +601,7 @@ def main():
             },
             "drift_limit": text(DRIFT_LIMIT),
             "rules": RULES,
+            "brackets": BRACKETS,
             "sizing": sizing,
             "cycles": cycles,
         }

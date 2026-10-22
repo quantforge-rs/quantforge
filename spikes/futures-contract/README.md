@@ -52,6 +52,7 @@ It computes ADR 0002's sizing, refusal and accounting rules with `Decimal` at
 - LONG and SHORT;
 - Binance's 100 USD and 10 USD contracts, and Bybit's 1 USD contracts;
 - minimums and maximums;
+- the leverage brackets, in USDT and in the coin;
 - the margin budget;
 - the submission guards;
 - the PRD's p.9 and p.10 figures. Every p.9 figure but its risk line fits a
@@ -64,17 +65,20 @@ Each result is checked three ways:
   - within budget;
   - one more step would exceed the budget;
   - the stop on the protective side;
+  - the position within its leverage bracket;
 - against the same numbers computed again in exact rational arithmetic
   (`fractions`), with code that shares nothing with the first computation;
 - for the stops, quantities and linear amounts, against values computed by
   hand.
 
 The script exits non-zero if any check fails. Planted defects in the inverse
-formula, the stop rounding, the fee allowance, the crossed-stop check and the
-net PnL each made it fail.
+formula, the stop rounding, the fee allowance, the crossed-stop check, the net
+PnL and the choice of leverage bracket each made it fail.
 
 [`sizing-cases.json`](sizing-cases.json) holds the cases and their results, for
 ALG-736 to reuse.
 
 The instrument rules in the cases are the 2026-10-22 values from `universe.py`.
-The taker fees are illustrative.
+The taker fees are illustrative. Bybit's leverage tiers are its public risk
+limits on 2026-10-22. Binance serves its brackets per account, to signed
+requests only, so the Binance tiers are illustrative too.

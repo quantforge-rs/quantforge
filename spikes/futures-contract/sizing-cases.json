@@ -70,6 +70,388 @@
       "face": "1"
     }
   },
+  "brackets": {
+    "binance linear BTCUSDT": [
+      [
+        "125",
+        "50000"
+      ],
+      [
+        "100",
+        "600000"
+      ],
+      [
+        "50",
+        "3000000"
+      ],
+      [
+        "20",
+        "12000000"
+      ],
+      [
+        "10",
+        "70000000"
+      ],
+      [
+        "5",
+        "100000000"
+      ]
+    ],
+    "binance linear SOLUSDT": [
+      [
+        "75",
+        "10000"
+      ],
+      [
+        "50",
+        "100000"
+      ],
+      [
+        "25",
+        "500000"
+      ],
+      [
+        "10",
+        "2000000"
+      ],
+      [
+        "5",
+        "10000000"
+      ]
+    ],
+    "binance inverse BTCUSD_PERP": [
+      [
+        "125",
+        "50"
+      ],
+      [
+        "100",
+        "100"
+      ],
+      [
+        "50",
+        "200"
+      ],
+      [
+        "20",
+        "500"
+      ],
+      [
+        "10",
+        "1000"
+      ]
+    ],
+    "binance inverse ETHUSD_PERP": [
+      [
+        "75",
+        "500"
+      ],
+      [
+        "50",
+        "2000"
+      ],
+      [
+        "25",
+        "5000"
+      ],
+      [
+        "10",
+        "20000"
+      ]
+    ],
+    "bybit linear SOLUSDT": [
+      [
+        "100.00",
+        "50000"
+      ],
+      [
+        "90.00",
+        "100000"
+      ],
+      [
+        "80.00",
+        "250000"
+      ],
+      [
+        "75.00",
+        "400000"
+      ],
+      [
+        "70.00",
+        "550000"
+      ],
+      [
+        "65.00",
+        "700000"
+      ],
+      [
+        "55.00",
+        "850000"
+      ],
+      [
+        "50.00",
+        "1000000"
+      ],
+      [
+        "45.00",
+        "2000000"
+      ],
+      [
+        "40.00",
+        "3000000"
+      ],
+      [
+        "35.00",
+        "4000000"
+      ],
+      [
+        "30.00",
+        "6000000"
+      ],
+      [
+        "25.00",
+        "8000000"
+      ],
+      [
+        "20.00",
+        "10000000"
+      ],
+      [
+        "19.00",
+        "12000000"
+      ],
+      [
+        "18.00",
+        "14000000"
+      ],
+      [
+        "17.00",
+        "16000000"
+      ],
+      [
+        "16.00",
+        "18000000"
+      ],
+      [
+        "15.00",
+        "20000000"
+      ],
+      [
+        "14.00",
+        "22000000"
+      ],
+      [
+        "13.00",
+        "24000000"
+      ],
+      [
+        "12.00",
+        "26000000"
+      ],
+      [
+        "11.00",
+        "28000000"
+      ],
+      [
+        "10.00",
+        "30000000"
+      ],
+      [
+        "9.00",
+        "35000000"
+      ],
+      [
+        "8.00",
+        "40000000"
+      ],
+      [
+        "7.00",
+        "45000000"
+      ],
+      [
+        "6.00",
+        "50000000"
+      ],
+      [
+        "5.00",
+        "60000000"
+      ],
+      [
+        "4.00",
+        "80000000"
+      ],
+      [
+        "3.00",
+        "100000000"
+      ],
+      [
+        "2.00",
+        "150000000"
+      ],
+      [
+        "1.43",
+        "200000000"
+      ],
+      [
+        "1.28",
+        "250000000"
+      ],
+      [
+        "1.00",
+        "300000000"
+      ]
+    ],
+    "bybit inverse BTCUSD": [
+      [
+        "100.00",
+        "150"
+      ],
+      [
+        "66.67",
+        "300"
+      ],
+      [
+        "50.00",
+        "450"
+      ],
+      [
+        "40.00",
+        "600"
+      ],
+      [
+        "33.34",
+        "750"
+      ],
+      [
+        "28.58",
+        "900"
+      ],
+      [
+        "25.00",
+        "1050"
+      ],
+      [
+        "22.23",
+        "1200"
+      ],
+      [
+        "20.00",
+        "1350"
+      ],
+      [
+        "18.19",
+        "1500"
+      ]
+    ],
+    "bybit inverse ETHUSD": [
+      [
+        "100.00",
+        "500"
+      ],
+      [
+        "50.00",
+        "3000"
+      ],
+      [
+        "33.34",
+        "6000"
+      ],
+      [
+        "25.00",
+        "9000"
+      ],
+      [
+        "20.00",
+        "12000"
+      ],
+      [
+        "16.67",
+        "15000"
+      ],
+      [
+        "14.29",
+        "18000"
+      ],
+      [
+        "12.50",
+        "21000"
+      ],
+      [
+        "11.12",
+        "24000"
+      ],
+      [
+        "10.00",
+        "27000"
+      ],
+      [
+        "9.10",
+        "30000"
+      ]
+    ],
+    "bybit inverse SOLUSD": [
+      [
+        "50.00",
+        "200"
+      ],
+      [
+        "45.00",
+        "400"
+      ],
+      [
+        "40.00",
+        "700"
+      ],
+      [
+        "35.00",
+        "1100"
+      ],
+      [
+        "30.00",
+        "1500"
+      ],
+      [
+        "25.00",
+        "1900"
+      ],
+      [
+        "20.00",
+        "2300"
+      ],
+      [
+        "15.00",
+        "3100"
+      ],
+      [
+        "10.00",
+        "4600"
+      ],
+      [
+        "5.00",
+        "6100"
+      ],
+      [
+        "4.00",
+        "7600"
+      ],
+      [
+        "3.00",
+        "38000"
+      ],
+      [
+        "2.00",
+        "76000"
+      ],
+      [
+        "1.50",
+        "115000"
+      ],
+      [
+        "1.00",
+        "150000"
+      ]
+    ]
+  },
   "sizing": [
     {
       "case": {
@@ -110,6 +492,7 @@
         "initial_margin": "205.18548",
         "fee_allowance": "1.0259274",
         "required_margin": "206.2114074",
+        "bracket_cap": "10000000",
         "status": "sized"
       }
     },
@@ -151,6 +534,7 @@
         "initial_margin": "201.4378",
         "fee_allowance": "1.1079079",
         "required_margin": "202.5457079",
+        "bracket_cap": "60000000",
         "status": "sized"
       }
     },
@@ -192,6 +576,7 @@
         "initial_margin": "20.14378",
         "fee_allowance": "0.1007189",
         "required_margin": "20.2444989",
+        "bracket_cap": "10000000",
         "status": "sized"
       }
     },
@@ -233,6 +618,7 @@
         "initial_margin": "328.081455",
         "fee_allowance": "3.28081455",
         "required_margin": "331.36226955",
+        "bracket_cap": "70000000",
         "status": "sized"
       }
     },
@@ -277,6 +663,7 @@
         "initial_margin": "0.032095707021",
         "fee_allowance": "0.000160478535",
         "required_margin": "0.032256185556",
+        "bracket_cap": "1000",
         "status": "sized"
       }
     },
@@ -316,6 +703,7 @@
         "initial_margin": "0.066393567791",
         "fee_allowance": "0.000331967839",
         "required_margin": "0.06672553563",
+        "bracket_cap": "20000",
         "status": "sized"
       }
     },
@@ -355,6 +743,7 @@
         "initial_margin": "0.032331075539",
         "fee_allowance": "0.000177820915",
         "required_margin": "0.032508896454",
+        "bracket_cap": "1500",
         "status": "sized"
       }
     },
@@ -394,6 +783,7 @@
         "initial_margin": "3.398239530541",
         "fee_allowance": "0.011214190451",
         "required_margin": "3.409453720992",
+        "bracket_cap": "38000",
         "status": "sized"
       }
     },
@@ -558,6 +948,135 @@
     },
     {
       "case": {
+        "id": "refuse-above-leverage-bracket",
+        "note": "At 100x Bybit's lowest risk tier caps SOLUSDT at 50,000 USDT, far below this 190,428.99 USDT position",
+        "instrument": "bybit linear SOLUSDT",
+        "side": "long",
+        "capital": {
+          "asset": "USDT",
+          "amount": "100000"
+        },
+        "risk_percent": "1",
+        "entry": "234.23",
+        "expect": {
+          "status": "refused",
+          "reason": "above_leverage_bracket",
+          "qty": "813.0",
+          "notional": "190428.99",
+          "bracket_cap": "50000"
+        },
+        "stop": "233.00",
+        "leverage": "100",
+        "taker_fee": "0.00055",
+        "available_margin": "100000",
+        "settlement_wallet": "100000"
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "1000",
+        "stop": "233.000",
+        "qty": "813.0",
+        "unit_loss": "1.23",
+        "risk": "999.99",
+        "notional": "190428.99",
+        "notional_settle": "190428.99",
+        "initial_margin": "1904.2899",
+        "fee_allowance": "209.471889",
+        "required_margin": "2113.761789",
+        "bracket_cap": "50000",
+        "status": "refused",
+        "reason": "above_leverage_bracket"
+      }
+    },
+    {
+      "case": {
+        "id": "leverage-bracket-fits-at-20x",
+        "note": "The same position at 20x, whose tiers reach 10,000,000 USDT",
+        "instrument": "bybit linear SOLUSDT",
+        "side": "long",
+        "capital": {
+          "asset": "USDT",
+          "amount": "100000"
+        },
+        "risk_percent": "1",
+        "entry": "234.23",
+        "expect": {
+          "status": "sized",
+          "stop": "233.000",
+          "qty": "813.0",
+          "risk": "999.99",
+          "notional": "190428.99",
+          "bracket_cap": "10000000"
+        },
+        "stop": "233.00",
+        "leverage": "20",
+        "taker_fee": "0.00055",
+        "available_margin": "100000",
+        "settlement_wallet": "100000"
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "1000",
+        "stop": "233.000",
+        "qty": "813.0",
+        "unit_loss": "1.23",
+        "risk": "999.99",
+        "notional": "190428.99",
+        "notional_settle": "190428.99",
+        "initial_margin": "9521.4495",
+        "fee_allowance": "209.471889",
+        "required_margin": "9730.921389",
+        "bracket_cap": "10000000",
+        "status": "sized"
+      }
+    },
+    {
+      "case": {
+        "id": "refuse-inverse-above-leverage-bracket",
+        "note": "At 50x Bybit caps SOLUSD at 200 SOL, and 75,135 contracts are 400.83 SOL",
+        "instrument": "bybit inverse SOLUSD",
+        "side": "short",
+        "capital": {
+          "asset": "SOL",
+          "amount": "200"
+        },
+        "risk_percent": "1",
+        "entry": "187.45",
+        "expect": {
+          "status": "refused",
+          "reason": "above_leverage_bracket",
+          "stop": "188.39",
+          "qty": "75135",
+          "bracket_cap": "200"
+        },
+        "stop_percent": "0.5",
+        "leverage": "50",
+        "taker_fee": "0.00055",
+        "available_margin": "200",
+        "settlement_wallet": "200"
+      },
+      "result": {
+        "settle": "SOL",
+        "warnings": [],
+        "budget": "2",
+        "stop": "188.39",
+        "qty": "75135",
+        "unit_loss": "0.00002661856",
+        "risk": "1.999985529698",
+        "notional": "75135",
+        "notional_settle": "400.826887169912",
+        "initial_margin": "8.016537743398",
+        "fee_allowance": "0.440909575887",
+        "required_margin": "8.457447319285",
+        "bracket_cap": "200",
+        "status": "refused",
+        "reason": "above_leverage_bracket"
+      }
+    },
+    {
+      "case": {
         "id": "refuse-insufficient-margin",
         "note": "331.36226955 USDT needed; 400 available minus a 100 USDT reservation leaves 300",
         "instrument": "binance linear BTCUSDT",
@@ -593,6 +1112,7 @@
         "initial_margin": "328.081455",
         "fee_allowance": "3.28081455",
         "required_margin": "331.36226955",
+        "bracket_cap": "70000000",
         "status": "refused",
         "reason": "insufficient_margin"
       }
@@ -632,6 +1152,7 @@
         "initial_margin": "201.4378",
         "fee_allowance": "1.1079079",
         "required_margin": "202.5457079",
+        "bracket_cap": "60000000",
         "status": "refused",
         "reason": "settlement_wallet_below_risk"
       }
@@ -671,6 +1192,7 @@
         "initial_margin": "0.032331075539",
         "fee_allowance": "0.000177820915",
         "required_margin": "0.032508896454",
+        "bracket_cap": "1500",
         "status": "refused",
         "reason": "settlement_wallet_below_risk"
       }
@@ -745,6 +1267,7 @@
         "initial_margin": "20.14378",
         "fee_allowance": "0.1007189",
         "required_margin": "20.2444989",
+        "bracket_cap": "10000000",
         "risk_at_fill": "18.49",
         "status": "sized"
       }
@@ -790,6 +1313,7 @@
         "initial_margin": "20.14378",
         "fee_allowance": "0.1007189",
         "required_margin": "20.2444989",
+        "bracket_cap": "10000000",
         "risk_at_fill": "18.92",
         "status": "refused",
         "reason": "risk_drift"
@@ -835,6 +1359,7 @@
         "initial_margin": "117.115",
         "fee_allowance": "0.6441325",
         "required_margin": "117.7591325",
+        "bracket_cap": "60000000",
         "status": "refused",
         "reason": "stop_crossed"
       }
@@ -879,6 +1404,7 @@
         "initial_margin": "20.14378",
         "fee_allowance": "0.1007189",
         "required_margin": "20.2444989",
+        "bracket_cap": "10000000",
         "status": "refused",
         "reason": "stop_crossed"
       }
