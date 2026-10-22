@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- ADR 0002 decides the v0.3 automation architecture: TradingView alerts reach a Rust executor beside, not inside, the candle strategies, which stay unchanged; it fixes instrument, account, environment and position identity, the product universe (USDT-settled linear and coin-settled inverse perpetuals on Binance and Bybit), one-way mode with explicit arming, risk sizing in each instrument's settlement asset, mark-price stops held by the exchange, the response to a failed stop, stale-alert and ownership rules, and what parity across venues and stores means; `docs/automation-requirements.md` maps the automation PRD's requirements to the stories that deliver them, `docs/futures-venues.md` records each venue's products, routes, recent API changes and open questions, and `spikes/futures-contract/` resolves the product universe from public metadata and checks the sizing examples independently
+
 - `docs/adr/` records architecture decisions; ADR 0001 decides how the synchronous storage ports will reach PostgreSQL: tokio-postgres with a deadpool pool on a small runtime the store owns, so no context that calls the ports can hit a nested-runtime panic, rustls with `ring` for TLS, a default-on `postgres` cargo feature, and PostgreSQL 16 to 18; compiling spikes in `spikes/postgres-bridge/` back each rule, and SQLite-only builds are unaffected
 
 - candle segments: a market's closed candles are packed window by window, 1,440 bars of the interval counted from the Unix epoch (one UTC day of `1m` candles), into immutable segments named `sha256:` and the hash of their payload; `docs/segment-spec.md` specifies segment format 1 and records why it is not Arrow IPC

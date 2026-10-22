@@ -7,6 +7,7 @@ overturn them.
 | ADR | Decision | Status |
 | --- | --- | --- |
 | [0001](0001-postgres-client-strategy.md) | PostgreSQL client strategy for the synchronous storage ports | Accepted |
+| [0002](0002-automation-architecture.md) | Automation architecture and futures capability contract for v0.3 | Accepted |
 
 ## Adding one
 
