@@ -263,6 +263,22 @@ impl TryFrom<ExternalIntentParts> for ExternalIntent {
         for attempt in &parts.attempts {
             super::order::expect_leg(&attempt.client_order_id, &[parts.kind.leg()])?;
         }
+        if matches!(
+            parts.state,
+            IntentState::Submitting
+                | IntentState::OutcomeUnknown
+                | IntentState::PartiallyFilled
+                | IntentState::Filled
+                | IntentState::Unfilled
+                | IntentState::NotPlaced
+        ) && parts.attempts.is_empty()
+        {
+            return Err(ModelError::MissingEvidence {
+                machine: "intent",
+                to: parts.state.as_str(),
+                evidence: "an owned order attempt".to_string(),
+            });
+        }
         if matches!(parts.kind, IntentKind::Entry(_)) && parts.attempts.len() > 1 {
             return Err(ModelError::InvalidIdentifier {
                 what: "entry intent",
