@@ -780,7 +780,7 @@ outcome changes nothing, are in that table.
 | Bybit attaches a stop to a market entry on its test environments | Attached at entry | Placed after the first fill |
 | A venue tells who cancelled a stop | §10's rule for user cancels applies | §8's repair, plus ALG-746's command to leave a position unprotected on purpose |
 | Bybit's demo trades inverse contracts through the API | Demo provides the inverse evidence | Testnet does |
-| A query by client ID finds an accepted order within §9's 30-second propagation delay, on each venue, family and environment | §9's bounds stand | On that venue, "not found" settles no entry. An entry settles only when its order, an event or a fill appears; otherwise it raises the incident, which the operator clears |
+| A query by client ID finds an accepted order within §9's 30-second propagation delay, on each venue, family and environment | §9's bounds stand | On that venue, a "not found" never settles an entry as never placed. The entry stays unresolved, blocking its key (§5), until its order, an event or a fill appears, or the operator clears the incident raised when its settle window ended |
 
 ## Evidence
 
