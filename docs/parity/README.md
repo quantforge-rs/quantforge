@@ -58,7 +58,7 @@ venue or no store counts for each of them.
 - Every cell has at least one implementation owner and one evidence owner.
 - ALG-769 is never a cell's only evidence owner.
 - The consumers (ALG-731, ALG-755, ALG-711, ALG-535 and ALG-719) read the
-  evidence and own none.
+  evidence and never own it.
 
 ## What fails a cell
 
