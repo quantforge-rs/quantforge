@@ -334,8 +334,10 @@ mod tests {
             assert!(AccountRef::new(Venue::Bybit, environment, fingerprint.clone()).is_ok());
         }
         assert!(AccountRef::new(Venue::Bybit, Environment::Mainnet, account_id()).is_ok());
-        let json = r#"{"venue":"Bybit","environment":"Mainnet","venue_account_id":{"KeyFingerprint":"0123456789abcdef"}}"#;
-        assert!(serde_json::from_str::<AccountRef>(json).is_err());
+        let demo = AccountRef::new(Venue::Bybit, Environment::Demo, fingerprint).expect("account");
+        let mut json = serde_json::to_value(demo).expect("json");
+        json["environment"] = serde_json::json!("Mainnet");
+        assert!(serde_json::from_value::<AccountRef>(json).is_err());
     }
 
     #[test]
