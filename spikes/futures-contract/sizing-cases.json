@@ -1,0 +1,993 @@
+{
+  "format": 1,
+  "generated_by": "spikes/futures-contract/sizing.py",
+  "decimal_precision": 60,
+  "rounding": {
+    "stop": "to the tick, away from the entry (LONG floor, SHORT ceiling)",
+    "quantity": "floor to the market step",
+    "coin_amounts": "12 decimal places, half to even, where a division is involved",
+    "return": "8 decimal places, half to even"
+  },
+  "drift_limit": "1.25",
+  "rules": {
+    "binance linear BTCUSDT": {
+      "tick": "0.10",
+      "step": "0.001",
+      "min_qty": "0.001",
+      "max_mkt": "120",
+      "min_notional": "50"
+    },
+    "binance linear SOLUSDT": {
+      "tick": "0.0100",
+      "step": "0.01",
+      "min_qty": "0.01",
+      "max_mkt": "80000",
+      "min_notional": "5"
+    },
+    "binance inverse BTCUSD_PERP": {
+      "tick": "0.1",
+      "step": "1",
+      "min_qty": "1",
+      "max_mkt": "60000",
+      "face": "100"
+    },
+    "binance inverse ETHUSD_PERP": {
+      "tick": "0.01",
+      "step": "1",
+      "min_qty": "1",
+      "max_mkt": "500000",
+      "face": "10"
+    },
+    "bybit linear SOLUSDT": {
+      "tick": "0.010",
+      "step": "0.1",
+      "min_qty": "0.1",
+      "max_mkt": "12000.0",
+      "min_notional": "5"
+    },
+    "bybit inverse BTCUSD": {
+      "tick": "0.10",
+      "step": "1",
+      "min_qty": "1",
+      "max_mkt": "5000000",
+      "min_notional": "5",
+      "face": "1"
+    },
+    "bybit inverse ETHUSD": {
+      "tick": "0.01",
+      "step": "1",
+      "min_qty": "1",
+      "max_mkt": "2000000",
+      "min_notional": "5",
+      "face": "1"
+    },
+    "bybit inverse SOLUSD": {
+      "tick": "0.01",
+      "step": "1",
+      "min_qty": "1",
+      "max_mkt": "1000000",
+      "min_notional": "5",
+      "face": "1"
+    }
+  },
+  "sizing": [
+    {
+      "case": {
+        "id": "prd-p9-binance-linear-long",
+        "note": "The PRD's p.9 trade with a 150 USDT budget, 1 % of 15,000: it reproduces every p.9 figure but the risk line",
+        "instrument": "binance linear SOLUSDT",
+        "side": "long",
+        "capital": {
+          "asset": "USDT",
+          "amount": "15000"
+        },
+        "risk_percent": "1",
+        "entry": "234.23",
+        "expect": {
+          "status": "sized",
+          "stop": "200.0000",
+          "qty": "4.38",
+          "risk": "149.9274",
+          "notional": "1025.9274",
+          "initial_margin": "205.18548"
+        },
+        "stop": "200.00",
+        "leverage": "5",
+        "taker_fee": "0.0005",
+        "available_margin": "15000",
+        "settlement_wallet": "15000"
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "150",
+        "stop": "200.0000",
+        "qty": "4.38",
+        "unit_loss": "34.23",
+        "risk": "149.9274",
+        "notional": "1025.9274",
+        "notional_settle": "1025.9274",
+        "initial_margin": "205.18548",
+        "fee_allowance": "1.0259274",
+        "required_margin": "206.2114074",
+        "status": "sized"
+      }
+    },
+    {
+      "case": {
+        "id": "prd-p9-bybit-linear-long",
+        "note": "The same trade on Bybit, whose 0.1 step keeps less of the budget",
+        "instrument": "bybit linear SOLUSDT",
+        "side": "long",
+        "capital": {
+          "asset": "USDT",
+          "amount": "15000"
+        },
+        "risk_percent": "1",
+        "entry": "234.23",
+        "expect": {
+          "status": "sized",
+          "stop": "200.000",
+          "qty": "4.3",
+          "risk": "147.189",
+          "notional": "1007.189"
+        },
+        "stop": "200.00",
+        "leverage": "5",
+        "taker_fee": "0.00055",
+        "available_margin": "15000",
+        "settlement_wallet": "15000"
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "150",
+        "stop": "200.000",
+        "qty": "4.3",
+        "unit_loss": "34.23",
+        "risk": "147.189",
+        "notional": "1007.189",
+        "notional_settle": "1007.189",
+        "initial_margin": "201.4378",
+        "fee_allowance": "1.1079079",
+        "required_margin": "202.5457079",
+        "status": "sized"
+      }
+    },
+    {
+      "case": {
+        "id": "prd-p9-literal-15-usdt",
+        "note": "The p.9 risk line read literally, 15 USDT: 0.43821 SOL before the 0.01 step, 0.43 after",
+        "instrument": "binance linear SOLUSDT",
+        "side": "long",
+        "capital": {
+          "asset": "USDT",
+          "amount": "1500"
+        },
+        "risk_percent": "1",
+        "entry": "234.23",
+        "expect": {
+          "status": "sized",
+          "stop": "200.0000",
+          "qty": "0.43",
+          "risk": "14.7189",
+          "notional": "100.7189"
+        },
+        "stop": "200.00",
+        "leverage": "5",
+        "taker_fee": "0.0005",
+        "available_margin": "1500",
+        "settlement_wallet": "1500"
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "15",
+        "stop": "200.0000",
+        "qty": "0.43",
+        "unit_loss": "34.23",
+        "risk": "14.7189",
+        "notional": "100.7189",
+        "notional_settle": "100.7189",
+        "initial_margin": "20.14378",
+        "fee_allowance": "0.1007189",
+        "required_margin": "20.2444989",
+        "status": "sized"
+      }
+    },
+    {
+      "case": {
+        "id": "linear-short-percent-stop",
+        "note": "SHORT with the 3 % fallback stop, rounded up to the tick",
+        "instrument": "binance linear BTCUSDT",
+        "side": "short",
+        "capital": {
+          "asset": "USDT",
+          "amount": "10000"
+        },
+        "risk_percent": "1",
+        "entry": "84123.45",
+        "expect": {
+          "status": "sized",
+          "stop": "86647.20",
+          "qty": "0.039",
+          "risk": "98.42625",
+          "notional": "3280.81455"
+        },
+        "stop_percent": "3",
+        "leverage": "10",
+        "taker_fee": "0.0005",
+        "available_margin": "5000",
+        "settlement_wallet": "10000"
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "100",
+        "stop": "86647.20",
+        "qty": "0.039",
+        "unit_loss": "2523.75",
+        "risk": "98.42625",
+        "notional": "3280.81455",
+        "notional_settle": "3280.81455",
+        "initial_margin": "328.081455",
+        "fee_allowance": "3.28081455",
+        "required_margin": "331.36226955",
+        "status": "sized"
+      }
+    },
+    {
+      "case": {
+        "id": "binance-inverse-long",
+        "note": "COIN-M LONG, 100 USD contracts; the wallet holds less than the capital, which only warns",
+        "instrument": "binance inverse BTCUSD_PERP",
+        "side": "long",
+        "capital": {
+          "asset": "BTC",
+          "amount": "0.5"
+        },
+        "risk_percent": "1",
+        "entry": "84123.4",
+        "expect": {
+          "status": "sized",
+          "stop": "81599.6",
+          "qty": "135",
+          "warnings": [
+            "wallet_below_capital"
+          ]
+        },
+        "stop_percent": "3",
+        "leverage": "5",
+        "taker_fee": "0.0005",
+        "available_margin": "0.3",
+        "settlement_wallet": "0.3"
+      },
+      "result": {
+        "settle": "BTC",
+        "warnings": [
+          "wallet_below_capital"
+        ],
+        "budget": "0.005",
+        "stop": "81599.6",
+        "qty": "135",
+        "unit_loss": "0.000036766314",
+        "risk": "0.004963452356",
+        "notional": "13500",
+        "notional_settle": "0.160478535104",
+        "initial_margin": "0.032095707021",
+        "fee_allowance": "0.000160478535",
+        "required_margin": "0.032256185556",
+        "status": "sized"
+      }
+    },
+    {
+      "case": {
+        "id": "binance-inverse-short",
+        "note": "COIN-M SHORT, 10 USD contracts, with an absolute stop rounded up to the tick",
+        "instrument": "binance inverse ETHUSD_PERP",
+        "side": "short",
+        "capital": {
+          "asset": "ETH",
+          "amount": "2"
+        },
+        "risk_percent": "0.5",
+        "entry": "3012.34",
+        "expect": {
+          "status": "sized",
+          "stop": "3105.56",
+          "qty": "100"
+        },
+        "stop": "3105.555",
+        "leverage": "5",
+        "taker_fee": "0.0005",
+        "available_margin": "2",
+        "settlement_wallet": "2"
+      },
+      "result": {
+        "settle": "ETH",
+        "warnings": [],
+        "budget": "0.01",
+        "stop": "3105.56",
+        "qty": "100",
+        "unit_loss": "0.00009964722",
+        "risk": "0.009964721966",
+        "notional": "1000",
+        "notional_settle": "0.331967838956",
+        "initial_margin": "0.066393567791",
+        "fee_allowance": "0.000331967839",
+        "required_margin": "0.06672553563",
+        "status": "sized"
+      }
+    },
+    {
+      "case": {
+        "id": "bybit-inverse-long",
+        "note": "Bybit inverse LONG, 1 USD contracts: the trade of binance-inverse-long, about 100 times the contracts (13,599 against 135), since the finer grid keeps more of the budget",
+        "instrument": "bybit inverse BTCUSD",
+        "side": "long",
+        "capital": {
+          "asset": "BTC",
+          "amount": "0.5"
+        },
+        "risk_percent": "1",
+        "entry": "84123.4",
+        "expect": {
+          "status": "sized",
+          "stop": "81599.60",
+          "qty": "13599"
+        },
+        "stop_percent": "3",
+        "leverage": "5",
+        "taker_fee": "0.00055",
+        "available_margin": "0.5",
+        "settlement_wallet": "0.5"
+      },
+      "result": {
+        "settle": "BTC",
+        "warnings": [],
+        "budget": "0.005",
+        "stop": "81599.60",
+        "qty": "13599",
+        "unit_loss": "0.000000367663",
+        "risk": "0.004999851007",
+        "notional": "13599",
+        "notional_settle": "0.161655377695",
+        "initial_margin": "0.032331075539",
+        "fee_allowance": "0.000177820915",
+        "required_margin": "0.032508896454",
+        "status": "sized"
+      }
+    },
+    {
+      "case": {
+        "id": "bybit-inverse-short",
+        "note": "Bybit inverse SHORT with the 2 % fallback stop",
+        "instrument": "bybit inverse SOLUSD",
+        "side": "short",
+        "capital": {
+          "asset": "SOL",
+          "amount": "20"
+        },
+        "risk_percent": "1",
+        "entry": "187.45",
+        "expect": {
+          "status": "sized",
+          "stop": "191.20",
+          "qty": "1911"
+        },
+        "stop_percent": "2",
+        "leverage": "3",
+        "taker_fee": "0.00055",
+        "available_margin": "20",
+        "settlement_wallet": "20"
+      },
+      "result": {
+        "settle": "SOL",
+        "warnings": [],
+        "budget": "0.2",
+        "stop": "191.20",
+        "qty": "1911",
+        "unit_loss": "0.000104630412",
+        "risk": "0.199948717147",
+        "notional": "1911",
+        "notional_settle": "10.194718591624",
+        "initial_margin": "3.398239530541",
+        "fee_allowance": "0.011214190451",
+        "required_margin": "3.409453720992",
+        "status": "sized"
+      }
+    },
+    {
+      "case": {
+        "id": "refuse-wrong-side-stop",
+        "note": "A LONG whose stop is above its entry",
+        "instrument": "bybit linear SOLUSDT",
+        "side": "long",
+        "capital": {
+          "asset": "USDT",
+          "amount": "1500"
+        },
+        "risk_percent": "1",
+        "entry": "234.23",
+        "expect": {
+          "status": "refused",
+          "reason": "stop_wrong_side"
+        },
+        "stop": "240.00",
+        "leverage": "5",
+        "taker_fee": "0.00055",
+        "available_margin": "1500",
+        "settlement_wallet": "1500"
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "15",
+        "status": "refused",
+        "reason": "stop_wrong_side"
+      }
+    },
+    {
+      "case": {
+        "id": "refuse-no-stop",
+        "note": "Neither a payload stop nor a fallback percentage",
+        "instrument": "bybit linear SOLUSDT",
+        "side": "long",
+        "capital": {
+          "asset": "USDT",
+          "amount": "1500"
+        },
+        "risk_percent": "1",
+        "entry": "234.23",
+        "expect": {
+          "status": "refused",
+          "reason": "no_stop"
+        },
+        "leverage": "5",
+        "taker_fee": "0.00055",
+        "available_margin": "1500",
+        "settlement_wallet": "1500"
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "15",
+        "status": "refused",
+        "reason": "no_stop"
+      }
+    },
+    {
+      "case": {
+        "id": "refuse-below-min-qty",
+        "note": "A budget too small for one step is refused, never rounded up",
+        "instrument": "binance linear BTCUSDT",
+        "side": "long",
+        "capital": {
+          "asset": "USDT",
+          "amount": "100"
+        },
+        "risk_percent": "0.1",
+        "entry": "84123.45",
+        "expect": {
+          "status": "refused",
+          "reason": "below_min_qty"
+        },
+        "stop_percent": "3",
+        "leverage": "10",
+        "taker_fee": "0.0005",
+        "available_margin": "100",
+        "settlement_wallet": "100"
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "0.1",
+        "stop": "81599.70",
+        "qty": "0.000",
+        "unit_loss": "2523.75",
+        "status": "refused",
+        "reason": "below_min_qty"
+      }
+    },
+    {
+      "case": {
+        "id": "refuse-below-min-notional",
+        "note": "Enough for two steps, but 4.6846 USDT is below the 5 USDT minimum notional",
+        "instrument": "binance linear SOLUSDT",
+        "side": "long",
+        "capital": {
+          "asset": "USDT",
+          "amount": "50"
+        },
+        "risk_percent": "1",
+        "entry": "234.23",
+        "expect": {
+          "status": "refused",
+          "reason": "below_min_notional"
+        },
+        "stop_percent": "10",
+        "leverage": "5",
+        "taker_fee": "0.0005",
+        "available_margin": "50",
+        "settlement_wallet": "50"
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "0.5",
+        "stop": "210.8000",
+        "qty": "0.02",
+        "unit_loss": "23.43",
+        "status": "refused",
+        "reason": "below_min_notional"
+      }
+    },
+    {
+      "case": {
+        "id": "refuse-above-market-max",
+        "note": "198.117 BTC is above the 120 BTC market-order maximum",
+        "instrument": "binance linear BTCUSDT",
+        "side": "short",
+        "capital": {
+          "asset": "USDT",
+          "amount": "10000000"
+        },
+        "risk_percent": "5",
+        "entry": "84123.45",
+        "expect": {
+          "status": "refused",
+          "reason": "above_market_max",
+          "qty": "198.117"
+        },
+        "stop_percent": "3",
+        "leverage": "10",
+        "taker_fee": "0.0005",
+        "available_margin": "10000000",
+        "settlement_wallet": "10000000"
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "500000",
+        "stop": "86647.20",
+        "qty": "198.117",
+        "unit_loss": "2523.75",
+        "status": "refused",
+        "reason": "above_market_max"
+      }
+    },
+    {
+      "case": {
+        "id": "refuse-insufficient-margin",
+        "note": "331.36226955 USDT needed; 400 available minus a 100 USDT reservation leaves 300",
+        "instrument": "binance linear BTCUSDT",
+        "side": "short",
+        "capital": {
+          "asset": "USDT",
+          "amount": "10000"
+        },
+        "risk_percent": "1",
+        "entry": "84123.45",
+        "expect": {
+          "status": "refused",
+          "reason": "insufficient_margin",
+          "required_margin": "331.36226955"
+        },
+        "stop_percent": "3",
+        "leverage": "10",
+        "taker_fee": "0.0005",
+        "available_margin": "400",
+        "reserved_margin": "100",
+        "settlement_wallet": "400"
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "100",
+        "stop": "86647.20",
+        "qty": "0.039",
+        "unit_loss": "2523.75",
+        "risk": "98.42625",
+        "notional": "3280.81455",
+        "notional_settle": "3280.81455",
+        "initial_margin": "328.081455",
+        "fee_allowance": "3.28081455",
+        "required_margin": "331.36226955",
+        "status": "refused",
+        "reason": "insufficient_margin"
+      }
+    },
+    {
+      "case": {
+        "id": "refuse-linear-wallet-below-risk",
+        "note": "Cross margin funded by other collateral: 15,000 USD of margin, but 100 USDT cannot pay a 150 USDT stop-out",
+        "instrument": "bybit linear SOLUSDT",
+        "side": "long",
+        "capital": {
+          "asset": "USDT",
+          "amount": "15000"
+        },
+        "risk_percent": "1",
+        "entry": "234.23",
+        "expect": {
+          "status": "refused",
+          "reason": "settlement_wallet_below_risk"
+        },
+        "stop": "200.00",
+        "leverage": "5",
+        "taker_fee": "0.00055",
+        "available_margin": "15000",
+        "settlement_wallet": "100"
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "150",
+        "stop": "200.000",
+        "qty": "4.3",
+        "unit_loss": "34.23",
+        "risk": "147.189",
+        "notional": "1007.189",
+        "notional_settle": "1007.189",
+        "initial_margin": "201.4378",
+        "fee_allowance": "1.1079079",
+        "required_margin": "202.5457079",
+        "status": "refused",
+        "reason": "settlement_wallet_below_risk"
+      }
+    },
+    {
+      "case": {
+        "id": "refuse-wallet-below-risk",
+        "note": "An inverse stop-out the BTC wallet could not pay",
+        "instrument": "bybit inverse BTCUSD",
+        "side": "long",
+        "capital": {
+          "asset": "BTC",
+          "amount": "0.5"
+        },
+        "risk_percent": "1",
+        "entry": "84123.4",
+        "expect": {
+          "status": "refused",
+          "reason": "settlement_wallet_below_risk"
+        },
+        "stop_percent": "3",
+        "leverage": "5",
+        "taker_fee": "0.00055",
+        "available_margin": "0.5",
+        "settlement_wallet": "0.004"
+      },
+      "result": {
+        "settle": "BTC",
+        "warnings": [],
+        "budget": "0.005",
+        "stop": "81599.60",
+        "qty": "13599",
+        "unit_loss": "0.000000367663",
+        "risk": "0.004999851007",
+        "notional": "13599",
+        "notional_settle": "0.161655377695",
+        "initial_margin": "0.032331075539",
+        "fee_allowance": "0.000177820915",
+        "required_margin": "0.032508896454",
+        "status": "refused",
+        "reason": "settlement_wallet_below_risk"
+      }
+    },
+    {
+      "case": {
+        "id": "refuse-capital-currency",
+        "note": "An ETH-settled instrument with capital configured only in BTC",
+        "instrument": "bybit inverse ETHUSD",
+        "side": "long",
+        "capital": {
+          "asset": "BTC",
+          "amount": "0.5"
+        },
+        "risk_percent": "1",
+        "entry": "3012.34",
+        "expect": {
+          "status": "refused",
+          "reason": "no_capital_in_settlement_asset"
+        },
+        "stop_percent": "3",
+        "leverage": "5",
+        "taker_fee": "0.00055",
+        "available_margin": "2",
+        "settlement_wallet": "2"
+      },
+      "result": {
+        "settle": "ETH",
+        "warnings": [],
+        "status": "refused",
+        "reason": "no_capital_in_settlement_asset"
+      }
+    },
+    {
+      "case": {
+        "id": "submit-drift-accepted",
+        "note": "At an ask of 243.00 the risk is 18.49, within 1.25 x 15 = 18.75",
+        "instrument": "binance linear SOLUSDT",
+        "side": "long",
+        "capital": {
+          "asset": "USDT",
+          "amount": "1500"
+        },
+        "risk_percent": "1",
+        "entry": "234.23",
+        "expect": {
+          "status": "sized",
+          "qty": "0.43",
+          "risk_at_fill": "18.49"
+        },
+        "stop": "200.00",
+        "leverage": "5",
+        "taker_fee": "0.0005",
+        "available_margin": "1500",
+        "settlement_wallet": "1500",
+        "quote": {
+          "bid": "242.90",
+          "ask": "243.00",
+          "mark": "242.95"
+        }
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "15",
+        "stop": "200.0000",
+        "qty": "0.43",
+        "unit_loss": "34.23",
+        "risk": "14.7189",
+        "notional": "100.7189",
+        "notional_settle": "100.7189",
+        "initial_margin": "20.14378",
+        "fee_allowance": "0.1007189",
+        "required_margin": "20.2444989",
+        "risk_at_fill": "18.49",
+        "status": "sized"
+      }
+    },
+    {
+      "case": {
+        "id": "submit-drift-refused",
+        "note": "At an ask of 244.00 the risk is 18.92, above 18.75",
+        "instrument": "binance linear SOLUSDT",
+        "side": "long",
+        "capital": {
+          "asset": "USDT",
+          "amount": "1500"
+        },
+        "risk_percent": "1",
+        "entry": "234.23",
+        "expect": {
+          "status": "refused",
+          "reason": "risk_drift",
+          "risk_at_fill": "18.92"
+        },
+        "stop": "200.00",
+        "leverage": "5",
+        "taker_fee": "0.0005",
+        "available_margin": "1500",
+        "settlement_wallet": "1500",
+        "quote": {
+          "bid": "243.90",
+          "ask": "244.00",
+          "mark": "243.95"
+        }
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "15",
+        "stop": "200.0000",
+        "qty": "0.43",
+        "unit_loss": "34.23",
+        "risk": "14.7189",
+        "notional": "100.7189",
+        "notional_settle": "100.7189",
+        "initial_margin": "20.14378",
+        "fee_allowance": "0.1007189",
+        "required_margin": "20.2444989",
+        "risk_at_fill": "18.92",
+        "status": "refused",
+        "reason": "risk_drift"
+      }
+    },
+    {
+      "case": {
+        "id": "submit-book-crossed",
+        "note": "A SHORT whose stop the ask has already reached",
+        "instrument": "bybit linear SOLUSDT",
+        "side": "short",
+        "capital": {
+          "asset": "USDT",
+          "amount": "1500"
+        },
+        "risk_percent": "1",
+        "entry": "234.23",
+        "expect": {
+          "status": "refused",
+          "reason": "stop_crossed"
+        },
+        "stop": "240.00",
+        "leverage": "5",
+        "taker_fee": "0.00055",
+        "available_margin": "1500",
+        "settlement_wallet": "1500",
+        "quote": {
+          "bid": "239.99",
+          "ask": "240.01",
+          "mark": "239.95"
+        }
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "15",
+        "stop": "240.000",
+        "qty": "2.5",
+        "unit_loss": "5.77",
+        "risk": "14.425",
+        "notional": "585.575",
+        "notional_settle": "585.575",
+        "initial_margin": "117.115",
+        "fee_allowance": "0.6441325",
+        "required_margin": "117.7591325",
+        "status": "refused",
+        "reason": "stop_crossed"
+      }
+    },
+    {
+      "case": {
+        "id": "submit-mark-crossed",
+        "note": "A LONG whose book is still above its stop, but whose mark price, which triggers the stop, is below it",
+        "instrument": "binance linear SOLUSDT",
+        "side": "long",
+        "capital": {
+          "asset": "USDT",
+          "amount": "1500"
+        },
+        "risk_percent": "1",
+        "entry": "234.23",
+        "expect": {
+          "status": "refused",
+          "reason": "stop_crossed"
+        },
+        "stop": "200.00",
+        "leverage": "5",
+        "taker_fee": "0.0005",
+        "available_margin": "1500",
+        "settlement_wallet": "1500",
+        "quote": {
+          "bid": "200.50",
+          "ask": "200.60",
+          "mark": "199.95"
+        }
+      },
+      "result": {
+        "settle": "USDT",
+        "warnings": [],
+        "budget": "15",
+        "stop": "200.0000",
+        "qty": "0.43",
+        "unit_loss": "34.23",
+        "risk": "14.7189",
+        "notional": "100.7189",
+        "notional_settle": "100.7189",
+        "initial_margin": "20.14378",
+        "fee_allowance": "0.1007189",
+        "required_margin": "20.2444989",
+        "status": "refused",
+        "reason": "stop_crossed"
+      }
+    }
+  ],
+  "cycles": [
+    {
+      "case": {
+        "id": "prd-p10-exit",
+        "note": "The PRD's p.10 indicator exit: its 69.07 and +6.73 % are gross, before fees",
+        "family": "linear",
+        "side": "long",
+        "qty": "4.38",
+        "entry": "234.23",
+        "exit": "250.00",
+        "fees": "0",
+        "funding": "0",
+        "expect": {
+          "gross": "69.0726",
+          "net": "69.0726",
+          "return_percent": "6.73"
+        }
+      },
+      "result": {
+        "gross": "69.0726",
+        "fees": "0",
+        "funding": "0",
+        "net": "69.0726",
+        "entry_notional": "1025.9274",
+        "return": "0.06732699",
+        "return_percent": "6.73"
+      }
+    },
+    {
+      "case": {
+        "id": "prd-p10-stop",
+        "note": "The PRD's p.10 stop-loss exit: 4.38 SOL lost 149.93, the risk of a 150 USDT budget",
+        "family": "linear",
+        "side": "long",
+        "qty": "4.38",
+        "entry": "234.23",
+        "exit": "200.00",
+        "fees": "0",
+        "funding": "0",
+        "expect": {
+          "gross": "-149.9274",
+          "net": "-149.9274",
+          "return_percent": "-14.61"
+        }
+      },
+      "result": {
+        "gross": "-149.9274",
+        "fees": "0",
+        "funding": "0",
+        "net": "-149.9274",
+        "entry_notional": "1025.9274",
+        "return": "-0.14613841",
+        "return_percent": "-14.61"
+      }
+    },
+    {
+      "case": {
+        "id": "linear-net",
+        "note": "Net = gross - fees + funding received (funding paid is negative)",
+        "family": "linear",
+        "side": "short",
+        "qty": "0.039",
+        "entry": "84123.45",
+        "exit": "82000.00",
+        "fees": "3.23940728",
+        "funding": "-0.42",
+        "expect": {
+          "gross": "82.81455",
+          "net": "79.15514272"
+        }
+      },
+      "result": {
+        "gross": "82.81455",
+        "fees": "3.23940728",
+        "funding": "-0.42",
+        "net": "79.15514272",
+        "entry_notional": "3280.81455",
+        "return": "0.02412667",
+        "return_percent": "2.41"
+      }
+    },
+    {
+      "case": {
+        "id": "inverse-net",
+        "note": "Inverse PnL is in the coin: N x F x (1/E - 1/X) for LONG",
+        "family": "inverse",
+        "side": "long",
+        "qty": "13599",
+        "face": "1",
+        "entry": "84123.4",
+        "exit": "86000.0",
+        "fees": "0.00017588",
+        "funding": "0.000005",
+        "expect": {}
+      },
+      "result": {
+        "gross": "0.003527470718",
+        "fees": "0.00017588",
+        "funding": "0.000005",
+        "net": "0.003356590718",
+        "entry_notional": "0.161655377695",
+        "return": "0.02076387",
+        "return_percent": "2.08"
+      }
+    }
+  ]
+}

@@ -325,6 +325,7 @@ explains the live modes and how to re-record.
 - restart reconciliation between local bot state and exchange state
 - richer indicators and more built-in strategies
 - PostgreSQL as a second storage backend, with SQLite staying the default; how the storage ports reach it is decided in [ADR 0001](https://github.com/quantforge-rs/quantforge/blob/main/docs/adr/0001-postgres-client-strategy.md)
+- TradingView alerts executed as risk-sized trades in USDT-settled linear and coin-settled inverse futures on Binance and Bybit, with stop losses held by the exchange, monitoring, and Telegram notifications; its architecture is decided in [ADR 0002](https://github.com/quantforge-rs/quantforge/blob/main/docs/adr/0002-automation-architecture.md)
 - research-oriented parameter sweeps and snapshot reports
 
 ## License
