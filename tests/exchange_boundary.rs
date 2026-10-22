@@ -1,14 +1,18 @@
-//! The boundary around `src/exchange/`, checked twice.
+//! The boundary around `src/exchange/`, checked three times.
 //!
 //! - Only the exchange module may name a concrete adapter. Everything else —
 //!   the engines, the CLI, the model, the ports, and any module added later
 //!   — reaches an exchange through the `ports` connector traits, and the CLI
 //!   gets its connectors from `exchange::connect`.
 //! - Outside the Binance adapter, nothing hardcodes Binance at all. The code
-//!   that may name it is listed below: the registry entry and default, the
-//!   `ExchangeId` variant with its storage name, and the two renamed
-//!   settings the CLI still refuses. The CLI's `--help` names it only as
-//!   `--exchange`'s default and only value.
+//!   that may name it is listed below: the registry's entries and default,
+//!   the `Venue` that names it with its product lines in `ExchangeId` and
+//!   their storage names, and the two renamed settings the CLI still
+//!   refuses. The CLI's `--help` names it only as `--exchange`'s default and
+//!   only value.
+//! - A venue's own position fields, Binance's `positionSide` and Bybit's
+//!   `positionIdx`, stay inside the adapters, which map them onto the
+//!   model's `PositionSide`.
 //!
 //! The source scans are textual. Every line is checked except comments: a
 //! line whose trimmed text starts with `//`, which covers `///` and `//!`,
@@ -29,13 +33,18 @@ const FORBIDDEN: [&str; 4] = [
 /// The only code outside `src/exchange/binance/` that may name Binance, as
 /// `(file, trimmed line)`. Each entry must match exactly once, so a stale
 /// entry fails as well as a new line.
-const NAMES_BINANCE: [(&str, &str); 9] = [
-    // The registry: the adapter module, its entry, and the default exchange.
+const NAMES_BINANCE: [(&str, &str); 20] = [
+    // The registry: the adapter module, its entry, the lines still waiting
+    // for an adapter, and the default exchange.
     ("src/exchange/mod.rs", "pub mod binance;"),
     ("src/exchange/registry.rs", "use super::binance;"),
     (
         "src/exchange/registry.rs",
-        "ExchangeId::BinanceSpot => binance::REGISTRATION,",
+        "ExchangeId::BinanceSpot => Some(binance::REGISTRATION),",
+    ),
+    (
+        "src/exchange/registry.rs",
+        "ExchangeId::BinanceLinear | ExchangeId::BinanceInverse => None,",
     ),
     (
         "src/exchange/registry.rs",
@@ -45,11 +54,40 @@ const NAMES_BINANCE: [(&str, &str); 9] = [
         "src/exchange/registry.rs",
         "const EXCHANGES: [ExchangeId; 1] = [ExchangeId::BinanceSpot];",
     ),
-    // The exchange id and the name candles and runs are stored under.
-    ("src/model/market.rs", "BinanceSpot,"),
+    // The venue, its name, and its product lines with the venue, category
+    // and storage name of each.
+    ("src/model/market.rs", "Binance,"),
     (
         "src/model/market.rs",
-        "Self::BinanceSpot => \"binance_spot\",",
+        "pub const ALL: [Self; 2] = [Self::Binance, Self::Bybit];",
+    ),
+    ("src/model/market.rs", "Self::Binance => \"binance\","),
+    ("src/model/market.rs", "BinanceSpot,"),
+    ("src/model/market.rs", "BinanceLinear,"),
+    ("src/model/market.rs", "BinanceInverse,"),
+    (
+        "src/model/market.rs",
+        "Self::BinanceSpot => (Venue::Binance, Category::Spot, \"binance_spot\"),",
+    ),
+    (
+        "src/model/market.rs",
+        "Self::BinanceLinear => (Venue::Binance, Category::Linear, \"binance_linear\"),",
+    ),
+    (
+        "src/model/market.rs",
+        "Self::BinanceInverse => (Venue::Binance, Category::Inverse, \"binance_inverse\"),",
+    ),
+    (
+        "src/model/market.rs",
+        "(Venue::Binance, Category::Spot) => Self::BinanceSpot,",
+    ),
+    (
+        "src/model/market.rs",
+        "(Venue::Binance, Category::Linear) => Self::BinanceLinear,",
+    ),
+    (
+        "src/model/market.rs",
+        "(Venue::Binance, Category::Inverse) => Self::BinanceInverse,",
     ),
     // The released names of `--base-url`, recognized only to be refused.
     (
@@ -61,6 +99,14 @@ const NAMES_BINANCE: [(&str, &str); 9] = [
         "const LEGACY_BASE_URL_ENV: &str = \"QF_BINANCE_BASE_URL\";",
     ),
 ];
+
+/// The venues' own position fields: one venue's position side in hedge
+/// mode, and the other's position index. Matched case-sensitively, so the
+/// model's `PositionSide` is not one of them.
+const POSITION_FIELDS: [&str; 2] = ["positionIdx", "positionSide"];
+
+/// Where the venue adapters live, the only code that may name those fields.
+const ADAPTERS: [&str; 2] = ["src/exchange/binance/", "src/exchange/bybit/"];
 
 fn crate_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -125,6 +171,10 @@ fn violations(text: &str) -> Vec<(usize, &str)> {
 
 fn names_binance(line: &str) -> bool {
     line.to_ascii_lowercase().contains("binance")
+}
+
+fn names_a_position_field(line: &str) -> bool {
+    POSITION_FIELDS.iter().any(|field| line.contains(field))
 }
 
 /// Where the test module that `declaring` declares as `mod name;` lives:
@@ -244,6 +294,41 @@ fn nothing_outside_the_binance_adapter_hardcodes_binance() {
         miscounted.is_empty(),
         "NAMES_BINANCE entries must each match exactly one line: {miscounted:#?}"
     );
+}
+
+#[test]
+fn venue_position_fields_stay_inside_the_adapters() {
+    let files = crate_sources("src/exchange/binance");
+    let mut found = Vec::new();
+    for (path, count) in code_lines(&files) {
+        if ADAPTERS.iter().any(|adapter| path.starts_with(adapter)) {
+            continue;
+        }
+        let lines = files[path].lines().take(count);
+        for (line, text) in matching_lines(lines, names_a_position_field) {
+            found.push(format!("{path}:{line}: {text}"));
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "these lines name a venue's own position field outside its adapter; map it onto \
+         PositionSide inside the adapter:\n  {}",
+        found.join("\n  ")
+    );
+}
+
+// Without this, a field list the matcher could never find would pass the
+// test above. The venue notes name both fields.
+#[test]
+fn the_position_field_matcher_finds_both_fields_in_the_venue_notes() {
+    let notes = crate_root().join("docs").join("futures-venues.md");
+    let text = std::fs::read_to_string(notes).expect("read the venue notes");
+    for field in POSITION_FIELDS {
+        let named = text
+            .lines()
+            .any(|line| names_a_position_field(line) && line.contains(field));
+        assert!(named, "docs/futures-venues.md no longer names {field}");
+    }
 }
 
 // The help a user sees is the rendered surface of those sources; the

@@ -46,6 +46,7 @@ impl RunStatus {
     }
 }
 
+/// One closed round trip of a candle strategy on Spot.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClosedTrade {
     pub symbol: Symbol,
@@ -54,6 +55,12 @@ pub struct ClosedTrade {
     pub entry_price: Decimal,
     pub exit_price: Decimal,
     pub qty: Decimal,
+    /// The trade's PnL in the quote asset, which means two things. In a
+    /// backtest it is the change in cash, so both fees are already
+    /// deducted; in live trading it is `(exit − entry) × qty`, before fees.
+    /// Futures PnL never comes from here: it is
+    /// [`RealizedPnl`](super::futures::RealizedPnl), which keeps gross,
+    /// fees, funding and net apart.
     pub gross_quote_pnl: Decimal,
     pub entry_order_id: Option<i64>,
     pub exit_order_id: Option<i64>,

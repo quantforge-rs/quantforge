@@ -20,11 +20,11 @@ use super::{ConnectorConfig, ExchangeConnectors};
 use crate::ports::ExchangeError;
 use std::sync::Arc;
 
-/// Binance Spot's registry entry: selected as `binance`, and served by the
-/// production REST API unless the caller names another base URL, such as
-/// the Spot testnet at `https://testnet.binance.vision/`.
+/// Binance Spot's registry entry: served by the production REST API unless
+/// the caller names another base URL, such as the Spot testnet at
+/// `https://testnet.binance.vision/`. Operators select it by its venue's
+/// name, `binance`.
 pub(crate) const REGISTRATION: Registration = Registration {
-    name: "binance",
     default_base_url: "https://api.binance.com/",
     factory: connect,
 };
