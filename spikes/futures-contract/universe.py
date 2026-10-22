@@ -11,7 +11,7 @@ It sends unauthenticated GET requests to public endpoints only. Run it with
 the standard library alone:
 
     python3 -I spikes/futures-contract/universe.py --out summary.json
-    python3 -I spikes/futures-contract/universe.py --list eligible.json
+    python3 -I spikes/futures-contract/universe.py --list docs/parity/universe-v1-YYYY-MM-DD.json
 
 Bybit answers 403 to requests from some regions; run it from elsewhere then.
 """
@@ -224,10 +224,21 @@ def main():
             json.dump(summary, handle, indent=2)
             handle.write("\n")
     if args.list_path:
+        # The rule travels with the list, so the record says what selected it.
         listing = {
             "rule_version": RULE_VERSION,
+            "rule": RULE,
             "fetched_at": summary["fetched_at"],
-            "eligible": eligible_lists,
+            "sources": [
+                {
+                    "venue": venue,
+                    "category": category,
+                    "environment": environment,
+                    "url": url,
+                    "symbols": eligible_lists["{} {} {}".format(venue, category, environment)],
+                }
+                for venue, category, environment, url in SOURCES
+            ],
         }
         with open(args.list_path, "w", encoding="utf-8", newline="\n") as handle:
             json.dump(listing, handle, indent=2)

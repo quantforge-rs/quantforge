@@ -12,7 +12,7 @@ excludes `spikes/` from the package.
 ## `universe.py`: the product universe
 
 ```bash
-python3 -I spikes/futures-contract/universe.py --out universe.json --list eligible.json
+python3 -I spikes/futures-contract/universe.py --out universe.json --list docs/parity/universe-v1-YYYY-MM-DD.json
 ```
 
 It sends unauthenticated GET requests to the public instrument endpoints of:
@@ -33,8 +33,10 @@ Bybit answers 403 to some regions.
 - **`--out`** writes that summary.
   [`universe-2026-10-22.json`](universe-2026-10-22.json) is the run the docs
   quote.
-- **`--list`** writes the eligible symbols for each source, which ALG-756
-  freezes.
+- **`--list`** writes, for each source, the eligible symbols and the rule that
+  selected them. ALG-756 froze one as
+  [`universe-v1-2026-10-22.json`](../../docs/parity/universe-v1-2026-10-22.json)
+  for the parity matrix.
 
 The counts change as venues list and delist contracts. A later run is expected
 to differ from the committed one; the rule is the contract, not the count.

@@ -1,0 +1,1391 @@
+# The v0.3 capability parity matrix: what QuantForge 0.3 must do on Binance and
+# Bybit, with SQLite and PostgreSQL, for each product family. ALG-756 froze it
+# on 2026-10-22, and ALG-769 holds the release until every cell has passing
+# evidence.
+#
+# README.md explains the rules and matrix.md renders this file. Check both with
+# `cargo test --test parity`; refresh matrix.md and cells.txt with
+# `UPDATE_SNAPSHOTS=1 cargo test --test parity`. Reducing coverage needs a
+# scope change recorded below, and every change to the cells bumps `revision`.
+
+format = 1
+revision = 1
+source_date = "2026-10-22"
+release = "0.3.0"
+
+# Gates that consume the evidence. They never own it.
+consumers = ["ALG-535", "ALG-711", "ALG-719", "ALG-731", "ALG-755"]
+
+# Cell IDs join a capability's values in this order: artifact, surface, venue,
+# backend, family, side. Values are unique across axes.
+[axes]
+artifact = ["binary", "image", "wheel", "sqlite-build"]
+surface = ["cli", "server", "python"]
+venue = ["binance", "bybit"]
+backend = ["sqlite", "postgres"]
+family = ["spot", "linear", "inverse"]
+side = ["long", "short"]
+
+# Every story that owns a cell, by its role here. Linear holds the full briefs.
+[stories]
+ALG-375 = "Backtest engine as a library API driven by external strategies"
+ALG-376 = "Python package scaffold and abi3 wheels"
+ALG-377 = "Core types exposed to Python"
+ALG-378 = "Python strategy adapter"
+ALG-379 = "Python backtest entry point"
+ALG-380 = "NumPy interop for candle batches"
+ALG-381 = "Pandas helpers for candles and results"
+ALG-382 = "Python candle reader for SQLite and PostgreSQL"
+ALG-383 = "Golden parity fixtures from the Rust SMA cross"
+ALG-384 = "Wheel build matrix and Python test job in CI"
+ALG-387 = "Python package release"
+ALG-388 = "Python strategies driving dry-run live trading"
+ALG-401 = "Storage backend selection and connection settings"
+ALG-402 = "Shared storage conformance suite"
+ALG-404 = "PostgreSQL schema, migrations and the postgres feature"
+ALG-405 = "PostgreSQL candle store"
+ALG-406 = "PostgreSQL run journal store"
+ALG-407 = "SQLite to PostgreSQL migration with verification"
+ALG-408 = "OCI container image"
+ALG-409 = "Compose file with PostgreSQL"
+ALG-411 = "CI against a PostgreSQL service, and the SQLite-only build"
+ALG-412 = "Multi-arch OCI validation and release preparation"
+ALG-488 = "Data sync and validate commands"
+ALG-491 = "Monitor commands"
+ALG-496 = "SQLite candle and journal stores"
+ALG-499 = "Binance credential flags and environment variables"
+ALG-506 = "Immutable content-addressed candle segments"
+ALG-508 = "HTTP history plane"
+ALG-509 = "Backtest job API"
+ALG-510 = "Process-per-job worker pool"
+ALG-511 = "Job results and downloads"
+ALG-512 = "Job logs and progress streaming"
+ALG-513 = "Remote backtests from the CLI"
+ALG-515 = "Python worker runtime"
+ALG-516 = "Reproducibility ledger and verified re-runs"
+ALG-517 = "Bundle execution threat model and hostile-payload suite"
+ALG-518 = "WebSocket live plane"
+ALG-519 = "Publish-after-persist fan-out"
+ALG-520 = "Remote market data source with catch-up"
+ALG-521 = "Dry-run trading on remote data, end to end"
+ALG-525 = "Container isolation for hosted workers"
+ALG-527 = "Python client: connection, auth and job primitives"
+ALG-528 = "Python bundle builder and submission"
+ALG-529 = "Python job handles, results and provenance"
+ALG-530 = "Parity of goldens, Python local and Python remote on both stores"
+ALG-532 = "Python runtime embedded in the binary"
+ALG-533 = "Python strategies in trade run and trade close"
+ALG-534 = "Removal of the Rust built-in strategies"
+ALG-535 = "Coordinated 0.3.0 release"
+ALG-683 = "Multi-exchange connector ports and registry"
+ALG-684 = "Exchange selection through the CLI, storage and protocol"
+ALG-685 = "Exchange conformance suite"
+ALG-686 = "Binance Spot symbol rules"
+ALG-687 = "Binance Spot REST hardening and rate-limit budget"
+ALG-688 = "Binance Spot kline stream with gap-fill"
+ALG-689 = "Binance Spot limit orders, time in force, cancel and replace"
+ALG-690 = "Unified Spot order lifecycle and journal"
+ALG-691 = "Binance Spot user-data stream"
+ALG-692 = "Spot reconciliation at start and reconnect"
+ALG-693 = "Bybit v5 client, signing, errors and environments"
+ALG-694 = "Bybit credentials"
+ALG-695 = "Bybit Spot instrument rules"
+ALG-696 = "Bybit Spot klines, sync and validate"
+ALG-697 = "Bybit Spot kline stream with gap-fill"
+ALG-698 = "Bybit Spot market and limit orders, time in force, cancel and status"
+ALG-699 = "Full CLI on the Bybit testnet"
+ALG-700 = "Bybit account balances and private streams"
+ALG-701 = "Bybit reconciliation through the shared reconciler"
+ALG-702 = "Conformance on both exchanges in CI"
+ALG-703 = "End-to-end release evidence on both exchanges and stores"
+ALG-711 = "Website claims checked against the matrix"
+ALG-719 = "Released-state website activation"
+ALG-728 = "PostgreSQL through the CLI and local execution"
+ALG-729 = "PostgreSQL in the server, jobs, workers and provenance"
+ALG-730 = "PostgreSQL concurrency, failures and restart recovery"
+ALG-731 = "Release gate for store parity across both exchanges"
+ALG-733 = "Typed futures instrument, account, position and execution ports"
+ALG-734 = "Identity migration and storage and protocol compatibility"
+ALG-735 = "Asset defaults, risk capital and per-asset policies"
+ALG-736 = "Decimal risk sizing for linear and inverse futures"
+ALG-737 = "Versioned TradingView payloads and alert templates"
+ALG-738 = "Signal inbox, execution ledger and event outbox"
+ALG-739 = "Bybit futures instruments, accounts and positions"
+ALG-740 = "Bybit futures leverage, entry and reduce-only close"
+ALG-741 = "Bybit native stop loss and liquidation"
+ALG-742 = "Futures conformance matrix for adapters and sizing"
+ALG-743 = "Authenticated webhook admission"
+ALG-744 = "Futures private-stream monitoring and REST reconciliation"
+ALG-745 = "Risk-sized entries through confirmed fills"
+ALG-746 = "Native stop verification and protective failure handling"
+ALG-747 = "Exit, stop-loss and manual-close races, with realized PnL"
+ALG-748 = "Crash recovery, liquidation warnings and safety faults"
+ALG-749 = "Telegram transport and notification outbox"
+ALG-750 = "CLI asset settings and automation profiles"
+ALG-751 = "Telegram message types"
+ALG-752 = "Automation start, status and graceful stop"
+ALG-753 = "Account and futures position status in the CLI"
+ALG-754 = "Deployment, alert setup and recovery drills"
+ALG-755 = "Final requirement and readiness gate"
+ALG-757 = "PostgreSQL segment store"
+ALG-758 = "Durable commits and bounded waits on both stores"
+ALG-759 = "Binance futures transport, routing and account profiles"
+ALG-760 = "Binance futures instruments, accounts, positions and leverage"
+ALG-761 = "Futures market data on both exchanges"
+ALG-762 = "Binance futures entry, queries and reduce-only close"
+ALG-763 = "Binance algo stop loss and liquidation"
+ALG-764 = "Binance futures private streams, reconciliation and accounting"
+ALG-765 = "Binance futures conformance gate"
+ALG-766 = "Spot amend and cancel-replace on both exchanges"
+ALG-767 = "Routing by persisted exchange, account and product profile"
+ALG-768 = "SQLite and PostgreSQL cutover, backup and recovery"
+ALG-769 = "Release block until every parity cell passes"
+
+# Units and number rules. Areas name the ones their values use.
+[units]
+price = "Decimal in the quote asset, on the instrument's tick"
+base_qty = "Decimal in the base asset, on the instrument's step (Spot and linear)"
+contracts = "Whole inverse contracts; face value F is the venue's (Binance contractSize, 100 or 10 USD; Bybit 1 USD)"
+quote_amount = "Decimal in the quote asset"
+money = "Decimal with its asset code; amounts in different assets are never summed"
+fee = "Decimal with the asset the venue charged it in"
+funding = "Decimal in the settlement asset: received is positive, paid negative"
+pnl = "Realized PnL in the settlement asset, net: gross minus fees plus funding"
+leverage = "Decimal multiplier, within the venue's bracket for the notional"
+percent = "Decimal percent: risk_percent 1 means 1 %"
+fraction = "Decimal fraction: taker_fee 0.0005 means 0.05 %"
+timestamp = "UTC epoch milliseconds"
+interval = "Interval token, such as 1m or 1d"
+hash = "sha256 followed by 64 lowercase hex digits"
+rounding = "Stops round to the tick away from the entry; quantities floor to the step; coin amounts round half-even to 12 places; returns round half-even to 8 places"
+exactness = "Decimals are exact text that keeps its scale; an amount the venue did not report stays unknown, never zero"
+
+# Error vocabularies. `exchange` is ExchangeErrorKind, `wire` is the protocol's
+# ErrorCode, `refusal` names every reason a request is refused before or
+# instead of reaching a venue.
+[errors]
+exchange = ["transport", "invalid_response", "invalid_request", "missing_credentials", "unauthorized", "clock_skew", "rate_limited", "unavailable", "outcome_unknown", "unknown_symbol", "unknown_order", "insufficient_balance", "rule_violation", "rejected", "other"]
+storage = ["unavailable", "outcome_unknown", "invalid_argument", "schema_unsupported", "other"]
+wire = ["invalid_request", "unauthorized", "not_found", "conflict", "unsupported_version", "limit_exceeded", "rate_limited", "unavailable", "internal"]
+refusal = ["no_capital_in_settlement_asset", "stop_wrong_side", "no_stop", "below_min_qty", "above_market_max", "below_min_notional", "above_leverage_bracket", "insufficient_margin", "settlement_wallet_below_risk", "stop_crossed", "risk_drift", "stale", "future_timestamp", "not_armed", "conflict", "pyramiding", "reversal", "unowned_position", "unresolved_entry", "incident_open", "hedge_mode", "portfolio_margin", "unsupported_account", "ambiguous_selection", "environment_mismatch", "unknown_ticker", "outside_universe"]
+
+# Normalized state machines. Spot orders use OrderStatus's names, jobs the
+# protocol's kinds; the futures machines extend ADR 0002 §1 with the terminal
+# states it implies.
+[states.spot_order]
+initial = "PENDING_NEW"
+states = ["PENDING_NEW", "NEW", "PARTIALLY_FILLED", "FILLED", "CANCELED", "REJECTED", "EXPIRED"]
+terminal = ["FILLED", "CANCELED", "REJECTED", "EXPIRED"]
+transitions = ["PENDING_NEW -> NEW", "PENDING_NEW -> PARTIALLY_FILLED", "PENDING_NEW -> FILLED", "PENDING_NEW -> CANCELED", "PENDING_NEW -> REJECTED", "PENDING_NEW -> EXPIRED", "NEW -> PARTIALLY_FILLED", "NEW -> FILLED", "NEW -> CANCELED", "NEW -> EXPIRED", "PARTIALLY_FILLED -> FILLED", "PARTIALLY_FILLED -> CANCELED", "PARTIALLY_FILLED -> EXPIRED"]
+
+[states.spot_replace]
+initial = "pending"
+states = ["pending", "accepted", "partially_applied", "rejected", "outcome_unknown"]
+terminal = ["accepted", "partially_applied", "rejected"]
+transitions = ["pending -> accepted", "pending -> partially_applied", "pending -> rejected", "pending -> outcome_unknown", "outcome_unknown -> accepted", "outcome_unknown -> partially_applied", "outcome_unknown -> rejected"]
+
+[states.job]
+initial = "queued"
+states = ["queued", "running", "succeeded", "failed", "cancelled"]
+terminal = ["succeeded", "failed", "cancelled"]
+transitions = ["queued -> running", "queued -> failed", "queued -> cancelled", "running -> succeeded", "running -> failed", "running -> cancelled"]
+
+[states.strategy_run]
+initial = "starting"
+states = ["starting", "running", "stopped", "failed"]
+terminal = ["stopped", "failed"]
+transitions = ["starting -> running", "starting -> stopped", "starting -> failed", "running -> stopped", "running -> failed"]
+
+[states.signal_intent]
+initial = "received"
+states = ["received", "admitted", "rejected", "duplicate", "noop", "expired", "submitting", "outcome_unknown", "not_placed", "partially_filled", "filled", "unfilled"]
+terminal = ["rejected", "duplicate", "noop", "expired", "not_placed", "filled", "unfilled"]
+transitions = ["received -> admitted", "received -> rejected", "received -> duplicate", "received -> noop", "admitted -> submitting", "admitted -> expired", "admitted -> rejected", "admitted -> noop", "submitting -> partially_filled", "submitting -> filled", "submitting -> unfilled", "submitting -> rejected", "submitting -> outcome_unknown", "outcome_unknown -> partially_filled", "outcome_unknown -> filled", "outcome_unknown -> unfilled", "outcome_unknown -> rejected", "outcome_unknown -> not_placed", "partially_filled -> filled"]
+
+[states.futures_position]
+initial = "protection_pending"
+states = ["protection_pending", "protected", "protected_by_operator", "protection_unknown", "unprotected", "unprotected_by_operator", "closing", "closed"]
+terminal = ["closed"]
+transitions = ["protection_pending -> protected", "protection_pending -> protected_by_operator", "protection_pending -> protection_unknown", "protection_pending -> unprotected", "protection_pending -> closing", "protection_pending -> closed", "protected -> protection_pending", "protected -> protected_by_operator", "protected -> protection_unknown", "protected -> unprotected", "protected -> unprotected_by_operator", "protected -> closing", "protected -> closed", "protected_by_operator -> protection_pending", "protected_by_operator -> protection_unknown", "protected_by_operator -> unprotected_by_operator", "protected_by_operator -> closing", "protected_by_operator -> closed", "protection_unknown -> protection_pending", "protection_unknown -> protected", "protection_unknown -> protected_by_operator", "protection_unknown -> unprotected", "protection_unknown -> unprotected_by_operator", "protection_unknown -> closing", "protection_unknown -> closed", "unprotected -> protection_pending", "unprotected -> protected", "unprotected -> closing", "unprotected -> closed", "unprotected_by_operator -> protected_by_operator", "unprotected_by_operator -> closing", "unprotected_by_operator -> closed", "closing -> protected", "closing -> protection_unknown", "closing -> unprotected", "closing -> closed"]
+
+[states.notification]
+initial = "pending"
+states = ["pending", "delivered", "outcome_unknown"]
+terminal = ["delivered", "outcome_unknown"]
+transitions = ["pending -> delivered", "pending -> outcome_unknown"]
+
+[states.incident]
+initial = "open"
+states = ["open", "cleared"]
+terminal = ["cleared"]
+transitions = ["open -> cleared"]
+
+[states.profile]
+initial = "disarmed"
+states = ["disarmed", "armed"]
+terminal = []
+transitions = ["disarmed -> armed", "armed -> disarmed"]
+
+[states.service]
+initial = "stopped"
+states = ["stopped", "starting", "running", "stopping"]
+terminal = []
+transitions = ["stopped -> starting", "starting -> running", "starting -> stopped", "running -> stopping", "stopping -> stopped"]
+
+[states.accounting]
+initial = "provisional"
+states = ["provisional", "final"]
+terminal = ["final"]
+transitions = ["provisional -> final"]
+
+# Frozen identity, account and signal choices. ADR 0002 decides them; ALG-733
+# and the adapter stories implement them.
+[policy]
+reference = "ADR 0002 §2, §4 and §5"
+environments = ["mainnet", "testnet", "demo"]
+profile_identity = ["id", "account_ref", "category", "owner_tag"]
+account_ref = ["venue", "environment", "venue_account_id"]
+position_mode = "one-way"
+margin_modes = ["isolated", "cross"]
+refused_modes = ["hedge", "portfolio_margin", "bybit_unified_1_0"]
+changes_account_settings = false
+rules = ["The environment is declared, never inferred from a URL, and every store is bound to one", "Outside mainnet a key fingerprint may stand in for the venue account ID; mainnet arming needs the venue's ID", "Leverage is set only while the position is flat with no open orders, then read back", "At most one armed profile per account and category", "One active store per account; client order IDs carry the store's activation epoch", "An ambiguous venue, account, environment or product selection is refused"]
+
+[policy.signals]
+reference = "ADR 0002 §8, §9 and §10"
+age_limit_default_s = 60
+age_limit_min_s = 5
+age_limit_max_s = 300
+future_allowance_s = 5
+drift_limit = "1.25"
+propagation_delay_s = 30
+settle_window_s = 60
+repair_attempts = 3
+protective_close_attempts = 3
+attempt_window_s = 10
+unprotected_alert_interval_s = 300
+operator_move_window_s = 30
+
+[policy.evidence]
+reference = "ADR 0001; ADR 0002 §13"
+environments = { "binance.spot" = ["testnet"], "binance.linear" = ["demo"], "binance.inverse" = ["demo"], "bybit" = ["demo", "testnet"] }
+postgres_versions = ["16", "18"]
+artifacts = "One passing record for every published file of an artifact, named by its digest"
+
+# The product universe, rule 1 (ADR 0002 §3). The list records what the rule
+# selected on its date; it is never an allowlist.
+[universe]
+rule_version = 1
+list = "universe-v1-2026-10-22.json"
+reference = "ADR 0002 §3"
+environments = { binance = ["mainnet", "demo"], bybit = ["mainnet", "testnet", "demo"] }
+
+[[universe.rule]]
+venue = "binance"
+family = "linear"
+match = "contractType PERPETUAL, marginAsset USDT, status TRADING"
+
+[[universe.rule]]
+venue = "binance"
+family = "inverse"
+match = "contractType PERPETUAL, contractStatus TRADING"
+
+[[universe.rule]]
+venue = "bybit"
+family = "linear"
+match = "contractType LinearPerpetual, settleCoin USDT, status Trading"
+
+[[universe.rule]]
+venue = "bybit"
+family = "inverse"
+match = "contractType InversePerpetual, status Trading"
+
+# Contracts for each area: what goes in and out, the states and errors it uses,
+# its units, data quality and persistence, and how parity is compared.
+[[area]]
+id = "config"
+title = "Configuration and routing"
+inputs = "Flags, then environment variables, then a persisted profile: venue, product family, environment, account, storage backend and its URL, and secrets by reference"
+outputs = "One resolved selection (venue, family, environment, account, store) that every later request and row carries"
+states = ["profile"]
+errors = ["refusal", "storage"]
+units = []
+quality = "Nothing is inferred: the environment is declared, never read from a URL; a missing, conflicting or ambiguous selection is refused before any network or storage access; secret values are never shown"
+persistence = "A store is bound to one environment for its life; profiles keep their identity and settings and refer to secrets without holding them"
+compare = "The same flags, precedence and refusals on every venue and store"
+
+[[area]]
+id = "strategy"
+title = "Candle strategies"
+inputs = "A strategy bundle or Python strategy, a Spot data series with its stored candles, and a backtest or trading configuration in Decimal"
+outputs = "Trades, equity and metrics, with provenance: code hash, data hashes and configuration"
+states = ["strategy_run", "job"]
+errors = ["exchange", "storage", "wire"]
+units = ["price", "base_qty", "quote_amount", "fee", "timestamp", "interval", "exactness"]
+quality = "Closed bars only; in a backtest a target set on bar N fills at bar N+1's open, with no clock, randomness or I/O; linear and inverse series are refused"
+persistence = "Runs, journals and job results live in the selected store and survive restarts"
+compare = "Byte-identical results across stores and between local and remote runs (the ALG-383 goldens); across venues a result depends only on that venue's frozen candles"
+
+[[area]]
+id = "jobs"
+title = "Server jobs"
+inputs = "A canonical bundle (bundle format 1) and a data selection"
+outputs = "Job status, logs, results and a provenance record"
+states = ["job"]
+errors = ["wire", "storage"]
+units = ["hash", "timestamp"]
+quality = "Workers never receive store credentials; a bundle is verified before it runs; results can be reproduced from their provenance"
+persistence = "Jobs and results live in the selected store; a restart neither loses nor repeats a finished job"
+compare = "Identical results and provenance on both stores"
+
+[[area]]
+id = "data"
+title = "Market data"
+inputs = "A data series key (venue, family, symbol, interval) and a time range"
+outputs = "Settled candles, validation issues, immutable segments with their hashes, history responses, live closed bars and current prices"
+states = []
+errors = ["exchange", "storage", "wire"]
+units = ["price", "base_qty", "contracts", "quote_amount", "timestamp", "interval", "hash", "exactness"]
+quality = "Only settled, closed bars are stored, ascending and without duplicates; gaps are reported, never filled with invented bars; inverse volume stays in contracts; mark-price series never mix with trade-price candles; a family is never inferred from a symbol"
+persistence = "Decimals keep their exact text; segments are append-only; syncing the same data again changes nothing"
+compare = "Identical bytes and segment hashes across stores; matched page shapes, gaps and duplicates across venues"
+
+[[area]]
+id = "spot"
+title = "Spot orders and accounts"
+inputs = "Symbol, side, base quantity or quote amount, limit price, time in force (GTC, IOC or FOK), client order ID, and replacement intents"
+outputs = "Normalized orders (venue ID as text, client ID, status, executed quantity and quote amount, fills with their fees), balances and trades"
+states = ["spot_order", "spot_replace", "strategy_run"]
+errors = ["exchange", "refusal", "storage"]
+units = ["price", "base_qty", "quote_amount", "fee", "timestamp", "exactness"]
+quality = "An acknowledgement is not a fill; an unknown outcome is queried before any retry; Spot never gains short positions, leverage or native futures protection"
+persistence = "The position change is persisted before its journal event; journal rows are identical on both stores; PnL is never fabricated"
+compare = "Identical journals across stores; matched order scenarios across venues"
+
+[[area]]
+id = "transport"
+title = "Transport and errors"
+inputs = "Requests to the hosts documented for the profile's environment"
+outputs = "A response, or one typed error per failure"
+states = []
+errors = ["exchange"]
+units = ["timestamp"]
+quality = "Each venue's rate budget is respected and stays explicit; every venue error maps to exactly one kind; a request that may have executed is outcome_unknown"
+persistence = "None"
+compare = "The same error kinds for matched failures on both venues"
+
+[[area]]
+id = "futures"
+title = "Futures adapters and the execution ledger"
+inputs = "Instrument, account and position identities, the policy snapshot, an account snapshot and admitted signals"
+outputs = "Instruments with their units; account and mode facts; positions with liquidation; leverage; sizing results; orders and fills; protection state; realized PnL"
+states = ["signal_intent", "futures_position", "incident", "accounting"]
+errors = ["exchange", "refusal", "storage"]
+units = ["price", "base_qty", "contracts", "money", "fee", "funding", "pnl", "leverage", "percent", "fraction", "timestamp", "rounding", "exactness"]
+quality = "Universe rule 1; rules come from the environment being traded; stops trigger on the mark price; liquidation is the venue's value or N/A with a reason, never an estimate; nothing is called protected or flat without the exchange's evidence"
+persistence = "Intents, fills, positions, protection and incidents live in the execution store; no transaction spans a network request; state survives a restart"
+compare = "Identical ledger rows across stores for identical frozen inputs; matched fixtures across venues give the same states, transitions and errors, never the same prices, fees or PnL"
+
+[[area]]
+id = "automation"
+title = "Automation service"
+inputs = "Authenticated TradingView deliveries, CLI commands and profile settings"
+outputs = "Inbox and outbox records, Telegram messages and CLI status"
+states = ["signal_intent", "notification", "profile", "service", "incident"]
+errors = ["refusal", "storage", "wire"]
+units = ["money", "pnl", "percent", "timestamp"]
+quality = "A 2xx answer means only that the inbox commit happened, within TradingView's 3 s; an acknowledgement is not a fill and a fill is not protection; secrets are held by reference"
+persistence = "Inbox, outbox and profiles are durable; a normal stop leaves positions and native stops in place"
+compare = "Identical records across stores; the same workflow on both venues"
+
+[[area]]
+id = "storage"
+title = "Storage backends"
+inputs = "The storage ports' operations"
+outputs = "The same results from SQLite and PostgreSQL"
+states = []
+errors = ["storage"]
+units = ["timestamp", "hash", "exactness"]
+quality = "Durable commits and bounded waits; never a hidden fallback to another backend"
+persistence = "Migrations never delete data; every earlier schema moves forward; transfers are verified"
+compare = "One shared conformance suite gives identical results on both backends"
+
+[[area]]
+id = "release"
+title = "Release artifacts"
+inputs = "Candidate binaries, wheels and OCI images, and the SQLite-only build"
+outputs = "Smoke results per surface, venue and backend, for every published file"
+states = []
+errors = []
+units = ["hash"]
+quality = "Full artifacts carry the postgres feature and both venues; a PostgreSQL deployment leaves no SQLite file; the Python SDK has no webhook or Telegram API"
+persistence = "None"
+compare = "Every published file of an artifact passes the same cells"
+
+# Capabilities. `axes` are the spanned axes; `only` narrows one for a domain
+# reason, never for missing work. A cell's owners are the union of every key
+# whose dot-separated parts are all among its values, plus `all`.
+
+[[capability]]
+id = "config.select"
+area = "config"
+title = "Select the venue, family, environment, account and store"
+axes = ["venue", "backend", "family"]
+passes = "Selecting each cell by flag, by environment variable and by profile reaches that venue, family and store, with the flag winning; a missing, conflicting or ambiguous selection is refused before any network or storage access"
+requires = ["replay", "real_store"]
+revised = 1
+requirements = ["OBS-R008"]
+implementation = { all = ["ALG-401", "ALG-750"], binance = ["ALG-684"], "binance.linear" = ["ALG-759"], "binance.inverse" = ["ALG-759"], bybit = ["ALG-693", "ALG-694"], linear = ["ALG-767"], inverse = ["ALG-767"] }
+evidence = { all = ["ALG-769"], spot = ["ALG-702"], linear = ["ALG-742"], inverse = ["ALG-742"] }
+
+[[capability]]
+id = "config.secrets"
+area = "config"
+title = "Hold credentials and tokens by reference, redacted"
+axes = ["venue", "backend"]
+passes = "Credentials and tokens resolve only from flags, environment variables or a profile's secret reference; no value appears in output, logs, the database, notifications or workers, and every one shown is redacted"
+requires = ["replay", "real_store", "artifact"]
+revised = 1
+requirements = ["OBS-R072", "D23"]
+implementation = { all = ["ALG-750", "ALG-754"], binance = ["ALG-499", "ALG-759"], bybit = ["ALG-694"] }
+evidence = { all = ["ALG-754"] }
+
+[[capability]]
+id = "config.environment"
+area = "config"
+title = "Bind each store to one environment"
+axes = ["backend"]
+passes = "A store records its environment once; a connector or profile for another environment is refused before any write, and a store from an older release is declared by its operator, never guessed"
+requires = ["real_store"]
+revised = 1
+implementation = { all = ["ALG-734"] }
+evidence = { all = ["ALG-748"] }
+
+[[capability]]
+id = "config.storage"
+area = "config"
+title = "Select the storage backend on every surface"
+axes = ["surface", "backend"]
+passes = "Selecting SQLite or PostgreSQL by flag or environment variable on each surface reaches that backend, and the other backend is never touched"
+requires = ["real_store"]
+revised = 1
+implementation = { all = ["ALG-401"], cli = ["ALG-728"], server = ["ALG-729"], python = ["ALG-382"] }
+evidence = { all = ["ALG-411", "ALG-530"] }
+
+[[capability]]
+id = "futures.routing"
+area = "config"
+title = "Route every request by its persisted profile"
+axes = ["venue", "backend", "family"]
+only = { family = ["linear", "inverse"] }
+reason = "Profiles route the futures automation; Spot keeps the global selection (ADR 0002 §2)"
+passes = "Every request and row carries the profile's venue, environment, account and family; same-named symbols on another venue, family or profile never reach the wrong account, and an ambiguous route is refused"
+requires = ["replay", "real_store"]
+revised = 1
+requirements = ["OBS-R008", "D05", "P-001"]
+implementation = { all = ["ALG-767"], binance = ["ALG-759"], bybit = ["ALG-693"] }
+evidence = { all = ["ALG-742", "ALG-748"] }
+
+[[capability]]
+id = "transport.rate_budget"
+area = "transport"
+title = "Stay within each venue's rate budget"
+axes = ["venue", "family"]
+passes = "Requests stay within the venue's documented budget for the product; a 429, 418 or 10006 answer backs off and is reported as rate_limited, never retried blindly"
+requires = ["replay", "live"]
+revised = 1
+implementation = { "binance.spot" = ["ALG-687"], "binance.linear" = ["ALG-759"], "binance.inverse" = ["ALG-759"], bybit = ["ALG-693"] }
+evidence = { spot = ["ALG-702"], linear = ["ALG-742"], inverse = ["ALG-742"] }
+
+[[capability]]
+id = "errors.taxonomy"
+area = "transport"
+title = "Map every venue error to one kind"
+axes = ["venue", "family"]
+passes = "Every venue error in the shared error fixtures maps to exactly one exchange error kind, and an error after which the request may have executed maps to outcome_unknown"
+requires = ["replay"]
+revised = 1
+implementation = { "binance.spot" = ["ALG-685"], "binance.linear" = ["ALG-759"], "binance.inverse" = ["ALG-759"], bybit = ["ALG-693"] }
+evidence = { spot = ["ALG-702"], linear = ["ALG-742"], inverse = ["ALG-742"] }
+
+[[capability]]
+id = "strategy.backtest_local"
+area = "strategy"
+title = "Backtest a strategy locally"
+axes = ["surface", "venue", "backend", "family"]
+only = { surface = ["cli", "python"], family = ["spot"] }
+reason = "Local backtests run from the CLI and from Python; candle strategies take Spot series only (ADR 0002 §1)"
+passes = "The frozen SMA-cross goldens reproduce byte for byte from candles stored for the venue in each store, from the CLI and from Python"
+requires = ["replay", "real_store"]
+revised = 1
+implementation = { cli = ["ALG-375", "ALG-532", "ALG-534"], python = ["ALG-376", "ALG-377", "ALG-378", "ALG-379", "ALG-380", "ALG-381"], postgres = ["ALG-728"] }
+evidence = { all = ["ALG-383", "ALG-530"] }
+
+[[capability]]
+id = "strategy.backtest_remote"
+area = "strategy"
+title = "Backtest a strategy as a server job"
+axes = ["surface", "venue", "backend", "family"]
+only = { surface = ["cli", "python"], family = ["spot"] }
+reason = "Remote backtests are submitted from the CLI and from Python; candle strategies take Spot series only (ADR 0002 §1)"
+passes = "The same bundle submitted from the CLI and from Python returns results identical to the local run and the goldens, with provenance naming the code and data hashes"
+requires = ["replay", "real_store"]
+revised = 1
+implementation = { all = ["ALG-509", "ALG-510", "ALG-511", "ALG-512", "ALG-515", "ALG-516"], cli = ["ALG-513"], python = ["ALG-527", "ALG-528", "ALG-529"], postgres = ["ALG-729"] }
+evidence = { all = ["ALG-530", "ALG-703"] }
+
+[[capability]]
+id = "strategy.trade_run"
+area = "strategy"
+title = "Trade a Spot strategy in dry-run and live mode"
+axes = ["surface", "venue", "backend", "family"]
+only = { surface = ["cli"], family = ["spot"] }
+reason = "trade run and trade close are CLI commands; candle strategies trade Spot only (ADR 0002 §1)"
+passes = "A Python strategy runs and closes a Spot position in dry-run and in live mode on the venue's test environment, with the same journal on both stores"
+requires = ["replay", "live", "real_store"]
+revised = 1
+implementation = { all = ["ALG-388", "ALG-533"], bybit = ["ALG-699"], postgres = ["ALG-728"] }
+evidence = { all = ["ALG-703"] }
+
+[[capability]]
+id = "strategy.python_reader"
+area = "strategy"
+title = "Read stored candles from Python"
+axes = ["venue", "backend", "family"]
+only = { family = ["spot"] }
+reason = "The Python SDK serves candle strategies, which take Spot series only (ADR 0002 §1)"
+passes = "Python reads the same candles, decimals and timestamps from both stores as the Rust store returns"
+requires = ["real_store"]
+revised = 1
+implementation = { all = ["ALG-381", "ALG-382"] }
+evidence = { all = ["ALG-530"] }
+
+[[capability]]
+id = "strategy.refuses_futures"
+area = "strategy"
+title = "Refuse a futures series for a candle strategy"
+axes = ["surface", "family"]
+only = { family = ["linear", "inverse"] }
+reason = "The refusal is the requirement: candle strategies take Spot series only, and no futures research engine is added (ADR 0002 §1)"
+refusal = true
+passes = "A candle strategy given a linear or inverse series is refused with a typed error before it runs, on every surface"
+requires = ["replay"]
+revised = 1
+implementation = { all = ["ALG-734"], cli = ["ALG-532"], python = ["ALG-379"], server = ["ALG-509"] }
+evidence = { all = ["ALG-703"] }
+
+[[capability]]
+id = "jobs.lifecycle"
+area = "jobs"
+title = "Submit, follow and cancel jobs"
+axes = ["surface", "backend"]
+only = { surface = ["cli", "python"] }
+reason = "Jobs are submitted from the CLI and from Python; the server runs them"
+passes = "A job is submitted, queued, run, cancelled and reported through the job states, from the CLI and from Python, on both stores"
+requires = ["real_store"]
+revised = 1
+implementation = { all = ["ALG-509", "ALG-510", "ALG-512"], cli = ["ALG-513"], python = ["ALG-527", "ALG-528", "ALG-529"], postgres = ["ALG-729"] }
+evidence = { all = ["ALG-530", "ALG-703"] }
+
+[[capability]]
+id = "jobs.results"
+area = "jobs"
+title = "Fetch job results and provenance"
+axes = ["surface", "backend"]
+only = { surface = ["cli", "python"] }
+reason = "Results are fetched from the CLI and from Python"
+passes = "Results, logs and provenance download intact, and a re-run from the provenance gives identical results"
+requires = ["real_store"]
+revised = 1
+implementation = { all = ["ALG-511", "ALG-516"], python = ["ALG-529"], postgres = ["ALG-729"] }
+evidence = { all = ["ALG-530"] }
+
+[[capability]]
+id = "jobs.isolation"
+area = "jobs"
+title = "Isolate workers from credentials and each other"
+axes = ["backend"]
+passes = "Workers run within their limits, without store credentials or access to the store; the hostile-payload suite passes"
+requires = ["real_store"]
+revised = 1
+implementation = { all = ["ALG-510", "ALG-517", "ALG-525"], postgres = ["ALG-729"] }
+evidence = { all = ["ALG-517"] }
+
+[[capability]]
+id = "jobs.recovery"
+area = "jobs"
+title = "Keep jobs through a server restart"
+axes = ["backend"]
+passes = "A server restart neither loses nor repeats a queued, running or finished job"
+requires = ["real_store"]
+revised = 1
+implementation = { all = ["ALG-509", "ALG-510"], postgres = ["ALG-729"] }
+evidence = { all = ["ALG-703"], postgres = ["ALG-730"] }
+
+[[capability]]
+id = "data.instruments"
+area = "data"
+title = "Read instrument rules from venue metadata"
+axes = ["venue", "family"]
+passes = "Instrument rules (tick, step, minimums, maximums, face value and status) come from the traded environment's metadata and normalize to the shared rules"
+requires = ["replay", "live"]
+revised = 1
+requirements = ["OBS-R002"]
+implementation = { "binance.spot" = ["ALG-686"], "bybit.spot" = ["ALG-695"], "binance.linear" = ["ALG-760"], "binance.inverse" = ["ALG-760"], "bybit.linear" = ["ALG-739"], "bybit.inverse" = ["ALG-739"], linear = ["ALG-761"], inverse = ["ALG-761"] }
+evidence = { spot = ["ALG-702"], linear = ["ALG-742"], inverse = ["ALG-742"] }
+flags = { spot = ["market_data.symbol_rules"] }
+
+[[capability]]
+id = "data.sync"
+area = "data"
+title = "Sync settled candles into the store"
+axes = ["venue", "backend", "family"]
+passes = "Syncing a range stores exactly the settled candles of the matched fixture, handling gaps, duplicates and page edges; a repeat sync changes nothing"
+requires = ["replay", "live", "real_store"]
+revised = 1
+implementation = { "binance.spot" = ["ALG-687"], "bybit.spot" = ["ALG-696"], linear = ["ALG-761"], inverse = ["ALG-761"], postgres = ["ALG-405", "ALG-728"] }
+evidence = { spot = ["ALG-702"], linear = ["ALG-742"], inverse = ["ALG-742"], postgres = ["ALG-411"] }
+flags = { spot = ["market_data.server_time"] }
+
+[[capability]]
+id = "data.validate"
+area = "data"
+title = "Validate stored candles"
+axes = ["venue", "backend", "family"]
+passes = "Validation reports the fixture's seeded gaps, duplicates and invalid candles, and nothing else"
+requires = ["replay", "real_store"]
+revised = 1
+implementation = { "binance.spot" = ["ALG-488"], "bybit.spot" = ["ALG-696"], linear = ["ALG-761"], inverse = ["ALG-761"], postgres = ["ALG-405", "ALG-728"] }
+evidence = { spot = ["ALG-702"], linear = ["ALG-742"], inverse = ["ALG-742"], postgres = ["ALG-411"] }
+
+[[capability]]
+id = "data.segments"
+area = "data"
+title = "Build immutable segments"
+axes = ["venue", "backend", "family"]
+passes = "Segments built from the same stored candles have identical bytes and hashes, and a refresh after a backfill rebuilds only the changed windows"
+requires = ["replay", "real_store"]
+revised = 1
+implementation = { all = ["ALG-734"], sqlite = ["ALG-506"], postgres = ["ALG-757"], linear = ["ALG-761"], inverse = ["ALG-761"] }
+evidence = { all = ["ALG-402", "ALG-411"] }
+
+[[capability]]
+id = "data.history"
+area = "data"
+title = "Serve history over HTTP"
+axes = ["venue", "backend", "family"]
+passes = "History requests return the stored candles, and segments by hash, identically from both stores"
+requires = ["real_store"]
+revised = 1
+implementation = { all = ["ALG-508"], postgres = ["ALG-729"], linear = ["ALG-761"], inverse = ["ALG-761"] }
+evidence = { all = ["ALG-703"], postgres = ["ALG-411"] }
+
+[[capability]]
+id = "data.live"
+area = "data"
+title = "Stream closed bars"
+axes = ["venue", "backend", "family"]
+passes = "Closed bars arrive once each and in order, with gaps filled from REST after a reconnect, both locally and through the live plane"
+requires = ["replay", "live", "real_store"]
+revised = 1
+implementation = { all = ["ALG-518", "ALG-519", "ALG-520", "ALG-521"], "binance.spot" = ["ALG-688"], "bybit.spot" = ["ALG-697"], linear = ["ALG-761"], inverse = ["ALG-761"] }
+evidence = { all = ["ALG-521", "ALG-703"], linear = ["ALG-742"], inverse = ["ALG-742"] }
+flags = { spot = ["streams.klines"] }
+
+[[capability]]
+id = "data.prices"
+area = "data"
+title = "Read current mark and book prices"
+axes = ["venue", "family"]
+only = { family = ["linear", "inverse"] }
+reason = "Mark and book prices feed futures monitoring and submission checks (ADR 0002 §9)"
+passes = "The mark and best bid and ask used by monitoring and submission checks come fresh from the venue with their source and time; a price that cannot be fetched fresh refuses the entry"
+requires = ["replay", "live"]
+revised = 1
+requirements = ["OBS-R042"]
+implementation = { all = ["ALG-761"], binance = ["ALG-760"], bybit = ["ALG-739"] }
+evidence = { all = ["ALG-742"] }
+
+[[capability]]
+id = "data.backend_identity"
+area = "data"
+title = "Store identical data identically"
+axes = ["venue", "family"]
+passes = "Identical frozen candles give byte-identical candle rows, segments and hashes in SQLite and PostgreSQL"
+requires = ["real_store"]
+revised = 1
+implementation = { all = ["ALG-402", "ALG-757"] }
+evidence = { all = ["ALG-411"] }
+
+[[capability]]
+id = "spot.order.market"
+area = "spot"
+title = "Market orders by base quantity or quote amount"
+axes = ["venue", "family"]
+only = { family = ["spot"] }
+reason = "Spot order types; futures entries are futures.entry (ADR 0002 §13)"
+passes = "Market orders by base quantity and by quote amount pass the shared scenarios (full fill, partial fill, rejection) with the normalized states and fills"
+requires = ["replay", "live"]
+revised = 1
+implementation = { binance = ["ALG-689"], bybit = ["ALG-698"] }
+evidence = { all = ["ALG-702"] }
+flags = { all = ["orders.market_by_base_quantity", "orders.market_by_quote_quantity", "orders.client_order_ids"] }
+
+[[capability]]
+id = "spot.order.limit"
+area = "spot"
+title = "Limit orders"
+axes = ["venue", "family"]
+only = { family = ["spot"] }
+reason = "Spot order types; futures enter at market (ADR 0002 §13)"
+passes = "Limit orders rest, fill partially, fill and are rejected with the normalized states and fills"
+requires = ["replay", "live"]
+revised = 1
+implementation = { binance = ["ALG-689"], bybit = ["ALG-698"] }
+evidence = { all = ["ALG-702"] }
+flags = { all = ["orders.client_order_ids"] }
+
+[[capability]]
+id = "spot.order.time_in_force"
+area = "spot"
+title = "Time in force: GTC, IOC and FOK"
+axes = ["venue", "family"]
+only = { family = ["spot"] }
+reason = "Spot order types (ADR 0002 §13)"
+passes = "GTC orders rest, IOC orders cancel what does not fill at once, and FOK orders fill completely or not at all"
+requires = ["replay", "live"]
+revised = 1
+implementation = { binance = ["ALG-689"], bybit = ["ALG-698"] }
+evidence = { all = ["ALG-702"] }
+
+[[capability]]
+id = "spot.order.cancel"
+area = "spot"
+title = "Cancel an order"
+axes = ["venue", "family"]
+only = { family = ["spot"] }
+reason = "Spot orders; futures closes are futures.exit (ADR 0002 §13)"
+passes = "Cancelling by venue ID and by client ID ends a resting order as CANCELED and keeps any fill"
+requires = ["replay", "live"]
+revised = 1
+implementation = { binance = ["ALG-689"], bybit = ["ALG-698"] }
+evidence = { all = ["ALG-702"] }
+
+[[capability]]
+id = "spot.order.replace"
+area = "spot"
+title = "Change a resting limit order"
+axes = ["venue", "family"]
+only = { family = ["spot"] }
+reason = "Spot orders (ADR 0002 §13)"
+passes = "Changing a resting limit order's price or quantity gives the normalized replace states, including partial application and fills during the change; an Unsupported answer fails"
+requires = ["replay", "live"]
+revised = 1
+implementation = { all = ["ALG-766"], binance = ["ALG-689"] }
+evidence = { all = ["ALG-702"] }
+
+[[capability]]
+id = "spot.order.query"
+area = "spot"
+title = "Query orders"
+axes = ["venue", "family"]
+only = { family = ["spot"] }
+reason = "Spot orders (ADR 0002 §13)"
+passes = "Querying by venue ID and by client ID, and listing open orders, return the normalized order"
+requires = ["replay", "live"]
+revised = 1
+implementation = { binance = ["ALG-689"], bybit = ["ALG-698"] }
+evidence = { all = ["ALG-702"] }
+
+[[capability]]
+id = "spot.account"
+area = "spot"
+title = "Balances and trades"
+axes = ["venue", "family"]
+only = { family = ["spot"] }
+reason = "Spot accounts (ADR 0002 §13)"
+passes = "Balances and trades return normalized amounts in their own assets; what the venue does not report stays unknown"
+requires = ["replay", "live"]
+revised = 1
+implementation = { binance = ["ALG-683"], bybit = ["ALG-700"] }
+evidence = { all = ["ALG-702"] }
+
+[[capability]]
+id = "spot.user_stream"
+area = "spot"
+title = "Private order and balance events"
+axes = ["venue", "family"]
+only = { family = ["spot"] }
+reason = "Spot accounts; futures events are futures.monitoring (ADR 0002 §13)"
+passes = "Execution reports and balance updates arrive from the private stream and agree with order queries"
+requires = ["replay", "live"]
+revised = 1
+implementation = { binance = ["ALG-691"], bybit = ["ALG-700"] }
+evidence = { all = ["ALG-702"] }
+flags = { all = ["streams.user_data"] }
+
+[[capability]]
+id = "spot.journal"
+area = "spot"
+title = "Journal every order event"
+axes = ["venue", "backend", "family"]
+only = { family = ["spot"] }
+reason = "The Spot run journal; futures use the execution ledger (ADR 0002 §15)"
+passes = "Every order event is journaled before and after its request, identically in both stores, and a failed journal write never loses an executed fill"
+requires = ["replay", "real_store"]
+revised = 1
+implementation = { all = ["ALG-690", "ALG-738"], postgres = ["ALG-406"] }
+evidence = { all = ["ALG-402", "ALG-703"] }
+
+[[capability]]
+id = "spot.reconciliation"
+area = "spot"
+title = "Reconcile the journal with the venue"
+axes = ["venue", "backend", "family"]
+only = { family = ["spot"] }
+reason = "Spot runs; futures recovery is futures.crash_recovery (ADR 0002 §11)"
+passes = "At start and after a reconnect the journal matches the venue, and any drift is reported before trading resumes"
+requires = ["replay", "real_store"]
+revised = 1
+implementation = { binance = ["ALG-692"], bybit = ["ALG-701"], postgres = ["ALG-728"] }
+evidence = { all = ["ALG-703"] }
+
+[[capability]]
+id = "spot.operator_cli"
+area = "spot"
+title = "Operate Spot runs from the CLI"
+axes = ["venue", "backend", "family"]
+only = { family = ["spot"] }
+reason = "The monitor and trade close commands serve Spot runs; futures status is automation.status_cli"
+passes = "The monitor commands and trade close work on the venue and both stores, behind their confirmation gates and without fabricated PnL"
+requires = ["replay", "live", "real_store"]
+revised = 1
+implementation = { binance = ["ALG-491"], bybit = ["ALG-699"], postgres = ["ALG-728"] }
+evidence = { all = ["ALG-703"], bybit = ["ALG-699"] }
+
+[[capability]]
+id = "futures.universe"
+area = "futures"
+title = "Select the futures universe by rule 1"
+axes = ["venue", "family"]
+only = { family = ["linear", "inverse"] }
+reason = "Futures semantics never reach Spot (ADR 0002 §13)"
+passes = "Rule 1 selects the venue's trading perpetuals from its metadata, and everything else is refused with a reason (SC-1)"
+requires = ["replay", "live"]
+revised = 1
+requirements = ["OBS-R002", "D01"]
+implementation = { all = ["ALG-733"], binance = ["ALG-760"], bybit = ["ALG-739"] }
+evidence = { all = ["ALG-742"], binance = ["ALG-765"] }
+
+[[capability]]
+id = "futures.account_checks"
+area = "futures"
+title = "Check the account type, position mode and margin mode"
+axes = ["venue", "family"]
+only = { family = ["linear", "inverse"] }
+reason = "Futures semantics never reach Spot (ADR 0002 §13)"
+passes = "Hedge mode, portfolio margin and unsupported account types are refused with an actionable message; one-way mode with isolated or cross margin passes; no account setting is changed"
+requires = ["replay", "live"]
+revised = 1
+requirements = ["D05", "D15"]
+implementation = { all = ["ALG-767"], binance = ["ALG-759", "ALG-760"], bybit = ["ALG-739", "ALG-740"] }
+evidence = { all = ["ALG-742"], binance = ["ALG-765"] }
+
+[[capability]]
+id = "futures.leverage"
+area = "futures"
+title = "Set and read back leverage"
+axes = ["venue", "family"]
+only = { family = ["linear", "inverse"] }
+reason = "Spot has no leverage (ADR 0002 §13)"
+passes = "Leverage is set only while flat with no open orders, read back, and refused outside the venue's bracket for the notional"
+requires = ["replay", "live"]
+revised = 1
+requirements = ["OBS-R035", "D15"]
+implementation = { binance = ["ALG-760"], bybit = ["ALG-740"] }
+evidence = { all = ["ALG-742"], binance = ["ALG-765"] }
+
+[[capability]]
+id = "futures.position"
+area = "futures"
+title = "Read positions with their liquidation price"
+axes = ["venue", "family", "side"]
+only = { family = ["linear", "inverse"] }
+reason = "Spot has no short side or liquidation (ADR 0002 §13)"
+passes = "Positions normalize to side, size, entry, mark, margin, leverage and liquidation (the venue's value, or N/A with a reason) on both sides"
+requires = ["replay", "live"]
+revised = 1
+requirements = ["OBS-R039", "OBS-R040", "D17"]
+implementation = { binance = ["ALG-760", "ALG-763"], bybit = ["ALG-739", "ALG-741"] }
+evidence = { all = ["ALG-742"], binance = ["ALG-765"] }
+
+[[capability]]
+id = "futures.sizing"
+area = "futures"
+title = "Size an entry from risk"
+axes = ["venue", "family", "side"]
+only = { family = ["linear", "inverse"] }
+reason = "Risk sizing serves futures entries (ADR 0002 §6)"
+passes = "Every case in sizing-cases.json reproduces exactly, every refusal included"
+requires = ["replay"]
+revised = 1
+requirements = ["OBS-R009", "OBS-R017", "OBS-R018", "OBS-R019", "OBS-R020", "OBS-R021", "OBS-R022", "OBS-R023", "OBS-R024", "OBS-R025", "OBS-R026", "OBS-R027", "OBS-R028", "D04", "D07", "D10", "D13", "D14"]
+implementation = { all = ["ALG-735", "ALG-736"] }
+evidence = { all = ["ALG-742"] }
+
+[[capability]]
+id = "futures.entry"
+area = "futures"
+title = "Enter at market through confirmed fill states"
+axes = ["venue", "backend", "family", "side"]
+only = { family = ["linear", "inverse"] }
+reason = "Futures semantics never reach Spot (ADR 0002 §13)"
+passes = "An admitted entry reaches a confirmed fill or a typed refusal through the intent states; a duplicate, a pyramid or a reversal never adds exposure"
+requires = ["replay", "live", "real_store"]
+revised = 1
+requirements = ["OBS-R003", "OBS-R007", "OBS-R010", "OBS-R011", "OBS-R019", "D06", "D09"]
+implementation = { all = ["ALG-738", "ALG-745"], binance = ["ALG-762"], bybit = ["ALG-740"] }
+evidence = { all = ["ALG-742"], binance = ["ALG-765"] }
+
+[[capability]]
+id = "futures.unknown_outcome"
+area = "futures"
+title = "Settle unknown entry outcomes"
+axes = ["venue", "backend", "family"]
+only = { family = ["linear", "inverse"] }
+reason = "Futures semantics never reach Spot (ADR 0002 §13)"
+passes = "An entry with an unknown outcome is never resubmitted; not found settles it only after 30 s with the position flat, and at 60 s an unsettled entry raises the incident (ADR 0002 §9)"
+requires = ["replay", "real_store"]
+revised = 1
+requirements = ["D09"]
+implementation = { all = ["ALG-745"], binance = ["ALG-762"], bybit = ["ALG-740"] }
+evidence = { all = ["ALG-748"] }
+
+[[capability]]
+id = "futures.native_stop"
+area = "futures"
+title = "Hold an exchange-native stop on every position"
+axes = ["venue", "backend", "family", "side"]
+only = { family = ["linear", "inverse"] }
+reason = "Spot gains no native futures protection (ADR 0002 §13)"
+passes = "A full-position mark-price stop is placed after the first fill, read back before the position counts as protected, and replaced without leaving the position bare"
+requires = ["replay", "live", "real_store"]
+revised = 1
+requirements = ["OBS-R003", "OBS-R043", "OBS-R044", "OBS-R045", "D10"]
+implementation = { all = ["ALG-746"], binance = ["ALG-763"], bybit = ["ALG-741"] }
+evidence = { all = ["ALG-742"], binance = ["ALG-765"] }
+
+[[capability]]
+id = "futures.protection_failure"
+area = "futures"
+title = "Respond to a failed stop"
+axes = ["venue", "backend", "family", "side"]
+only = { family = ["linear", "inverse"] }
+reason = "Spot gains no native futures protection (ADR 0002 §13)"
+passes = "A failed stop goes through three repairs in 10 s, then an incident, a halt and a reduce-only close, then alerts and retries until the position is protected or flat (ADR 0002 §8)"
+requires = ["replay", "real_store"]
+revised = 1
+requirements = ["OBS-R046", "D19"]
+implementation = { all = ["ALG-746"] }
+evidence = { all = ["ALG-748"] }
+
+[[capability]]
+id = "futures.exit"
+area = "futures"
+title = "Close on an exit signal"
+axes = ["venue", "backend", "family", "side"]
+only = { family = ["linear", "inverse"] }
+reason = "Futures semantics never reach Spot (ADR 0002 §13)"
+passes = "An exit closes only an owned cycle of its side entered strictly earlier, with a reduce-only market close that never opens or reverses exposure; a duplicate exit is a no-op"
+requires = ["replay", "live", "real_store"]
+revised = 1
+requirements = ["OBS-R003", "OBS-R012", "OBS-R013", "OBS-R014", "OBS-R015", "D11"]
+implementation = { all = ["ALG-747"], binance = ["ALG-762"], bybit = ["ALG-740"] }
+evidence = { all = ["ALG-742"], binance = ["ALG-765"] }
+
+[[capability]]
+id = "futures.monitoring"
+area = "futures"
+title = "Monitor positions, orders and stops"
+axes = ["venue", "backend", "family", "side"]
+only = { family = ["linear", "inverse"] }
+reason = "Futures semantics never reach Spot (ADR 0002 §13)"
+passes = "Private events and REST snapshots keep positions, orders, stops and liquidation current, and a stale or unreconciled stream halts entries"
+requires = ["replay", "live", "real_store"]
+revised = 1
+requirements = ["OBS-R003", "OBS-R042", "OBS-R047", "OBS-R048", "OBS-R050", "OBS-R053", "OBS-R054", "OBS-R055", "OBS-R056", "D18"]
+implementation = { all = ["ALG-744"], binance = ["ALG-764"], bybit = ["ALG-700"] }
+evidence = { all = ["ALG-748"], binance = ["ALG-765"] }
+
+[[capability]]
+id = "futures.manual_changes"
+area = "futures"
+title = "Handle manual changes to owned positions"
+axes = ["venue", "backend", "family", "side"]
+only = { family = ["linear", "inverse"] }
+reason = "Futures semantics never reach Spot (ADR 0002 §13)"
+passes = "Manual additions, reductions, stop moves, stop removals and closes are detected and handled as ADR 0002 §10 decides"
+requires = ["replay", "live", "real_store"]
+revised = 1
+requirements = ["OBS-R049", "OBS-R051", "OBS-R052", "D05", "D20"]
+implementation = { all = ["ALG-744", "ALG-746"], binance = ["ALG-764"] }
+evidence = { all = ["ALG-748"] }
+
+[[capability]]
+id = "futures.accounting"
+area = "futures"
+title = "Record realized PnL with fees and funding"
+axes = ["venue", "backend", "family", "side"]
+only = { family = ["linear", "inverse"] }
+reason = "Futures semantics never reach Spot (ADR 0002 §13)"
+passes = "Each closed cycle records gross, fees, funding and net in the settlement asset, provisional and then final, from the venue's own records"
+requires = ["replay", "live", "real_store"]
+revised = 1
+requirements = ["OBS-R016", "D12"]
+implementation = { all = ["ALG-747"], binance = ["ALG-764"] }
+evidence = { all = ["ALG-742"] }
+
+[[capability]]
+id = "futures.crash_recovery"
+area = "futures"
+title = "Recover from crashes and reconnects"
+axes = ["venue", "backend", "family", "side"]
+only = { family = ["linear", "inverse"] }
+reason = "Futures semantics never reach Spot (ADR 0002 §13)"
+passes = "A restart at each intent, fill, protection and outbox boundary recovers without a second order and without losing protection"
+requires = ["replay", "real_store"]
+revised = 1
+requirements = ["OBS-R056", "OBS-R057"]
+implementation = { all = ["ALG-738", "ALG-744"], binance = ["ALG-764"] }
+evidence = { all = ["ALG-748"] }
+
+[[capability]]
+id = "futures.venue_equivalence"
+area = "futures"
+title = "Behave the same on both venues"
+axes = ["backend", "family", "side"]
+only = { family = ["linear", "inverse"] }
+reason = "Compares the venues' futures paths with each other (ADR 0002 §13)"
+passes = "Economically matched fixtures give the same normalized states, transitions, refusals and errors on both venues; prices, fees and PnL are not compared"
+requires = ["replay", "real_store"]
+revised = 1
+requirements = ["OBS-R001", "P-001"]
+implementation = { all = ["ALG-742"] }
+evidence = { all = ["ALG-742"] }
+
+[[capability]]
+id = "futures.backend_identity"
+area = "futures"
+title = "Keep identical ledgers on both stores"
+axes = ["venue", "family", "side"]
+only = { family = ["linear", "inverse"] }
+reason = "Compares the stores' futures ledgers with each other (ADR 0002 §13)"
+passes = "Identical frozen inputs give identical intents, fills, positions, protection rows and outbox records in SQLite and PostgreSQL"
+requires = ["real_store"]
+revised = 1
+requirements = ["P-001"]
+implementation = { all = ["ALG-738", "ALG-742"] }
+evidence = { all = ["ALG-742"] }
+
+[[capability]]
+id = "automation.admission"
+area = "automation"
+title = "Admit webhook deliveries durably"
+axes = ["venue", "backend", "family"]
+only = { family = ["linear", "inverse"] }
+reason = "External signals drive the futures automation (ADR 0002 §1)"
+passes = "An authenticated, valid delivery is committed to the inbox before a 2xx within 3 s; a duplicate gets the original outcome, and conflicting, stale or unauthenticated deliveries are refused and recorded"
+requires = ["replay", "real_store"]
+revised = 1
+requirements = ["OBS-R004", "OBS-R005", "OBS-R006", "OBS-R007", "OBS-R008", "OBS-R024", "D02", "D03", "D06", "D24"]
+implementation = { all = ["ALG-737", "ALG-738", "ALG-743", "ALG-758"] }
+evidence = { all = ["ALG-748"] }
+
+[[capability]]
+id = "automation.profiles"
+area = "automation"
+title = "Keep profiles, asset policies and capital"
+axes = ["venue", "backend", "family"]
+only = { family = ["linear", "inverse"] }
+reason = "Profiles configure the futures automation (ADR 0002 §2, §5)"
+passes = "Profiles, asset policies, defaults and capital persist, start disarmed, arm only with confirmation, and an edit never resizes or unprotects an open cycle"
+requires = ["replay", "real_store"]
+revised = 1
+requirements = ["OBS-R009", "OBS-R017", "OBS-R025", "OBS-R029", "OBS-R030", "OBS-R031", "OBS-R032", "OBS-R033", "OBS-R034", "OBS-R035", "OBS-R036", "OBS-R037", "OBS-R038", "D07", "D08", "D13"]
+implementation = { all = ["ALG-735", "ALG-750", "ALG-767"], binance = ["ALG-759"] }
+evidence = { all = ["ALG-748"] }
+
+[[capability]]
+id = "automation.status_cli"
+area = "automation"
+title = "Show account and position status"
+axes = ["venue", "backend", "family"]
+only = { family = ["linear", "inverse"] }
+reason = "The futures automation's status (ADR 0002 §12)"
+passes = "Status shows the running state, connections, balances per asset and the 11 position fields, all from verified state"
+requires = ["replay", "live", "real_store"]
+revised = 1
+requirements = ["OBS-R041", "OBS-R068", "OBS-R069"]
+implementation = { all = ["ALG-753"] }
+evidence = { all = ["ALG-754", "ALG-769"] }
+
+[[capability]]
+id = "automation.notifications"
+area = "automation"
+title = "Send Telegram messages from the outbox"
+axes = ["venue", "backend", "family", "side"]
+only = { family = ["linear", "inverse"] }
+reason = "The futures automation's messages (ADR 0002 §1, §12)"
+passes = "Each message type is sent from the outbox once its state is verified, never claiming an unconfirmed fill or protection"
+requires = ["replay", "real_store"]
+revised = 1
+requirements = ["OBS-R015", "OBS-R041", "OBS-R058", "OBS-R059", "OBS-R060", "OBS-R061", "OBS-R062", "OBS-R063", "OBS-R064", "OBS-R065", "D21"]
+implementation = { all = ["ALG-749", "ALG-751"] }
+evidence = { all = ["ALG-754", "ALG-769"] }
+
+[[capability]]
+id = "automation.lifecycle"
+area = "automation"
+title = "Start, report and stop the service"
+axes = ["venue", "backend", "family"]
+only = { family = ["linear", "inverse"] }
+reason = "The futures automation's service (ADR 0002 §1, §5)"
+passes = "Start, status and a graceful stop work from the CLI, and a normal stop leaves positions and native stops in place"
+requires = ["replay", "live", "real_store"]
+revised = 1
+requirements = ["OBS-R045", "OBS-R066", "OBS-R067", "OBS-R070", "OBS-R071", "D22"]
+implementation = { all = ["ALG-752"] }
+evidence = { all = ["ALG-754", "ALG-769"] }
+
+[[capability]]
+id = "automation.deployment"
+area = "automation"
+title = "Deploy and recover the service"
+axes = ["artifact", "backend"]
+only = { artifact = ["binary", "image"] }
+reason = "The service runs from the binary or the image; the wheel carries no service (ADR 0002 §14)"
+passes = "The documented deployment starts the service from the artifact with its store, secrets and webhook edge, and the recovery drill passes"
+requires = ["artifact", "real_store"]
+revised = 1
+requirements = ["D22"]
+implementation = { all = ["ALG-754"], image = ["ALG-409"] }
+evidence = { all = ["ALG-754"] }
+
+[[capability]]
+id = "storage.conformance"
+area = "storage"
+title = "Pass the shared storage conformance suite"
+axes = ["backend"]
+passes = "The shared conformance suite passes for the candle, journal, segment and execution stores"
+requires = ["real_store"]
+revised = 1
+implementation = { all = ["ALG-402"], sqlite = ["ALG-496", "ALG-738"], postgres = ["ALG-404", "ALG-405", "ALG-406", "ALG-738", "ALG-757"] }
+evidence = { all = ["ALG-411"] }
+
+[[capability]]
+id = "storage.durability"
+area = "storage"
+title = "Commit durably within bounded waits"
+axes = ["backend"]
+passes = "Commits are durable under the documented settings, and waits stay within the admission budget"
+requires = ["real_store"]
+revised = 1
+requirements = ["D16"]
+implementation = { all = ["ALG-758"] }
+evidence = { all = ["ALG-411", "ALG-748"] }
+
+[[capability]]
+id = "storage.migrations"
+area = "storage"
+title = "Migrate every earlier schema"
+axes = ["backend"]
+passes = "Every earlier schema (1 to 4 on SQLite) migrates to the current one without losing or changing data"
+requires = ["real_store"]
+revised = 1
+requirements = ["D16"]
+implementation = { sqlite = ["ALG-734"], postgres = ["ALG-404"] }
+evidence = { all = ["ALG-411", "ALG-768"] }
+
+[[capability]]
+id = "storage.transfer"
+area = "storage"
+title = "Transfer a store to the other backend"
+axes = ["backend"]
+passes = "A full transfer into this backend verifies counts, hashes, decimal scale and IDs, and backup and restore round-trip"
+requires = ["real_store"]
+revised = 1
+requirements = ["D16"]
+implementation = { all = ["ALG-768"], postgres = ["ALG-407"] }
+evidence = { all = ["ALG-754", "ALG-768"] }
+
+[[capability]]
+id = "release.artifact"
+area = "release"
+title = "Carry every promised venue and backend"
+axes = ["artifact", "surface", "venue", "backend"]
+passes = "The candidate artifact runs its surface's smoke scenarios with each venue on each backend it promises; a full artifact without the postgres feature fails"
+requires = ["artifact"]
+revised = 1
+implementation = { binary = ["ALG-535"], image = ["ALG-408", "ALG-412"], wheel = ["ALG-376", "ALG-387"], "sqlite-build" = ["ALG-404", "ALG-411"] }
+evidence = { all = ["ALG-769"], binary = ["ALG-703"], image = ["ALG-412"], wheel = ["ALG-384"], "sqlite-build" = ["ALG-411"] }
+
+[[capability]]
+id = "release.no_hidden_sqlite"
+area = "release"
+title = "Leave no SQLite state under PostgreSQL"
+axes = ["surface"]
+passes = "With PostgreSQL selected, no SQLite file is created, opened or read"
+requires = ["artifact"]
+revised = 1
+implementation = { all = ["ALG-401"], cli = ["ALG-728"], server = ["ALG-729"], python = ["ALG-382"] }
+evidence = { all = ["ALG-411", "ALG-769"] }
+
+[[capability]]
+id = "release.wheel_surface"
+area = "release"
+title = "Keep the Python SDK to candle strategies and jobs"
+axes = ["artifact"]
+only = { artifact = ["wheel"] }
+reason = "Only the wheel carries the Python SDK (ADR 0002 §14)"
+passes = "The wheel exposes the candle-strategy and job APIs, and no webhook or Telegram API"
+requires = ["artifact"]
+revised = 1
+implementation = { all = ["ALG-376", "ALG-387"] }
+evidence = { all = ["ALG-384"] }
+
+# Artifacts and what each promises. A cell of release.artifact takes its
+# surfaces and backends from here.
+[[artifact]]
+id = "binary"
+title = "The quantforge binary"
+surfaces = ["cli", "server"]
+backends = ["sqlite", "postgres"]
+published = true
+platforms = ["linux", "macos", "windows"]
+requirement = "Built with default features: the postgres feature is on and both venues are registered"
+
+[[artifact]]
+id = "image"
+title = "The OCI image"
+surfaces = ["server", "cli"]
+backends = ["sqlite", "postgres"]
+published = true
+platforms = ["linux/amd64", "linux/arm64"]
+requirement = "The binary with default features, running non-root, with its store and secrets supplied by the deployment"
+
+[[artifact]]
+id = "wheel"
+title = "The Python wheel"
+surfaces = ["python"]
+backends = ["sqlite", "postgres"]
+published = true
+platforms = ["linux", "macos", "windows"]
+requirement = "Local and remote Python workflows on both stores, with PostgreSQL pools held by the trusted host; no webhook or Telegram API"
+
+[[artifact]]
+id = "sqlite-build"
+title = "The SQLite-only build"
+surfaces = ["cli", "server"]
+backends = ["sqlite"]
+published = false
+platforms = []
+requirement = "Built with --no-default-features; supported separately and labelled as such, never published as a full artifact"
+
+# Values a venue genuinely does not provide, how each is represented, and the
+# source that says so.
+[[optional_value]]
+venue = "binance"
+field = "liquidationPrice"
+absent_when = "The position has no liquidation price; Binance reports 0"
+representation = "N/A with the reason; never estimated"
+source = "docs/futures-venues.md#stops-and-liquidation"
+
+[[optional_value]]
+venue = "bybit"
+field = "liqPrice"
+absent_when = "Portfolio margin, or outside the price limits; Bybit leaves it empty"
+representation = "N/A with the reason; never estimated"
+source = "docs/futures-venues.md#stops-and-liquidation"
+
+[[optional_value]]
+venue = "bybit"
+field = "kline trade count"
+absent_when = "Bybit's klines carry no trade count"
+representation = "Unknown: None in candles, and known = 0 in segments"
+source = "docs/segment-spec.md"
+
+[[optional_value]]
+venue = "bybit"
+field = "position stop client ID"
+absent_when = "Bybit's position stops carry no client ID"
+representation = "Identified by the position's stopLoss; ownership comes from the ledger"
+source = "docs/futures-venues.md#order-identity-and-retention"
+
+[[optional_value]]
+venue = "bybit"
+field = "position stop trigger basis"
+absent_when = "/v5/position/list reports the stop's price but not its trigger basis"
+representation = "Read from the order view, or ALG-741 uses a stop whose basis can be read; never assumed (unverified item 5)"
+source = "docs/futures-venues.md#unverified-items"
+
+[[optional_value]]
+venue = "bybit"
+field = "inverse face value"
+absent_when = "No instrument field carries it"
+representation = "F = 1 USD, from Bybit's documented rule"
+source = "docs/futures-venues.md#units"
+
+[[optional_value]]
+venue = "binance"
+field = "COIN-M minimum notional"
+absent_when = "COIN-M instruments have no minimum-notional filter"
+representation = "No notional check; the minimum quantity still applies"
+source = "docs/futures-venues.md#units"
+
+[[optional_value]]
+venue = "binance"
+field = "acknowledgement fills"
+absent_when = "Since 2026-06-30 Binance's futures acknowledgements carry no fills"
+representation = "Fills come from order queries, fill records or private events"
+source = "docs/futures-venues.md#order-identity-and-retention"
+
+[[optional_value]]
+venue = "binance"
+field = "futures account ID"
+absent_when = "A key may expose no stable account ID (unverified item 3)"
+representation = "Outside mainnet a key fingerprint stands in; mainnet arming is refused"
+source = "docs/adr/0002-automation-architecture.md"
+
+# Unverified venue items that block cells until they resolve
+# (docs/futures-venues.md#unverified-items).
+[[blocker]]
+item = 1
+capability = "futures.native_stop"
+cells = { venue = "binance", family = "inverse" }
+effect = "These cells cannot pass until ALG-763 proves COIN-M algo stops on demo; if it cannot, the release waits on Marko's decision"
+
+[[blocker]]
+item = 11
+capability = "futures.monitoring"
+cells = { venue = "binance" }
+effect = "These cells cannot pass until ALG-764 finds a working private-stream route on demo"
+
+# Decisions that change coverage. An exclusion records scope that never had
+# cells; a reduction removes cells and must list them.
+[[scope_change]]
+id = "SC-1"
+kind = "exclusion"
+date = "2026-10-22"
+decided_by = "Marko"
+summary = "Crypto perpetuals only: dated futures and TradFi perpetuals are refused, and both families stay required on both venues"
+reference = "ADR 0002 §3"
+removes = []
+
+[[scope_change]]
+id = "SC-2"
+kind = "exclusion"
+date = "2026-10-22"
+decided_by = "Marko"
+summary = "A profile owns only the positions it opened; there is no adoption in v0.3"
+reference = "ADR 0002 §10"
+removes = []

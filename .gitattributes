@@ -11,3 +11,6 @@ tests/conformance/fixtures/**/*.json text eol=lf
 docs/exchange-feature-matrix.md text eol=lf
 # The segment spec's worked example is decoded and hashed by its drift test.
 docs/segment-spec.md text eol=lf
+# The parity matrix and its generated ledger and view are read and compared
+# byte for byte by tests/parity.
+docs/parity/* text eol=lf
