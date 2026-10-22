@@ -169,7 +169,7 @@ fn the_evidence_check_refuses_skips_strangers_and_loose_records() {
         ("a short commit", valid.replace("0123456789abcdef0123456789abcdef01234567", "0123456")),
         ("no live environment", valid.replace(r#","environment":"demo""#, "")),
         ("a testnet Binance futures run", valid.replace(r#""demo""#, r#""testnet""#)),
-        ("a kind the capability does not require", valid.replace(r#""kind":"live","environment":"demo""#, r#""kind":"artifact","platform":"linux","digest":"sha256:x""#)),
+        ("a kind the capability does not require", valid.replace(r#""kind":"live","environment":"demo""#, r#""kind":"artifact","platform":"linux","digest":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855""#)),
         ("an unknown field", valid.replace(r#""date""#, r#""waiver":true,"date""#)),
         ("a failure without a note", artifact.replace(r#","note":"the smoke run found no PostgreSQL""#, "")),
         ("an artifact without a digest", artifact.replace(r#","digest":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855""#, "")),
