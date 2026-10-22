@@ -46,6 +46,15 @@ Counts from [`universe-2026-10-22.json`](../spikes/futures-contract/universe-202
 Every family has trading perpetuals on mainnet and on each venue's test
 environment, so no required family is missing.
 
+The parity matrix keeps a dated record of what rule 1 selected, symbol by
+symbol: [parity/universe-v1-2026-10-22.json](parity/universe-v1-2026-10-22.json),
+written by `universe.py --list` later the same day. Its counts differ slightly
+from the table above because listings change.
+
+**Symbols are Unicode text.** Binance lists USDⓈ-M perpetuals whose symbols are
+not ASCII, such as `币安人生USDT`: five on mainnet and four on demo on
+2026-10-22. Compare symbols by code point; never assume ASCII.
+
 **What mainnet refuses:**
 - **Binance USDⓈ-M:**
   - 225 TradFi perpetuals (`TRADIFI_PERPETUAL`: stocks, commodities, FX);

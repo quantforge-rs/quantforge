@@ -22,12 +22,14 @@ order. Requirements are paraphrased, not quoted.
   touches, and ALG-755 accepts it.
 - **Keep it in step with scope.** When a story's scope changes, update this page
   in the same change. Dropping a required venue, store, family or operation
-  needs Marko's explicit decision, recorded below.
+  needs Marko's explicit decision, recorded below and as a scope change in the
+  parity matrix.
 - **How it relates to the other matrices:**
   - [exchange-feature-matrix.md](exchange-feature-matrix.md) is generated from
     the Spot connector's declared capabilities and conformance checks.
-  - ALG-756's machine-readable matrix turns the rows here into testable venue ×
-    store × product × operation cells, with owners and evidence.
+  - The [parity matrix](parity/README.md) turns the rows here into testable
+    venue × store × product × operation cells, with owners and evidence. Every
+    ID below maps to at least one of its capabilities.
 - **The venue facts** these requirements depend on are in
   [futures-venues.md](futures-venues.md).
 
@@ -36,8 +38,8 @@ order. Requirements are paraphrased, not quoted.
 | Date | Decision | By |
 | --- | --- | --- |
 | 2026-10-21 | Parity: the same functions on Binance and Bybit, SQLite and PostgreSQL (P-001 below) | Marko |
-| 2026-10-22 | Crypto perpetuals only. Dated futures and TradFi perpetuals are refused, but both families stay required on both venues (ADR 0002 §3) | Marko |
-| 2026-10-22 | A profile owns only positions it opened; there is no adoption in v0.3 (ADR 0002 §10) | Marko |
+| 2026-10-22 | Crypto perpetuals only. Dated futures and TradFi perpetuals are refused, but both families stay required on both venues (ADR 0002 §3; parity scope change SC-1) | Marko |
+| 2026-10-22 | A profile owns only positions it opened; there is no adoption in v0.3 (ADR 0002 §10; parity scope change SC-2) | Marko |
 | 2026-10-22 | Stale entry alerts are refused by age and by price (ADR 0002 §9) | Marko |
 | 2026-10-22 | This matrix lives in the repository, citing the PRD by section and page | Marko |
 

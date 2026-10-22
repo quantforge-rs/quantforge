@@ -11,3 +11,5 @@
 .vscode
 # The spikes are standalone Cargo projects with their own target directories.
 /spikes/*/target/
+# Python bytecode from running the spikes.
+__pycache__/
