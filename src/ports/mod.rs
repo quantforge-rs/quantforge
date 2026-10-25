@@ -11,6 +11,15 @@
 //! The requests and responses crossing these traits are plain domain types
 //! from [`crate::model`]; nothing here names a concrete exchange. Callers
 //! obtain connectors from the registry in [`crate::exchange`].
+//!
+//! The futures contract's connector ports, split by what each may do, are
+//! in [`futures`]; [`Clock`] is the time source automation is given.
+
+pub mod futures;
+
+mod clock;
+
+pub use clock::{Clock, SystemClock};
 
 use async_trait::async_trait;
 use std::error::Error as StdError;

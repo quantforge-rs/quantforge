@@ -49,8 +49,11 @@ impl AppContext {
         // endpoint, as its registry entry names it.
         let base_url = match &cli.base_url {
             Some(raw) => Url::parse(raw).context("failed to parse --base-url")?,
-            None => Url::parse(exchange::default_base_url(cli.exchange))
-                .context("failed to parse the exchange's default base URL")?,
+            None => {
+                let default = exchange::default_base_url(cli.exchange)
+                    .context("the selected exchange has no adapter")?;
+                Url::parse(default).context("failed to parse the exchange's default base URL")?
+            }
         };
 
         let db_existed = cli.db.exists();
