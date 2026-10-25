@@ -101,7 +101,7 @@ pub(crate) async fn replay_check(
 
 /// The registry's own factory for `exchange`.
 pub(crate) fn registered_factory(exchange: ExchangeId) -> Factory {
-    std::sync::Arc::new(quantforge::exchange::factory(exchange))
+    std::sync::Arc::new(move |config| quantforge::exchange::connect(exchange, config))
 }
 
 fn replay_credentials() -> ApiCredentials {

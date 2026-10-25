@@ -18,16 +18,19 @@
 //! [`server`] answers other instances in that format, and so far uses
 //! nothing else.
 //!
-//! - [`model`] — market identity, the candle grid and its validation, the
-//!   columnar [`CandleBatch`], the candle segments a store hands out,
-//!   exchange orders and the exchange-agnostic requests behind them, bot-run
-//!   state, and the timestamp and decimal helpers, including the decimal ↔
-//!   float64 conversions.
+//! - [`model`] — market identity with its venues and product lines, the
+//!   candle grid and its validation, the columnar [`CandleBatch`], the
+//!   candle segments a store hands out, exchange orders and the
+//!   exchange-agnostic requests behind them, bot-run state, and the
+//!   timestamp and decimal helpers, including the decimal ↔ float64
+//!   conversions; execution identity, units and refusals; and the futures
+//!   contract of ADR 0002 in [`model::futures`].
 //! - [`ports`] — [`MarketDataConnector`], [`TradingConnector`] and
 //!   [`AccountConnector`] are what an exchange adapter provides, described by
 //!   [`ExchangeCapabilities`]; [`CandleStore`], [`RunJournalStore`] and
 //!   [`SegmentStore`] are what a persistence backend provides; plus their
-//!   error types.
+//!   error types. The futures connector ports, split by capability, are in
+//!   [`ports::futures`], and [`ports::Clock`] is the injected time source.
 //! - [`exchange`] — the connector registry, which names each exchange
 //!   ([`exchange::lookup`]) and builds its connectors
 //!   ([`exchange::connect`]), and one adapter namespace per exchange;
@@ -80,7 +83,7 @@
 //! paths are supported too, and are how the tree above is read —
 //! `quantforge::Candle` and `quantforge::model::Candle` are one type.
 //!
-//! A name is public here for one of six reasons:
+//! A name is public here for one of seven reasons:
 //!
 //! - the binary or the integration tests name it, and both consume this
 //!   crate externally, so `pub(crate)` is not available for it;
@@ -102,7 +105,12 @@
 //!   factory, not only the registered ones;
 //! - it is the wire protocol, published for clients and servers written
 //!   outside this repository: [`protocol`] is used through its module, and
-//!   in the crate only [`server`] names it.
+//!   in the crate only [`server`] names it;
+//! - it is the futures contract, published ahead of the adapters and the
+//!   automation that will implement and use it: [`model::futures`] and
+//!   [`ports::futures`] are used through their modules, and nothing in the
+//!   crate drives them yet. [`Venue`] and [`Category`] are re-exported here
+//!   because [`ExchangeId`]'s methods return them.
 //!
 //! Everything else is internal and moves without notice: the Binance wire
 //! DTOs, request signing and HTTP transport behind
@@ -133,11 +141,11 @@ pub mod storage;
 /// interchange, which no command uses yet.
 pub use model::{
     AccountTrade, AssetBalance, BotRunState, CancelOrderRequest, Candle, CandleBatch,
-    CandleColumns, ClosedTrade, ExchangeId, ExchangeOrder, ExecutionMode, Fill, Interval,
+    CandleColumns, Category, ClosedTrade, ExchangeId, ExchangeOrder, ExecutionMode, Fill, Interval,
     KlineRequest, MarketId, MarketOrderRequest, ModelError, OrderQueryRequest, OrderStatus,
     PositionState, RunStatus, SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh, SegmentTip,
     Side, Symbol, SymbolRules, TargetPosition, TimestampMs, ValidationIssue, ValidationReport,
-    decimal_from_f64, decimal_to_f64, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms,
+    Venue, decimal_from_f64, decimal_to_f64, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms,
     round_down_to_step, validate_candles,
 };
 
@@ -147,7 +155,9 @@ pub use model::{
 /// `SignedConnectors` pairs the two connectors that need credentials, and
 /// `ExchangeError` and `StorageError` are the two failure channels they
 /// report through, with `ExchangeErrorKind` classifying an exchange's
-/// failures in terms every exchange shares.
+/// failures in terms every exchange shares. A futures adapter implements
+/// the ports in `ports::futures` instead, and reports through the same
+/// `ExchangeError`.
 pub use ports::{
     AccountConnector, CandleQuery, CandleStore, ExchangeCapabilities, ExchangeConnector,
     ExchangeError, ExchangeErrorKind, MarketDataCapabilities, MarketDataConnector,
