@@ -129,7 +129,7 @@ All notable changes to this project will be documented in this file.
 - an executed order is always reflected in position state even when journaling the order event fails; the journaling failure is surfaced afterwards with reconciliation guidance
 - an unsellable dust remnant left after an exit or manual close is written off with a warning instead of wedging the run in a permanently open position
 - opening a database with a mismatched schema version fails with actionable guidance instead of proceeding silently
-- `BotRunState` gained a required `execution_mode` field, and the database holds the candle segment tables (schemas 3 and 4 of the chain above); a run QuantForge 0.2.0 wrote recorded no mode, so it stays as it is until `store adopt-run --execution-mode` states one, and `docs/upgrading.md` says how to replace the still-forming candle 0.2.0 stored at the end of each market
+- `BotRunState` gained a required `execution_mode` field, and the database holds the candle segment tables (schemas 3 and 4 of the chain above); a run QuantForge 0.2.0 wrote recorded no mode, so it stays as it is until `store adopt-run --execution-mode` states one, and `docs/upgrading.md` says which periods 0.2.0 stored forming candles in (every period a following sync covered, and the tail of a bounded sync whose end had not passed) and how to re-sync them
 - data sync summaries report the first synced candle, and bounded syncs warn when the exchange returned no candles for part of the requested window
 - startup logs the exchange and its effective base URL, and warns when the database file did not exist and was created empty
 - `ms_to_rfc3339` renders out-of-range timestamps as an explicit `invalid-ms(...)` marker instead of a plausible epoch date

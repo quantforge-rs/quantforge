@@ -81,20 +81,56 @@ environment and no account, so `trade run --run-id` and `trade close`
 refuse it until an operator adopts it; `store status` lists these runs. An
 adoption gives the run the store's environment and, for a live run, the
 account behind the credentials in hand, which must reach that environment.
-A run 0.2.0 wrote also recorded no execution mode; state it:
+
+`store status` shows each legacy run's mode. A run a development build
+wrote shows `dry_run` or `live`, and `--execution-mode` is refused for it,
+since its mode is already recorded. A run 0.2.0 wrote shows `unrecorded`,
+and its adoption states the mode with `--execution-mode`.
+
+A dry run needs no credentials and takes the store's environment only:
 
 ```bash
+# A dry run that recorded its mode
 quantforge --db data/market.sqlite store adopt-run --run-id qf-... --yes
-quantforge --db data/market.sqlite store adopt-run --run-id qf-... --execution-mode live --yes
+# A dry run 0.2.0 wrote, which recorded none
+quantforge --db data/market.sqlite store adopt-run --run-id qf-... \
+  --execution-mode dry-run --yes
+```
+
+A live run is adopted by the account that will close or resume it, so the
+credentials must be in hand and the base URL must reach the environment the
+store is bound to; without `--base-url` the default is the production
+endpoint, and the command is refused before any request. The example is a
+live run 0.2.0 wrote; for a live run that recorded its mode, leave out
+`--execution-mode live`:
+
+```bash
+export QF_API_KEY="$(cat ~/.config/quantforge/testnet-api-key)"
+export QF_API_SECRET="$(cat ~/.config/quantforge/testnet-api-secret)"
+quantforge --db data/market.sqlite --base-url https://testnet.binance.vision/ \
+  store adopt-run --run-id qf-... --execution-mode live --yes
 ```
 
 A run nobody adopts stays as it was: readable, listed, never resumed. New
 runs start under the store's environment without any of this.
 
-**From 0.2.0, replace the last candle of each market.** 0.2.0 stored the
-candle still forming at the end of each sync pass, and never fetched it
-again. A bounded sync over the last window writes the settled candle over
-it:
+**From 0.2.0, re-sync every period that holds a forming candle.** 0.2.0
+stored the candle still forming at the end of each sync pass and resumed
+after it, so it never fetched that candle again. Two kinds of period are
+affected, for each market:
+
+- **Every period a following sync covered** (`--follow`, or no `--end`). It
+  kept a snapshot of nearly every candle, taken seconds after the candle
+  opened.
+- **The tail of every bounded sync whose `--end` had not yet passed when it
+  ran**, even where no following sync covered it. It stored settled candles
+  except its last one. Re-sync that tail once its last candle has settled.
+
+Re-sync each period with `--start` and `--end` that span it: the sync writes
+the settled candles over the snapshots in place, marks their windows for the
+next segment refresh, and `data validate` checks the result. For example,
+one day of `1m` candles, which is an example window and not the whole
+repair:
 
 ```bash
 quantforge --db data/market.sqlite data sync --symbol BTCUSDT --interval 1m \
