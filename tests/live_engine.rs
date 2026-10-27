@@ -801,3 +801,39 @@ async fn live_mode_refuses_an_identity_without_an_account_before_any_venue_call(
         "nothing was recorded"
     );
 }
+
+// The same guard on the resume path: a live run the store accepted with no
+// account (a store keeps whatever identity it is given) is never driven by
+// an invocation that carries none either, so any key could not take over
+// its open position. The persisted state stays as it was.
+#[tokio::test]
+async fn live_mode_refuses_to_resume_a_run_under_an_identity_without_an_account() {
+    let (anchor, warmup, poll_bar) = timeline(Decimal::from(9_000));
+    let tempdir = tempdir().expect("tempdir");
+    let store = seeded_store(&tempdir, &warmup);
+    let cfg = LiveTradeConfig {
+        identity: RunIdentity::recorded(None, None),
+        ..engine_config(ExecutionMode::Live, "run-live-resume-no-account")
+    };
+    let seeded = seeded_open_run_state(&cfg, anchor);
+    store
+        .create_run(&seeded, &RunIdentity::recorded(None, None))
+        .expect("seed state");
+    let source = ScriptedMarketData::new(vec![Vec::new(), vec![poll_bar]]);
+    let venue = RefusingVenue;
+    let engine = LiveTradeEngine::new(&source, &store, &store, Some(signed(&venue)));
+
+    let error = engine.run(&cfg).await.expect_err("no account");
+    assert!(matches!(error, EngineError::InvalidConfig(_)), "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains("carries none; refusing to start or resume"),
+        "got {error}"
+    );
+    let state = store
+        .load_run_state("run-live-resume-no-account")
+        .expect("load")
+        .expect("state");
+    assert_eq!(state, seeded, "the persisted run is untouched");
+}
