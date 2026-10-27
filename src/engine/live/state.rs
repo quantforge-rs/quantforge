@@ -3,7 +3,9 @@
 
 use super::{LiveTradeConfig, LiveTradeEngine};
 use crate::EngineError;
-use crate::{BotRunState, PositionState, RunIdentity, RunStatus, TargetPosition, now_utc_ms};
+use crate::{
+    BotRunState, ExecutionMode, PositionState, RunIdentity, RunStatus, TargetPosition, now_utc_ms,
+};
 use uuid::Uuid;
 
 impl<'a> LiveTradeEngine<'a> {
@@ -11,6 +13,7 @@ impl<'a> LiveTradeEngine<'a> {
         &self,
         cfg: &LiveTradeConfig,
     ) -> Result<BotRunState, EngineError> {
+        require_account_for_live(cfg)?;
         if let Some(run_id) = &cfg.run_id {
             if let Some(existing) = self.journal_store.load_run_state(run_id)? {
                 apply_resume_checks(&existing, cfg)?;
@@ -47,6 +50,20 @@ impl<'a> LiveTradeEngine<'a> {
         self.journal_store.create_run(&state, &cfg.identity)?;
         Ok(state)
     }
+}
+
+/// A live run is recorded with the account behind its credentials, so that
+/// only that key resumes or closes it; an identity without one would let any
+/// key do so. A dry run has no account, and keeps none.
+fn require_account_for_live(cfg: &LiveTradeConfig) -> Result<(), EngineError> {
+    if cfg.execution_mode == ExecutionMode::Live && cfg.identity.account.is_none() {
+        return Err(EngineError::InvalidConfig(
+            "a live run records the account behind its credentials, but this identity \
+             carries none; refusing to start or resume it"
+                .to_string(),
+        ));
+    }
+    Ok(())
 }
 
 /// A run is driven only under the identity that recorded it: a legacy run
@@ -129,8 +146,8 @@ pub(super) fn current_target(position: &PositionState) -> TargetPosition {
 mod tests {
     use super::*;
     use crate::{
-        BuiltInStrategyConfig, Environment, ExchangeId, ExecutionMode, Interval, MarketId, Symbol,
-        VenueOrderId,
+        BuiltInStrategyConfig, Environment, ExchangeId, ExecutionMode, Interval, KeyFingerprint,
+        MarketId, Symbol, VenueAccountId, VenueOrderId,
     };
     use rust_decimal::Decimal;
     use std::str::FromStr;
@@ -264,5 +281,27 @@ mod tests {
             "got {error}"
         );
         assert!(apply_identity_check("run-1", &current, &current).is_ok());
+    }
+
+    #[test]
+    fn a_live_run_needs_an_account_in_its_identity_and_a_dry_run_none() {
+        let live = config(ExecutionMode::Live);
+        let error = require_account_for_live(&live).expect_err("no account");
+        assert!(matches!(error, EngineError::InvalidConfig(_)));
+        assert!(
+            error
+                .to_string()
+                .contains("carries none; refusing to start or resume"),
+            "got {error}"
+        );
+        let with_account = LiveTradeConfig {
+            identity: RunIdentity::recorded(
+                None,
+                Some(VenueAccountId::KeyFingerprint(KeyFingerprint::of("key"))),
+            ),
+            ..live
+        };
+        assert!(require_account_for_live(&with_account).is_ok());
+        assert!(require_account_for_live(&config(ExecutionMode::DryRun)).is_ok());
     }
 }

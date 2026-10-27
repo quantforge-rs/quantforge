@@ -7,10 +7,11 @@ use quantforge::{
     AccountConnector, AccountTrade, AssetBalance, BotRunState, BuiltInStrategyConfig,
     CancelOrderRequest, Candle, CandleStore, ClosedTrade, EngineError, ExchangeCapabilities,
     ExchangeConnector, ExchangeError, ExchangeId, ExchangeOrder, ExecutionMode, Interval,
-    KlineRequest, LiveTradeConfig, LiveTradeEngine, LiveTradeSummary, MarketDataConnector,
-    MarketId, MarketOrderRequest, OrderQueryRequest, OrderStatus, PositionState, RunIdentity,
-    RunJournalStore, RunStatus, Side, SignedConnectors, SqliteStore, StorageError, Symbol,
-    SymbolRules, TimestampMs, TradingConnector, VenueOrderId, now_utc_ms,
+    KeyFingerprint, KlineRequest, LiveTradeConfig, LiveTradeEngine, LiveTradeSummary,
+    MarketDataConnector, MarketId, MarketOrderRequest, OrderQueryRequest, OrderStatus,
+    PositionState, RunIdentity, RunJournalStore, RunStatus, Side, SignedConnectors, SqliteStore,
+    StorageError, Symbol, SymbolRules, TimestampMs, TradingConnector, VenueAccountId, VenueOrderId,
+    now_utc_ms,
 };
 use rust_decimal::Decimal;
 use std::collections::VecDeque;
@@ -378,7 +379,17 @@ fn engine_config(execution_mode: ExecutionMode, run_id: &str) -> LiveTradeConfig
         // close vs the previous close, and equal closes emit nothing.
         strategy: BuiltInStrategyConfig::SmaCross { fast: 1, slow: 2 },
         execution_mode,
-        identity: RunIdentity::recorded(None, None),
+        // A live run carries the account behind its credentials; a dry run
+        // has none.
+        identity: RunIdentity::recorded(
+            None,
+            match execution_mode {
+                ExecutionMode::Live => Some(VenueAccountId::KeyFingerprint(KeyFingerprint::of(
+                    "test-key",
+                ))),
+                ExecutionMode::DryRun => None,
+            },
+        ),
         quote_order_qty: Decimal::from(100),
         poll_interval: Duration::from_millis(1),
         bootstrap_bars: 10,
@@ -756,5 +767,37 @@ async fn dry_run_entry_persists_the_position_before_surfacing_a_journal_failure(
             .as_deref()
             .expect("last error")
             .contains("journaling the order event failed")
+    );
+}
+
+// The engine's own guard, not just the CLI's: a live configuration whose
+// identity carries no account is refused before the venue is asked anything,
+// since any key could otherwise resume the run it would record.
+#[tokio::test]
+async fn live_mode_refuses_an_identity_without_an_account_before_any_venue_call() {
+    let (_anchor, warmup, poll_bar) = timeline(Decimal::from(9_000));
+    let tempdir = tempdir().expect("tempdir");
+    let store = seeded_store(&tempdir, &warmup);
+    let source = ScriptedMarketData::new(vec![Vec::new(), vec![poll_bar]]);
+    let venue = RefusingVenue;
+    let engine = LiveTradeEngine::new(&source, &store, &store, Some(signed(&venue)));
+    let cfg = LiveTradeConfig {
+        identity: RunIdentity::recorded(None, None),
+        ..engine_config(ExecutionMode::Live, "run-live-no-account")
+    };
+    let error = engine.run(&cfg).await.expect_err("no account");
+    assert!(matches!(error, EngineError::InvalidConfig(_)), "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains("carries none; refusing to start or resume"),
+        "got {error}"
+    );
+    assert!(
+        store
+            .load_run_state("run-live-no-account")
+            .expect("load")
+            .is_none(),
+        "nothing was recorded"
     );
 }
