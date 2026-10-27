@@ -39,8 +39,11 @@
 //! - A price, quantity, or amount is an [`ExactDecimal`]: a JSON string,
 //!   never a number.
 //! - Stored content is named by its [`ContentHash`].
-//! - A market is three strings, each in its one canonical form. `exchange` is
+//! - A market is four strings, each in its one canonical form. `exchange` is
 //!   the name QuantForge registers the exchange under, such as `binance`.
+//!   `category` is the product family it sells the symbol in: `spot`,
+//!   `linear` or `inverse`; the two together name the product line, and a
+//!   candle strategy's market is always `spot`.
 //!   `symbol` is the exchange's symbol in uppercase, such as `BTCUSDT`.
 //!   `interval` is one of QuantForge's bar intervals, whatever the exchange
 //!   calls them: `1s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`,

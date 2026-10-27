@@ -8,6 +8,7 @@ Commands:
   trade     Run or manually close the strategy bot
   monitor   Observe exchange state and manage orders manually when needed
   serve     Run the server other QuantForge instances connect to
+  store     The database's own record: its environment, identity, and legacy runs
   help      Print this message or the help of the given subcommand(s)
 
 Options:

@@ -141,12 +141,14 @@ pub mod storage;
 /// interchange, which no command uses yet.
 pub use model::{
     AccountTrade, AssetBalance, BotRunState, CancelOrderRequest, Candle, CandleBatch,
-    CandleColumns, Category, ClosedTrade, ExchangeId, ExchangeOrder, ExecutionMode, Fill, Interval,
-    KlineRequest, MarketId, MarketOrderRequest, ModelError, OrderQueryRequest, OrderStatus,
-    PositionState, RunStatus, SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh, SegmentTip,
-    Side, Symbol, SymbolRules, TargetPosition, TimestampMs, ValidationIssue, ValidationReport,
-    Venue, decimal_from_f64, decimal_to_f64, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms,
-    round_down_to_step, validate_candles,
+    CandleColumns, Category, ClosedTrade, Environment, ExchangeId, ExchangeOrder, ExecutionMode,
+    Fill, IdentitySource, Interval, KeyFingerprint, KlineRequest, LegacyRun, MarketId,
+    MarketOrderRequest, ModelError, OrderQueryRequest, OrderStatus, PositionState, RunIdentity,
+    RunStatus, SchemaMigration, SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh, SegmentTip,
+    Side, StoreActivation, StoreId, StoreIdentity, Symbol, SymbolRules, TargetPosition,
+    TimestampMs, ValidationIssue, ValidationReport, Venue, VenueAccountId, VenueOrderId,
+    VenueTradeId, decimal_from_f64, decimal_to_f64, describe_account, describe_environment,
+    ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms, round_down_to_step, validate_candles,
 };
 
 /// The seams. An out-of-tree exchange or storage backend implements these
@@ -161,7 +163,7 @@ pub use model::{
 pub use ports::{
     AccountConnector, CandleQuery, CandleStore, ExchangeCapabilities, ExchangeConnector,
     ExchangeError, ExchangeErrorKind, MarketDataCapabilities, MarketDataConnector,
-    OrderCapabilities, RunJournalStore, SegmentStore, SignedConnectors, StorageError,
+    OrderCapabilities, RunJournalStore, SegmentStore, SignedConnectors, StorageError, StoreControl,
     StreamCapabilities, TradingConnector,
 };
 

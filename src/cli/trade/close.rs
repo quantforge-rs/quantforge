@@ -72,6 +72,15 @@ pub(crate) async fn handle_trade_close(ctx: &AppContext, args: TradeCloseArgs) -
             run_state.run_id
         );
     }
+    // The run is sold only under the identity that recorded it: a legacy run,
+    // or one recorded in another environment or under another API key, is
+    // never closed with whatever credentials are in hand.
+    let recorded = store
+        .run_identity(&run_state.run_id)?
+        .ok_or_else(|| anyhow!("run {} has no identity record", run_state.run_id))?;
+    recorded
+        .matches(&ctx.run_identity(ExecutionMode::Live))
+        .map_err(|err| anyhow!("run {}: {err}; refusing to close it", run_state.run_id))?;
 
     let rules = ctx
         .exchange
@@ -197,8 +206,8 @@ pub(crate) async fn handle_trade_close(ctx: &AppContext, args: TradeCloseArgs) -
             exit_price,
             qty: closed_qty,
             gross_quote_pnl: (exit_price - entry_price) * closed_qty,
-            entry_order_id: position_before.entry_order_id,
-            exit_order_id: order.order_id,
+            entry_order_id: position_before.entry_order_id.clone(),
+            exit_order_id: order.order_id.clone(),
         };
         store.append_closed_trade(&run_state.run_id, &trade)?;
     } else {

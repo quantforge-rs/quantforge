@@ -156,6 +156,20 @@ impl ExchangeId {
         self.parts().1
     }
 
+    /// The line stored under `name`, the inverse of [`as_str`](Self::as_str):
+    /// how a storage column is read back. It is not the serde channel, which
+    /// reads the token only.
+    pub fn from_storage_name(name: &str) -> Option<Self> {
+        Venue::ALL
+            .iter()
+            .flat_map(|&venue| {
+                Category::ALL
+                    .iter()
+                    .map(move |&category| Self::from_parts(venue, category))
+            })
+            .find(|line| line.as_str() == name)
+    }
+
     /// The line that sells `category` on `venue`.
     pub const fn from_parts(venue: Venue, category: Category) -> Self {
         match (venue, category) {
@@ -328,6 +342,7 @@ mod tests {
             assert_eq!(exchange.category(), category, "{exchange:?}");
             assert_eq!(exchange.as_str(), storage, "{exchange:?}");
             assert_eq!(exchange.to_string(), storage, "{exchange:?}");
+            assert_eq!(ExchangeId::from_storage_name(storage), Some(exchange));
             let json = serde_json::to_string(&exchange).expect("serialize exchange");
             assert_eq!(json, format!("\"{token}\""), "{exchange:?}");
             // The two channels never read each other.

@@ -26,7 +26,7 @@ pub const SEGMENT_FORMAT: u32 = 1;
 /// ```
 /// use quantforge::protocol::segments::{SEGMENT_FORMAT, SegmentIndex};
 ///
-/// let json = r#"{"segments":[{"hash":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","format":1,"exchange":"binance","symbol":"BTCUSDT","interval":"1m","range":{"first_open_ms":1792454400000,"last_open_ms":1792540740000,"bar_count":1440},"size_bytes":48213}]}"#;
+/// let json = r#"{"segments":[{"hash":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","format":1,"exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m","range":{"first_open_ms":1792454400000,"last_open_ms":1792540740000,"bar_count":1440},"size_bytes":48213}]}"#;
 /// let index: SegmentIndex = serde_json::from_str(json)?;
 /// assert_eq!(index.segments[0].format, SEGMENT_FORMAT);
 /// assert_eq!(index.segments[0].range.bar_count, 1440);
@@ -51,6 +51,9 @@ pub struct SegmentEntry {
     pub format: u32,
     /// The exchange, by the name QuantForge registers it under.
     pub exchange: String,
+    /// The product family: `spot`, `linear` or `inverse`. With `exchange` it
+    /// names the product line.
+    pub category: String,
     /// The exchange's symbol, in uppercase.
     pub symbol: String,
     /// The bar interval, such as `1m`.
@@ -86,6 +89,7 @@ mod tests {
             hash: EMPTY.parse().expect("hash"),
             format: SEGMENT_FORMAT,
             exchange: "binance".to_string(),
+            category: "spot".to_string(),
             symbol: "BTCUSDT".to_string(),
             interval: "1h".to_string(),
             range: SegmentRange {
@@ -103,7 +107,7 @@ mod tests {
             segments: vec![entry()],
         };
         let json = format!(
-            r#"{{"segments":[{{"hash":"{EMPTY}","format":1,"exchange":"binance","symbol":"BTCUSDT","interval":"1h","range":{{"first_open_ms":1792454400000,"last_open_ms":1792537200000,"bar_count":23}},"size_bytes":1204}}]}}"#
+            r#"{{"segments":[{{"hash":"{EMPTY}","format":1,"exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1h","range":{{"first_open_ms":1792454400000,"last_open_ms":1792537200000,"bar_count":23}},"size_bytes":1204}}]}}"#
         );
         assert_eq!(serde_json::to_string(&index).expect("serialize"), json);
         assert_eq!(
@@ -127,7 +131,7 @@ mod tests {
     #[test]
     fn fields_this_build_does_not_know_are_ignored() {
         let json = format!(
-            r#"{{"hash":"{EMPTY}","format":1,"exchange":"binance","symbol":"BTCUSDT","interval":"1h","range":{{"first_open_ms":1792454400000,"last_open_ms":1792537200000,"bar_count":23,"gaps":1}},"size_bytes":1204,"codec":"zstd"}}"#
+            r#"{{"hash":"{EMPTY}","format":1,"exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1h","range":{{"first_open_ms":1792454400000,"last_open_ms":1792537200000,"bar_count":23,"gaps":1}},"size_bytes":1204,"codec":"zstd"}}"#
         );
         assert_eq!(
             serde_json::from_str::<SegmentEntry>(&json).expect("entry"),

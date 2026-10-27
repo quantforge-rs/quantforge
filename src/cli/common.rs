@@ -116,6 +116,11 @@ pub(crate) fn round_quantity_for_rules(qty: Decimal, rules: &quantforge::SymbolR
     }
 }
 
+/// The venue's ID as text, or `n/a` where it reported none.
+pub(crate) fn venue_id(id: Option<&quantforge::VenueOrderId>) -> &str {
+    id.map_or("n/a", |id| id.as_str())
+}
+
 pub(crate) fn print_order(order: &quantforge::ExchangeOrder) {
     let display_decimal = |value: Option<Decimal>| {
         value
@@ -123,8 +128,8 @@ pub(crate) fn print_order(order: &quantforge::ExchangeOrder) {
             .unwrap_or_else(|| "n/a".to_string())
     };
     println!(
-        "order: id={:?} client_id={:?} symbol={} side={} status={} executed_qty={} cumulative_quote_qty={} avg_price={}",
-        order.order_id,
+        "order: id={} client_id={:?} symbol={} side={} status={} executed_qty={} cumulative_quote_qty={} avg_price={}",
+        venue_id(order.order_id.as_ref()),
         order.client_order_id,
         order.symbol,
         order.side,

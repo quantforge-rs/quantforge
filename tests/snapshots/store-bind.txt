@@ -1,0 +1,16 @@
+Bind the store to the environment its connectors reach, once and for life
+
+Usage: quantforge store bind [OPTIONS] --environment <ENVIRONMENT>
+
+Options:
+      --db <DB>                    SQLite database path [env: QF_DB=] [default: data/market.sqlite]
+      --environment <ENVIRONMENT>  [possible values: mainnet, testnet, demo]
+      --exchange <EXCHANGE>        Exchange to connect to [env: QF_EXCHANGE=] [default: binance] [possible values: binance]
+      --yes                        
+      --base-url <BASE_URL>        Exchange API base URL; omitted, the exchange's production endpoint [env: QF_BASE_URL=]
+      --log-level <LOG_LEVEL>      Log filter (trace, debug, info, warn, error or a full tracing filter expression) [env: QF_LOG=] [default: info]
+  -h, --help                       Print help
+
+Exchange credentials:
+      --api-key <API_KEY>        API key for the exchange's signed endpoints (monitor, trade close, trade run --mode live); prefer QF_API_KEY: command-line values can land in shell history and process listings [env: QF_API_KEY]
+      --api-secret <API_SECRET>  API secret paired with --api-key; prefer QF_API_SECRET: command-line values can land in shell history and process listings [env: QF_API_SECRET]

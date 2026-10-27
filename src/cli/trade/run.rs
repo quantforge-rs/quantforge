@@ -92,6 +92,12 @@ pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Re
                 "live trading against a PRODUCTION endpoint; real funds at risk"
             );
         }
+        if ctx.identity.environment.is_none() {
+            warn!(
+                "the store is not bound to an environment, so this run records none; bind \
+                 it with `quantforge store bind --environment <mainnet|testnet|demo> --yes`"
+            );
+        }
     }
 
     let engine = LiveTradeEngine::new(
@@ -110,6 +116,7 @@ pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Re
             market,
             strategy: strategy_config(args.fast, args.slow),
             execution_mode: args.mode.into(),
+            identity: ctx.run_identity(args.mode.into()),
             quote_order_qty,
             poll_interval: Duration::from_secs(args.poll_secs),
             bootstrap_bars: args.bootstrap_bars,

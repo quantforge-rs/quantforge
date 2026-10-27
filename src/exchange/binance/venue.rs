@@ -20,7 +20,7 @@ use crate::ports::{
 use crate::{
     AccountTrade, AssetBalance, CancelOrderRequest, Candle, ExchangeError, ExchangeId,
     ExchangeOrder, KlineRequest, MarketOrderRequest, OrderQueryRequest, Side, Symbol, SymbolRules,
-    TimestampMs,
+    TimestampMs, VenueOrderId, VenueTradeId,
 };
 
 /// What Binance Spot supports through this adapter: market orders sized
@@ -185,8 +185,8 @@ impl TradingConnector for BinanceSpotClient {
         request: &CancelOrderRequest,
     ) -> Result<ExchangeOrder, ExchangeError> {
         let mut params = vec![("symbol", request.symbol.as_str().to_string())];
-        if let Some(order_id) = request.order_id {
-            params.push(("orderId", order_id.to_string()));
+        if let Some(order_id) = &request.order_id {
+            params.push(("orderId", order_id.as_str().to_string()));
         }
         if let Some(client_order_id) = &request.client_order_id {
             params.push(("origClientOrderId", client_order_id.clone()));
@@ -208,8 +208,8 @@ impl TradingConnector for BinanceSpotClient {
         request: &OrderQueryRequest,
     ) -> Result<ExchangeOrder, ExchangeError> {
         let mut params = vec![("symbol", request.symbol.as_str().to_string())];
-        if let Some(order_id) = request.order_id {
-            params.push(("orderId", order_id.to_string()));
+        if let Some(order_id) = &request.order_id {
+            params.push(("orderId", order_id.as_str().to_string()));
         }
         if let Some(client_order_id) = &request.client_order_id {
             params.push(("origClientOrderId", client_order_id.clone()));
@@ -299,8 +299,8 @@ impl AccountConnector for BinanceSpotClient {
         for row in rows {
             trades.push(AccountTrade {
                 symbol: Symbol::new(row.symbol)?,
-                trade_id: row.id,
-                order_id: row.order_id,
+                trade_id: VenueTradeId::new(row.id.to_string())?,
+                order_id: VenueOrderId::new(row.order_id.to_string())?,
                 side: if row.is_buyer { Side::Buy } else { Side::Sell },
                 price: parse_decimal(&row.price, "trade.price")?,
                 qty: parse_decimal(&row.qty, "trade.qty")?,

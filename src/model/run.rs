@@ -2,7 +2,7 @@
 //! status, the realized-trade record, and the journalled run snapshot that
 //! `state_json` round-trips.
 
-use super::{MarketId, Symbol, TimestampMs};
+use super::{MarketId, Symbol, TimestampMs, VenueOrderId};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -62,8 +62,8 @@ pub struct ClosedTrade {
     /// [`RealizedPnl`](super::futures::RealizedPnl), which keeps gross,
     /// fees, funding and net apart.
     pub gross_quote_pnl: Decimal,
-    pub entry_order_id: Option<i64>,
-    pub exit_order_id: Option<i64>,
+    pub entry_order_id: Option<VenueOrderId>,
+    pub exit_order_id: Option<VenueOrderId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -71,7 +71,7 @@ pub struct PositionState {
     pub qty: Decimal,
     pub entry_price: Option<Decimal>,
     pub entry_time_ms: Option<TimestampMs>,
-    pub entry_order_id: Option<i64>,
+    pub entry_order_id: Option<VenueOrderId>,
 }
 
 impl PositionState {

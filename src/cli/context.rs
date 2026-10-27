@@ -7,8 +7,9 @@ use super::Cli;
 use anyhow::{Context, Result, anyhow};
 use quantforge::exchange;
 use quantforge::{
-    ApiCredentials, CandleStore, ConnectorConfig, ExchangeConnectors, ExchangeId, SignedConnectors,
-    SqliteStore,
+    ApiCredentials, CandleStore, ConnectorConfig, ExchangeConnectors, ExchangeId, ExecutionMode,
+    RunIdentity, SignedConnectors, SqliteStore, StoreControl, StoreIdentity, VenueAccountId,
+    describe_environment,
 };
 use std::io::{self, IsTerminal, Write};
 use tracing::{info, warn};
@@ -30,8 +31,12 @@ const SHELL_HISTORY_WARNING: &str = "an API credential was passed on the command
 #[derive(Debug)]
 pub(crate) struct AppContext {
     pub(crate) store: SqliteStore,
+    /// What the store knows about itself after `init` brought it to the
+    /// current schema: its ID, environment and activation.
+    pub(crate) identity: StoreIdentity,
     pub(crate) base_url: Url,
     pub(crate) exchange: ExchangeConnectors,
+    credentials: Option<ApiCredentials>,
 }
 
 impl AppContext {
@@ -65,6 +70,9 @@ impl AppContext {
 
         let store = SqliteStore::new(&cli.db);
         CandleStore::init(&store).context("failed to initialize sqlite store")?;
+        let identity = store
+            .store_identity()
+            .context("failed to read the store's identity")?;
         if !db_existed {
             warn!(
                 db_path = %cli.db.display(),
@@ -86,16 +94,58 @@ impl AppContext {
             cli.exchange,
             ConnectorConfig {
                 base_url: base_url.clone(),
-                credentials,
+                credentials: credentials.clone(),
             },
         )
         .context("failed to build the exchange connectors")?;
 
         Ok(Self {
             store,
+            identity,
             base_url,
             exchange,
+            credentials,
         })
+    }
+
+    /// A store bound to an environment is used only with connectors that
+    /// reach it: mainnet means a production endpoint and nothing else does.
+    /// Called before any command that talks to the exchange, so a testnet
+    /// store never records production orders and the other way round.
+    pub(crate) fn verify_environment(&self) -> Result<()> {
+        let Some(environment) = self.identity.environment else {
+            return Ok(());
+        };
+        let production = self.exchange.market_data.is_production();
+        if production != environment.is_production() {
+            let endpoint = if production { "production" } else { "test" };
+            return Err(anyhow!(
+                "store {} is bound to {environment}, but {} is a {endpoint} endpoint; refusing \
+                 before any request (pass the {environment} base URL, or use another --db)",
+                self.identity.store_id,
+                display_url(&self.base_url)
+            ));
+        }
+        Ok(())
+    }
+
+    /// The identity a run started by this invocation records: the store's
+    /// environment and, for a live run, the fingerprint of the API key in
+    /// use. A dry run has no account.
+    pub(crate) fn run_identity(&self, mode: ExecutionMode) -> RunIdentity {
+        let account = match mode {
+            ExecutionMode::Live => self
+                .credentials
+                .as_ref()
+                .map(|credentials| VenueAccountId::KeyFingerprint(credentials.key_fingerprint())),
+            ExecutionMode::DryRun => None,
+        };
+        RunIdentity::recorded(self.identity.environment, account)
+    }
+
+    /// `mainnet`, `testnet`, `demo`, or `undeclared`.
+    pub(crate) fn environment_text(&self) -> String {
+        describe_environment(self.identity.environment)
     }
 
     /// The exchange the connectors talk to: the exchange of every market a

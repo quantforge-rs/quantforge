@@ -19,6 +19,7 @@ it passes all of them.
 
 ## Contents
 
+- [Identity](#identity)
 - [Windows](#windows)
 - [The payload](#the-payload)
 - [Decimals](#decimals)
@@ -30,6 +31,25 @@ it passes all of them.
 - [The shared cases](#the-shared-cases)
 - [Why not Arrow IPC](#why-not-arrow-ipc)
 - [Changes](#changes)
+
+## Identity
+
+A segment's name is the hash of its bytes, and its bytes hold no market: the
+same candles under two markets pack to one name. What a name stands for in
+one store is the index entry that lists it, and that entry's identity is
+the market's product line, its symbol, its interval and the window's start:
+
+- on the wire, the product line is `exchange`, the venue's registry name,
+  with `category`, its product family (`spot`, `linear` or `inverse`);
+- in a store, the two are one column, `exchange`, holding the line's storage
+  name, such as `binance_spot`.
+
+The storage name has carried the venue and the family since QuantForge
+0.1.0, so an index entry written before `category` reached the wire names
+the same segment it always did, and a name once published stays readable and
+verifiable against its bytes. A segment identity is never reinterpreted
+under another key: a change to what an entry means, or to what its name
+covers, comes with a new segment format.
 
 ## Windows
 
@@ -314,3 +334,6 @@ which pyarrow and polars read directly. Format 1 is its own instead:
 ## Changes
 
 - Format 1: the first format.
+- QUA-37 wrote down the identity of an index entry, and added `category`
+  to it on the wire. The payload, the hash and the stored names are
+  unchanged.

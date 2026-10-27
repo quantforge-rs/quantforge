@@ -8,7 +8,7 @@ use super::support::{Anchor, Ctx, Fault, POLL_ATTEMPTS, Verdict, client_order_id
 use crate::ports::SignedConnectors;
 use crate::{
     AssetBalance, CancelOrderRequest, ExchangeErrorKind, ExchangeOrder, MarketOrderRequest,
-    OrderQueryRequest, OrderStatus, Side, SymbolRules, round_down_to_step,
+    OrderQueryRequest, OrderStatus, Side, SymbolRules, VenueTradeId, round_down_to_step,
 };
 
 /// The lifecycle buys this many times the minimum notional. An exchange
@@ -100,13 +100,14 @@ async fn after_buy(
         filled_qty == executed,
         "the buy's fills add up to {filled_qty}, not its executed quantity {executed}"
     );
-    let trade_ids: Vec<i64> = fills
+    let trade_ids: Vec<VenueTradeId> = fills
         .iter()
-        .map(|fill| fill.trade_id)
+        .map(|fill| fill.trade_id.clone())
         .collect::<Option<_>>()
         .ok_or_else(|| Fault::failed("a fill of the buy reported no trade id"))?;
     let order_id = buy
         .order_id
+        .clone()
         .ok_or_else(|| Fault::failed("the buy reported no order id"))?;
     ensure!(
         buy.transact_time_ms.is_some(),
@@ -125,7 +126,7 @@ async fn after_buy(
         .trading
         .query_order(&OrderQueryRequest {
             symbol: symbol.clone(),
-            order_id: Some(order_id),
+            order_id: Some(order_id.clone()),
             client_order_id: None,
         })
         .await
@@ -152,7 +153,8 @@ async fn after_buy(
         .await
         .map_err(|err| ctx.unexpected("listing the open orders", err))?;
     ensure!(
-        open.iter().all(|order| order.order_id != Some(order_id)),
+        open.iter()
+            .all(|order| order.order_id.as_ref() != Some(&order_id)),
         "the filled buy {order_id} is listed among the open orders"
     );
     steps.push("open orders");
@@ -161,7 +163,7 @@ async fn after_buy(
         .trading
         .cancel_order(&CancelOrderRequest {
             symbol: symbol.clone(),
-            order_id: Some(order_id),
+            order_id: Some(order_id.clone()),
             client_order_id: None,
         })
         .await;

@@ -7,8 +7,9 @@ ALG-534. This page tracks each change:
 - where it stands;
 - who consumes it.
 
-ALG-733 built the Rust side of the identity and the futures contract. The
-rest lands with the stories named below.
+ALG-733 built the Rust side of the identity and the futures contract, and
+QUA-37 (ALG-734 in the previous workspace) the storage, the wire's
+`category` and the migrations. The rest lands with the stories named below.
 
 ## Changed in Rust by ALG-733
 
@@ -23,15 +24,20 @@ rest lands with the stories named below.
 | The futures contract:<ul><li>instruments and universe rule 1;</li><li>accounts and positions;</li><li>orders, stops and their coverage;</li><li>the ledger and private events;</li><li>intents and position cycles, with their state machines;</li><li>`RealizedPnl`.</li></ul> | `quantforge::model::futures` | No |
 | The futures connector ports, split by capability, with `FuturesCapabilities` and `FuturesConnectors`; and the injected `Clock` | `quantforge::ports::futures`, `quantforge::ports::Clock` | No |
 
+## Changed by QUA-37
+
+| Change | Where | Reaches the Python FFI |
+| --- | --- | --- |
+| Spot's venue IDs are text, with their columns:<ul><li>`ExchangeOrder.order_id` and `Fill.trade_id`;</li><li>`AccountTrade.trade_id` and `AccountTrade.order_id`;</li><li>`ClosedTrade.entry_order_id` and `ClosedTrade.exit_order_id`;</li><li>`PositionState.entry_order_id`;</li><li>the `order_id` of a cancel or query request.</li></ul>Schema 5 rebuilt the journal columns and rewrote the JSON fields, keeping the originals | `quantforge::{VenueOrderId, VenueTradeId}` | Yes: ALG-377 binds them as `str` |
+| The protocol's markets carry a required `category` beside `exchange`, which stays the venue's name: `DataSelection`, `SegmentEntry`, `Subscribe`, `BarClosed` and `GapNotice` | `quantforge::protocol` | No; remote jobs, the bar stream and provenance name markets with it |
+| Product lines in storage: the `exchange` column holds their storage names, candle and segment keys stay as they are, each store is bound to one environment (`store bind`), and a SQLite database is migrated from schema 1 on, never deleted; [storage-schema.md](storage-schema.md) is the contract for both backends | `quantforge::{StoreControl, StoreIdentity, RunIdentity}` | No |
+| Segment identity under the new key, with old segments and hashes still readable ([segment-spec.md](segment-spec.md#identity)) | `docs/segment-spec.md` | No |
+
 ## Changing next
 
 | Change | Story | Consumers |
 | --- | --- | --- |
-| Spot's venue IDs become text, with their columns:<ul><li>`ExchangeOrder.order_id` and `Fill.trade_id`;</li><li>`AccountTrade.trade_id` and `AccountTrade.order_id`;</li><li>`ClosedTrade.entry_order_id` and `ClosedTrade.exit_order_id`;</li><li>`PositionState.entry_order_id`.</li></ul> | ALG-734 | ALG-377 binds them as `str`, so this lands first |
-| The protocol's markets gain a required `category` beside `exchange`, which stays the venue's name. They are `DataSelection`, `SegmentEntry`, `Subscribe`, `BarClosed` and `GapNotice` | ALG-734 | Remote jobs, the bar stream, provenance |
-| Product lines in storage:<ul><li>the `exchange` column takes their storage names, and candle and segment keys stay as they are;</li><li>each store is bound to one environment;</li><li>a SQLite database is migrated from schema 1 on, never deleted.</li></ul> | ALG-734 | The PostgreSQL stories |
-| Segment identity under the new key, with old segments and hashes still readable | ALG-734 | ALG-508's history plane |
-| Candle strategies refuse a linear or inverse series | ALG-734, ALG-532, ALG-379, ALG-509 | Backtests, `trade run`, Python, remote jobs |
+| Candle strategies refuse a linear or inverse series | QUA-37's successors: ALG-532, ALG-379, ALG-509 | Backtests, `trade run`, Python, remote jobs |
 | `ExecutionStore`, which persists the records above | ALG-738 | ALG-743 to ALG-748 |
 | `SignalInbox`, the server's only view of the executor | ALG-743 | The webhook route |
 | `Notifier`, which delivers from the outbox | ALG-749 | ALG-751 |
@@ -58,7 +64,7 @@ candle-strategy FFI.
 
 Decided on 2026-10-22, when ALG-733 was planned:
 - **The store ports.** ADR 0002 §1 lists `ExecutionStore`, `SignalInbox` and `Notifier` among ALG-733's ports. Each is designed by the story that implements it, with its inputs in hand: ALG-738, ALG-743 and ALG-749.
-- **The product lines.** ALG-733 added them to `ExchangeId`, which ADR 0002's follow-ups gave to ALG-734. ALG-734 keeps storage, the protocol, the environment binding and the migrations.
+- **The product lines.** ALG-733 added them to `ExchangeId`, which ADR 0002's follow-ups gave to ALG-734 (now QUA-37). QUA-37 kept storage, the protocol, the environment binding and the migrations.
 - **Stop ownership.** Deciding which stop covering a position is QuantForge's belongs to ALG-746: the ledger, the owner tag, the epoch, and a second writer. `CoveredStop` checks only the coverage.
 - **A profile's ports.** ALG-767 hands each profile the ports it may use: no entry port and no leverage port while the profile is not armed.
 - **Sizing.** ALG-736 refuses a stop on the wrong side, and converts USD margin pools at the venue's index price.

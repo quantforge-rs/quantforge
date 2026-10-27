@@ -1,0 +1,131 @@
+{
+  "format": 1,
+  "note": "The storage identity cases of docs/storage-schema.md: every product line's storage columns, wire spelling and state_json token, the decimal texts a store returns unchanged, scale included, and venue IDs as text. Written by spikes/storage-contract/identity_cases.py, not by the Rust code under test.",
+  "markets": [
+    {
+      "venue": "binance",
+      "category": "spot",
+      "symbol": " btcusdt ",
+      "interval": "1m",
+      "storage": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "wire": {
+        "exchange": "binance",
+        "category": "spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "state_json_exchange": "BinanceSpot"
+    },
+    {
+      "venue": "binance",
+      "category": "linear",
+      "symbol": "btcusdt",
+      "interval": "1h",
+      "storage": {
+        "exchange": "binance_linear",
+        "symbol": "BTCUSDT",
+        "interval": "1h"
+      },
+      "wire": {
+        "exchange": "binance",
+        "category": "linear",
+        "symbol": "BTCUSDT",
+        "interval": "1h"
+      },
+      "state_json_exchange": "BinanceLinear"
+    },
+    {
+      "venue": "binance",
+      "category": "inverse",
+      "symbol": "BTCUSD",
+      "interval": "8h",
+      "storage": {
+        "exchange": "binance_inverse",
+        "symbol": "BTCUSD",
+        "interval": "8h"
+      },
+      "wire": {
+        "exchange": "binance",
+        "category": "inverse",
+        "symbol": "BTCUSD",
+        "interval": "8h"
+      },
+      "state_json_exchange": "BinanceInverse"
+    },
+    {
+      "venue": "bybit",
+      "category": "spot",
+      "symbol": " btcusdt ",
+      "interval": "1m",
+      "storage": {
+        "exchange": "bybit_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "wire": {
+        "exchange": "bybit",
+        "category": "spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "state_json_exchange": "BybitSpot"
+    },
+    {
+      "venue": "bybit",
+      "category": "linear",
+      "symbol": "btcusdt",
+      "interval": "1h",
+      "storage": {
+        "exchange": "bybit_linear",
+        "symbol": "BTCUSDT",
+        "interval": "1h"
+      },
+      "wire": {
+        "exchange": "bybit",
+        "category": "linear",
+        "symbol": "BTCUSDT",
+        "interval": "1h"
+      },
+      "state_json_exchange": "BybitLinear"
+    },
+    {
+      "venue": "bybit",
+      "category": "inverse",
+      "symbol": "BTCUSD",
+      "interval": "8h",
+      "storage": {
+        "exchange": "bybit_inverse",
+        "symbol": "BTCUSD",
+        "interval": "8h"
+      },
+      "wire": {
+        "exchange": "bybit",
+        "category": "inverse",
+        "symbol": "BTCUSD",
+        "interval": "8h"
+      },
+      "state_json_exchange": "BybitInverse"
+    }
+  ],
+  "decimals": [
+    "0",
+    "1.10",
+    "1.1",
+    "0.0000001",
+    "67012.34000000",
+    "12.04510000",
+    "-1.5",
+    "123456789.123456789012345678",
+    "0.1234567890123456789012345678"
+  ],
+  "venue_ids": [
+    "7",
+    "1321003749386327552",
+    "a1b2c3-d4",
+    "00000042"
+  ]
+}

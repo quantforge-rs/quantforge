@@ -431,3 +431,61 @@ fn a_candle_whose_window_cannot_be_written_is_refused_before_anything_is_stored(
             .is_empty()
     );
 }
+
+// A segment's name covers its bytes and nothing else: the same candles under
+// two product lines pack to one name, listed by two index entries. What an
+// entry means is in docs/segment-spec.md#identity.
+#[test]
+fn the_same_candles_under_two_product_lines_share_one_name_and_two_index_entries() {
+    let (_tempdir, store) = store();
+    let spot = m1();
+    let linear = MarketId::new(
+        ExchangeId::BinanceLinear,
+        Symbol::new("BTCUSDT").expect("symbol"),
+        Interval::M1,
+    );
+    for market in [&spot, &linear] {
+        store
+            .upsert_candles(market, &minutes(T, 3))
+            .expect("the window");
+        store
+            .upsert_candles(market, &[candle(Interval::M1, T + DAY, "1")])
+            .expect("the tip, so the window is closed");
+        store.refresh_segments(market).expect("refresh");
+    }
+    let plan = |market: &MarketId| {
+        store
+            .resolve_segments(market, T, T + 2 * MINUTE)
+            .expect("plan")
+    };
+    let (spot_plan, linear_plan) = (plan(&spot), plan(&linear));
+    assert_eq!(spot_plan.segments.len(), 1, "{spot_plan:?}");
+    assert_eq!(linear_plan.segments.len(), 1, "{linear_plan:?}");
+    let hash = spot_plan.segments[0].hash;
+    assert_eq!(
+        linear_plan.segments[0].hash, hash,
+        "one name for the same bytes"
+    );
+
+    let connection = rusqlite::Connection::open(store.path()).expect("open");
+    let count = |sql: &str| -> i64 {
+        connection
+            .query_row(sql, [hash.to_string()], |row| row.get(0))
+            .expect("count")
+    };
+    assert_eq!(count("SELECT COUNT(*) FROM segments WHERE hash = ?1"), 1);
+    assert_eq!(
+        count("SELECT COUNT(*) FROM segment_index WHERE hash = ?1"),
+        2
+    );
+    let lines: Vec<String> = {
+        let mut stmt = connection
+            .prepare("SELECT exchange FROM segment_index WHERE hash = ?1 ORDER BY exchange")
+            .expect("prepare");
+        let rows = stmt
+            .query_map([hash.to_string()], |row| row.get(0))
+            .expect("query");
+        rows.collect::<Result<_, _>>().expect("rows")
+    };
+    assert_eq!(lines, ["binance_linear", "binance_spot"]);
+}

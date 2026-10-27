@@ -151,7 +151,7 @@ from it.
 | D13 | Configured capital versus exchange balances | Settled | §6 | ALG-735, ALG-736, ALG-753 |
 | D14 | Rounding, cost allowance and risk limits | Settled | §6 | ALG-736, ALG-738, ALG-745 |
 | D15 | Leverage and margin modes | Settled | §4, §6 | ALG-736, ALG-740, ALG-756, ALG-760, ALG-762 |
-| D16 | Durability, migrations and cutover | The principle is settled; ALG-734, ALG-738 and ALG-768 own the detail | §15 | ALG-734, ALG-738, ALG-754, ALG-758, ALG-768 |
+| D16 | Durability, migrations and cutover | The principle is settled; QUA-37 (ALG-734 in the previous workspace), ALG-738 and ALG-768 own the detail | §15 | QUA-37, ALG-738, ALG-754, ALG-758, ALG-768 |
 | D17 | Liquidation availability and warnings | Settled | §7 | ALG-741, ALG-744, ALG-746, ALG-763, ALG-764 |
 | D18 | Monitoring order and reconnection | Settled | §11 | ALG-744, ALG-748, ALG-764 |
 | D19 | Response to a failed stop | Settled, with its bounds | §8 | ALG-746, ALG-748 |

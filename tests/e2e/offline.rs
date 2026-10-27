@@ -15,8 +15,8 @@ use crate::mock_binance::{
 use assert_cmd::Command;
 use predicates::prelude::*;
 use quantforge::{
-    BotRunState, CandleStore, ExchangeId, ExecutionMode, Interval, MarketId, PositionState,
-    RunJournalStore, RunStatus, Symbol,
+    BotRunState, CandleStore, ExchangeId, ExecutionMode, Interval, KeyFingerprint, MarketId,
+    PositionState, RunIdentity, RunJournalStore, RunStatus, Symbol, VenueAccountId, VenueOrderId,
 };
 use rust_decimal::Decimal;
 use std::str::FromStr;
@@ -143,8 +143,8 @@ fn live_trade_run_completes_an_entry_exit_round_trip_fully_offline() {
         trades[0].gross_quote_pnl,
         Decimal::from_str("-9.99").expect("decimal")
     );
-    assert_eq!(trades[0].entry_order_id, Some(1_001));
-    assert_eq!(trades[0].exit_order_id, Some(1_002));
+    assert_eq!(trades[0].entry_order_id, Some(venue_id(1_001)));
+    assert_eq!(trades[0].exit_order_id, Some(venue_id(1_002)));
 
     let events = store.list_order_events("e2e-live-1", 10).expect("events");
     assert_eq!(events.len(), 2);
@@ -468,14 +468,14 @@ async fn order_query_without_fills_parses_as_missing_fill_data() {
         &client,
         &quantforge::OrderQueryRequest {
             symbol: quantforge::Symbol::new("BTCUSDT").expect("symbol"),
-            order_id: Some(77),
+            order_id: Some(venue_id(77)),
             client_order_id: None,
         },
     )
     .await
     .expect("query order");
 
-    assert_eq!(order.order_id, Some(77));
+    assert_eq!(order.order_id, Some(venue_id(77)));
     assert_eq!(order.fills, None);
     assert_eq!(
         order.executed_qty,
@@ -881,11 +881,24 @@ fn seed_open_live_run(bed: &TestBed) -> BotRunState {
             qty: Decimal::from_str("0.01").expect("decimal"),
             entry_price: Some(Decimal::from(10_000)),
             entry_time_ms: Some(1_704_067_200_000),
-            entry_order_id: Some(1_001),
+            entry_order_id: Some(venue_id(1_001)),
         },
     };
-    store.save_run_state(&state).expect("save run");
+    // The identity a live `trade close` under the offline harness carries:
+    // an unbound store and the fake key's fingerprint.
+    let identity = RunIdentity::recorded(
+        None,
+        Some(VenueAccountId::KeyFingerprint(KeyFingerprint::of(
+            FAKE_API_KEY,
+        ))),
+    );
+    store.create_run(&state, &identity).expect("create run");
     state
+}
+
+/// A venue order ID from a number, as the mock Binance issues them.
+fn venue_id(number: i64) -> VenueOrderId {
+    VenueOrderId::new(number.to_string()).expect("venue order id")
 }
 
 #[test]

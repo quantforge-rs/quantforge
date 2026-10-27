@@ -78,15 +78,18 @@ Explanations belong in the Setting cell.
 | Fee per fill in basis points; a decimal of zero or more | `--fee-bps <decimal>` | — | `10` | `backtest` |
 | Quote amount spent per entry; a positive decimal | `--quote-order-qty <decimal>` | — | `100` | `trade run` |
 | Execution mode: `dry-run` runs the strategy without any trading venue, `live` places real orders | `--mode <mode>` | — | `dry-run` | `trade run` |
-| Confirm a live run or an account change; without it the command only previews the action, except that a live `trade run` on an interactive terminal asks instead | `--yes` | — | `false` | `trade run`, `trade close`, `monitor cancel-order`, `monitor close-position` |
+| Confirm a live run, an account change, or a change to the store's record; without it the command only previews the action, except that a live `trade run` on an interactive terminal asks instead | `--yes` | — | `false` | `trade run`, `trade close`, `monitor cancel-order`, `monitor close-position`, `store bind`, `store adopt-run` |
 | Closed candles loaded to warm up the strategy before the first poll | `--bootstrap-bars <count>` | — | `300` | `trade run` |
 | Act on the warm-up signal in the first loop, which may place an order immediately | `--bootstrap-enter` | — | `false` | `trade run` |
 | Run to resume; omitted, a new run starts with a flat position | `--run-id <id>` | — | none | `trade run` |
 | Run to close; omitted, the latest run for the market and `--strategy-name` | `--run-id <id>` | — | none | `trade close` |
+| Legacy run to adopt, as `store status` lists it | `--run-id <id>` | — | `required` | `store adopt-run` |
+| Execution mode of a legacy run that recorded none (QuantForge 0.2.0 wrote none); refused for a run that did | `--execution-mode <mode>` | — | none | `store adopt-run` |
+| Environment the store is bound to for life: `mainnet`, `testnet`, or `demo`; must agree with the endpoint `--base-url` reaches | `--environment <environment>` | — | `required` | `store bind` |
 | Strategy whose journaled runs are read | `--strategy-name <name>` | — | `sma_cross` | `trade close`, `monitor status`, `monitor watch` |
 | Recent account trades shown | `--recent-trades <count>` | — | `10` | `monitor status`, `monitor watch` |
 | Recent account trades listed | `--limit <count>` | — | `20` | `monitor trades` |
-| Exchange order id of the order to cancel; pass it or `--client-order-id` | `--order-id <id>` | — | none | `monitor cancel-order` |
+| Exchange order id of the order to cancel, as the exchange spells it; pass it or `--client-order-id` | `--order-id <id>` | — | none | `monitor cancel-order` |
 | Client order id of the order to cancel; pass it or `--order-id` | `--client-order-id <id>` | — | none | `monitor cancel-order` |
 | Address to listen on: an IP address and a port, such as `0.0.0.0:9600` for every interface; a host name is refused; the default accepts connections from this machine only, and port 0 picks a free port, which the `listening:` line shows | `--listen <addr>` | `QF_LISTEN` | `127.0.0.1:9600` | `serve run` |
 | Directory for cached candle segments, relative to the working directory; created at startup if missing | `--segment-cache-dir <path>` | `QF_SEGMENT_CACHE_DIR` | `data/segments` | `serve run` |

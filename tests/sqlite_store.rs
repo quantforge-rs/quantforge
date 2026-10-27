@@ -5,9 +5,10 @@
 //! `src/storage/sqlite/mod.rs`, next to the private `SCHEMA_VERSION` it pins.
 
 use quantforge::{
-    BotRunState, Candle, CandleQuery, CandleStore, ClosedTrade, ExchangeId, ExchangeOrder,
-    ExecutionMode, Interval, MarketId, OrderStatus, PositionState, RunJournalStore, RunStatus,
-    Side, SqliteStore, Symbol, TimestampMs, now_utc_ms,
+    BotRunState, Candle, CandleQuery, CandleStore, ClosedTrade, Environment, ExchangeId,
+    ExchangeOrder, ExecutionMode, Interval, KeyFingerprint, MarketId, OrderStatus, PositionState,
+    RunIdentity, RunJournalStore, RunStatus, Side, SqliteStore, Symbol, TimestampMs,
+    VenueAccountId, VenueOrderId, now_utc_ms,
 };
 use rusqlite::Connection;
 use rust_decimal::Decimal;
@@ -79,9 +80,19 @@ fn run_state(run_id: &str) -> BotRunState {
             qty: dec("0.0254"),
             entry_price: Some(dec("9900")),
             entry_time_ms: Some(1_700_000_000_000),
-            entry_order_id: Some(7),
+            entry_order_id: Some(venue_id(7)),
         },
     }
+}
+
+/// The identity every run here is created with: an unbound store, no account.
+fn identity() -> RunIdentity {
+    RunIdentity::recorded(None, None)
+}
+
+/// A venue order ID from a number, as Binance issues them.
+fn venue_id(number: i64) -> VenueOrderId {
+    VenueOrderId::new(number.to_string()).expect("venue order id")
 }
 
 // `order_id` doubles as `transact_time_ms` so events stay distinguishable.
@@ -91,7 +102,7 @@ fn order(order_id: i64) -> ExchangeOrder {
         side: Side::Buy,
         order_type: "MARKET".to_string(),
         status: OrderStatus::Filled,
-        order_id: Some(order_id),
+        order_id: Some(venue_id(order_id)),
         client_order_id: Some(format!("qf-{order_id}")),
         requested_qty: None,
         requested_quote_qty: Some(dec("100")),
@@ -113,8 +124,8 @@ fn closed_trade(entry_time_ms: TimestampMs) -> ClosedTrade {
         exit_price: dec("10100"),
         qty: dec("0.01"),
         gross_quote_pnl: dec("1"),
-        entry_order_id: Some(7),
-        exit_order_id: Some(8),
+        entry_order_id: Some(venue_id(7)),
+        exit_order_id: Some(venue_id(8)),
     }
 }
 
@@ -159,7 +170,7 @@ fn sqlite_roundtrip_for_candles_and_runs() {
         position: PositionState::flat(),
     };
 
-    RunJournalStore::save_run_state(&store, &saved_state).expect("save run");
+    RunJournalStore::create_run(&store, &saved_state, &identity()).expect("create run");
     let loaded_run = store
         .load_run_state("run-1")
         .expect("load run")
@@ -171,7 +182,7 @@ fn sqlite_roundtrip_for_candles_and_runs() {
         side: Side::Buy,
         order_type: "MARKET".to_string(),
         status: OrderStatus::Filled,
-        order_id: Some(7),
+        order_id: Some(venue_id(7)),
         client_order_id: Some("abc".to_string()),
         requested_qty: None,
         requested_quote_qty: Some(Decimal::from_str("100").expect("decimal")),
@@ -201,8 +212,8 @@ fn sqlite_roundtrip_for_candles_and_runs() {
         exit_price: Decimal::from_str("10100").expect("decimal"),
         qty: Decimal::from_str("0.01").expect("decimal"),
         gross_quote_pnl: Decimal::from_str("1").expect("decimal"),
-        entry_order_id: Some(7),
-        exit_order_id: Some(8),
+        entry_order_id: Some(venue_id(7)),
+        exit_order_id: Some(venue_id(8)),
     };
     store
         .append_closed_trade("run-1", &trade)
@@ -417,7 +428,7 @@ fn decimal_scale_survives_the_candle_text_round_trip() {
 fn bot_run_state_round_trips_through_state_json_in_full() {
     let (_tempdir, store) = temp_store();
     let state = run_state("run-1");
-    store.save_run_state(&state).expect("save");
+    store.create_run(&state, &identity()).expect("create");
 
     let loaded = store
         .load_run_state("run-1")
@@ -432,7 +443,9 @@ fn bot_run_state_round_trips_through_state_json_in_full() {
 fn save_run_state_updates_the_existing_row_for_a_run_id() {
     let (_tempdir, store) = temp_store();
     let initial = run_state("run-1");
-    store.save_run_state(&initial).expect("save initial");
+    store
+        .create_run(&initial, &identity())
+        .expect("create initial");
 
     // The every-bar persistence path of the live engine: same run_id,
     // advanced cursor, changed status and position. Identity columns and
@@ -486,14 +499,9 @@ fn latest_run_for_market_returns_the_most_recently_updated_matching_run() {
         updated_at_ms: 4_000,
         ..run_state("run-d")
     };
-    store.save_run_state(&older).expect("save older");
-    store.save_run_state(&newer).expect("save newer");
-    store
-        .save_run_state(&other_strategy)
-        .expect("save other strategy");
-    store
-        .save_run_state(&other_interval)
-        .expect("save other interval");
+    for state in [&older, &newer, &other_strategy, &other_interval] {
+        store.create_run(state, &identity()).expect("create");
+    }
 
     let latest = store
         .latest_run_for_market(&market(), "sma_cross")
@@ -620,7 +628,9 @@ fn a_fresh_store_over_an_existing_database_loads_run_state_for_resume() {
     let first_process = SqliteStore::new(&db_path);
     RunJournalStore::init(&first_process).expect("first init");
     let state = run_state("run-1");
-    first_process.save_run_state(&state).expect("save");
+    first_process
+        .create_run(&state, &identity())
+        .expect("create");
     drop(first_process);
 
     let second_process = SqliteStore::new(&db_path);
@@ -637,7 +647,9 @@ fn a_fresh_store_over_an_existing_database_loads_run_state_for_resume() {
 #[test]
 fn sqlite_columns_store_wire_forms_while_json_payloads_store_serde_tokens() {
     let (_tempdir, store) = temp_store();
-    store.save_run_state(&run_state("run-1")).expect("save run");
+    store
+        .create_run(&run_state("run-1"), &identity())
+        .expect("create run");
     store
         .append_order_event("run-1", &order(1))
         .expect("append order");
@@ -671,4 +683,97 @@ fn sqlite_columns_store_wire_forms_while_json_payloads_store_serde_tokens() {
         .expect("order event row");
     assert_eq!(side, "BUY");
     assert!(raw_json.contains("\"Buy\""), "got {raw_json}");
+}
+
+#[test]
+fn a_run_is_created_once_with_its_identity_and_only_saved_after_that() {
+    let (_tempdir, store) = temp_store();
+    let state = run_state("run-1");
+    let error = store.save_run_state(&state).expect_err("never created");
+    assert!(
+        error.to_string().contains("run run-1 was never created"),
+        "got {error}"
+    );
+
+    let recorded = RunIdentity::recorded(
+        Some(Environment::Testnet),
+        Some(VenueAccountId::KeyFingerprint(KeyFingerprint::of("key"))),
+    );
+    store.create_run(&state, &recorded).expect("create");
+    assert_eq!(
+        store.run_identity("run-1").expect("identity"),
+        Some(recorded.clone())
+    );
+    assert_eq!(store.run_identity("run-none").expect("none"), None);
+    let error = store
+        .create_run(&state, &RunIdentity::recorded(None, None))
+        .expect_err("created once");
+    assert!(
+        error.to_string().contains("run run-1 already exists"),
+        "got {error}"
+    );
+
+    // Saving never touches the identity.
+    let stopped = BotRunState {
+        status: RunStatus::Stopped,
+        ..state.clone()
+    };
+    store.save_run_state(&stopped).expect("update");
+    assert_eq!(
+        store.run_identity("run-1").expect("identity"),
+        Some(recorded)
+    );
+    let connection = Connection::open(store.path()).expect("open");
+    let columns: (String, String, String, String) = connection
+        .query_row(
+            "SELECT environment, account_kind, account_id, identity_source FROM bot_runs WHERE run_id = 'run-1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("identity columns");
+    assert_eq!(
+        columns,
+        (
+            "testnet".to_string(),
+            "key_fingerprint".to_string(),
+            KeyFingerprint::of("key").as_str().to_string(),
+            "recorded".to_string()
+        )
+    );
+}
+
+#[test]
+fn venue_ids_are_stored_as_text_columns() {
+    let (_tempdir, store) = temp_store();
+    store
+        .create_run(&run_state("run-1"), &identity())
+        .expect("create run");
+    store
+        .append_order_event("run-1", &order(7))
+        .expect("append order");
+    store
+        .append_closed_trade("run-1", &closed_trade(1_700_000_000_000))
+        .expect("append trade");
+    let connection = Connection::open(store.path()).expect("open");
+    let (order_id, order_kind): (String, String) = connection
+        .query_row(
+            "SELECT order_id, typeof(order_id) FROM order_events WHERE run_id = 'run-1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("order row");
+    assert_eq!((order_id.as_str(), order_kind.as_str()), ("7", "text"));
+    let (entry, exit, kind): (String, String, String) = connection
+        .query_row(
+            "SELECT entry_order_id, exit_order_id, typeof(entry_order_id) FROM closed_trades WHERE run_id = 'run-1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("trade row");
+    assert_eq!(
+        (entry.as_str(), exit.as_str(), kind.as_str()),
+        ("7", "8", "text")
+    );
+    let trades = store.list_closed_trades("run-1", 10).expect("list");
+    assert_eq!(trades[0].entry_order_id, Some(venue_id(7)));
 }

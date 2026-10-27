@@ -1,7 +1,7 @@
 //! Exchange order lifecycle: order side and status, individual fills, and
 //! the exchange-reported order and account-trade records.
 
-use super::{ModelError, Symbol, TimestampMs};
+use super::{ModelError, Symbol, TimestampMs, VenueOrderId, VenueTradeId};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
@@ -99,7 +99,7 @@ pub struct Fill {
     pub qty: Decimal,
     pub commission: Decimal,
     pub commission_asset: Option<String>,
-    pub trade_id: Option<i64>,
+    pub trade_id: Option<VenueTradeId>,
 }
 
 /// Exchange-reported order state.
@@ -107,14 +107,16 @@ pub struct Fill {
 /// `executed_qty`, `cumulative_quote_qty`, and `fills` are `None` when the
 /// exchange response did not report them (e.g. ACK-style responses, or the
 /// open-orders endpoint which never includes fills). `None` means
-/// "not reported" and is deliberately distinct from a reported zero.
+/// "not reported" and is deliberately distinct from a reported zero. The
+/// venue's IDs are opaque text (ADR 0002 §2): a number on one venue, a
+/// string on another, never computed with.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ExchangeOrder {
     pub symbol: Symbol,
     pub side: Side,
     pub order_type: String,
     pub status: OrderStatus,
-    pub order_id: Option<i64>,
+    pub order_id: Option<VenueOrderId>,
     pub client_order_id: Option<String>,
     pub requested_qty: Option<Decimal>,
     pub requested_quote_qty: Option<Decimal>,
@@ -167,8 +169,8 @@ impl ExchangeOrder {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AccountTrade {
     pub symbol: Symbol,
-    pub trade_id: i64,
-    pub order_id: i64,
+    pub trade_id: VenueTradeId,
+    pub order_id: VenueOrderId,
     pub side: Side,
     pub price: Decimal,
     pub qty: Decimal,
@@ -189,7 +191,7 @@ mod tests {
             side: Side::Buy,
             order_type: "MARKET".to_string(),
             status: OrderStatus::Filled,
-            order_id: Some(1),
+            order_id: Some(VenueOrderId::new("1").expect("order id")),
             client_order_id: Some("abc".to_string()),
             requested_qty: None,
             requested_quote_qty: Some(Decimal::from_str("100").expect("decimal")),

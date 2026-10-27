@@ -22,7 +22,10 @@ pub(crate) enum DataCommand {
 
 pub(crate) async fn dispatch(ctx: &AppContext, command: DataCommand) -> Result<()> {
     match command {
-        DataCommand::Sync(args) => handle_data_sync(ctx, args).await,
+        DataCommand::Sync(args) => {
+            ctx.verify_environment()?;
+            handle_data_sync(ctx, args).await
+        }
         DataCommand::Validate(args) => handle_data_validate(ctx, args),
     }
 }
