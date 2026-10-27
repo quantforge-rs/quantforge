@@ -8,7 +8,7 @@ use crate::cli::common::{CliExecutionMode, ConfirmArgs};
 use crate::cli::context::AppContext;
 use anyhow::{Result, anyhow, bail};
 use clap::Args;
-use quantforge::{ExecutionMode, RunIdentity, StoreControl, describe_account};
+use quantforge::{ExecutionMode, RunIdentity, StoreControl};
 
 #[derive(Args, Debug)]
 pub(crate) struct StoreAdoptRunArgs {
@@ -71,7 +71,10 @@ pub(crate) fn handle_store_adopt_run(ctx: &AppContext, args: StoreAdoptRunArgs) 
     );
     println!("execution_mode: {}", mode.as_str());
     println!("environment: {environment}");
-    println!("account: {}", describe_account(account.as_ref()));
+    println!(
+        "account: {}",
+        if account.is_some() { "present" } else { "none" }
+    );
     if !args.confirm.yes {
         println!("No identity written. Re-run with --yes to adopt the run.");
         return Ok(());
