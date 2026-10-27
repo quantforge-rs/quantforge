@@ -22,6 +22,7 @@ pub mod request;
 pub mod rules;
 pub mod run;
 pub mod segment;
+pub mod store;
 pub mod timestamp;
 pub mod units;
 
@@ -43,6 +44,10 @@ pub use request::{CancelOrderRequest, KlineRequest, MarketOrderRequest, OrderQue
 pub use rules::{AssetBalance, SymbolRules};
 pub use run::{BotRunState, ClosedTrade, ExecutionMode, PositionState, RunStatus, TargetPosition};
 pub use segment::{SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh, SegmentTip};
+pub use store::{
+    IdentitySource, LegacyRun, RunIdentity, SchemaMigration, StoreActivation, StoreId,
+    StoreIdentity, describe_account, describe_environment,
+};
 pub use timestamp::{TimestampMs, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms};
 pub use units::{BaseQty, Contracts, FaceValue, Leverage, PositionSide, Price, Quantity};
 
@@ -124,6 +129,19 @@ pub enum ModelError {
         to: &'static str,
         evidence: String,
     },
+
+    #[error("{subject} was recorded as {recorded}, but this invocation is {current}")]
+    IdentityMismatch {
+        subject: &'static str,
+        recorded: String,
+        current: String,
+    },
+
+    #[error(
+        "the run's environment and account were never verified; adopt it with `quantforge store \
+         adopt-run`, or start a new run"
+    )]
+    UnverifiedIdentity,
 
     #[error("{record} format {found} is not supported; this build reads format {expected}")]
     UnsupportedFormat {

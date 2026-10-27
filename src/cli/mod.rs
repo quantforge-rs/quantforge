@@ -1,7 +1,7 @@
 //! Command-line interface: the root parser and its `parse()` entry point,
 //! the command tree, and the `run()` dispatch. Each command group owns a
 //! module mirroring its command path (`backtest`, `data`, `monitor`, `serve`,
-//! `trade`).
+//! `store`, `trade`).
 
 use anyhow::Result;
 use clap::builder::{PossibleValuesParser, TypedValueParser};
@@ -18,6 +18,7 @@ mod context;
 mod data;
 mod monitor;
 mod serve;
+mod store;
 mod trade;
 
 use context::AppContext;
@@ -28,6 +29,7 @@ use backtest::{BacktestArgs, handle_backtest};
 use data::DataCommand;
 use monitor::MonitorCommand;
 use serve::ServeCommand;
+use store::StoreCommand;
 use trade::TradeCommand;
 
 /// Parse the process arguments exactly like clap's `Parser::parse()`, then
@@ -92,8 +94,12 @@ pub(crate) async fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Data { command } => data::dispatch(&ctx, command).await?,
         Command::Backtest(args) => handle_backtest(&ctx, args)?,
-        Command::Trade { command } => trade::dispatch(&ctx, command).await?,
+        Command::Trade { command } => {
+            ctx.verify_environment()?;
+            trade::dispatch(&ctx, command).await?
+        }
         Command::Monitor { command } => {
+            ctx.verify_environment()?;
             let signed = ctx.require_signed("monitor commands require exchange credentials")?;
             monitor::dispatch(
                 &ctx.store,
@@ -104,6 +110,7 @@ pub(crate) async fn run(cli: Cli) -> Result<()> {
             .await?
         }
         Command::Serve { command } => serve::dispatch(command).await?,
+        Command::Store { command } => store::dispatch(&ctx, command)?,
     }
 
     Ok(())
@@ -238,6 +245,12 @@ pub(crate) enum Command {
     Serve {
         #[command(subcommand)]
         command: ServeCommand,
+    },
+
+    /// The database's own record: its environment, identity, and legacy runs.
+    Store {
+        #[command(subcommand)]
+        command: StoreCommand,
     },
 }
 

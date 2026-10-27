@@ -498,3 +498,176 @@ fn backtest_reproduces_pinned_summary_for_seeded_fixture() {
             "trade: entry=720000 @ 99.9 exit=899999 @ 110.11 qty=100 gross_pnl=999.99900\n",
         ));
 }
+
+#[test]
+fn store_status_reports_a_fresh_store_as_unbound_and_inactive() {
+    let tempdir = tempdir().expect("tempdir");
+    let db_path = tempdir.path().join("market.sqlite");
+
+    let mut cmd = quantforge();
+    cmd.arg("--db")
+        .arg(&db_path)
+        .arg("--log-level")
+        .arg("error")
+        .args(["store", "status"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("schema_version: 5"))
+        .stdout(predicate::str::contains("environment: undeclared"))
+        .stdout(predicate::str::contains("activation: inactive"))
+        .stdout(predicate::str::contains("activation_epoch: 0"))
+        .stdout(predicate::str::contains("migrations: 1"))
+        .stdout(predicate::str::contains("  0 -> 5 at "))
+        .stdout(predicate::str::contains("legacy_runs: 0"));
+}
+
+// Binding is verified against the endpoint, before any request: mainnet is
+// a production endpoint and nothing else is. The unroutable base URL proves
+// no request is sent.
+#[test]
+fn store_bind_refuses_an_environment_the_base_url_does_not_reach() {
+    let tempdir = tempdir().expect("tempdir");
+    let db_path = tempdir.path().join("market.sqlite");
+
+    let mut cmd = quantforge();
+    cmd.arg("--db")
+        .arg(&db_path)
+        .arg("--log-level")
+        .arg("error")
+        .args([
+            "--base-url",
+            "http://127.0.0.1:9/",
+            "store",
+            "bind",
+            "--environment",
+            "mainnet",
+            "--yes",
+        ]);
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "is a test endpoint, so this invocation cannot bind the store to mainnet",
+    ));
+
+    let mut cmd = quantforge();
+    cmd.arg("--db")
+        .arg(&db_path)
+        .arg("--log-level")
+        .arg("error")
+        .args(["store", "bind", "--environment", "testnet", "--yes"]);
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "is a production endpoint, so this invocation cannot bind the store to testnet",
+    ));
+}
+
+#[test]
+fn store_bind_binds_once_for_life_and_the_binding_gates_every_connector_use() {
+    let tempdir = tempdir().expect("tempdir");
+    let db_path = tempdir.path().join("market.sqlite");
+    let bind = |environment: &str, yes: bool| {
+        let mut cmd = quantforge();
+        cmd.arg("--db")
+            .arg(&db_path)
+            .arg("--log-level")
+            .arg("error")
+            .args(["--base-url", "http://127.0.0.1:9/", "store", "bind"])
+            .args(["--environment", environment]);
+        if yes {
+            cmd.arg("--yes");
+        }
+        cmd
+    };
+    bind("testnet", false)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("environment: testnet"))
+        .stdout(predicate::str::contains("No binding written"));
+    bind("testnet", true)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("bound: testnet"));
+    bind("testnet", true)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("already bound; nothing changed"));
+    bind("demo", true)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("is bound to testnet"));
+
+    // The default base URL is production: a command that would reach the
+    // exchange is refused before credentials are even asked for, while one
+    // that only reads the store runs.
+    let mut cmd = quantforge();
+    cmd.arg("--db")
+        .arg(&db_path)
+        .arg("--log-level")
+        .arg("error")
+        .args(["monitor", "status", "--symbol", "BTCUSDT"]);
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("is bound to testnet, but"))
+        .stderr(predicate::str::contains("is a production endpoint"));
+    let mut cmd = quantforge();
+    cmd.arg("--db")
+        .arg(&db_path)
+        .arg("--log-level")
+        .arg("error")
+        .args(["data", "validate", "--symbol", "BTCUSDT"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("candles: 0"));
+    let mut cmd = quantforge();
+    cmd.arg("--db")
+        .arg(&db_path)
+        .arg("--log-level")
+        .arg("error")
+        .args(["store", "status"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("environment: testnet"));
+}
+
+#[test]
+fn store_adopt_run_needs_a_bound_store_and_a_legacy_run() {
+    let tempdir = tempdir().expect("tempdir");
+    let db_path = tempdir.path().join("market.sqlite");
+    let adopt = || {
+        let mut cmd = quantforge();
+        cmd.arg("--db")
+            .arg(&db_path)
+            .arg("--log-level")
+            .arg("error")
+            .args([
+                "--base-url",
+                "http://127.0.0.1:9/",
+                "store",
+                "adopt-run",
+                "--run-id",
+                "run-legacy",
+                "--yes",
+            ]);
+        cmd
+    };
+    adopt()
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("is not bound to an environment"));
+
+    let mut cmd = quantforge();
+    cmd.arg("--db")
+        .arg(&db_path)
+        .arg("--log-level")
+        .arg("error")
+        .args([
+            "--base-url",
+            "http://127.0.0.1:9/",
+            "store",
+            "bind",
+            "--environment",
+            "testnet",
+            "--yes",
+        ]);
+    cmd.assert().success();
+    adopt().assert().failure().stderr(predicate::str::contains(
+        "run run-legacy is not a legacy run of this store",
+    ));
+}

@@ -65,9 +65,14 @@ src/
 │   │   ├── trades.rs           quantforge monitor trades: recent account trades
 │   │   ├── cancel_order.rs     quantforge monitor cancel-order: cancel one order
 │   │   └── close_position.rs   quantforge monitor close-position: market-sell the free balance
-│   └── serve/                  the server other instances connect to
-│       ├── mod.rs              quantforge serve: subcommand enum and dispatch
-│       └── run.rs              quantforge serve run: listen, answer, and stop on a signal
+│   ├── serve/                  the server other instances connect to
+│   │   ├── mod.rs              quantforge serve: subcommand enum and dispatch
+│   │   └── run.rs              quantforge serve run: listen, answer, and stop on a signal
+│   └── store/                  the database's own record: environment, identity, legacy runs
+│       ├── mod.rs              quantforge store: subcommand enum and dispatch
+│       ├── status.rs           quantforge store status: identity, environment, migrations, legacy runs
+│       ├── bind.rs             quantforge store bind: declare the environment, once and for life
+│       └── adopt_run.rs        quantforge store adopt-run: give a legacy run a verified identity
 ├── protocol/                   the wire format between instances; uses no other module
 │   ├── mod.rs                  the wire spec: encoding, versions, compatibility; ProtocolError
 │   ├── version.rs              ProtoVersion, PROTO_VERSION, MIN_SUPPORTED, VersionRange negotiation
@@ -114,6 +119,7 @@ src/
 │   ├── rules.rs                SymbolRules and AssetBalance
 │   ├── run.rs                  BotRunState, PositionState, ClosedTrade, TargetPosition
 │   ├── segment.rs              SegmentHash, SegmentRef, SegmentPlan: what the segment store hands out
+│   ├── store.rs                StoreId, StoreActivation, StoreIdentity, RunIdentity, the migration log
 │   ├── timestamp.rs            TimestampMs, now_utc_ms, RFC 3339 conversions
 │   ├── units.rs                Price, BaseQty, Contracts, Quantity, FaceValue, Leverage, PositionSide
 │   └── futures/                the futures contract of ADR 0002, used through its module
@@ -133,8 +139,9 @@ src/
 │       ├── position.rs         PositionCycle, CloseReason, OperatorRemoval
 │       └── accounting.rs       RealizedPnl and AccountingStatus: net PnL per settlement asset
 ├── ports/                      the seams: connector and storage traits, capabilities, error kinds
-│   ├── mod.rs                  Spot connector and storage traits, their capabilities and errors
+│   ├── mod.rs                  Spot connector traits, their capabilities and errors; re-exports the storage ports
 │   ├── clock.rs                Clock, the injected time source, and SystemClock
+│   ├── storage.rs              CandleStore, SegmentStore, RunJournalStore, StoreControl, StorageError
 │   └── futures.rs              futures ports by capability, FuturesCapabilities, FuturesConnectors
 ├── exchange/                   the connector registry, one adapter per exchange, and the conformance suite
 │   ├── mod.rs                  the registry API: lookup, name, connect, ExchangeConnectors
@@ -164,9 +171,14 @@ src/
 │   │   ├── mod.rs              windows, compression, the hash, opening a fetched segment, SegmentError
 │   │   └── payload.rs          the payload: candles as columns, exact decimal text, strict decoding
 │   └── sqlite/                 SQLite backend
-│       ├── mod.rs              SqliteStore: connections, schema version, row helpers
+│       ├── mod.rs              SqliteStore: connections, SCHEMA_VERSION, row helpers
+│       ├── migrate.rs          the schema chain: every earlier schema brought forward at init
+│       ├── control.rs          store_control and schema_migrations: the StoreControl implementation
 │       ├── candles.rs          candle table and the CandleStore implementation; marks changed windows
-│       ├── journal.rs          run, order-event, and trade tables: RunJournalStore
+│       ├── journal.rs          run table, run identity, and RunJournalStore; the journal DDL of every schema
+│       ├── journal/            the journals beside a run's state, and its identity columns
+│       │   ├── identity.rs     a RunIdentity written to and read from its four columns
+│       │   └── events.rs       order events and closed trades, and the schema-5 rewrite of their ids
 │       └── segments/           segment tables and the SegmentStore implementation
 │           ├── mod.rs          the tables, the dirty marks, resolving a range, loading a segment
 │           ├── build.rs        refresh: packs each dirty closed window outside the write lock
@@ -188,6 +200,8 @@ src/
 │       ├── mod.rs              public surface and the run lifecycle
 │       ├── runner.rs           the poll loop: bootstrap, bars, closed-bar detection
 │       ├── execution.rs        order placement, exchange rules, dry-run vs live
+│       ├── execution/          its unit tests, beside it for the line budget
+│       │   └── tests.rs        dry-run fills, rounding, notional and dust rules
 │       └── state.rs            run identity: create, resume, and resume checks
 └── server/                     the HTTP server other instances connect to
     └── mod.rs                  serve: the routes, and the shutdown that finishes requests in progress
@@ -239,6 +253,12 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
 - `tests/backtest_engine.rs`, `tests/candle_validation.rs`,
   `tests/candle_batch.rs`, `tests/decimal_float.rs`, `tests/sqlite_store.rs`,
   and `tests/live_engine.rs`: library integration tests
+- `tests/storage/`: the storage contract of
+  [storage-schema.md](storage-schema.md) — the shared identity cases of
+  `tests/fixtures/storage_identity_cases.json`, isolation of product lines,
+  environments and accounts, decimal scale, the schema chain from every
+  earlier schema in `tests/fixtures/sqlite/`, and the document held to the
+  code
 - `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
   from naming a concrete exchange adapter, the code and `--help` outside
   the Binance adapter from hardcoding Binance, and each venue's own
@@ -268,8 +288,9 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   can fail, the recorder, and the generated feature matrix
 - `tests/fixtures/`: data shared with the Python bindings' tests: the
   decimal ↔ float64 conformance cases of
-  [decimal-float-policy.md](decimal-float-policy.md), and the shared cases
-  of the bundle and segment specs
+  [decimal-float-policy.md](decimal-float-policy.md), the shared cases
+  of the bundle and segment specs, the storage identity cases, and the
+  SQLite databases of every earlier schema under `sqlite/`
 - unit tests sit at the bottom of the module they test, in
   `#[cfg(test)] mod tests`, or in a `tests.rs` beside it once they would
   push the file over its line budget (`src/cli/tests.rs`)

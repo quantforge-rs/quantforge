@@ -1,7 +1,7 @@
 //! `quantforge monitor status` — one-shot report of balances, run state,
 //! open orders, and recent trades.
 
-use crate::cli::common::{MarketArgs, StrategyArgs, parse_market};
+use crate::cli::common::{MarketArgs, StrategyArgs, parse_market, venue_id};
 use anyhow::Result;
 use clap::Args;
 use quantforge::{
@@ -66,6 +66,14 @@ pub(super) async fn render_status(
 
     if let Some(run) = run {
         println!("latest_run_id: {}", run.run_id);
+        let identity = store.run_identity(&run.run_id)?;
+        println!(
+            "run_identity: {}",
+            identity.map_or_else(
+                || "unknown".to_string(),
+                |identity| identity.source.to_string()
+            )
+        );
         println!("run_status: {}", run.status.as_str());
         println!(
             "last_processed_open_time: {}",
@@ -103,8 +111,8 @@ pub(super) async fn render_status(
     println!("open_orders: {}", open_orders.len());
     for order in open_orders.iter().take(10) {
         println!(
-            "  id={:?} side={} status={} qty={} avg_price={}",
-            order.order_id,
+            "  id={} side={} status={} qty={} avg_price={}",
+            venue_id(order.order_id.as_ref()),
             order.side,
             order.status.as_str(),
             order

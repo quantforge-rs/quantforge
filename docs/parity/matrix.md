@@ -71,7 +71,7 @@ Bind each store to one environment.
 - **Cells:** 2, over backend
 - **Passes when:** A store records its environment once; a connector or profile for another environment is refused before any write, and a store from an older release is declared by its operator, never guessed
 - **Evidence required:** real_store
-- **Implementation:** all: ALG-734
+- **Implementation:** all: QUA-37
 - **Evidence:** all: ALG-748
 - **Revised in:** revision 1
 
@@ -172,7 +172,7 @@ Refuse a futures series for a candle strategy.
 - **A refusal:** the cell passes when the request is refused
 - **Passes when:** A candle strategy given a linear or inverse series is refused with a typed error before it runs, on every surface
 - **Evidence required:** replay
-- **Implementation:** all: ALG-734; cli: ALG-532; python: ALG-379; server: ALG-509
+- **Implementation:** all: QUA-37; cli: ALG-532; python: ALG-379; server: ALG-509
 - **Evidence:** all: ALG-703
 - **Revised in:** revision 1
 
@@ -291,7 +291,7 @@ Build immutable segments.
 - **Cells:** 12, over venue × backend × family
 - **Passes when:** Segments built from the same stored candles have identical bytes and hashes, and a refresh after a backfill rebuilds only the changed windows
 - **Evidence required:** replay, real_store
-- **Implementation:** all: ALG-734; inverse: ALG-761; linear: ALG-761; postgres: ALG-757; sqlite: ALG-506
+- **Implementation:** all: QUA-37; inverse: ALG-761; linear: ALG-761; postgres: ALG-757; sqlite: ALG-506
 - **Evidence:** all: ALG-402, ALG-411
 - **Revised in:** revision 1
 
@@ -843,7 +843,7 @@ The `storage` area.
 
 - **Inputs:** The storage ports' operations
 - **Outputs:** The same results from SQLite and PostgreSQL
-- **States:** none
+- **States:** store
 - **Errors:** storage
 - **Units:** timestamp, hash, exactness
 - **Data quality:** Durable commits and bounded waits; never a hidden fallback to another backend
@@ -880,7 +880,7 @@ Migrate every earlier schema.
 - **Cells:** 2, over backend
 - **Passes when:** Every earlier schema (1 to 4 on SQLite) migrates to the current one without losing or changing data
 - **Evidence required:** real_store
-- **Implementation:** postgres: ALG-404; sqlite: ALG-734
+- **Implementation:** postgres: ALG-404; sqlite: QUA-37
 - **Evidence:** all: ALG-411, ALG-768
 - **Requirements:** D16
 - **Revised in:** revision 1
@@ -1043,6 +1043,16 @@ Keep the Python SDK to candle strategies and jobs.
 - **Transitions:**
   - pending → accepted, partially_applied, rejected, outcome_unknown
   - outcome_unknown → accepted, partially_applied, rejected
+
+### `store`
+
+- **States:** inactive, active, deactivated
+- **Initial:** inactive
+- **Terminal:** none; the machine cycles
+- **Transitions:**
+  - inactive → active
+  - active → deactivated
+  - deactivated → active
 
 ### `strategy_run`
 
@@ -1272,7 +1282,6 @@ Cells each story owns as implementation or evidence. Consumers read the evidence
 | ALG-730 | PostgreSQL concurrency, failures and restart recovery | 0 | 1 |
 | ALG-731 | Release gate for store parity across both exchanges | 0 | consumer |
 | ALG-733 | Typed futures instrument, account, position and execution ports | 4 | 0 |
-| ALG-734 | Identity migration and storage and protocol compatibility | 21 | 0 |
 | ALG-735 | Asset defaults, risk capital and per-asset policies | 16 | 0 |
 | ALG-736 | Decimal risk sizing for linear and inverse futures | 8 | 0 |
 | ALG-737 | Versioned TradingView payloads and alert templates | 8 | 0 |
@@ -1307,3 +1316,4 @@ Cells each story owns as implementation or evidence. Consumers read the evidence
 | ALG-767 | Routing by persisted exchange, account and product profile | 28 | 0 |
 | ALG-768 | SQLite and PostgreSQL cutover, backup and recovery | 2 | 4 |
 | ALG-769 | Release block until every parity cell passes | 0 | 71 |
+| QUA-37 | Identity migration and storage and protocol compatibility (ALG-734 in the previous workspace) | 21 | 0 |

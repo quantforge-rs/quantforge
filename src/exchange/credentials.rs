@@ -4,6 +4,7 @@
 //! `QF_API_KEY`/`QF_API_SECRET` as env fallbacks, so the library never reads
 //! credentials from the process environment.
 
+use crate::model::KeyFingerprint;
 use std::fmt;
 
 #[derive(Clone)]
@@ -33,6 +34,12 @@ impl ApiCredentials {
             api_key: present(api_key)?,
             secret: present(secret)?,
         })
+    }
+
+    /// The fingerprint of the key: what a journal records as its account
+    /// where the venue gives no ID. The key itself never leaves here.
+    pub fn key_fingerprint(&self) -> KeyFingerprint {
+        KeyFingerprint::of(&self.api_key)
     }
 }
 

@@ -10,7 +10,7 @@ use super::super::ExactDecimal;
 /// ```
 /// use quantforge::protocol::stream::ClientFrame;
 ///
-/// let json = r#"{"type":"subscribe","exchange":"binance","symbol":"BTCUSDT","interval":"1m"}"#;
+/// let json = r#"{"type":"subscribe","exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m"}"#;
 /// let ClientFrame::Subscribe(subscribe) = serde_json::from_str(json)? else {
 ///     panic!("a subscribe frame");
 /// };
@@ -22,6 +22,9 @@ use super::super::ExactDecimal;
 pub struct Subscribe {
     /// The exchange, by the name QuantForge registers it under.
     pub exchange: String,
+    /// The product family: `spot`, `linear` or `inverse`. With `exchange` it
+    /// names the product line.
+    pub category: String,
     /// The exchange's symbol, in uppercase.
     pub symbol: String,
     /// The bar interval, such as `1m`.
@@ -39,7 +42,7 @@ pub struct Subscribe {
 /// ```
 /// use quantforge::protocol::stream::ServerFrame;
 ///
-/// let json = r#"{"type":"bar_closed","exchange":"binance","symbol":"BTCUSDT","interval":"1m","bar":{"open_time_ms":1792454400000,"close_time_ms":1792454459999,"open":"67012.34000000","high":"67020.00000000","low":"67001.10000000","close":"67015.50000000","volume":"12.04510000","trades":1234}}"#;
+/// let json = r#"{"type":"bar_closed","exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m","bar":{"open_time_ms":1792454400000,"close_time_ms":1792454459999,"open":"67012.34000000","high":"67020.00000000","low":"67001.10000000","close":"67015.50000000","volume":"12.04510000","trades":1234}}"#;
 /// let ServerFrame::BarClosed(closed) = serde_json::from_str(json)? else {
 ///     panic!("a bar_closed frame");
 /// };
@@ -52,6 +55,9 @@ pub struct Subscribe {
 pub struct BarClosed {
     /// The exchange, by the name QuantForge registers it under.
     pub exchange: String,
+    /// The product family: `spot`, `linear` or `inverse`. With `exchange` it
+    /// names the product line.
+    pub category: String,
     /// The exchange's symbol, in uppercase.
     pub symbol: String,
     /// The bar interval, such as `1m`.
@@ -90,7 +96,7 @@ pub struct Bar {
 /// ```
 /// use quantforge::protocol::stream::{GapReason, ServerFrame};
 ///
-/// let json = r#"{"type":"gap_notice","exchange":"binance","symbol":"BTCUSDT","interval":"1m","first_open_ms":1792454460000,"last_open_ms":1792454580000,"reason":"no_data"}"#;
+/// let json = r#"{"type":"gap_notice","exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m","first_open_ms":1792454460000,"last_open_ms":1792454580000,"reason":"no_data"}"#;
 /// let ServerFrame::GapNotice(gap) = serde_json::from_str(json)? else {
 ///     panic!("a gap_notice frame");
 /// };
@@ -102,6 +108,9 @@ pub struct Bar {
 pub struct GapNotice {
     /// The exchange, by the name QuantForge registers it under.
     pub exchange: String,
+    /// The product family: `spot`, `linear` or `inverse`. With `exchange` it
+    /// names the product line.
+    pub category: String,
     /// The exchange's symbol, in uppercase.
     pub symbol: String,
     /// The bar interval, such as `1m`.
@@ -141,7 +150,7 @@ mod tests {
     use super::super::ServerFrame;
     use super::*;
 
-    const BAR_CLOSED: &str = r#"{"type":"bar_closed","exchange":"binance","symbol":"BTCUSDT","interval":"1m","bar":{"open_time_ms":1792454400000,"close_time_ms":1792454459999,"open":"67012.34000000","high":"67020.00000000","low":"67001.10000000","close":"67015.50000000","volume":"12.04510000","trades":1234}}"#;
+    const BAR_CLOSED: &str = r#"{"type":"bar_closed","exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m","bar":{"open_time_ms":1792454400000,"close_time_ms":1792454459999,"open":"67012.34000000","high":"67020.00000000","low":"67001.10000000","close":"67015.50000000","volume":"12.04510000","trades":1234}}"#;
 
     /// Every reason a server sends, with its wire name.
     const REASONS: [(GapReason, &str); 3] = [
@@ -173,12 +182,13 @@ mod tests {
 
     #[test]
     fn a_gap_reason_this_build_does_not_know_is_unrecognized_and_keeps_the_gap() {
-        let json = r#"{"type":"gap_notice","exchange":"binance","symbol":"BTCUSDT","interval":"1m","first_open_ms":1,"last_open_ms":2,"reason":"maintenance"}"#;
+        let json = r#"{"type":"gap_notice","exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m","first_open_ms":1,"last_open_ms":2,"reason":"maintenance"}"#;
         let frame: ServerFrame = serde_json::from_str(json).expect("frame");
         assert_eq!(
             frame,
             ServerFrame::GapNotice(GapNotice {
                 exchange: "binance".to_string(),
+                category: "spot".to_string(),
                 symbol: "BTCUSDT".to_string(),
                 interval: "1m".to_string(),
                 first_open_ms: 1,
@@ -238,13 +248,14 @@ mod tests {
     fn a_subscribe_without_a_resume_point_is_left_without_one() {
         let live = Subscribe {
             exchange: "binance".to_string(),
+            category: "spot".to_string(),
             symbol: "BTCUSDT".to_string(),
             interval: "1m".to_string(),
             resume_from_open_ms: None,
         };
-        let json = r#"{"exchange":"binance","symbol":"BTCUSDT","interval":"1m"}"#;
+        let json = r#"{"exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m"}"#;
         assert_eq!(serde_json::to_string(&live).expect("serialize"), json);
-        let null = r#"{"exchange":"binance","symbol":"BTCUSDT","interval":"1m","resume_from_open_ms":null}"#;
+        let null = r#"{"exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m","resume_from_open_ms":null}"#;
         assert_eq!(
             serde_json::from_str::<Subscribe>(null).expect("subscribe"),
             live

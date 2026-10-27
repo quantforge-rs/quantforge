@@ -13,9 +13,10 @@ use super::super::{ContentHash, ExactDecimal};
 /// ```
 /// use quantforge::protocol::jobs::JobSubmission;
 ///
-/// let json = r#"{"bundle":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","data":{"exchange":"binance","symbol":"BTCUSDT","interval":"1m","start_open_ms":1792454400000,"end_open_ms":1792540740000},"backtest":{"initial_cash":"10000","fee_bps":"10","close_out_at_end":true}}"#;
+/// let json = r#"{"bundle":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","data":{"exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m","start_open_ms":1792454400000,"end_open_ms":1792540740000},"backtest":{"initial_cash":"10000","fee_bps":"10","close_out_at_end":true}}"#;
 /// let submission: JobSubmission = serde_json::from_str(json)?;
 /// assert_eq!(submission.data.exchange, "binance");
+/// assert_eq!(submission.data.category, "spot");
 /// assert_eq!(submission.backtest.fee_bps.to_string(), "10");
 /// assert_eq!(serde_json::to_string(&submission)?, json);
 /// # Ok::<(), serde_json::Error>(())
@@ -38,6 +39,9 @@ pub struct JobSubmission {
 pub struct DataSelection {
     /// The exchange, by the name QuantForge registers it under.
     pub exchange: String,
+    /// The product family: `spot`, `linear` or `inverse`. With `exchange` it
+    /// names the product line.
+    pub category: String,
     /// The exchange's symbol, in uppercase.
     pub symbol: String,
     /// The bar interval, such as `1m`.
@@ -66,7 +70,7 @@ pub struct BacktestSettings {
 mod tests {
     use super::*;
 
-    const JSON: &str = r#"{"bundle":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","data":{"exchange":"binance","symbol":"BTCUSDT","interval":"4h","start_open_ms":1792454400000,"end_open_ms":1792540800000},"backtest":{"initial_cash":"2500.00","fee_bps":"7.5","close_out_at_end":false}}"#;
+    const JSON: &str = r#"{"bundle":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","data":{"exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"4h","start_open_ms":1792454400000,"end_open_ms":1792540800000},"backtest":{"initial_cash":"2500.00","fee_bps":"7.5","close_out_at_end":false}}"#;
 
     #[test]
     fn a_submission_has_its_exact_json() {
@@ -96,6 +100,7 @@ mod tests {
     fn every_field_is_required() {
         for field in [
             r#""bundle":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","#,
+            r#""category":"spot","#,
             r#""start_open_ms":1792454400000,"#,
             r#","close_out_at_end":false"#,
         ] {

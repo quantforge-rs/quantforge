@@ -20,10 +20,14 @@ pub fn is_date(text: &str) -> bool {
         })
 }
 
+/// `ALG-N` or `QUA-N`: a story in either Linear workspace. Stories moved
+/// from the first to the second keep their old ID until they are swept.
 fn is_story(id: &str) -> bool {
-    id.strip_prefix("ALG-").is_some_and(|number| {
-        !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
-    })
+    id.strip_prefix("ALG-")
+        .or_else(|| id.strip_prefix("QUA-"))
+        .is_some_and(|number| {
+            !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+        })
 }
 
 /// The first column of every markdown table row in `text` that `accept` takes.
@@ -206,7 +210,9 @@ fn owners_are_declared_stories_and_consumers_own_no_evidence() {
     let mut problems = Vec::new();
     for (id, role) in &matrix.stories {
         if !is_story(id) || role.trim().is_empty() {
-            problems.push(format!("story {id:?} needs an ALG-N ID and a role"));
+            problems.push(format!(
+                "story {id:?} needs an ALG-N or QUA-N ID and a role"
+            ));
         }
     }
     let consumers: BTreeSet<&str> = matrix.consumers.iter().map(String::as_str).collect();

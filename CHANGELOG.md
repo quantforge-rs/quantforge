@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- a SQLite database from any earlier release is migrated in place when it is opened: schema 1 (0.1.0), 2 (0.2.0) and the development schemas 3 and 4 move forward to schema 5 step by step, each step in one transaction, and `docs/upgrading.md` is the operator's guide; nothing is deleted, and the original JSON of every migrated run and order event stays beside its migrated form
+- `quantforge store status`, `store bind` and `store adopt-run`: the database's own record — its identity, the environment it is bound to for life (`mainnet`, `testnet` or `demo`, declared by the operator and checked against the base URL, never inferred from it), the migrations it went through, and the runs an earlier release wrote without a verified identity, which an operator adopts before they can be resumed or closed
+- every run records the identity it started under (the store's environment and, for a live run, the fingerprint of the API key), and `trade run --run-id` and `trade close` drive a run only under the identity that recorded it; `monitor status` prints `run_identity`
+- `docs/storage-schema.md`: the storage contract — identities, the store activation contract that ALG-738, ALG-767 and ALG-768 implement, enforce and verify, schema ownership, the SQLite DDL and the reviewed PostgreSQL DDL — and `tests/storage/` with the shared identity cases of `tests/fixtures/storage_identity_cases.json`
 - `ExchangeId` names product lines: beside `binance_spot` come `binance_linear`, `binance_inverse`, `bybit_spot`, `bybit_linear` and `bybit_inverse`, each a `Venue` (`binance`, `bybit`) with a `Category` (`spot`, `linear`, `inverse`), and `MarketId::category()` gives a market's family; only Binance Spot has an adapter so far, and the CLI is unchanged
 - `model` gains execution identity and units: `Environment`, `InstrumentId`, `AccountRef`, venue order, algo-order and trade IDs as text, and `OperationId`; `Price`, `BaseQty`, whole `Contracts`, `Quantity`, `FaceValue`, `Leverage` and `PositionSide`; `Money`, whose arithmetic refuses to mix assets; and `Refusal`, the parity matrix's refusal vocabulary
 - `model::futures` types the futures contract of ADR 0002: instruments with their trading rules and universe rule 1, accounts, settings and positions, entry and reduce-only orders, acknowledgements that carry no status or fills, fills, stops and the read-back that alone makes a position protected, ledger records, private events, and QuantForge's 36-character client order IDs
@@ -80,6 +84,9 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- the venue's order and trade IDs are text everywhere, Spot included: `ExchangeOrder.order_id`, `Fill.trade_id`, `AccountTrade.trade_id` and `order_id`, `ClosedTrade.entry_order_id` and `exit_order_id`, `PositionState.entry_order_id`, and the `order_id` of a cancel or query request are `VenueOrderId`/`VenueTradeId`; `monitor cancel-order --order-id` takes the ID as the exchange spells it, and `order: id=` lines print it without `Some(..)`
+- the SQLite schema version is 5; `RunJournalStore::save_run_state` updates a run that `create_run` recorded with its identity and refuses an unknown one; `StorageError` is `#[non_exhaustive]` and `SchemaVersionMismatch` became `SchemaUnsupported`, raised only for a database from a newer build
+- the protocol's markets carry a required `category` beside `exchange` (`DataSelection`, `SegmentEntry`, `Subscribe`, `BarClosed`, `GapNotice`): `spot`, `linear` or `inverse`, always `spot` for a candle strategy
 - `ExchangeId` is `#[non_exhaustive]`, so a `match` on it outside the crate needs a wildcard arm
 - `exchange::default_base_url` and `exchange::factory` return `Option`, `None` for a product line without an adapter, and `exchange::connect` refuses such a line; `exchange::name` returns the venue's name, `binance` as before
 
@@ -122,7 +129,7 @@ All notable changes to this project will be documented in this file.
 - an executed order is always reflected in position state even when journaling the order event fails; the journaling failure is surfaced afterwards with reconciliation guidance
 - an unsellable dust remnant left after an exit or manual close is written off with a warning instead of wedging the run in a permanently open position
 - opening a database with a mismatched schema version fails with actionable guidance instead of proceeding silently
-- the SQLite schema version is now 4 (`BotRunState` gained a required `execution_mode` field, and the database holds the candle segment tables); until 1.0.0 schema changes are not backward compatible and there are no migrations — delete the database and re-sync, which also replaces the still-forming candles earlier versions stored
+- `BotRunState` gained a required `execution_mode` field, and the database holds the candle segment tables (schemas 3 and 4 of the chain above); a run QuantForge 0.2.0 wrote recorded no mode, so it stays as it is until `store adopt-run --execution-mode` states one, and `docs/upgrading.md` says how to replace the still-forming candle 0.2.0 stored at the end of each market
 - data sync summaries report the first synced candle, and bounded syncs warn when the exchange returned no candles for part of the requested window
 - startup logs the exchange and its effective base URL, and warns when the database file did not exist and was created empty
 - `ms_to_rfc3339` renders out-of-range timestamps as an explicit `invalid-ms(...)` marker instead of a plausible epoch date

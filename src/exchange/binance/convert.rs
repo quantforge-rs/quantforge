@@ -7,7 +7,10 @@ use serde_json::Value;
 use tracing::warn;
 
 use super::types::{BinanceOrderResponse, BinanceSymbolInfo};
-use crate::{ExchangeError, ExchangeOrder, Fill, OrderStatus, Side, Symbol, SymbolRules};
+use crate::{
+    ExchangeError, ExchangeOrder, Fill, OrderStatus, Side, Symbol, SymbolRules, VenueOrderId,
+    VenueTradeId,
+};
 
 pub(super) fn parse_symbol_rules(info: BinanceSymbolInfo) -> Result<SymbolRules, ExchangeError> {
     let mut rules = SymbolRules {
@@ -97,7 +100,10 @@ pub(super) fn parse_order(raw: Value) -> Result<ExchangeOrder, ExchangeError> {
                         qty: parse_decimal(&fill.qty, "fill.qty")?,
                         commission: parse_decimal(&fill.commission, "fill.commission")?,
                         commission_asset: fill.commission_asset,
-                        trade_id: fill.trade_id,
+                        trade_id: fill
+                            .trade_id
+                            .map(|id| VenueTradeId::new(id.to_string()))
+                            .transpose()?,
                     })
                 })
                 .collect::<Result<Vec<_>, ExchangeError>>()
@@ -142,7 +148,10 @@ pub(super) fn parse_order(raw: Value) -> Result<ExchangeOrder, ExchangeError> {
         side,
         order_type: response.order_type,
         status: OrderStatus::from_exchange(response.status.as_deref().unwrap_or("UNKNOWN")),
-        order_id: response.order_id,
+        order_id: response
+            .order_id
+            .map(|id| VenueOrderId::new(id.to_string()))
+            .transpose()?,
         client_order_id: response.client_order_id,
         requested_qty,
         requested_quote_qty,
@@ -185,7 +194,10 @@ mod tests {
         let order = parse_order(raw).expect("order");
         assert_eq!(order.side, Side::Buy);
         assert_eq!(order.status, OrderStatus::Filled);
-        assert_eq!(order.order_id, Some(7));
+        assert_eq!(
+            order.order_id,
+            Some(VenueOrderId::new("7").expect("order id"))
+        );
         assert_eq!(
             order.executed_qty,
             Some(Decimal::from_str_exact("0.01000000").expect("decimal"))

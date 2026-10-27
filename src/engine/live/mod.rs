@@ -10,7 +10,7 @@ mod state;
 
 use crate::EngineError;
 use crate::{
-    BuiltInStrategyConfig, CandleStore, ExecutionMode, MarketDataConnector, MarketId,
+    BuiltInStrategyConfig, CandleStore, ExecutionMode, MarketDataConnector, MarketId, RunIdentity,
     RunJournalStore, RunStatus, SignedConnectors, now_utc_ms,
 };
 use rust_decimal::Decimal;
@@ -22,6 +22,10 @@ pub struct LiveTradeConfig {
     pub market: MarketId,
     pub strategy: BuiltInStrategyConfig,
     pub execution_mode: ExecutionMode,
+    /// The identity a new run records, and the one a resumed run must
+    /// have been recorded with: the store's environment and, in live
+    /// mode, the account behind the credentials.
+    pub identity: RunIdentity,
     pub quote_order_qty: Decimal,
     pub poll_interval: Duration,
     pub bootstrap_bars: usize,

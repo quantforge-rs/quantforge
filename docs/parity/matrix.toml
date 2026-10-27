@@ -105,7 +105,7 @@ ALG-729 = "PostgreSQL in the server, jobs, workers and provenance"
 ALG-730 = "PostgreSQL concurrency, failures and restart recovery"
 ALG-731 = "Release gate for store parity across both exchanges"
 ALG-733 = "Typed futures instrument, account, position and execution ports"
-ALG-734 = "Identity migration and storage and protocol compatibility"
+QUA-37 = "Identity migration and storage and protocol compatibility (ALG-734 in the previous workspace)"
 ALG-735 = "Asset defaults, risk capital and per-asset policies"
 ALG-736 = "Decimal risk sizing for linear and inverse futures"
 ALG-737 = "Versioned TradingView payloads and alert templates"
@@ -225,6 +225,14 @@ initial = "disarmed"
 states = ["disarmed", "armed"]
 terminal = []
 transitions = ["disarmed -> armed", "armed -> disarmed"]
+
+# The store activation contract (docs/storage-schema.md): a store executes
+# only once an operator activates it; copies and transfers never carry that.
+[states.store]
+initial = "inactive"
+states = ["inactive", "active", "deactivated"]
+terminal = []
+transitions = ["inactive -> active", "active -> deactivated", "deactivated -> active"]
 
 [states.service]
 initial = "stopped"
@@ -403,7 +411,7 @@ id = "storage"
 title = "Storage backends"
 inputs = "The storage ports' operations"
 outputs = "The same results from SQLite and PostgreSQL"
-states = []
+states = ["store"]
 errors = ["storage"]
 units = ["timestamp", "hash", "exactness"]
 quality = "Durable commits and bounded waits; never a hidden fallback to another backend"
@@ -458,7 +466,7 @@ axes = ["backend"]
 passes = "A store records its environment once; a connector or profile for another environment is refused before any write, and a store from an older release is declared by its operator, never guessed"
 requires = ["real_store"]
 revised = 1
-implementation = { all = ["ALG-734"] }
+implementation = { all = ["QUA-37"] }
 evidence = { all = ["ALG-748"] }
 
 [[capability]]
@@ -571,7 +579,7 @@ refusal = true
 passes = "A candle strategy given a linear or inverse series is refused with a typed error before it runs, on every surface"
 requires = ["replay"]
 revised = 1
-implementation = { all = ["ALG-734"], cli = ["ALG-532"], python = ["ALG-379"], server = ["ALG-509"] }
+implementation = { all = ["QUA-37"], cli = ["ALG-532"], python = ["ALG-379"], server = ["ALG-509"] }
 evidence = { all = ["ALG-703"] }
 
 [[capability]]
@@ -666,7 +674,7 @@ axes = ["venue", "backend", "family"]
 passes = "Segments built from the same stored candles have identical bytes and hashes, and a refresh after a backfill rebuilds only the changed windows"
 requires = ["replay", "real_store"]
 revised = 1
-implementation = { all = ["ALG-734"], sqlite = ["ALG-506"], postgres = ["ALG-757"], linear = ["ALG-761"], inverse = ["ALG-761"] }
+implementation = { all = ["QUA-37"], sqlite = ["ALG-506"], postgres = ["ALG-757"], linear = ["ALG-761"], inverse = ["ALG-761"] }
 evidence = { all = ["ALG-402", "ALG-411"] }
 
 [[capability]]
@@ -1203,7 +1211,7 @@ passes = "Every earlier schema (1 to 4 on SQLite) migrates to the current one wi
 requires = ["real_store"]
 revised = 1
 requirements = ["D16"]
-implementation = { sqlite = ["ALG-734"], postgres = ["ALG-404"] }
+implementation = { sqlite = ["QUA-37"], postgres = ["ALG-404"] }
 evidence = { all = ["ALG-411", "ALG-768"] }
 
 [[capability]]

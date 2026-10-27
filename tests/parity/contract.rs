@@ -9,7 +9,8 @@ use quantforge::model::futures::{
     PositionMode, ProfileId, ProfileIdentity, ProtectionState, SETTLE_WINDOW_MS, UNIVERSE_RULE,
 };
 use quantforge::model::{
-    AccountRef, Category, Environment, PositionSide, Refusal, Venue, VenueAccountId,
+    AccountRef, Category, Environment, PositionSide, Refusal, StoreActivation, Venue,
+    VenueAccountId,
 };
 
 use crate::model::{self, Machine};
@@ -107,6 +108,18 @@ fn the_accounting_statuses_are_the_matrix_accounting_machine() {
         AccountingStatus::as_str,
     );
     assert_eq!(code, machine("accounting"));
+}
+
+#[test]
+fn the_store_activations_are_the_matrix_store_machine() {
+    let code = code_shape(
+        &StoreActivation::ALL,
+        StoreActivation::INITIAL,
+        StoreActivation::is_terminal,
+        &StoreActivation::TRANSITIONS,
+        StoreActivation::as_str,
+    );
+    assert_eq!(code, machine("store"));
 }
 
 #[test]

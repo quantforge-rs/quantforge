@@ -2,8 +2,9 @@
 //! [`MarketDataConnector`], [`TradingConnector`] and [`AccountConnector`],
 //! all three on the shared [`ExchangeConnector`] base that names the
 //! exchange and describes it with [`ExchangeCapabilities`]. A persistence
-//! backend provides [`CandleStore`], [`RunJournalStore`] and
-//! [`SegmentStore`].
+//! backend provides [`CandleStore`], [`RunJournalStore`], [`SegmentStore`]
+//! and [`StoreControl`], the store's own identity and control record; they
+//! are in `storage`, re-exported here.
 //! [`ExchangeError`] and [`StorageError`] are the two failure channels an
 //! engine folds into its own; [`ExchangeErrorKind`] classifies an exchange
 //! failure the same way for every exchange.
@@ -18,8 +19,12 @@
 pub mod futures;
 
 mod clock;
+mod storage;
 
 pub use clock::{Clock, SystemClock};
+pub use storage::{
+    CandleQuery, CandleStore, RunJournalStore, SegmentStore, StorageError, StoreControl,
+};
 
 use async_trait::async_trait;
 use std::error::Error as StdError;
@@ -27,17 +32,10 @@ use std::fmt;
 use thiserror::Error;
 
 use crate::model::{
-    AccountTrade, AssetBalance, BotRunState, CancelOrderRequest, Candle, ClosedTrade, ExchangeId,
-    ExchangeOrder, KlineRequest, MarketId, MarketOrderRequest, ModelError, OrderQueryRequest,
-    SegmentHash, SegmentPlan, SegmentRefresh, Symbol, SymbolRules, TimestampMs,
+    AccountTrade, AssetBalance, CancelOrderRequest, Candle, ExchangeId, ExchangeOrder,
+    KlineRequest, MarketOrderRequest, ModelError, OrderQueryRequest, Symbol, SymbolRules,
+    TimestampMs,
 };
-
-#[derive(Clone, Debug, Default)]
-pub struct CandleQuery {
-    pub start_time_ms: Option<TimestampMs>,
-    pub end_time_ms: Option<TimestampMs>,
-    pub limit: Option<usize>,
-}
 
 #[derive(Error, Debug)]
 pub enum ExchangeError {
@@ -185,31 +183,6 @@ impl From<ModelError> for ExchangeError {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum StorageError {
-    #[error("storage error")]
-    Other(#[source] Box<dyn StdError + Send + Sync>),
-
-    #[error("invalid argument: {0}")]
-    InvalidArgument(String),
-
-    #[error(
-        "database schema version {found} does not match the supported version {expected}; \
-         use a matching quantforge release or re-create the database (candles can be \
-         re-synced with `data sync`)"
-    )]
-    SchemaVersionMismatch { found: String, expected: String },
-}
-
-impl StorageError {
-    pub fn other<E>(err: E) -> Self
-    where
-        E: StdError + Send + Sync + 'static,
-    {
-        Self::Other(Box::new(err))
-    }
-}
-
 /// What an exchange supports. Each connector reports the capabilities of
 /// the exchange behind it, and callers branch on these — never on
 /// [`ExchangeId`] — so a second exchange slots in without touching them.
@@ -333,64 +306,4 @@ impl fmt::Debug for SignedConnectors<'_> {
             .field("exchange", &self.trading.exchange_id())
             .finish_non_exhaustive()
     }
-}
-
-pub trait CandleStore: Send + Sync {
-    fn init(&self) -> Result<(), StorageError>;
-    fn upsert_candles(&self, market: &MarketId, candles: &[Candle]) -> Result<usize, StorageError>;
-    fn load_candles(
-        &self,
-        market: &MarketId,
-        query: CandleQuery,
-    ) -> Result<Vec<Candle>, StorageError>;
-    fn load_recent_candles(
-        &self,
-        market: &MarketId,
-        limit: usize,
-    ) -> Result<Vec<Candle>, StorageError>;
-    fn max_open_time_ms(&self, market: &MarketId) -> Result<Option<TimestampMs>, StorageError>;
-}
-
-/// A market's closed candles packed window by window into immutable
-/// segments, each named by the hash of its payload, beside the candles they
-/// are built from. [`crate::storage::segments`] is the format.
-pub trait SegmentStore: Send + Sync {
-    /// Packs every closed window whose candles changed since it was last
-    /// packed. The window holding the newest candle is the tip, and stays
-    /// unpacked.
-    fn refresh_segments(&self, market: &MarketId) -> Result<SegmentRefresh, StorageError>;
-    /// The segments, and the tip after them, holding `market`'s candles with
-    /// open times from `first_open_ms` to `last_open_ms`.
-    fn resolve_segments(
-        &self,
-        market: &MarketId,
-        first_open_ms: TimestampMs,
-        last_open_ms: TimestampMs,
-    ) -> Result<SegmentPlan, StorageError>;
-    /// A segment's stored bytes, its payload zstd-compressed, or `None` when
-    /// no segment has that name.
-    fn load_segment(&self, hash: &SegmentHash) -> Result<Option<Vec<u8>>, StorageError>;
-}
-
-pub trait RunJournalStore: Send + Sync {
-    fn init(&self) -> Result<(), StorageError>;
-    fn save_run_state(&self, state: &BotRunState) -> Result<(), StorageError>;
-    fn load_run_state(&self, run_id: &str) -> Result<Option<BotRunState>, StorageError>;
-    fn latest_run_for_market(
-        &self,
-        market: &MarketId,
-        strategy_name: &str,
-    ) -> Result<Option<BotRunState>, StorageError>;
-    fn append_order_event(&self, run_id: &str, order: &ExchangeOrder) -> Result<(), StorageError>;
-    fn append_closed_trade(&self, run_id: &str, trade: &ClosedTrade) -> Result<(), StorageError>;
-    fn list_order_events(
-        &self,
-        run_id: &str,
-        limit: usize,
-    ) -> Result<Vec<ExchangeOrder>, StorageError>;
-    fn list_closed_trades(
-        &self,
-        run_id: &str,
-        limit: usize,
-    ) -> Result<Vec<ClosedTrade>, StorageError>;
 }

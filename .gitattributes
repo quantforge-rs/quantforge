@@ -3,6 +3,8 @@ tests/snapshots/*.txt text eol=lf
 # Fixtures are shared with the Python tests; the same bytes everywhere.
 tests/fixtures/*.csv text eol=lf
 tests/fixtures/*.json text eol=lf
+# The databases of every earlier schema are loaded as SQL by tests/storage.
+tests/fixtures/sqlite/*.sql text eol=lf
 # The bundle spec's worked example is hashed by its drift test.
 docs/bundle-spec.md text eol=lf
 # Conformance fixtures and the matrix doc generated from them are compared

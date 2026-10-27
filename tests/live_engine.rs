@@ -8,9 +8,9 @@ use quantforge::{
     CancelOrderRequest, Candle, CandleStore, ClosedTrade, EngineError, ExchangeCapabilities,
     ExchangeConnector, ExchangeError, ExchangeId, ExchangeOrder, ExecutionMode, Interval,
     KlineRequest, LiveTradeConfig, LiveTradeEngine, LiveTradeSummary, MarketDataConnector,
-    MarketId, MarketOrderRequest, OrderQueryRequest, OrderStatus, PositionState, RunJournalStore,
-    RunStatus, Side, SignedConnectors, SqliteStore, StorageError, Symbol, SymbolRules, TimestampMs,
-    TradingConnector, now_utc_ms,
+    MarketId, MarketOrderRequest, OrderQueryRequest, OrderStatus, PositionState, RunIdentity,
+    RunJournalStore, RunStatus, Side, SignedConnectors, SqliteStore, StorageError, Symbol,
+    SymbolRules, TimestampMs, TradingConnector, VenueOrderId, now_utc_ms,
 };
 use rust_decimal::Decimal;
 use std::collections::VecDeque;
@@ -251,12 +251,20 @@ impl RunJournalStore for FailingOrderJournal<'_> {
         RunJournalStore::init(self.inner)
     }
 
+    fn create_run(&self, state: &BotRunState, identity: &RunIdentity) -> Result<(), StorageError> {
+        self.inner.create_run(state, identity)
+    }
+
     fn save_run_state(&self, state: &BotRunState) -> Result<(), StorageError> {
         self.saves
             .lock()
             .expect("lock")
             .push((state.status, state.position.qty));
         self.inner.save_run_state(state)
+    }
+
+    fn run_identity(&self, run_id: &str) -> Result<Option<RunIdentity>, StorageError> {
+        self.inner.run_identity(run_id)
     }
 
     fn load_run_state(&self, run_id: &str) -> Result<Option<BotRunState>, StorageError> {
@@ -370,6 +378,7 @@ fn engine_config(execution_mode: ExecutionMode, run_id: &str) -> LiveTradeConfig
         // close vs the previous close, and equal closes emit nothing.
         strategy: BuiltInStrategyConfig::SmaCross { fast: 1, slow: 2 },
         execution_mode,
+        identity: RunIdentity::recorded(None, None),
         quote_order_qty: Decimal::from(100),
         poll_interval: Duration::from_millis(1),
         bootstrap_bars: 10,
@@ -475,7 +484,10 @@ async fn dry_run_exit_on_resume_sells_journaled_qty_and_writes_closed_trade_with
     let store = seeded_store(&tempdir, &warmup);
     let cfg = engine_config(ExecutionMode::DryRun, "run-dry-exit");
     store
-        .save_run_state(&seeded_open_run_state(&cfg, anchor))
+        .create_run(
+            &seeded_open_run_state(&cfg, anchor),
+            &RunIdentity::recorded(None, None),
+        )
         .expect("seed state");
     let source = ScriptedMarketData::new(vec![Vec::new(), vec![poll_bar.clone()]]);
     let venue = RefusingVenue;
@@ -597,7 +609,7 @@ async fn live_entry_submits_one_market_order_and_records_venue_reported_quantity
             side: Side::Buy,
             order_type: "MARKET".to_string(),
             status: OrderStatus::Filled,
-            order_id: Some(42),
+            order_id: Some(VenueOrderId::new("42").expect("order id")),
             client_order_id: Some("venue-echo".to_string()),
             requested_qty: None,
             requested_quote_qty: Some(Decimal::from(100)),
@@ -639,7 +651,10 @@ async fn live_entry_submits_one_market_order_and_records_venue_reported_quantity
         Decimal::from_str("0.007").expect("decimal")
     );
     assert_eq!(state.position.entry_price, Some(Decimal::from(12_600)));
-    assert_eq!(state.position.entry_order_id, Some(42));
+    assert_eq!(
+        state.position.entry_order_id,
+        Some(VenueOrderId::new("42").expect("order id"))
+    );
     assert_eq!(
         state.position.entry_time_ms,
         Some(poll_bar.close_time_ms + 1)
@@ -647,7 +662,10 @@ async fn live_entry_submits_one_market_order_and_records_venue_reported_quantity
 
     let events = store.list_order_events("run-live-1", 10).expect("events");
     assert_eq!(events.len(), 1);
-    assert_eq!(events[0].order_id, Some(42));
+    assert_eq!(
+        events[0].order_id,
+        Some(VenueOrderId::new("42").expect("order id"))
+    );
 }
 
 #[tokio::test]

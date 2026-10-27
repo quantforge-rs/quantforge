@@ -54,6 +54,14 @@ pub(crate) const COMMANDS: &[(&str, &[&str], &str)] = &[
     ),
     ("serve", &["serve"], "serve"),
     ("serve-run", &["serve", "run"], "serve/run"),
+    ("store", &["store"], "store"),
+    ("store-status", &["store", "status"], "store/status"),
+    ("store-bind", &["store", "bind"], "store/bind"),
+    (
+        "store-adopt-run",
+        &["store", "adopt-run"],
+        "store/adopt_run",
+    ),
 ];
 
 fn snapshot_path(name: &str) -> PathBuf {

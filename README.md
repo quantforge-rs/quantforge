@@ -22,7 +22,10 @@ There is **no UI**. The CLI is the product.
 - `trade close` command for operator-driven position exits
 - `monitor` command group for balances, open orders, recent trades, manual cancel,
   and manual close
-- bot run state and order or trade journal persisted in SQLite
+- bot run state and order or trade journal persisted in SQLite, under a
+  schema that every earlier release's database is migrated to in place
+- `store` command group for the database's own record: the environment it
+  is bound to, its identity, and the runs an earlier release wrote
 
 QuantForge is engineering software. It is **not** investment advice, does not
 recommend trades, and does not promise profitability.
@@ -266,6 +269,23 @@ cargo run -- \
   --yes
 ```
 
+Bind the database to the environment it trades, once and for life, and
+show its record. A store bound to `testnet` refuses a production base URL
+before any request, and the other way round:
+
+```bash
+cargo run -- \
+  --db data/market.sqlite \
+  --base-url https://testnet.binance.vision/ \
+  store bind \
+  --environment testnet \
+  --yes
+
+cargo run -- \
+  --db data/market.sqlite \
+  store status
+```
+
 Close the bot-managed position manually:
 
 ```bash
@@ -288,6 +308,17 @@ cargo run -- \
   --listen 127.0.0.1:9600
 curl http://127.0.0.1:9600/version
 ```
+
+## Upgrading
+
+A database from an earlier release is migrated in place the first time a
+newer release opens it, never deleted: candles, journals, IDs, timestamps
+and every decimal's exact text stay as they were, and a run an earlier
+release wrote keeps its original record beside the migrated one. Back the
+file up first, then follow the
+[upgrade guide](https://github.com/quantforge-rs/quantforge/blob/main/docs/upgrading.md),
+which also says how `store status` and `store adopt-run` bring such a run
+back under a verified environment and account.
 
 ## Determinism contract
 

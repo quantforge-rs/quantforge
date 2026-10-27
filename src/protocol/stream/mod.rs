@@ -147,6 +147,7 @@ mod tests {
             (
                 ServerFrame::BarClosed(BarClosed {
                     exchange: "binance".to_string(),
+                    category: "spot".to_string(),
                     symbol: "BTCUSDT".to_string(),
                     interval: "1m".to_string(),
                     bar: Bar {
@@ -160,18 +161,19 @@ mod tests {
                         trades: Some(1_234),
                     },
                 }),
-                r#"{"type":"bar_closed","exchange":"binance","symbol":"BTCUSDT","interval":"1m","bar":{"open_time_ms":1792454400000,"close_time_ms":1792454459999,"open":"67012.34000000","high":"67020.00000000","low":"67001.10000000","close":"67015.50000000","volume":"12.04510000","trades":1234}}"#,
+                r#"{"type":"bar_closed","exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m","bar":{"open_time_ms":1792454400000,"close_time_ms":1792454459999,"open":"67012.34000000","high":"67020.00000000","low":"67001.10000000","close":"67015.50000000","volume":"12.04510000","trades":1234}}"#,
             ),
             (
                 ServerFrame::GapNotice(GapNotice {
                     exchange: "binance".to_string(),
+                    category: "spot".to_string(),
                     symbol: "BTCUSDT".to_string(),
                     interval: "1m".to_string(),
                     first_open_ms: 1_792_454_460_000,
                     last_open_ms: 1_792_454_580_000,
                     reason: GapReason::SlowConsumer,
                 }),
-                r#"{"type":"gap_notice","exchange":"binance","symbol":"BTCUSDT","interval":"1m","first_open_ms":1792454460000,"last_open_ms":1792454580000,"reason":"slow_consumer"}"#,
+                r#"{"type":"gap_notice","exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m","first_open_ms":1792454460000,"last_open_ms":1792454580000,"reason":"slow_consumer"}"#,
             ),
             (
                 ServerFrame::Ping(Ping { nonce: 7 }),
@@ -207,11 +209,12 @@ mod tests {
             (
                 ClientFrame::Subscribe(Subscribe {
                     exchange: "binance".to_string(),
+                    category: "spot".to_string(),
                     symbol: "ETHUSDT".to_string(),
                     interval: "5m".to_string(),
                     resume_from_open_ms: Some(1_792_454_100_000),
                 }),
-                r#"{"type":"subscribe","exchange":"binance","symbol":"ETHUSDT","interval":"5m","resume_from_open_ms":1792454100000}"#,
+                r#"{"type":"subscribe","exchange":"binance","category":"spot","symbol":"ETHUSDT","interval":"5m","resume_from_open_ms":1792454100000}"#,
             ),
             (
                 ClientFrame::Ping(Ping { nonce: 1 }),
@@ -265,7 +268,8 @@ mod tests {
 
     #[test]
     fn a_frame_type_this_build_does_not_know_is_unrecognized() {
-        let server = r#"{"type":"subscribed","exchange":"binance","symbol":"BTCUSDT"}"#;
+        let server =
+            r#"{"type":"subscribed","exchange":"binance","category":"spot","symbol":"BTCUSDT"}"#;
         assert_eq!(
             serde_json::from_str::<ServerFrame>(server).expect("frame"),
             ServerFrame::Unrecognized
