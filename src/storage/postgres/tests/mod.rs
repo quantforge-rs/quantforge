@@ -168,6 +168,37 @@ fn a_database_that_does_not_answer_is_unavailable_and_never_shown_the_password()
 }
 
 #[test]
+fn getting_a_connection_spends_the_calls_deadline_and_running_out_is_unavailable() {
+    // Takes connections into its backlog and never answers, so opening one
+    // would last the whole connect timeout.
+    let silent = std::net::TcpListener::bind("127.0.0.1:0").expect("a listener");
+    let port = silent.local_addr().expect("its address").port();
+    let mut settings = settings(
+        &format!("postgres://quant:{SENTINEL}@127.0.0.1:{port}/none"),
+        "silent",
+    );
+    settings.connect_timeout = Duration::from_secs(60);
+    settings.call_deadline = Duration::from_millis(300);
+    let bridge = Bridge::new(&settings).expect("a bridge");
+    let started = Instant::now();
+    // Even a write: nothing was sent, so nothing can have been written.
+    let refused = bridge
+        .execute(Effect::Write, |client| {
+            Box::pin(async move { client.batch_execute("SELECT 1").await })
+        })
+        .expect_err("no connection in time");
+    assert!(
+        matches!(&refused, StorageError::Unavailable(what) if what == "no connection within 300 ms"),
+        "{refused:?}"
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
+    );
+}
+
+#[test]
 fn the_tls_connector_takes_the_system_roots_and_refuses_a_ca_file_without_certificates() {
     tls::connector(None).expect("the system roots");
     let dir = tempfile::tempdir().expect("tempdir");

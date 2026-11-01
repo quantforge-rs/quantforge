@@ -77,6 +77,26 @@ fn a_supplied_path_is_used_with_the_backend_omitted_or_sqlite() {
 }
 
 #[test]
+fn an_empty_path_is_refused_naming_its_label_with_the_backend_omitted_or_sqlite() {
+    for backend in [None, supplied(StorageBackend::Sqlite, "--storage")] {
+        let request = StorageRequest {
+            backend,
+            sqlite_path: supplied(PathBuf::new(), "QF_DB"),
+            ..StorageRequest::default()
+        };
+        let refused = StorageSettings::resolve(request, StoreOwner::Command).expect_err("empty");
+        assert!(
+            matches!(&refused, StorageConfigError::EmptySqlitePath { label } if label == "QF_DB"),
+            "{refused:?}"
+        );
+        assert_eq!(
+            refused.to_string(),
+            "QF_DB is empty; name the SQLite database file, or leave it unset"
+        );
+    }
+}
+
+#[test]
 fn a_postgres_setting_beside_an_omitted_backend_is_refused_naming_its_label() {
     let cases = [
         (

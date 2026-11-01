@@ -242,12 +242,12 @@ impl StorageSettings {
     pub fn resolve(request: StorageRequest, owner: StoreOwner) -> Result<Self, StorageConfigError> {
         match request.backend.as_ref().map(|backend| backend.value) {
             Some(StorageBackend::Postgres) => Self::postgres(request, owner),
-            Some(StorageBackend::Sqlite) => Ok(Self::sqlite(request)),
+            Some(StorageBackend::Sqlite) => Self::sqlite(request),
             None => {
                 let unused = request.postgres_labels().next().map(str::to_string);
                 match unused {
                     Some(label) => Err(StorageConfigError::PostgresSettingWithoutBackend { label }),
-                    None => Ok(Self::sqlite(request)),
+                    None => Self::sqlite(request),
                 }
             }
         }
@@ -261,14 +261,19 @@ impl StorageSettings {
         }
     }
 
-    fn sqlite(request: StorageRequest) -> Self {
-        let path = request
-            .sqlite_path
-            .map_or_else(|| PathBuf::from(DEFAULT_SQLITE_PATH), |path| path.value);
-        Self::Sqlite(SqliteSettings {
+    fn sqlite(request: StorageRequest) -> Result<Self, StorageConfigError> {
+        let path = match request.sqlite_path {
+            // SQLite would open a temporary database that vanishes on close.
+            Some(path) if path.value.as_os_str().is_empty() => {
+                return Err(StorageConfigError::EmptySqlitePath { label: path.label });
+            }
+            Some(path) => path.value,
+            None => PathBuf::from(DEFAULT_SQLITE_PATH),
+        };
+        Ok(Self::Sqlite(SqliteSettings {
             path,
             limits: StorageLimits::default(),
-        })
+        }))
     }
 
     fn postgres(request: StorageRequest, owner: StoreOwner) -> Result<Self, StorageConfigError> {
@@ -359,6 +364,9 @@ pub enum StorageConfigError {
          the sqlite backend"
     )]
     SqlitePathWithPostgres { label: String },
+
+    #[error("{label} is empty; name the SQLite database file, or leave it unset")]
+    EmptySqlitePath { label: String },
 
     #[error("postgres storage needs a connection URL: postgres://USER:PASSWORD@HOST:PORT/DATABASE")]
     MissingPostgresUrl,

@@ -128,9 +128,11 @@ impl Bridge {
     }
 
     /// Runs `work` on a pooled connection, on the bridge, within the
-    /// deadline, and blocks the caller until it ends. Past the deadline the
-    /// query is cancelled on the server and the connection discarded, so no
-    /// later call queues behind it.
+    /// deadline, and blocks the caller until it ends. Getting the connection
+    /// spends the same deadline, and running out of it there is unavailable:
+    /// nothing was sent. Past the deadline the query is cancelled on the
+    /// server and the connection discarded, so no later call queues behind
+    /// it.
     pub(crate) fn execute<T, F>(&self, effect: Effect, work: F) -> Result<T, StorageError>
     where
         T: Send + 'static,
@@ -140,17 +142,26 @@ impl Bridge {
         let tls = self.tls.clone();
         let deadline = self.deadline;
         let job = async move {
-            let client = pool.get().await.map_err(|error| match error {
-                PoolError::Timeout(TimeoutType::Wait) => {
-                    StorageError::Unavailable("no free connection in time".to_string())
+            let until = tokio::time::Instant::now() + deadline;
+            let client = match tokio::time::timeout_at(until, pool.get()).await {
+                Ok(client) => client.map_err(|error| match error {
+                    PoolError::Timeout(TimeoutType::Wait) => {
+                        StorageError::Unavailable("no free connection in time".to_string())
+                    }
+                    PoolError::Backend(error) => {
+                        StorageError::Unavailable(format!("cannot get a connection: {error}"))
+                    }
+                    other => StorageError::Unavailable(other.to_string()),
+                })?,
+                Err(_) => {
+                    return Err(StorageError::Unavailable(format!(
+                        "no connection within {} ms",
+                        deadline.as_millis()
+                    )));
                 }
-                PoolError::Backend(error) => {
-                    StorageError::Unavailable(format!("cannot get a connection: {error}"))
-                }
-                other => StorageError::Unavailable(other.to_string()),
-            })?;
+            };
             let token = client.cancel_token();
-            match tokio::time::timeout(deadline, work(&client)).await {
+            match tokio::time::timeout_at(until, work(&client)).await {
                 Ok(result) => result.map_err(|error| from_driver(effect, error)),
                 Err(_) => {
                     // Best effort, and bounded by the connect timeout.
