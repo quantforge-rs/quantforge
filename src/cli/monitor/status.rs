@@ -5,7 +5,7 @@ use crate::cli::common::{MarketArgs, StrategyArgs, parse_market, venue_id};
 use anyhow::Result;
 use clap::Args;
 use quantforge::{
-    MarketDataConnector, RunJournalStore, SignedConnectors, SqliteStore, ms_to_rfc3339, now_utc_ms,
+    AnyStore, MarketDataConnector, RunJournalStore, SignedConnectors, ms_to_rfc3339, now_utc_ms,
 };
 
 #[derive(Args, Debug)]
@@ -19,7 +19,7 @@ pub(crate) struct MonitorStatusArgs {
 }
 
 pub(crate) async fn handle_monitor_status(
-    store: &SqliteStore,
+    store: &AnyStore,
     market_data: &dyn MarketDataConnector,
     signed: SignedConnectors<'_>,
     args: MonitorStatusArgs,
@@ -38,7 +38,7 @@ pub(crate) async fn handle_monitor_status(
 /// Fetches and prints the whole status report. Shared by `monitor status`
 /// and every iteration of `monitor watch`.
 pub(super) async fn render_status(
-    store: &SqliteStore,
+    store: &AnyStore,
     market_data: &dyn MarketDataConnector,
     signed: SignedConnectors<'_>,
     market_args: &MarketArgs,

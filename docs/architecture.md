@@ -45,7 +45,8 @@ src/
 ├── cli/                        the command tree, binary only
 │   ├── mod.rs                  quantforge: root parser, global flags, dispatch into groups
 │   ├── common.rs               shared flattened args, execution-mode enum, parse and print helpers
-│   ├── context.rs              AppContext: tracing, SQLite store, exchange connectors, prompts
+│   ├── context.rs              AppContext: tracing, the selected store, exchange connectors, prompts
+│   ├── storage_args.rs         the global storage flags, where each value came from, their redaction, and tests
 │   ├── tests.rs                root-parser unit tests and the config-matrix and README drift checks
 │   ├── data/                   market-data commands
 │   │   ├── mod.rs              quantforge data: subcommand enum and dispatch
@@ -165,8 +166,26 @@ src/
 │       ├── signing.rs          HMAC-SHA256 query signing
 │       ├── types.rs            wire DTOs, the shapes the REST API returns
 │       └── venue.rs            the connector implementations and declared capabilities
-├── storage/                    persistence: one namespace per backend, and the segment format
-│   ├── mod.rs                  declares them; re-exports SqliteStore
+├── storage/                    persistence: one namespace per backend, the segment format, and opening one
+│   ├── mod.rs                  declares them; re-exports SqliteStore and AnyStore
+│   ├── settings/               which backend, and how to reach it: resolved, checked, never shown
+│   │   ├── mod.rs              StorageBackend, StoreOwner, StorageRequest, StorageSettings, StorageConfigError
+│   │   ├── connection.rs       the PostgreSQL URL: libpq's form, the sslmode table, the password redacted
+│   │   └── tests/              the resolver's unit tests
+│   │       ├── mod.rs          every resolve rule, and the shared limits
+│   │       └── connection.rs   the sslmode table, every URL refusal, and the redaction
+│   ├── any.rs                  AnyStore: every storage port, handed to the backend it holds
+│   ├── factory.rs              StoreFactory: opens the selected backend through its registered provider
+│   ├── factory/                the factory's unit tests
+│   │   └── tests.rs            dispatch to test providers, and no fallback for a backend without one
+│   ├── postgres/               the PostgreSQL bridge of ADR 0001, built with the postgres feature
+│   │   ├── mod.rs              PostgresStore: connect and ping; no storage port yet
+│   │   ├── runner.rs           the bridge's own runtime, and the reply channel callers block on
+│   │   ├── bridge.rs           the bounded pool, each call's deadline and cancel, lost reads and writes
+│   │   ├── tls.rs              the rustls connector: the system's roots plus an optional CA file
+│   │   └── tests/              the bridge's unit tests
+│   │       ├── mod.rs          every calling context, the refusals, and the TLS connector
+│   │       └── database.rs     against a real database: pool bound, deadlines, drop, password, TLS
 │   ├── segments/               segment format 1: a window of candles, packed and named by its hash
 │   │   ├── mod.rs              windows, compression, the hash, opening a fetched segment, SegmentError
 │   │   └── payload.rs          the payload: candles as columns, exact decimal text, strict decoding
@@ -216,7 +235,8 @@ uses `model`, `exchange` and `storage` use `model` and `ports`, `sdk` uses
 hands it the listener. The engines reach the exchange
 and storage adapters only through the `ports` traits; the binary chooses
 which adapters to pass in, building the connectors of the exchange that
-`--exchange` names through `exchange::connect`. Nothing outside
+`--exchange` names through `exchange::connect`, and opening the store that
+`--storage` selects through `storage::factory`. Nothing outside
 `src/exchange/` names a concrete exchange adapter, nothing outside the
 Binance adapter hardcodes Binance beyond the registry's entries and the
 `Venue` that names it with its product lines in `ExchangeId`, no venue's
@@ -245,7 +265,8 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   and exit codes
 - `tests/e2e/`: end-to-end tiers — `offline.rs` against a mock Binance
   server, `testnet.rs` against Binance Spot testnet, `precedence.rs` for
-  flag, environment, and default precedence, `serve.rs` for `serve run` as
+  flag, environment, and default precedence, `storage.rs` for selecting
+  the storage backend that way, `serve.rs` for `serve run` as
   a running process — its routes, and how it stops on a signal — and
   `snapshot.rs` and `layout.rs` for the CLI surface and this document
 - `tests/snapshots/`: the committed `--help` output of every command, plus
@@ -257,8 +278,8 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   [storage-schema.md](storage-schema.md) — the shared identity cases of
   `tests/fixtures/storage_identity_cases.json`, isolation of product lines,
   environments and accounts, decimal scale, the schema chain from every
-  earlier schema in `tests/fixtures/sqlite/`, and the document held to the
-  code
+  earlier schema in `tests/fixtures/sqlite/`, the same checks through
+  `AnyStore`, and the document held to the code
 - `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
   from naming a concrete exchange adapter, the code and `--help` outside
   the Binance adapter from hardcoding Binance, and each venue's own

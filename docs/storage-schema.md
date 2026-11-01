@@ -24,6 +24,7 @@ operator's side of the same contract.
 - [SQLite DDL](#sqlite-ddl)
 - [PostgreSQL DDL](#postgresql-ddl)
 - [The shared cases](#the-shared-cases)
+- [Backends and ownership](#backends-and-ownership)
 
 ## Identities
 
@@ -448,3 +449,22 @@ return unchanged. They were written by an independent Python script,
 test, and a backend conforms when it stores and returns every case as
 given: `tests/storage/contract.rs` runs them against SQLite, and the
 PostgreSQL store runs the same module.
+
+## Backends and ownership
+
+A host selects one backend with `--storage` (`StorageSettings::resolve`)
+and opens it through `StoreFactory`, which hands back an `AnyStore` that
+serves every port above; [configuration.md](configuration.md#storage-backends)
+is the operator's side. The factory opens only the backend selected: a
+backend without a registered provider is refused, never replaced by
+another. PostgreSQL's provider is registered once its stores exist
+(QUA-124, QUA-123, QUA-112, then QUA-116); until then a PostgreSQL
+selection is checked and refused.
+
+The process that opens a store owns it, its pool and its credentials, for
+its whole life, and no other process receives them (ADR 0001): a CLI
+command, the server's parent process, later the Python reader. A job
+worker never opens a store and never receives its settings; the parent
+reads the candles a job needs and passes them on. The execution store of
+ALG-738 is opened the same way, from the same settings, in the same
+process.

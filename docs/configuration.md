@@ -1,6 +1,6 @@
 # Configuration
 
-Every QuantForge setting is a command-line flag. The six global settings and
+Every QuantForge setting is a command-line flag. The ten global settings and
 the two settings of `serve run` also read a `QF_*` environment variable as a
 fallback; every other per-command option is a flag only. QuantForge reads no
 other environment variable itself — the few its dependencies honor are listed
@@ -29,6 +29,13 @@ A variable that is exported but empty is still set, so it never falls back to
 the default:
 
 - `QF_DB=` is a usage error (exit status 2, reported against `--db`);
+- `QF_STORAGE=`, `QF_POSTGRES_POOL_SIZE=` and
+  `QF_POSTGRES_CONNECT_TIMEOUT_SECS=` are usage errors (exit status 2,
+  reported against their flags);
+- `QF_POSTGRES_URL=` is a PostgreSQL setting that is set: with `--storage
+  postgres` it fails as an unusable URL, and with no backend selected it is
+  refused like any other PostgreSQL setting (see [Storage
+  backends](#storage-backends));
 - `QF_EXCHANGE=` is a usage error (exit status 2, reported against
   `--exchange`);
 - `QF_BASE_URL=` fails with `failed to parse --base-url` before the database
@@ -56,7 +63,11 @@ Explanations belong in the Setting cell.
 
 | Setting | Flag | Env var | Default | Scope |
 | --- | --- | --- | --- | --- |
-| SQLite database path, relative to the working directory; a missing parent directory is created | `--db <path>` | `QF_DB` | `data/market.sqlite` | global |
+| SQLite database path, relative to the working directory; a missing parent directory is created; refused with `--storage postgres` | `--db <path>` | `QF_DB` | `data/market.sqlite` | global |
+| Storage backend: `sqlite` or `postgres`; see [Storage backends](#storage-backends) | `--storage <backend>` | `QF_STORAGE` | `sqlite` | global |
+| PostgreSQL URL, `postgres://USER:PASSWORD@HOST:PORT/DATABASE` with optional `sslmode` and `sslrootcert`; prefer the variable, since command-line values can land in shell history and process listings, and `--help` never shows its value | `--postgres-url <url>` | `QF_POSTGRES_URL` | none | global |
+| Most PostgreSQL connections the process opens; omitted, 2, or 8 for `serve run`; at least 1 | `--postgres-pool-size <count>` | `QF_POSTGRES_POOL_SIZE` | none | global |
+| Seconds opening a PostgreSQL connection, TLS included, may take; at least 1 | `--postgres-connect-timeout-secs <seconds>` | `QF_POSTGRES_CONNECT_TIMEOUT_SECS` | `5` | global |
 | Exchange to connect to, by its registry name; `binance` (Binance Spot) is the only one, and output names it by its storage name, `binance_spot` | `--exchange <name>` | `QF_EXCHANGE` | `binance` | global |
 | Exchange API base URL; omitted, the exchange's production endpoint — `https://api.binance.com/` for `binance`, whose Spot testnet is `https://testnet.binance.vision/` | `--base-url <url>` | `QF_BASE_URL` | none | global |
 | Log filter: `trace`, `debug`, `info`, `warn`, `error`, or a full tracing filter expression; log lines go to stdout | `--log-level <filter>` | `QF_LOG` | `info` | global |
@@ -93,6 +104,72 @@ Explanations belong in the Setting cell.
 | Client order id of the order to cancel; pass it or `--order-id` | `--client-order-id <id>` | — | none | `monitor cancel-order` |
 | Address to listen on: an IP address and a port, such as `0.0.0.0:9600` for every interface; a host name is refused; the default accepts connections from this machine only, and port 0 picks a free port, which the `listening:` line shows | `--listen <addr>` | `QF_LISTEN` | `127.0.0.1:9600` | `serve run` |
 | Directory for cached candle segments, relative to the working directory; created at startup if missing | `--segment-cache-dir <path>` | `QF_SEGMENT_CACHE_DIR` | `data/segments` | `serve run` |
+
+## Storage backends
+
+`--storage` selects where candles, journals and segments are kept:
+
+- **`sqlite`**, the default: one file at `--db`. Nothing about SQLite
+  changes when no backend is selected.
+- **`postgres`**: the database `--postgres-url` names. This release checks
+  the PostgreSQL settings and refuses the command (`postgres storage has no
+  adapter yet`); a later release adds the PostgreSQL stores. A build
+  compiled without the `postgres` cargo feature, which is on by default,
+  refuses it as `not in this build`.
+
+A selection is never guessed and never replaced. These are refused before
+anything is created:
+
+- a PostgreSQL setting (`--postgres-url`, `--postgres-pool-size`,
+  `--postgres-connect-timeout-secs` or their variables) while no backend is
+  selected, since the command would quietly use SQLite. With `--storage
+  sqlite` they are ignored;
+- `--db` or `QF_DB` with `--storage postgres`;
+- `--storage postgres` without a URL.
+
+PostgreSQL never falls back to SQLite, and never creates a SQLite file or
+directory.
+
+### The PostgreSQL URL
+
+The URL has libpq's form, `postgres://USER:PASSWORD@HOST:PORT/DATABASE`
+(`postgresql://` works too). One host, a user and a database are required;
+the port defaults to 5432; percent-encode `@`, `:`, `/` and `%` inside the
+user, password or database. QuantForge reads two query parameters and
+refuses every other one, so a setting is never dropped in silence:
+
+| `sslmode` | This machine (`localhost`, `127.0.0.0/8`, `::1`) | Any other host |
+| --- | --- | --- |
+| absent | TLS if offered | TLS, verified |
+| `disable` | plain text | refused |
+| `prefer` | TLS if offered | refused |
+| `require`, `verify-ca`, `verify-full` | TLS, verified | TLS, verified |
+
+"Verified" checks the certificate chain against the system's trust store
+and the host name, `verify-ca` included. `sslrootcert` names a CA file to
+trust as well, for a provider whose CA the system lacks.
+
+The password belongs in `QF_POSTGRES_URL`, set by whatever starts
+QuantForge (a service manager, a container runtime, a shell profile with
+restricted permissions). No error, log line or `--help` output shows it, or
+the URL that carries it: the database appears as
+`postgres://HOST:PORT/DATABASE`. A password passed with `--postgres-url` on
+an interactive terminal logs a warning. libpq's variables (`PGHOST`,
+`PGPASSWORD` and the rest) and `~/.pgpass` are never read.
+
+### Connection limits
+
+The pool opens at most `--postgres-pool-size` connections: 2 by default,
+which is enough for a command, and 8 for `serve run`. Budget the database's
+`max_connections` across the processes that share it. The other limits are
+fixed:
+
+| Limit | Value |
+| --- | --- |
+| Waiting for a free connection | 5 s, then the call fails as unavailable |
+| A statement on the server (`statement_timeout`) | 30 s |
+| One call, end to end | 35 s, then the query is cancelled on the server |
+| Idle time before TCP keepalives probe a connection | 30 s |
 
 ## Renamed settings
 
@@ -135,6 +212,7 @@ with no QuantForge-specific meaning, so they have no flags:
 | `RUST_BACKTRACE`, `RUST_LIB_BACKTRACE` | Rust standard library, anyhow | add backtraces to panics and error reports |
 | `TOKIO_WORKER_THREADS` | tokio | async runtime worker threads; a value that is not a positive integer makes QuantForge panic at startup |
 | `SQLITE_TMPDIR`, `TMPDIR` | SQLite | directory for SQLite's temporary files |
+| `SSL_CERT_FILE`, `SSL_CERT_DIR` | rustls-native-certs | replace the system's trust store for PostgreSQL's TLS |
 
 `RUST_LOG` is not read: the log filter comes only from `--log-level` or
 `QF_LOG`.

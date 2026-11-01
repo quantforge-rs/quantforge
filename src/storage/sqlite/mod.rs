@@ -43,6 +43,12 @@ const META_DDL: &str = r#"
                 );
 "#;
 
+/// Every connection's `synchronous` pragma, and how long it waits on
+/// another writer's lock: what `StorageLimits::default()` names
+/// (`storage::settings`) until ALG-758 makes them settable.
+pub(crate) const SYNCHRONOUS: &str = "NORMAL";
+pub(crate) const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[derive(Clone, Debug)]
 pub struct SqliteStore {
     path: PathBuf,
@@ -63,10 +69,10 @@ impl SqliteStore {
             .pragma_update(None, "journal_mode", "WAL")
             .map_err(StorageError::other)?;
         connection
-            .pragma_update(None, "synchronous", "NORMAL")
+            .pragma_update(None, "synchronous", SYNCHRONOUS)
             .map_err(StorageError::other)?;
         connection
-            .busy_timeout(Duration::from_secs(5))
+            .busy_timeout(BUSY_TIMEOUT)
             .map_err(StorageError::other)?;
         Ok(connection)
     }
