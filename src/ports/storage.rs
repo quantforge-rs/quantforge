@@ -20,7 +20,9 @@ pub struct CandleQuery {
 
 /// A storage backend's failures. Older schemas are never refused: `init`
 /// migrates them (`docs/storage-schema.md`); only a schema newer than the
-/// build is.
+/// build is. A backend reached over a network tells a safe retry
+/// ([`StorageError::Unavailable`]) from a write that must be reconciled
+/// first ([`StorageError::OutcomeUnknown`]), as ADR 0001 sets out.
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum StorageError {
@@ -35,6 +37,16 @@ pub enum StorageError {
          newer quantforge release, and never an older one on this database"
     )]
     SchemaUnsupported { found: u32, supported: u32 },
+
+    /// Nothing was changed: no connection, no free one in time, or a read
+    /// that ran out of time. Safe to retry.
+    #[error("storage unavailable: {0}")]
+    Unavailable(String),
+
+    /// A write lost its answer and may or may not have committed: look
+    /// before retrying, since a blind retry can write a row twice.
+    #[error("storage write outcome unknown: {0}; check what was written before retrying")]
+    OutcomeUnknown(String),
 }
 
 impl StorageError {

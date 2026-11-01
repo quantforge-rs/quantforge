@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use clap::Subcommand;
-use quantforge::{MarketDataConnector, SignedConnectors, SqliteStore};
+use quantforge::{AnyStore, MarketDataConnector, SignedConnectors};
 
 mod cancel_order;
 mod close_position;
@@ -42,7 +42,7 @@ pub(crate) enum MonitorCommand {
 }
 
 pub(crate) async fn dispatch(
-    store: &SqliteStore,
+    store: &AnyStore,
     market_data: &dyn MarketDataConnector,
     signed: SignedConnectors<'_>,
     command: MonitorCommand,

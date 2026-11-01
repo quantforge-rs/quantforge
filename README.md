@@ -42,7 +42,7 @@ The public surface is layered as Rust modules, innermost first:
 - `model` - normalized market types, validation, the columnar candle batch, the exchange-agnostic requests, timestamp and decimal helpers
 - `ports` - the exchange connector and storage traits every adapter implements, and the capability descriptor that says what an exchange supports
 - `exchange` - the connector registry, which names each exchange (`--exchange binance`) and builds its connectors, and one adapter namespace per exchange; `binance` is the only one today, and nothing outside `exchange` names it. `exchange::conformance` writes down what every adapter must do as checks, and the [feature matrix](https://github.com/quantforge-rs/quantforge/blob/main/docs/exchange-feature-matrix.md) shows each exchange's results
-- `storage` - persistence adapters, one namespace per backend, with `sqlite` the only one; and `segments`, the [segment format](https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md) every backend packs a market's closed candles into, window by window, as immutable segments named by their hash
+- `storage` - persistence adapters, one namespace per backend, with `sqlite` the only one that stores data so far and `postgres` its connection bridge; `settings` and `factory`, which select a backend and open it; and `segments`, the [segment format](https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md) every backend packs a market's closed candles into, window by window, as immutable segments named by their hash
 - `sdk` - the strategy trait and its context, indicator math, and built-in strategies
 - `engine` - the drivers: `engine::backtest`, `engine::data_sync`, and `engine::live`
 - `protocol` - stands apart from the layers above: the versioned wire types between QuantForge instances, for remote backtest jobs, candle segments, and the live bar stream, and the [strategy bundle](https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md) a remote backtest runs; its rustdoc is the wire specification
@@ -96,7 +96,10 @@ and `QF_API_SECRET`, and a flag always wins over its variable. So do
 `serve run`'s `--listen` and `--segment-cache-dir`, with `QF_LISTEN` and
 `QF_SEGMENT_CACHE_DIR`. `--exchange` names the exchange (`binance`, the
 default and so far the only one), and an omitted `--base-url` is that
-exchange's production endpoint. The
+exchange's production endpoint. `--storage` (`QF_STORAGE`) selects the
+storage backend: `sqlite`, the default, at `--db`, or `postgres`, whose
+settings this release checks and then refuses until its stores arrive;
+keep a PostgreSQL password in `QF_POSTGRES_URL`. The
 [configuration matrix](https://github.com/quantforge-rs/quantforge/blob/main/docs/configuration.md)
 lists every flag with its environment variable, default, and scope, and the
 settings renamed from their earlier `--binance-*` and `QF_BINANCE_*` names.

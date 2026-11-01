@@ -8,9 +8,8 @@ use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::error::ErrorKind;
 use clap::parser::ValueSource;
 use clap::{Arg, ArgMatches, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
-use quantforge::{ExchangeId, exchange};
+use quantforge::{ExchangeId, StorageBackend, exchange};
 use std::fmt;
-use std::path::PathBuf;
 
 mod backtest;
 mod common;
@@ -18,6 +17,7 @@ mod context;
 mod data;
 mod monitor;
 mod serve;
+mod storage_args;
 mod store;
 mod trade;
 
@@ -29,13 +29,14 @@ use backtest::{BacktestArgs, handle_backtest};
 use data::DataCommand;
 use monitor::MonitorCommand;
 use serve::ServeCommand;
+use storage_args::StorageArgs;
 use store::StoreCommand;
 use trade::TradeCommand;
 
 /// Parse the process arguments exactly like clap's `Parser::parse()`, then
 /// refuse a renamed setting and record whether a credential arrived on the
-/// command line rather than through its env fallback — facts the derived
-/// struct cannot carry.
+/// command line rather than through its env fallback, and where each
+/// storage setting came from — facts the derived struct cannot carry.
 pub(crate) fn parse() -> Cli {
     let matches = command().get_matches();
     if let Some(message) = renamed_setting_error(&matches) {
@@ -44,6 +45,7 @@ pub(crate) fn parse() -> Cli {
     let mut cli =
         Cli::from_arg_matches(&matches).unwrap_or_else(|err| err.format(&mut command()).exit());
     cli.credentials.on_command_line = credentials_on_command_line(&matches);
+    cli.storage.record_sources(&matches);
     cli
 }
 
@@ -126,6 +128,13 @@ fn exchange_parser() -> impl TypedValueParser<Value = ExchangeId> {
         .try_map(|name| exchange::lookup(&name).ok_or_else(|| format!("no exchange named {name}")))
 }
 
+/// `--storage`'s values are the backends' names, so clap lists them in
+/// `--help` and in the error for any other value.
+fn backend_parser() -> impl TypedValueParser<Value = StorageBackend> {
+    PossibleValuesParser::new(StorageBackend::ALL.map(StorageBackend::as_str))
+        .try_map(|name| name.parse::<StorageBackend>())
+}
+
 /// Help section for the credential flags, listed after every command's
 /// regular options.
 const CREDENTIALS_HEADING: &str = "Exchange credentials";
@@ -137,14 +146,9 @@ const CREDENTIALS_HEADING: &str = "Exchange credentials";
     about = "CLI-first market data ingestion, research, and controlled live trading framework."
 )]
 pub(crate) struct Cli {
-    /// SQLite database path.
-    #[arg(
-        long,
-        global = true,
-        env = "QF_DB",
-        default_value = "data/market.sqlite"
-    )]
-    pub(crate) db: PathBuf,
+    // First, so the Storage help section comes before the credentials.
+    #[command(flatten)]
+    pub(crate) storage: StorageArgs,
 
     /// Exchange to connect to.
     #[arg(

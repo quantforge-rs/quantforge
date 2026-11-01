@@ -1,15 +1,16 @@
-//! Shared per-invocation construction: tracing, the SQLite store, and the
-//! selected exchange's connectors, built through the library's registry —
-//! once, from the parsed [`Cli`], and handed to the handlers — plus the
+//! Shared per-invocation construction: tracing, the store the storage
+//! settings select, opened through the library's store factory, and the
+//! selected exchange's connectors, built through its registry — once, from
+//! the parsed [`Cli`], and handed to the handlers — plus the
 //! interactive-session and confirmation helpers.
 
-use super::Cli;
+use super::{Cli, Command};
 use anyhow::{Context, Result, anyhow};
 use quantforge::exchange;
 use quantforge::{
-    ApiCredentials, CandleStore, ConnectorConfig, ExchangeConnectors, ExchangeId, ExecutionMode,
-    RunIdentity, SignedConnectors, SqliteStore, StoreControl, StoreIdentity, VenueAccountId,
-    describe_environment,
+    AnyStore, ApiCredentials, ConnectorConfig, ExchangeConnectors, ExchangeId, ExecutionMode,
+    RunIdentity, SignedConnectors, StorageConfigError, StorageSettings, StoreControl, StoreFactory,
+    StoreIdentity, StoreOpenError, StoreOwner, VenueAccountId, describe_environment,
 };
 use std::io::{self, IsTerminal, Write};
 use tracing::{info, warn};
@@ -27,10 +28,15 @@ const SHELL_HISTORY_WARNING: &str = "an API credential was passed on the command
      literally typed value may be saved in shell history, and command-line values are visible \
      in process listings while quantforge runs; prefer QF_API_KEY/QF_API_SECRET";
 
+/// The same warning for a PostgreSQL URL that carries a password.
+const URL_SHELL_HISTORY_WARNING: &str = "a PostgreSQL URL with a password was passed on the \
+     command line; a literally typed value may be saved in shell history, and command-line \
+     values are visible in process listings while quantforge runs; prefer QF_POSTGRES_URL";
+
 /// Everything a command handler needs, constructed once per invocation.
 #[derive(Debug)]
 pub(crate) struct AppContext {
-    pub(crate) store: SqliteStore,
+    pub(crate) store: AnyStore,
     /// What the store knows about itself after `init` brought it to the
     /// current schema: its ID, environment and activation.
     pub(crate) identity: StoreIdentity,
@@ -41,14 +47,24 @@ pub(crate) struct AppContext {
 
 impl AppContext {
     /// Build the context in startup order: tracing first (so the credential
-    /// and store warnings can be emitted), then the base URL, which is
-    /// validated before anything is created, then the database, then the
-    /// connectors.
+    /// and store warnings can be emitted), then the storage settings and the
+    /// base URL, which are validated before anything is created, then the
+    /// store, then the connectors.
     pub(crate) fn init(cli: &Cli) -> Result<Self> {
         init_tracing(&cli.log_level)?;
         if cli.credentials.on_command_line && is_interactive() {
             warn!("{SHELL_HISTORY_WARNING}");
         }
+        if cli.storage.password_on_command_line() && is_interactive() {
+            warn!("{URL_SHELL_HISTORY_WARNING}");
+        }
+
+        let owner = match cli.command {
+            Command::Serve { .. } => StoreOwner::Server,
+            _ => StoreOwner::Command,
+        };
+        let storage =
+            StorageSettings::resolve(cli.storage.request(), owner).map_err(storage_refusal)?;
 
         // Without a flag or variable, the exchange's own production
         // endpoint, as its registry entry names it.
@@ -61,21 +77,25 @@ impl AppContext {
             }
         };
 
-        let db_existed = cli.db.exists();
-        if let Some(parent) = cli.db.parent() {
-            std::fs::create_dir_all(parent).with_context(|| {
-                format!("failed to create parent directory {}", parent.display())
+        // Only a SQLite file can be created by opening it.
+        let created = match &storage {
+            StorageSettings::Sqlite(sqlite) => (!sqlite.path.exists()).then_some(&sqlite.path),
+            _ => None,
+        };
+        let store = StoreFactory::builtin()
+            .open(&storage)
+            .map_err(|error| match error {
+                StoreOpenError::Storage(error) => anyhow!(error)
+                    .context(format!("failed to initialize {} store", storage.backend())),
+                StoreOpenError::Config(error) => storage_refusal(error),
+                other => anyhow!(other),
             })?;
-        }
-
-        let store = SqliteStore::new(&cli.db);
-        CandleStore::init(&store).context("failed to initialize sqlite store")?;
         let identity = store
             .store_identity()
             .context("failed to read the store's identity")?;
-        if !db_existed {
+        if let Some(path) = created {
             warn!(
-                db_path = %cli.db.display(),
+                db_path = %path.display(),
                 "database did not exist and was created empty; if you expected existing data \
                  (run state, candles), check the --db path or QF_DB"
             );
@@ -160,6 +180,25 @@ impl AppContext {
         self.exchange
             .signed()
             .ok_or_else(|| anyhow!("{subject}: {CREDENTIALS_REMEDY}"))
+    }
+}
+
+/// A refused storage setting, with the flags and variables that fix it
+/// where the library's message cannot name them.
+fn storage_refusal(error: StorageConfigError) -> anyhow::Error {
+    match error {
+        StorageConfigError::MissingPostgresUrl => anyhow!(
+            "{error}; set QF_POSTGRES_URL, or pass --postgres-url (the variable keeps a password \
+             out of shell history)"
+        ),
+        StorageConfigError::PostgresSettingWithoutBackend { .. } => {
+            anyhow!("{error}: pass --storage postgres or --storage sqlite, or set QF_STORAGE")
+        }
+        StorageConfigError::NoAdapter { .. } => anyhow!(
+            "{error}: this release checks PostgreSQL settings but cannot keep data there; use \
+             --storage sqlite"
+        ),
+        other => anyhow!(other),
     }
 }
 

@@ -6,12 +6,16 @@
 //!   isolation of product lines, environments and accounts, decimal scale,
 //!   and the rule that a legacy run is never driven again silently;
 //! - [`sqlite`]: those checks on the SQLite store;
+//! - [`any_store`]: those checks again through `AnyStore`, opened by the
+//!   built-in store factory, with the segment and store-control ports
+//!   compared against the SQLite store on the same file;
 //! - [`migration`]: the schema chain from every schema an earlier build
 //!   wrote, loaded from `tests/fixtures/sqlite/`, with every row carried
 //!   forward unchanged, and the controls that prove a failed step leaves
 //!   the file where it was;
 //! - [`docs`]: the document held to the code.
 
+mod any_store;
 mod cases;
 mod contract;
 mod docs;

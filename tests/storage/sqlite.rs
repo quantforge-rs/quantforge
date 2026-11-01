@@ -14,7 +14,7 @@ fn store() -> (TempDir, SqliteStore) {
 }
 
 /// The text of `column` for every candle of `market`, in open-time order.
-fn raw_texts(store: &SqliteStore) -> impl Fn(&MarketId, &str) -> Vec<String> + '_ {
+pub fn raw_texts(store: &SqliteStore) -> impl Fn(&MarketId, &str) -> Vec<String> + '_ {
     move |market, column| {
         let connection = Connection::open(store.path()).expect("open");
         let mut stmt = connection
@@ -49,10 +49,9 @@ fn decimal_texts_keep_their_scale() {
     contract::decimal_texts_keep_their_scale(&store, &raw_texts(&store));
 }
 
-#[test]
-fn venue_ids_are_text() {
-    let (_tempdir, store) = store();
-    let raw_event_ids = || {
+/// Every order event's `order_id` and its SQLite type, in journal order.
+pub fn raw_event_ids(store: &SqliteStore) -> impl Fn() -> Vec<(String, String)> + '_ {
+    move || {
         let connection = Connection::open(store.path()).expect("open");
         let mut stmt = connection
             .prepare("SELECT order_id, typeof(order_id) FROM order_events ORDER BY seq")
@@ -63,8 +62,13 @@ fn venue_ids_are_text() {
             })
             .expect("query");
         rows.collect::<Result<Vec<_>, _>>().expect("rows")
-    };
-    contract::venue_ids_are_text(&store, &raw_event_ids);
+    }
+}
+
+#[test]
+fn venue_ids_are_text() {
+    let (_tempdir, store) = store();
+    contract::venue_ids_are_text(&store, &raw_event_ids(&store));
 }
 
 #[test]

@@ -8,6 +8,10 @@
 //! [`precedence`] asserts where each setting with a variable comes from:
 //! flag, then `QF_*` variable, then default. No network, always runs.
 //!
+//! [`storage`] selects the storage backend by flag, variable and default,
+//! and proves PostgreSQL is never replaced by SQLite and its password never
+//! printed. No network, always runs.
+//!
 //! [`serve`] runs `serve run` as a process on a loopback port: its routes,
 //! and how it stops on a signal. Loopback only, always runs; the signal
 //! tests run on unix.
@@ -31,4 +35,5 @@ mod offline;
 mod precedence;
 mod serve;
 mod snapshot;
+mod storage;
 mod testnet;

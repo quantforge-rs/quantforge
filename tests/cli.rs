@@ -4,8 +4,8 @@ use quantforge::{Candle, CandleStore, ExchangeId, Interval, MarketId, SqliteStor
 use rust_decimal::Decimal;
 use tempfile::tempdir;
 
-/// The binary with every exchange and server setting a shell could leak in
-/// removed, so each test supplies the ones it needs by flag. The renamed
+/// The binary with every exchange, server and storage setting a shell could
+/// leak in removed, so each test supplies the ones it needs by flag. The renamed
 /// `QF_BINANCE_BASE_URL` goes too: the binary refuses to run while it is
 /// set.
 fn quantforge() -> Command {
@@ -18,6 +18,10 @@ fn quantforge() -> Command {
         "QF_API_SECRET",
         "QF_LISTEN",
         "QF_SEGMENT_CACHE_DIR",
+        "QF_STORAGE",
+        "QF_POSTGRES_URL",
+        "QF_POSTGRES_POOL_SIZE",
+        "QF_POSTGRES_CONNECT_TIMEOUT_SECS",
     ] {
         cmd.env_remove(variable);
     }

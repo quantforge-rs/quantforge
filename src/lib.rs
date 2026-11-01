@@ -66,8 +66,9 @@
 //!
 //! `trade close` and the six `monitor` subcommands have no engine behind
 //! them: they drive the connectors and [`RunJournalStore`] directly, so that
-//! orchestration lives in the binary. The global `--db` opens a
-//! [`SqliteStore`]; `--exchange` selects an exchange by its registry name
+//! orchestration lives in the binary. The global `--storage` and its
+//! settings resolve to [`StorageSettings`], and [`StoreFactory`] opens the
+//! store they name ([`SqliteStore`] at `--db`); `--exchange` selects an exchange by its registry name
 //! ([`exchange::lookup`]), and `--base-url` with the credentials builds its
 //! connectors through [`exchange::connect`]; `--log-level` has no
 //! counterpart here, because this crate emits `tracing` events and the binary
@@ -177,6 +178,16 @@ pub use exchange::{ApiCredentials, ConnectorConfig, ExchangeConnectors};
 /// The persistence adapter, named for the same reason. The schema and the
 /// row decoders behind it stay private.
 pub use storage::SqliteStore;
+
+/// How a host picks a storage backend and opens it: the settings it
+/// resolves from what its flags and variables held, and the factory that
+/// opens the store they describe behind every storage port.
+pub use storage::AnyStore;
+pub use storage::factory::{StoreFactory, StoreOpenError};
+pub use storage::settings::{
+    ConnectionString, StorageBackend, StorageConfigError, StorageRequest, StorageSettings,
+    StoreOwner, Supplied,
+};
 
 /// The strategy boundary, published for strategy authors outside this
 /// repository. The CLI only ever sees the `Box<dyn Strategy>` that

@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `--storage` (`QF_STORAGE`) selects the storage backend, `sqlite` (the default, at `--db`) or `postgres`, whose connection comes from `--postgres-url` (`QF_POSTGRES_URL`), `--postgres-pool-size` (`QF_POSTGRES_POOL_SIZE`; 2, or 8 for `serve run`) and `--postgres-connect-timeout-secs` (`QF_POSTGRES_CONNECT_TIMEOUT_SECS`, 5); this release checks the PostgreSQL settings and refuses the command, since PostgreSQL has no stores yet, and never falls back to SQLite
+- a PostgreSQL setting with no backend selected, and `--db` or `QF_DB` with `--storage postgres`, are refused before anything is created, naming the flag or variable that set them
+- the PostgreSQL URL takes libpq's form and its `sslmode` and `sslrootcert`; plain text, or a fallback to it, is refused for any host but this machine, every other parameter is refused, and its password never appears in `--help`, a log line, an error or a `Debug` output
+- `StorageSettings::resolve` turns what a host's flags and variables held into checked settings for one backend, `StoreFactory` opens the store they describe through the provider registered for its backend, and `AnyStore` serves every storage port for whichever backend it holds
+- `storage::postgres`, built with the default-on `postgres` cargo feature, is the bridge of ADR 0001: tokio-postgres and a bounded deadpool pool on a runtime the store owns, a deadline on every call with the query cancelled past it, TLS through rustls; `PostgresStore` connects and answers, and implements no storage port yet; `--no-default-features` builds SQLite only
+- `StorageError::Unavailable` (nothing changed; safe to retry) and `StorageError::OutcomeUnknown` (a write that lost its answer; check before retrying)
 - a SQLite database from any earlier release is migrated in place when it is opened: schema 1 (0.1.0), 2 (0.2.0) and the development schemas 3 and 4 move forward to schema 5 step by step, each step in one transaction, and `docs/upgrading.md` is the operator's guide; nothing is deleted, and the original JSON of every migrated run and order event stays beside its migrated form
 - `quantforge store status`, `store bind` and `store adopt-run`: the database's own record — its identity, the environment it is bound to for life (`mainnet`, `testnet` or `demo`, declared by the operator and checked against the base URL, never inferred from it), the migrations it went through, and the runs an earlier release wrote without a verified identity, which an operator adopts before they can be resumed or closed
 - every run records the identity it started under (the store's environment and, for a live run, the fingerprint of the API key), and `trade run --run-id` and `trade close` drive a run only under the identity that recorded it; `monitor status` prints `run_identity`
@@ -84,6 +90,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- `--help` lists `--db` with the new storage flags under a "Storage" heading
 - the venue's order and trade IDs are text everywhere, Spot included: `ExchangeOrder.order_id`, `Fill.trade_id`, `AccountTrade.trade_id` and `order_id`, `ClosedTrade.entry_order_id` and `exit_order_id`, `PositionState.entry_order_id`, and the `order_id` of a cancel or query request are `VenueOrderId`/`VenueTradeId`; `monitor cancel-order --order-id` takes the ID as the exchange spells it, and `order: id=` lines print it without `Some(..)`
 - the SQLite schema version is 5; `RunJournalStore::save_run_state` updates a run that `create_run` recorded with its identity and refuses an unknown one; `StorageError` is `#[non_exhaustive]` and `SchemaVersionMismatch` became `SchemaUnsupported`, raised only for a database from a newer build
 - the protocol's markets carry a required `category` beside `exchange` (`DataSelection`, `SegmentEntry`, `Subscribe`, `BarClosed`, `GapNotice`): `spot`, `linear` or `inverse`, always `spot` for a candle strategy
