@@ -190,6 +190,13 @@ fn from_driver(effect: Effect, error: tokio_postgres::Error) -> StorageError {
         Some(code) if *code == SqlState::QUERY_CANCELED => {
             lost(effect, format!("the statement timed out: {error}"))
         }
+        Some(code)
+            if code.code().starts_with("08")
+                || *code == SqlState::ADMIN_SHUTDOWN
+                || *code == SqlState::CRASH_SHUTDOWN =>
+        {
+            lost(effect, format!("the server ended the call: {error}"))
+        }
         Some(_) => StorageError::other(error),
         None => lost(effect, format!("the connection failed: {error}")),
     }
