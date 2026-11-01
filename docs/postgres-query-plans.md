@@ -3,8 +3,9 @@
 The evidence behind the PostgreSQL schema's indexes (QUA-125): on
 representative data, the index every query the stores run is planned on,
 the one SQLite index PostgreSQL leaves out, and the BRIN index it does not
-build. [storage-schema.md](storage-schema.md#postgresql-ddl) holds the
-schema; this page holds the measurements.
+build; and how long a batch of 100,000 candles takes to write on each
+backend (QUA-124). [storage-schema.md](storage-schema.md#postgresql-ddl)
+holds the schema; this page holds the measurements.
 
 `tests/storage/postgres/plans.rs` reproduces it. It seeds the data below in
 a database of its own, asserts that every query is planned on the indexes
@@ -21,6 +22,7 @@ own.
 - [The queries](#the-queries)
 - [The candles key and its copy](#the-candles-key-and-its-copy)
 - [BRIN](#brin)
+- [Writing candles](#writing-candles)
 - [Reproducing it](#reproducing-it)
 
 ## The run
@@ -82,10 +84,10 @@ market by market; where the other order differs, it is in brackets.
 
 | Query | Run by | Plan | Rows | Buffers | Time |
 | --- | --- | --- | --- | --- | --- |
-| `candles.load` | `load_candles` with a range and a limit | Index Scan on `candles_pkey`, under the limit | 1,000 | 24 (131) | 0.33 ms (0.49) |
+| `candles.load` | `load_candles` with a range and a limit | Index Scan on `candles_pkey`, under the limit | 1,000 | 24 (131) | 0.26 ms (0.31) |
 | `candles.recent` | `load_recent_candles` | Index Scan Backward on `candles_pkey` | 300 | 13 (43) | 0.09 ms (0.12) |
 | `candles.max_open_time` | `max_open_time_ms`, and a segment refresh's tip | Index Only Scan Backward on `candles_pkey` | 1 | 4 | 0.04 ms (0.06) |
-| `candles.upsert` | `upsert_candles` | Conflicts checked on `candles_pkey` | | | |
+| `candles.upsert` | `upsert_candles` | The batch read from its unnested arrays, conflicts checked on `candles_pkey` | | | |
 | `candles.window` | a refresh reading one window | Bitmap Index Scan on `candles_pkey`, then a sort | 1,440 | 36 (190) | 0.52 ms (0.78) |
 | `runs.latest` | `latest_run_for_market` | Index Scan on `idx_bot_runs_market`, the tie-breakers sorted incrementally | 1 of 3 | 13 | 0.04 ms |
 | `runs.by_id` | `load_run_state`, `run_identity` | Index Scan on `bot_runs_pkey` | 1 | 3 | 0.03 ms (0.02) |
@@ -93,7 +95,7 @@ market by market; where the other order differs, it is in brackets.
 | `order_events.latest` | `list_order_events` | Bitmap Index Scan on `idx_order_events_run`, then a sort | 50 | 56 | 0.15 ms (0.13) |
 | `closed_trades.latest` | `list_closed_trades` | Bitmap Index Scan on `idx_closed_trades_run`, then a sort | 15 | 20 | 0.06 ms |
 | `segments.lowest_dirty` | a refresh's next window, and a plan's effective tip | Index Only Scan on the dirty marks' unique key | 1 | 3 | 0.04 ms (0.05) |
-| `segments.mark` | `upsert_candles` marking a changed window | Conflicts checked on the dirty marks' unique key | | | |
+| `segments.mark` | `upsert_candles` marking the windows it changed | The windows unnested from one array, conflicts checked on the dirty marks' unique key | | | |
 | `segments.mark_of_window` | a refresh's read and its write-back | Index Scan on the dirty marks' unique key | 1 | 3 | 0.02 ms |
 | `segments.entry_of_window` | a refresh comparing the hash it packed | Index Scan on `segment_index_pkey` | 1 | 3 | 0.03 ms (0.02) |
 | `segments.plan` | `resolve_segments` | Bitmap Index Scan on `segment_index_pkey`, then a nested loop on `segments_pkey` | 30 | 154 | 0.28 ms (0.27) |
@@ -145,6 +147,36 @@ market's rows alone. A BRIN index earns its place once something reads
 candles by time across markets, such as a retention job; TimescaleDB's
 chunks do that job in its follow-up.
 
+## Writing candles
+
+One `upsert_candles` of 100,000 candles, through the port, on each backend,
+with no threshold behind it: the numbers describe this machine and this
+dataset, nothing more.
+
+- **The batch:** 100,000 consecutive `1m` candles of one market, about 69
+  days from `1792454400000`; prices with two decimal places, volumes with
+  eight, a trade count on every candle.
+- **The writes,** each on a fresh store: into the empty market; the same
+  batch again, which changes no row and marks no window; and the batch with
+  every close a cent higher, which changes every row and marks all 70
+  windows.
+- **The environment:** an Apple M2 Max with 96 GB, macOS 26.4.1, rustc
+  1.99.0 in release, on 2026-11-01. PostgreSQL 16.15 from Homebrew with
+  `initdb`'s default settings, over TCP to `127.0.0.1`; SQLite in WAL with
+  `synchronous = NORMAL`, on the internal SSD.
+
+| Backend | Into the empty market | The same batch again | Every close changed |
+| --- | --- | --- | --- |
+| SQLite | 0.260 to 0.266 s | 0.155 to 0.158 s | 0.187 to 0.197 s |
+| PostgreSQL | 0.585 to 0.619 s | 0.435 to 0.442 s | 1.077 to 1.129 s |
+
+PostgreSQL takes the batch as one statement, its columns sent as arrays,
+and the marks as a second, in one transaction; SQLite writes it row by row
+in one transaction on a local file. Changing every row costs PostgreSQL
+most: each update writes a new row version and a new key entry, since the
+freshly filled pages leave no room to update in place (`pg_stat_user_tables`
+counts none of 100,000 such updates as in place).
+
 ## Reproducing it
 
 With a server as in [storage-conformance.md](storage-conformance.md#postgresql):
@@ -155,4 +187,10 @@ QUANTFORGE_TEST_POSTGRES_URL='postgres://quant:local-pw@127.0.0.1:54329/postgres
 ```
 
 The test prints every plan, for both orders of the data, then the BRIN
-index's size and its one plan.
+index's size and its one plan. The batch measurement runs on demand, in
+release, on SQLite and on the server the variable names:
+
+```bash
+QUANTFORGE_TEST_POSTGRES_URL='postgres://quant:local-pw@127.0.0.1:54329/postgres?sslmode=disable' \
+  cargo test --release --test storage measure -- --ignored --nocapture
+```

@@ -71,6 +71,11 @@ never computed with.
 
 **Decimals** are exact text that keeps its scale: `1.10` is stored and
 returned as `1.10`, never `1.1` and never a `REAL` or `NUMERIC` (ADR 0001).
+Every backend writes `Decimal::to_string` and reads back with
+`Decimal::from_str_exact`: stored text a `Decimal` cannot hold exactly,
+more than 28 decimal places or beyond its range, is refused with the text
+named, never rounded. QuantForge never writes such text; it can only have
+been written behind the store's back.
 
 **Segments** are named by the hash of their bytes, which hold no market; an
 index entry (`segment_index`) gives a name its market and window. The
@@ -376,10 +381,8 @@ nothing else. The mapping follows ADR 0001:
   the text SQLite returns, scale included (`1.10` is never `1.1`). No
   `NUMERIC` or `REAL` column, and no `CHECK` on a decimal, changes or
   refuses text: a store holds what was written, inexact text written
-  behind its back included. The
-  PostgreSQL stores read it back with `Decimal::from_str_exact`, so text a
-  `Decimal` cannot hold exactly (more than 28 decimal places, or beyond
-  its range) is an error, never rounded.
+  behind its back included, and a read refuses what it cannot hold
+  exactly, as on SQLite ([Identities](#identities)).
 - Timestamps are `BIGINT` milliseconds, and a trade count is a `u64`
   stored in a signed column, as on SQLite.
 - A sequence number is an identity column that never reuses a value, as
@@ -571,9 +574,10 @@ and opens it through `StoreFactory`, which hands back an `AnyStore` that
 serves every port above; [configuration.md](configuration.md#storage-backends)
 is the operator's side. The factory opens only the backend selected: a
 backend without a registered provider is refused, never replaced by
-another. PostgreSQL's provider is registered once its stores exist
-(QUA-124, QUA-123, QUA-112, then QUA-116); until then a PostgreSQL
-selection is checked and refused.
+another. PostgreSQL's provider is registered once its stores exist: the
+candle store does (QUA-124); the journal and segment stores come with
+QUA-123 and QUA-112, then QUA-116 registers the provider. Until then a
+PostgreSQL selection is checked and refused.
 
 The process that opens a store owns it, its pool and its credentials, for
 its whole life, and no other process receives them (ADR 0001): a CLI

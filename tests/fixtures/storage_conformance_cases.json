@@ -796,6 +796,281 @@
    ]
   },
   {
+   "id": "candles.every_column_counts",
+   "doc": "a candle written again with any one column changed is stored with that change",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "100",
+       "high": "100",
+       "low": "100",
+       "close": "100",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "100",
+       "high": "100",
+       "low": "100",
+       "close": "100",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "100",
+       "high": "100",
+       "low": "100",
+       "close": "100",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "99",
+       "high": "100",
+       "low": "100",
+       "close": "100",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "99",
+       "high": "100",
+       "low": "100",
+       "close": "100",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "99",
+       "high": "101",
+       "low": "100",
+       "close": "100",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "99",
+       "high": "101",
+       "low": "100",
+       "close": "100",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "99",
+       "high": "101",
+       "low": "98",
+       "close": "100",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "99",
+       "high": "101",
+       "low": "98",
+       "close": "100",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "99",
+       "high": "101",
+       "low": "98",
+       "close": "100.5",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "99",
+       "high": "101",
+       "low": "98",
+       "close": "100.5",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "99",
+       "high": "101",
+       "low": "98",
+       "close": "100.5",
+       "volume": "2.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "99",
+       "high": "101",
+       "low": "98",
+       "close": "100.5",
+       "volume": "2.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "99",
+       "high": "101",
+       "low": "98",
+       "close": "100.5",
+       "volume": "2.000",
+       "trades": 2
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "99",
+       "high": "101",
+       "low": "98",
+       "close": "100.5",
+       "volume": "2.000",
+       "trades": 2
+      }
+     ]
+    }
+   ]
+  },
+  {
    "id": "candles.later_duplicate_wins",
    "doc": "of two candles with one open time in a batch, the later is kept",
    "steps": [
@@ -2196,6 +2471,114 @@
      ]
     }
    ]
+  },
+  {
+   "id": "candles.inexact_text_refused",
+   "doc": "stored text a decimal cannot hold exactly is refused by every read that returns it, never rounded",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 1792454460000,
+       "close_time_ms": 1792454519999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 1792454520000,
+       "close_time_ms": 1792454579999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 3
+    },
+    {
+     "op": "raw_execute",
+     "sql": "UPDATE candles SET close = '1.00000000000000000000000000001' WHERE exchange = 'binance_spot' AND symbol = 'BTCUSDT' AND interval = '1m' AND open_time_ms = 1792454460000"
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "1.00000000000000000000000000001"
+     }
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": 1792454400000,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "recent",
+     "market": "spot",
+     "limit": 1,
+     "expect": [
+      {
+       "open_time_ms": 1792454520000,
+       "close_time_ms": 1792454579999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "recent",
+     "market": "spot",
+     "limit": 2,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "1.00000000000000000000000000001"
+     }
+    },
+    {
+     "op": "max_open_time",
+     "market": "spot",
+     "expect": 1792454520000
+    }
+   ]
   }
  ],
  "journal": [
@@ -2753,6 +3136,52 @@
      "expect": [
       "text"
      ]
+    }
+   ]
+  },
+  {
+   "id": "journal.inexact_text_refused",
+   "doc": "a closed trade whose stored text a decimal cannot hold exactly is refused when listed, never rounded",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "first",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "append_closed_trade",
+     "run_id": "run-1",
+     "trade": "t1"
+    },
+    {
+     "op": "append_closed_trade",
+     "run_id": "run-1",
+     "trade": "t2"
+    },
+    {
+     "op": "raw_execute",
+     "sql": "UPDATE closed_trades SET qty = '1.00000000000000000000000000001' WHERE run_id = 'run-1' AND entry_time_ms = 1792454400000"
+    },
+    {
+     "op": "list_closed_trades",
+     "run_id": "run-1",
+     "limit": 1,
+     "expect": [
+      "t2"
+     ]
+    },
+    {
+     "op": "list_closed_trades",
+     "run_id": "run-1",
+     "limit": 10,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "1.00000000000000000000000000001"
+     }
     }
    ]
   },

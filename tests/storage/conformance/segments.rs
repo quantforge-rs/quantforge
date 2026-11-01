@@ -2,12 +2,9 @@
 //! `tests/fixtures/segment_cases.json` packs to its own name in a store.
 
 use quantforge::storage::segments;
-use quantforge::{
-    Candle, CandleStore, ExchangeId, Interval, MarketId, SegmentHash, SegmentStore, Symbol,
-};
-use serde::Deserialize;
+use quantforge::{Candle, CandleStore, ExchangeId, MarketId, SegmentHash, SegmentStore, Symbol};
 
-use super::cases::{CandleText, Cases, PlanText, SegmentText, TipText, read};
+use super::cases::{CandleText, Cases, PlanText, SegmentText, TipText, segment_spec_cases};
 use super::{Coded, Fixture, Step, expect_refused};
 
 /// The checks coded here: id and statement.
@@ -119,37 +116,15 @@ fn plan_is<S: SegmentStore + ?Sized>(
     }
 }
 
-/// Every interval's wire form.
-const INTERVALS: [&str; 15] = [
-    "1s", "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w",
-];
-
-#[derive(Debug, Deserialize)]
-struct SpecCases {
-    cases: Vec<SpecCase>,
-}
-
-#[derive(Debug, Deserialize)]
-struct SpecCase {
-    name: String,
-    candles: Vec<CandleText>,
-    hash: String,
-}
-
 /// Every shared case of the segment spec, stored under a market of its
 /// interval and closed by a candle of the next window, is packed to the
 /// name the case gives, and loads to the case's candles with their text.
 fn spec_cases<S: CandleStore + SegmentStore>(fixture: &Fixture<S>) {
     let store = &fixture.store;
-    let spec: SpecCases = read("tests/fixtures/segment_cases.json");
-    for (index, case) in spec.cases.iter().enumerate() {
+    for (index, case) in segment_spec_cases().iter().enumerate() {
         let candles: Vec<Candle> = case.candles.iter().map(CandleText::candle).collect();
-        let step = candles[0].close_time_ms - candles[0].open_time_ms + 1;
-        let interval = INTERVALS
-            .into_iter()
-            .map(|token| token.parse::<Interval>().expect("interval"))
-            .find(|interval| interval.step_ms() == step)
-            .unwrap_or_else(|| panic!("{}: no interval of {step} ms", case.name));
+        let interval = case.interval();
+        let step = interval.step_ms();
         // A market of its own for each case, so no case closes another.
         let market = MarketId::new(
             ExchangeId::BinanceSpot,

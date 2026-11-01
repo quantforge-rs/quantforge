@@ -11,6 +11,7 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use tracing::warn;
 
 use super::{SqliteStore, format, tip_window};
+use crate::storage::common;
 use crate::storage::segments::{SegmentError, TextCandle};
 use crate::{MarketId, SegmentHash, SegmentRefresh, StorageError, TimestampMs, ms_to_rfc3339};
 
@@ -97,7 +98,7 @@ fn build_window(
     window_start: TimestampMs,
 ) -> Result<Built, StorageError> {
     let window = format::window(market.interval, window_start)
-        .ok_or_else(|| super::out_of_range(window_start))?;
+        .ok_or_else(|| common::out_of_range(window_start))?;
     for _ in 0..ATTEMPTS {
         let Some(snapshot) = read_window(connection, market, &window)? else {
             return Ok(Built::Elsewhere);

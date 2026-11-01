@@ -41,6 +41,8 @@ cases of [segment-spec.md](segment-spec.md#the-shared-cases).
   given, not the rows it added
 - `candles.duplicate_overwrites`: a candle written again under its open time
   replaces every other column
+- `candles.every_column_counts`: a candle written again with any one column
+  changed is stored with that change
 - `candles.later_duplicate_wins`: of two candles with one open time in a
   batch, the later is kept
 - `candles.bounds_order_and_limit`: a load is ascending with both bounds
@@ -61,11 +63,15 @@ cases of [segment-spec.md](segment-spec.md#the-shared-cases).
   hold is refused whole
 - `candles.reopened`: a store opened again on the same database resumes from
   its newest candle
+- `candles.inexact_text_refused`: stored text a decimal cannot hold exactly is
+  refused by every read that returns it, never rounded
 - `candles.identity_product_lines`: every product line of the identity cases
   stores its market under the storage spelling the cases give, and reads
   back only its own candle
 - `candles.identity_decimals`: every decimal text of the identity cases is
   stored and read back unchanged
+- `candles.segment_cases`: the candles of every segment spec case, stored and
+  read back, pack to the case's name
 <!-- end: candles -->
 
 ### The run journal
@@ -89,6 +95,8 @@ cases of [segment-spec.md](segment-spec.md#the-shared-cases).
 - `journal.duplicate_event`: an order event appended twice is listed twice
 - `journal.closed_trades`: closed trades read back newest first with their
   scale and their missing order IDs
+- `journal.inexact_text_refused`: a closed trade whose stored text a decimal
+  cannot hold exactly is refused when listed, never rounded
 - `journal.runs_apart`: two runs' journals never mix
 - `journal.reopened`: a store opened again on the same database loads a run
   for resume
@@ -201,7 +209,11 @@ The rules it models, beyond what the statements above say:
 - the latest run of a market and strategy is the one updated last, then the
   one started last, then the one with the greatest run ID;
 - order events and closed trades are listed newest first, in the order they
-  were appended, duplicates kept.
+  were appended, duplicates kept;
+- a read refuses stored decimal text that a `Decimal` cannot hold exactly
+  (more than 28 decimal places, or a mantissa of 2^96 or more), naming the
+  text, and never rounds it; QuantForge writes only text it can read back,
+  so such text was written behind the store's back.
 
 ## Registering a backend
 
@@ -259,11 +271,11 @@ pg_ctl -D pg -w stop
 
 Each fixture's store, and each one `reopen` opens, has run
 `PostgresStore::init`, so every scenario starts on a new store's schema
-(QUA-125). No group runs on PostgreSQL yet, because `PostgresStore`
-implements no port: QUA-124 switches on the candle group, QUA-123 the
-journal group, and QUA-112 the segment group and the PostgreSQL race
+(QUA-125). The candle group runs on PostgreSQL (QUA-124); QUA-123 switches
+on the journal group, and QUA-112 the segment group and the PostgreSQL race
 stepper. QUA-118 runs them in CI against a PostgreSQL service container.
-The same command also runs the schema's own tests and the query plans of
+The same command also runs the schema's own tests, the candle store's
+writes raced against a refresh's write-back, and the query plans of
 [postgres-query-plans.md](postgres-query-plans.md).
 
 ## The races

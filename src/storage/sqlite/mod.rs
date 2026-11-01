@@ -14,11 +14,11 @@ mod migrate;
 mod segments;
 
 use crate::StorageError;
+use crate::storage::common::{InexactDecimal, read_decimal};
 use rusqlite::Connection;
 use rust_decimal::Decimal;
 use std::{
     path::{Path, PathBuf},
-    str::FromStr,
     time::Duration,
 };
 use tracing::info;
@@ -86,8 +86,21 @@ impl SqliteStore {
     }
 }
 
+/// Reads a stored decimal exactly, inside a row closure; [`row_error`]
+/// turns a refusal back into the `InvalidArgument` it is.
 fn parse_decimal_str(raw: &str) -> Result<Decimal, rusqlite::Error> {
-    Decimal::from_str(raw).map_err(to_from_sql_error)
+    read_decimal(raw).map_err(to_from_sql_error)
+}
+
+/// A row's error as the store reports it: stored text no `Decimal` holds
+/// exactly is refused as `InvalidArgument`, anything else is `Other`.
+fn row_error(error: rusqlite::Error) -> StorageError {
+    if let rusqlite::Error::FromSqlConversionFailure(_, _, source) = &error {
+        if let Some(inexact) = source.downcast_ref::<InexactDecimal>() {
+            return StorageError::InvalidArgument(inexact.to_string());
+        }
+    }
+    StorageError::other(error)
 }
 
 fn to_from_sql_error<E>(err: E) -> rusqlite::Error

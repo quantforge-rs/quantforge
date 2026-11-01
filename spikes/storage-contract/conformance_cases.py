@@ -30,6 +30,8 @@ MINUTE = 60_000
 DAY = 86_400_000
 # 2026-10-20T00:00:00Z, a UTC midnight.
 T = 1_792_454_400_000
+# 29 decimal places: more than a Decimal holds.
+INEXACT = "1.00000000000000000000000000001"
 WINDOW_BARS = 1440
 STEP_MS = {
     "1s": 1_000,
@@ -186,6 +188,29 @@ def refusal(contains: str) -> dict:
     return {"kind": "invalid_argument", "contains": contains}
 
 
+def holds_exactly(text: str) -> bool:
+    """Whether a Decimal reads text without rounding or overflow: at most
+    28 decimal places and a mantissa below 2**96. QuantForge writes only
+    such text; anything else was written behind the store's back, and is
+    refused when read, never rounded."""
+    integer, _, fraction = text.removeprefix("-").partition(".")
+    return len(fraction) <= 28 and int(integer + fraction) < 2**96
+
+
+CANDLE_DECIMALS = ["open", "high", "low", "close", "volume"]
+TRADE_DECIMALS = ["entry_price", "exit_price", "qty", "gross_quote_pnl"]
+
+
+def unreadable(rows, columns):
+    """The refusal for the first stored text no Decimal holds exactly, in
+    the order the rows are read, or None."""
+    for row in rows:
+        for column in columns:
+            if not holds_exactly(row[column]):
+                return refusal(row[column])
+    return None
+
+
 # --- The reference model -----------------------------------------------------
 
 
@@ -210,6 +235,7 @@ class Model:
         self.marks = 0
         self.runs = {}  # run_id -> record
         self.journal = []  # (kind, run_id, name), in append order
+        self.edits = {}  # (run_id, trade name) -> columns written behind the store's back
 
     # Candles.
 
@@ -239,11 +265,14 @@ class Model:
             if (start is None or c["open_time_ms"] >= start)
             and (end is None or c["open_time_ms"] <= end)
         ]
-        return out if limit is None else out[:limit]
+        out = out if limit is None else out[:limit]
+        return out, unreadable(out, CANDLE_DECIMALS)
 
     def recent(self, market, limit):
         rows = self.rows(market)
-        return rows[len(rows) - limit :] if limit else []
+        out = rows[len(rows) - limit :] if limit else []
+        # Read newest first, then returned oldest first.
+        return out, unreadable(list(reversed(out)), CANDLE_DECIMALS)
 
     def max_open_time(self, market):
         rows = self.rows(market)
@@ -395,7 +424,11 @@ class Model:
 
     def listed(self, kind, run_id, limit):
         names = [item for k, r, item in self.journal if k == kind and r == run_id]
-        return list(reversed(names))[:limit]
+        names = list(reversed(names))[:limit]
+        if kind != "trade":
+            return names, None
+        rows = [{**TRADES[name], **self.edits.get((run_id, name), {})} for name in names]
+        return names, unreadable(rows, TRADE_DECIMALS)
 
 
 # --- Scenarios ---------------------------------------------------------------
@@ -423,11 +456,14 @@ class Scenario:
             self.step("upsert", market=market, **source, written=written)
 
     def load(self, market, start=None, end=None, limit=None):
-        expect = self.model.load(market, start, end, limit)
-        self.step("load", market=market, start=start, end=end, limit=limit, expect=expect)
+        expect, refused = self.model.load(market, start, end, limit)
+        answer = {"refused": refused} if refused else {"expect": expect}
+        self.step("load", market=market, start=start, end=end, limit=limit, **answer)
 
     def recent(self, market, limit):
-        self.step("recent", market=market, limit=limit, expect=self.model.recent(market, limit))
+        expect, refused = self.model.recent(market, limit)
+        answer = {"refused": refused} if refused else {"expect": expect}
+        self.step("recent", market=market, limit=limit, **answer)
 
     def max_open_time(self, market):
         self.step("max_open_time", market=market, expect=self.model.max_open_time(market))
@@ -502,7 +538,7 @@ class Scenario:
         self.step("append_order_event", run_id=run_id, order=order)
 
     def list_order_events(self, run_id, limit):
-        expect = self.model.listed("order", run_id, limit)
+        expect, _ = self.model.listed("order", run_id, limit)
         self.step("list_order_events", run_id=run_id, limit=limit, expect=expect)
 
     def append_closed_trade(self, run_id, trade):
@@ -510,8 +546,9 @@ class Scenario:
         self.step("append_closed_trade", run_id=run_id, trade=trade)
 
     def list_closed_trades(self, run_id, limit):
-        expect = self.model.listed("trade", run_id, limit)
-        self.step("list_closed_trades", run_id=run_id, limit=limit, expect=expect)
+        expect, refused = self.model.listed("trade", run_id, limit)
+        answer = {"refused": refused} if refused else {"expect": expect}
+        self.step("list_closed_trades", run_id=run_id, limit=limit, **answer)
 
 
 def where(market):
@@ -784,6 +821,27 @@ def candle_scenarios():
     s.load("spot")
     out.append(s)
 
+    s = Scenario(
+        "candles.every_column_counts",
+        "a candle written again with any one column changed is stored with that change",
+    )
+    stored = candle(0, "100")
+    s.upsert("spot", [stored])
+    for column, value in [
+        ("close_time_ms", 59_000),
+        ("open", "99"),
+        ("high", "101"),
+        ("low", "98"),
+        ("close", "100.5"),
+        ("volume", "2.000"),
+        ("trades", 2),
+    ]:
+        # Each write differs from the stored row in this one column.
+        stored = {**stored, column: value}
+        s.upsert("spot", [stored])
+        s.load("spot")
+    out.append(s)
+
     s = Scenario("candles.later_duplicate_wins", "of two candles with one open time in a batch, the later is kept")
     s.upsert("spot", [candle(0, "1"), candle(MINUTE, "5"), candle(0, "2")])
     s.load("spot")
@@ -876,6 +934,21 @@ def candle_scenarios():
     s.reopen()
     s.max_open_time("spot")
     s.load("spot")
+    out.append(s)
+
+    s = Scenario(
+        "candles.inexact_text_refused",
+        "stored text a decimal cannot hold exactly is refused by every read that returns it, never rounded",
+    )
+    s.upsert("spot", [candle(T + i * MINUTE, "101") for i in range(3)])
+    # Written behind the store's back: 29 decimal places.
+    s.raw_execute(f"UPDATE candles SET close = '{INEXACT}' WHERE {where('spot')} AND open_time_ms = {T + MINUTE}")
+    s.model.candles["spot"][T + MINUTE]["close"] = INEXACT
+    s.load("spot")
+    s.load("spot", end=T)
+    s.recent("spot", 1)
+    s.recent("spot", 2)
+    s.max_open_time("spot")
     out.append(s)
     return out
 
@@ -989,6 +1062,20 @@ def journal_scenarios():
     s.list_closed_trades("run-1", 1)
     s.value_types("closed_trades", "entry_order_id", ["text"])
     s.value_types("closed_trades", "exit_order_id", ["text"])
+    out.append(s)
+
+    s = Scenario(
+        "journal.inexact_text_refused",
+        "a closed trade whose stored text a decimal cannot hold exactly is refused when listed, never rounded",
+    )
+    s.create_run("first", identity())
+    for t in ["t1", "t2"]:
+        s.append_closed_trade("run-1", t)
+    # Written behind the store's back: 29 decimal places.
+    s.raw_execute(f"UPDATE closed_trades SET qty = '{INEXACT}' WHERE run_id = 'run-1' AND entry_time_ms = {T}")
+    s.model.edits[("run-1", "t1")] = {"qty": INEXACT}
+    s.list_closed_trades("run-1", 1)
+    s.list_closed_trades("run-1", 10)
     out.append(s)
 
     s = Scenario("journal.runs_apart", "two runs' journals never mix")

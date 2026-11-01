@@ -1,13 +1,16 @@
-//! The candle store's steps, and the checks that read the identity cases:
+//! The candle store's steps, and the checks that read the shared cases:
 //! every product line stores its market under the storage spelling the
-//! cases give, and every decimal text of the cases comes back unchanged.
+//! identity cases give, every decimal text of the cases comes back
+//! unchanged, and the candles of every segment spec case, read back, pack
+//! to the case's name on every backend.
 
+use quantforge::storage::segments;
 use quantforge::{
     Candle, CandleQuery, CandleStore, Category, ExchangeId, Interval, MarketId, Symbol, Venue,
 };
 use std::str::FromStr;
 
-use super::cases::{CandleText, Cases, decimal, identity_cases};
+use super::cases::{CandleText, Cases, decimal, identity_cases, segment_spec_cases};
 use super::{Coded, Fixture, Step, expect_refused};
 
 /// The checks coded here: id and statement.
@@ -20,12 +23,17 @@ pub const CHECKS: &[(&str, &str)] = &[
         "candles.identity_decimals",
         "every decimal text of the identity cases is stored and read back unchanged",
     ),
+    (
+        "candles.segment_cases",
+        "the candles of every segment spec case, stored and read back, pack to the case's name",
+    ),
 ];
 
 pub fn check<S: CandleStore>(id: &str) -> Coded<S> {
     match id {
         "candles.identity_product_lines" => product_lines,
         "candles.identity_decimals" => identity_decimals,
+        "candles.segment_cases" => segment_cases,
         other => panic!("no candle check {other}"),
     }
 }
@@ -66,30 +74,38 @@ pub fn step<S: CandleStore + ?Sized>(cases: &Cases, store: &S, step: &Step) -> b
             end,
             limit,
             expect,
+            refused,
         } => {
             let query = CandleQuery {
                 start_time_ms: *start,
                 end_time_ms: *end,
                 limit: *limit,
             };
-            let loaded = store
-                .load_candles(&cases.market(market), query)
-                .expect("load");
-            assert_eq!(
-                &texts(&loaded),
-                expect,
-                "load {start:?}..={end:?} limit {limit:?}"
-            );
+            let outcome = store.load_candles(&cases.market(market), query);
+            let what = format!("load {start:?}..={end:?} limit {limit:?}");
+            match (expect, refused) {
+                (Some(expect), None) => {
+                    assert_eq!(&texts(&outcome.expect("load")), expect, "{what}")
+                }
+                (None, Some(refused)) => expect_refused(outcome, refused, &what),
+                _ => panic!("a load expects candles or a refusal"),
+            }
         }
         Step::Recent {
             market,
             limit,
             expect,
+            refused,
         } => {
-            let loaded = store
-                .load_recent_candles(&cases.market(market), *limit)
-                .expect("recent");
-            assert_eq!(&texts(&loaded), expect, "recent {limit}");
+            let outcome = store.load_recent_candles(&cases.market(market), *limit);
+            let what = format!("recent {limit}");
+            match (expect, refused) {
+                (Some(expect), None) => {
+                    assert_eq!(&texts(&outcome.expect("recent")), expect, "{what}")
+                }
+                (None, Some(refused)) => expect_refused(outcome, refused, &what),
+                _ => panic!("a recent read expects candles or a refusal"),
+            }
         }
         Step::MaxOpenTime { market, expect } => {
             let newest = store
@@ -235,4 +251,33 @@ fn identity_decimals<S: CandleStore>(fixture: &Fixture<S>) {
         .map(|candle| candle.close.to_string())
         .collect();
     assert_eq!(texts, cases.decimals, "the text read back");
+}
+
+/// The candles of every segment spec case, stored under a market of their
+/// interval and read back, are the case's texts and pack to the case's
+/// name: the same rows make the same canonical bytes on every backend.
+fn segment_cases<S: CandleStore>(fixture: &Fixture<S>) {
+    let store = &fixture.store;
+    for (index, case) in segment_spec_cases().iter().enumerate() {
+        let market = MarketId::new(
+            ExchangeId::BybitLinear,
+            Symbol::new(format!("CASE{index}USDT")).expect("symbol"),
+            case.interval(),
+        );
+        let candles: Vec<Candle> = case.candles.iter().map(CandleText::candle).collect();
+        store
+            .upsert_candles(&market, &candles)
+            .expect("the case's candles");
+        let loaded = store
+            .load_candles(&market, CandleQuery::default())
+            .expect("load");
+        assert_eq!(texts(&loaded), case.candles, "{}", case.name);
+        let payload = segments::encode(&loaded).expect("a payload");
+        assert_eq!(
+            segments::hash(&payload).to_string(),
+            case.hash,
+            "{}",
+            case.name
+        );
+    }
 }

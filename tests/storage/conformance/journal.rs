@@ -144,12 +144,20 @@ pub fn step<S: RunJournalStore + ?Sized>(cases: &Cases, store: &S, step: &Step) 
             run_id,
             limit,
             expect,
+            refused,
         } => {
-            let found = store
-                .list_closed_trades(run_id, *limit)
-                .expect("list closed trades");
-            let expected: Vec<ClosedTrade> = expect.iter().map(|name| cases.trade(name)).collect();
-            same(&found, &expected, &format!("closed trades of {run_id}"));
+            let outcome = store.list_closed_trades(run_id, *limit);
+            let what = format!("closed trades of {run_id}");
+            match (expect, refused) {
+                (Some(expect), None) => {
+                    let found = outcome.expect("list closed trades");
+                    let expected: Vec<ClosedTrade> =
+                        expect.iter().map(|name| cases.trade(name)).collect();
+                    same(&found, &expected, &what);
+                }
+                (None, Some(refused)) => expect_refused(outcome, refused, &what),
+                _ => panic!("a closed-trade listing expects trades or a refusal"),
+            }
         }
         _ => return false,
     }
