@@ -175,18 +175,21 @@ src/
 │   │       ├── mod.rs          every resolve rule, and the shared limits
 │   │       └── connection.rs   the sslmode table, every URL refusal, and the redaction
 │   ├── any.rs                  AnyStore: every storage port, handed to the backend it holds
+│   ├── common.rs               what both backends share: exact decimal reads, a candle's window
 │   ├── factory.rs              StoreFactory: opens the selected backend through its registered provider
 │   ├── factory/                the factory's unit tests
 │   │   └── tests.rs            dispatch to test providers, and no fallback for a backend without one
-│   ├── postgres/               PostgreSQL: the bridge of ADR 0001 and the schema chain, built with the postgres feature
-│   │   ├── mod.rs              PostgresStore: connect, ping and init; no storage port yet
+│   ├── postgres/               PostgreSQL: the bridge of ADR 0001, the schema chain and the stores, built with the postgres feature
+│   │   ├── mod.rs              PostgresStore: connect, ping and init
 │   │   ├── runner.rs           the bridge's own runtime, and the reply channel callers block on
 │   │   ├── bridge.rs           the bounded pool, each call's deadline and cancel, lost reads and writes
 │   │   ├── tls.rs              the rustls connector: the system's roots plus an optional CA file
 │   │   ├── schema.rs           the DDL of every schema version, the advisory lock, the control row
 │   │   ├── migrate.rs          the schema chain: created at init, one transaction per step under the lock
-│   │   └── tests/              the bridge's and the chain's unit tests
+│   │   ├── candles.rs          CandleStore: batches unnested into one upsert that marks changed windows
+│   │   └── tests/              the bridge's, the chain's and the candle store's unit tests
 │   │       ├── mod.rs          every calling context, the refusals, and the TLS connector
+│   │       ├── candles.rs      a batch as one statement: the last duplicate, forced windows, sorted rows
 │   │       ├── database.rs     against a real database: pool bound, deadlines, drop, password, TLS
 │   │       └── migrate.rs      the chain over steps no build has: an upgrade, a failure, stores together
 │   ├── segments/               segment format 1: a window of candles, packed and named by its hash
@@ -285,9 +288,11 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   and through `AnyStore`, with an isolated PostgreSQL database per fixture
   ready for the PostgreSQL stores; the schema chain from every earlier
   schema in `tests/fixtures/sqlite/`; the PostgreSQL schema `init` creates,
-  its refusals, exact round trips and the query plans of
-  [postgres-query-plans.md](postgres-query-plans.md) (`postgres/`); and the
-  documents held to the code
+  its refusals, exact round trips, the candle group, the candle store's
+  writes raced against a refresh's write-back, and the query plans of
+  [postgres-query-plans.md](postgres-query-plans.md) (`postgres/`); the
+  documents held to the code; and, on demand, a 100,000-candle batch on
+  each backend (`measure.rs`)
 - `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
   from naming a concrete exchange adapter, the code and `--help` outside
   the Binance adapter from hardcoding Binance, and each venue's own

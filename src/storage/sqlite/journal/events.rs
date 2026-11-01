@@ -1,7 +1,7 @@
 //! The journals beside a run's state: order events and closed trades, and
 //! the schema-5 rewrite that turned their venue IDs into text.
 
-use super::super::{SqliteStore, parse_decimal_str, to_from_sql_error};
+use super::super::{SqliteStore, parse_decimal_str, row_error, to_from_sql_error};
 use crate::{ClosedTrade, ExchangeOrder, StorageError, VenueOrderId};
 use rusqlite::{Transaction, params};
 use serde_json::Value;
@@ -148,7 +148,7 @@ pub(super) fn list_closed_trades(
 
     let mut trades = Vec::new();
     for row in rows {
-        trades.push(row.map_err(StorageError::other)?);
+        trades.push(row.map_err(row_error)?);
     }
     Ok(trades)
 }

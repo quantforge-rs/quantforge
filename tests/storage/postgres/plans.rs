@@ -25,7 +25,9 @@ struct Query {
 }
 
 /// Every statement shape the SQLite stores run, as the PostgreSQL stores
-/// will run it. The values pick one market, run and window of the data.
+/// run it: the candle store's own statements (`src/storage/postgres/
+/// candles.rs`, a batch unnested from arrays), and the rest as QUA-123 and
+/// QUA-112 will. The values pick one market, run and window of the data.
 const QUERIES: &[Query] = &[
     Query {
         id: "candles.load",
@@ -35,7 +37,8 @@ const QUERIES: &[Query] = &[
         sql: "SELECT open_time_ms, close_time_ms, open, high, low, close, volume, trades \
               FROM candles \
               WHERE exchange = 'binance_spot' AND symbol = 'BTCUSDT' AND interval = '1m' \
-                AND open_time_ms >= 1790812800000 AND open_time_ms <= 1791417600000 \
+                AND (CAST(1790812800000 AS bigint) IS NULL OR open_time_ms >= 1790812800000) \
+                AND (CAST(1791417600000 AS bigint) IS NULL OR open_time_ms <= 1791417600000) \
               ORDER BY open_time_ms ASC LIMIT 1000",
     },
     Query {
@@ -63,14 +66,26 @@ const QUERIES: &[Query] = &[
         write: true,
         sql: "INSERT INTO candles(exchange, symbol, interval, open_time_ms, close_time_ms, \
                                   open, high, low, close, volume, trades) \
-              VALUES ('binance_spot', 'BTCUSDT', '1m', 1790812800000, 1790812859999, \
-                      '1', '1', '1', '1', '1', 1) \
+              SELECT 'binance_spot', 'BTCUSDT', '1m', t.open_time_ms, t.close_time_ms, t.open, \
+                     t.high, t.low, t.close, t.volume, t.trades \
+              FROM unnest(CAST(ARRAY[1790812800000, 1790812860000] AS bigint[]), \
+                          CAST(ARRAY[1790812859999, 1790812919999] AS bigint[]), \
+                          CAST(ARRAY['1', '1'] AS text[]), CAST(ARRAY['1', '1'] AS text[]), \
+                          CAST(ARRAY['1', '1'] AS text[]), CAST(ARRAY['1', '1'] AS text[]), \
+                          CAST(ARRAY['1', '1'] AS text[]), CAST(ARRAY[1, 1] AS bigint[])) \
+                AS t(open_time_ms, close_time_ms, open, high, low, close, volume, trades) \
               ON CONFLICT (exchange, symbol, interval, open_time_ms) DO UPDATE SET \
                 close_time_ms = excluded.close_time_ms, open = excluded.open, \
                 high = excluded.high, low = excluded.low, close = excluded.close, \
                 volume = excluded.volume, trades = excluded.trades \
               WHERE candles.close_time_ms IS DISTINCT FROM excluded.close_time_ms \
-                 OR candles.close IS DISTINCT FROM excluded.close",
+                 OR candles.open IS DISTINCT FROM excluded.open \
+                 OR candles.high IS DISTINCT FROM excluded.high \
+                 OR candles.low IS DISTINCT FROM excluded.low \
+                 OR candles.close IS DISTINCT FROM excluded.close \
+                 OR candles.volume IS DISTINCT FROM excluded.volume \
+                 OR candles.trades IS DISTINCT FROM excluded.trades \
+              RETURNING open_time_ms",
     },
     Query {
         id: "candles.window",
@@ -141,7 +156,8 @@ const QUERIES: &[Query] = &[
         never_scanned: &["segment_dirty"],
         write: true,
         sql: "INSERT INTO segment_dirty(exchange, symbol, interval, window_start_ms) \
-              VALUES ('binance_spot', 'BTCUSDT', '1m', 1790812800000) \
+              SELECT 'binance_spot', 'BTCUSDT', '1m', \
+                     unnest(CAST(ARRAY[1790812800000, 1790899200000] AS bigint[])) \
               ON CONFLICT (exchange, symbol, interval, window_start_ms) DO UPDATE SET id = DEFAULT",
     },
     Query {

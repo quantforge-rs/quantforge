@@ -10,18 +10,19 @@
 //! the isolated database through `PostgresStore`, TLS rules and all.
 //!
 //! Every fixture's store has run `init`, so the schema of QUA-125 is in
-//! place. No group runs yet: `PostgresStore` implements no port. Each story
-//! adds its group's test here as its store lands, the way `sqlite.rs` calls
-//! them: `conformance::candles::<Postgres>()` with QUA-124,
-//! `conformance::journal::<Postgres>()` with QUA-123, and
-//! `conformance::segments::<Postgres>()` with QUA-112.
+//! place. Each port's group runs here once its store lands, as `sqlite.rs`
+//! calls them: the candle group since QUA-124, the journal group with
+//! QUA-123, and the segment group with QUA-112.
 //!
 //! - `schema`: the schema `init` creates, held to the doc: a repeat, stores
 //!   starting together, the refusals, exact round trips, and identities
 //!   that never collide.
+//! - `candles`: a correction racing a refresh's write-back, which never
+//!   leaves its window published as clean.
 //! - `plans`: representative data, and the index each query the ports run
 //!   is planned on; the evidence `docs/postgres-query-plans.md` records.
 
+mod candles;
 mod plans;
 mod schema;
 
@@ -34,7 +35,7 @@ use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio_postgres::{Client, NoTls, SimpleQueryMessage};
 
-use crate::conformance::{Backend, Fixture, Raw};
+use crate::conformance::{self, Backend, Fixture, Raw};
 
 /// The server the isolated databases are created on, or `None` to skip.
 fn server_url() -> Option<String> {
@@ -236,4 +237,13 @@ fn each_fixture_gets_a_database_of_its_own_and_drops_it() {
         ),
     );
     assert!(left.is_empty(), "left behind: {left:?}");
+}
+
+#[test]
+fn candles() {
+    if server_url().is_none() {
+        eprintln!("skipping: {VARIABLE} is unset");
+        return;
+    }
+    conformance::candles::<Postgres>();
 }

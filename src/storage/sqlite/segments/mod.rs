@@ -19,6 +19,7 @@ use std::collections::BTreeSet;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use super::{SqliteStore, to_from_sql_error};
+use crate::storage::common;
 use crate::storage::segments as format;
 use crate::{
     MarketId, SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh, SegmentStore, SegmentTip,
@@ -216,19 +217,6 @@ fn tip_window(
         )
         .map_err(StorageError::other)?;
     newest
-        .map(|open_time_ms| {
-            format::window(market.interval, open_time_ms)
-                .map(|window| window.start)
-                .ok_or_else(|| out_of_range(open_time_ms))
-        })
+        .map(|open_time_ms| common::window_start(market.interval, open_time_ms))
         .transpose()
-}
-
-/// The error for a candle whose segment window cannot be written, which
-/// `upsert_candles` refuses before storing it.
-pub(super) fn out_of_range(open_time_ms: TimestampMs) -> StorageError {
-    StorageError::InvalidArgument(format!(
-        "candle open time {open_time_ms} lies too close to the end of the timestamp range to \
-         belong to a segment window"
-    ))
 }

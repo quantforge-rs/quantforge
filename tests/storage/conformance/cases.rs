@@ -86,12 +86,18 @@ pub enum Step {
         start: Option<i64>,
         end: Option<i64>,
         limit: Option<usize>,
-        expect: Vec<CandleText>,
+        #[serde(default)]
+        expect: Option<Vec<CandleText>>,
+        #[serde(default)]
+        refused: Option<Refusal>,
     },
     Recent {
         market: String,
         limit: usize,
-        expect: Vec<CandleText>,
+        #[serde(default)]
+        expect: Option<Vec<CandleText>>,
+        #[serde(default)]
+        refused: Option<Refusal>,
     },
     MaxOpenTime {
         market: String,
@@ -182,7 +188,10 @@ pub enum Step {
     ListClosedTrades {
         run_id: String,
         limit: usize,
-        expect: Vec<String>,
+        #[serde(default)]
+        expect: Option<Vec<String>>,
+        #[serde(default)]
+        refused: Option<Refusal>,
     },
 }
 
@@ -618,4 +627,41 @@ pub fn identity_cases() -> IdentityCases {
     assert_eq!(cases.format, 1);
     assert!(cases.note.contains("not by the Rust code under test"));
     cases
+}
+
+/// Every interval's wire form.
+const INTERVALS: [&str; 15] = [
+    "1s", "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w",
+];
+
+#[derive(Debug, Deserialize)]
+struct SpecCases {
+    cases: Vec<SpecCase>,
+}
+
+/// One shared case of the segment spec: a window's candles and the name
+/// their payload has.
+#[derive(Debug, Deserialize)]
+pub struct SpecCase {
+    pub name: String,
+    pub candles: Vec<CandleText>,
+    pub hash: String,
+}
+
+impl SpecCase {
+    /// The interval whose step the case's candles span.
+    pub fn interval(&self) -> Interval {
+        let first = &self.candles[0];
+        let step = first.close_time_ms - first.open_time_ms + 1;
+        INTERVALS
+            .into_iter()
+            .map(|token| token.parse::<Interval>().expect("interval"))
+            .find(|interval| interval.step_ms() == step)
+            .unwrap_or_else(|| panic!("{}: no interval of {step} ms", self.name))
+    }
+}
+
+/// The cases of `tests/fixtures/segment_cases.json`.
+pub fn segment_spec_cases() -> Vec<SpecCase> {
+    read::<SpecCases>("tests/fixtures/segment_cases.json").cases
 }

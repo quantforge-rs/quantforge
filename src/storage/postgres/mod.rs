@@ -13,13 +13,15 @@
 //! - `schema`: the DDL of every schema version, and the lock `init` takes.
 //! - `migrate`: the chain that creates the schema and brings an earlier one
 //!   forward, one transaction per step (`docs/storage-schema.md`).
+//! - `candles`: `CandleStore`, with SQLite's semantics and batches that
+//!   mark the windows they change in the same transaction.
 //!
-//! [`PostgresStore`] connects, answers and creates its schema; it
-//! implements no storage port yet. The candle, journal and segment stores
-//! come with QUA-124, QUA-123 and QUA-112, and QUA-116 makes it selectable
-//! through `storage::factory`.
+//! [`PostgresStore`] connects, answers, creates its schema and stores
+//! candles. The journal and segment stores come with QUA-123 and QUA-112,
+//! and QUA-116 makes it selectable through `storage::factory`.
 
 mod bridge;
+mod candles;
 mod migrate;
 mod runner;
 mod schema;

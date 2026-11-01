@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `PostgresStore` implements `CandleStore` with SQLite's semantics: a batch is one transaction that writes its candles as one statement and marks the segment windows it changed with a fresh revision, so a refresh never publishes a window over candles it did not pack; identical candles change no row. PostgreSQL is not selectable yet (QUA-116)
 - `PostgresStore::init` creates the PostgreSQL schema, schema 5 with SQLite's tables and exact `TEXT` decimals, in one transaction under an advisory lock: processes starting together create it once, a failure leaves nothing behind, and running it again changes nothing; a later build migrates it in place, one step per transaction. PostgreSQL is not selectable yet (QUA-116)
 - a PostgreSQL database from a newer build, or one whose schema holds tables named like QuantForge's but records no schema version, is refused untouched
 - `docs/postgres-query-plans.md` records, on representative data, the index each storage query is planned on in PostgreSQL, and why the PostgreSQL schema leaves out SQLite's copy of the candles key and builds no BRIN index
@@ -158,6 +159,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- reading a stored decimal that a `Decimal` cannot hold exactly, with more than 28 decimal places, was silently rounded on SQLite; candles and closed trades now refuse it with the text named, as every backend does
 - refreshing a market's segments failed on a stored candle whose trade count was above 9223372036854775807, so no later window of that market was packed again; such a count is now packed as stored, as the segment format allows
 
 - `data sync` stored the candle still forming at the end of each pass and never fetched it again, so a following sync kept a snapshot of nearly every candle taken seconds after it opened; it now stores a candle only once it has settled, and fetches the forming one again on a later pass

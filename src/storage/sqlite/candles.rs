@@ -1,8 +1,8 @@
 //! Candle table: its schema, the `CandleStore` implementation, and the row
 //! decoder shared by the two read paths.
 
-use super::{SqliteStore, parse_decimal_str, segments};
-use crate::storage::segments as format;
+use super::{SqliteStore, parse_decimal_str, row_error, segments};
+use crate::storage::common;
 use crate::{Candle, CandleQuery, CandleStore, MarketId, StorageError, TimestampMs};
 use rusqlite::{ToSql, params, params_from_iter};
 use std::collections::BTreeSet;
@@ -43,11 +43,7 @@ impl CandleStore for SqliteStore {
         // written.
         let window_starts = candles
             .iter()
-            .map(|candle| {
-                format::window(market.interval, candle.open_time_ms)
-                    .map(|window| window.start)
-                    .ok_or_else(|| segments::out_of_range(candle.open_time_ms))
-            })
+            .map(|candle| common::window_start(market.interval, candle.open_time_ms))
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut connection = self.open()?;
@@ -168,7 +164,7 @@ impl CandleStore for SqliteStore {
 
         let mut candles = Vec::new();
         for row in rows {
-            candles.push(row.map_err(StorageError::other)?);
+            candles.push(row.map_err(row_error)?);
         }
         Ok(candles)
     }
@@ -216,7 +212,7 @@ impl CandleStore for SqliteStore {
 
         let mut candles = Vec::new();
         for row in rows {
-            candles.push(row.map_err(StorageError::other)?);
+            candles.push(row.map_err(row_error)?);
         }
         candles.reverse();
         Ok(candles)

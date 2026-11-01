@@ -1,8 +1,10 @@
 //! The bridge from every context QuantForge calls storage from, its
 //! refusals, and its TLS connector: none of these needs a database.
-//! [`database`] runs the rest against a real one, and [`migrate`] the
-//! schema chain, over steps no build has.
+//! [`database`] runs the rest against a real one, [`migrate`] the schema
+//! chain, over steps no build has, and [`candles`] how a batch of candles
+//! becomes one statement.
 
+mod candles;
 mod database;
 mod migrate;
 
