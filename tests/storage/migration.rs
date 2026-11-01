@@ -14,7 +14,7 @@ use rusqlite::Connection;
 use rusqlite::types::Value;
 use tempfile::TempDir;
 
-use crate::cases::fixture;
+use crate::conformance::cases::fixture;
 
 /// The hash of the one-bar segment the schema-4 fixture holds, and the
 /// candle it packs: segment case `one bar`.

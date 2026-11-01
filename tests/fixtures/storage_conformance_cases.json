@@ -1,0 +1,4497 @@
+{
+ "format": 1,
+ "note": "The storage conformance cases of docs/storage-conformance.md: scenarios for the candle, journal and segment ports, each step with what a conforming store returns, and the dirty-window races each backend steps through. Written by spikes/storage-contract/conformance_cases.py, not by the Rust code under test.",
+ "markets": {
+  "spot": {
+   "exchange": "binance_spot",
+   "symbol": "BTCUSDT",
+   "interval": "1m"
+  },
+  "linear": {
+   "exchange": "binance_linear",
+   "symbol": "BTCUSDT",
+   "interval": "1m"
+  },
+  "inverse": {
+   "exchange": "binance_inverse",
+   "symbol": "BTCUSD",
+   "interval": "1m"
+  },
+  "bybit_spot": {
+   "exchange": "bybit_spot",
+   "symbol": "BTCUSDT",
+   "interval": "1m"
+  },
+  "bybit_linear": {
+   "exchange": "bybit_linear",
+   "symbol": "BTCUSDT",
+   "interval": "1m"
+  },
+  "bybit_inverse": {
+   "exchange": "bybit_inverse",
+   "symbol": "BTCUSD",
+   "interval": "1m"
+  },
+  "eth": {
+   "exchange": "binance_spot",
+   "symbol": "ETHUSDT",
+   "interval": "1m"
+  },
+  "spot_5m": {
+   "exchange": "binance_spot",
+   "symbol": "BTCUSDT",
+   "interval": "5m"
+  },
+  "eth_5m": {
+   "exchange": "binance_spot",
+   "symbol": "ETHUSDT",
+   "interval": "5m"
+  },
+  "spot_3d": {
+   "exchange": "binance_spot",
+   "symbol": "BTCUSDT",
+   "interval": "3d"
+  },
+  "spot_1w": {
+   "exchange": "binance_spot",
+   "symbol": "BTCUSDT",
+   "interval": "1w"
+  }
+ },
+ "series_rule": "candle i of a series, for i from 0 to count - 1 (only those in range [a, b) when a range is given, and none listed in skip): open_time_ms = from + i * spacing_ms (spacing_ms defaults to the market's interval step); close_time_ms = open_time_ms + step - 1; open, high, low and close are the close text when one is given, otherwise \"{100 + i % 50}.{i % 100, two digits}\"; volume is \"0.50000000\"; trades is open_time_ms modulo 97, never negative; candles are written in rising i",
+ "runs": {
+  "full": {
+   "run_id": "run-1",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 7,
+    "slow": 25,
+    "note": "ünïcode"
+   },
+   "execution_mode": "live",
+   "status": "running",
+   "last_processed_open_time_ms": 1792454520000,
+   "started_at_ms": 1792454400000,
+   "updated_at_ms": 1792454580000,
+   "stopped_at_ms": null,
+   "last_error": "the last poll timed out",
+   "position": {
+    "qty": "0.00120",
+    "entry_price": "67012.34000000",
+    "entry_time_ms": 1792454460000,
+    "entry_order_id": "1321003749386327552"
+   }
+  },
+  "first": {
+   "run_id": "run-1",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 1792454400000,
+   "updated_at_ms": 1792454400000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "first_stopped": {
+   "run_id": "run-1",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "stopped",
+   "last_processed_open_time_ms": 1792454520000,
+   "started_at_ms": 1792454400000,
+   "updated_at_ms": 1792454580000,
+   "stopped_at_ms": 1792454580000,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "second": {
+   "run_id": "run-2",
+   "market": "eth",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 1792454400000,
+   "updated_at_ms": 1792454400000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "older": {
+   "run_id": "run-a",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 1792454400000,
+   "updated_at_ms": 1000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "newer": {
+   "run_id": "run-b",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 1792454400000,
+   "updated_at_ms": 2000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "other_strategy": {
+   "run_id": "run-c",
+   "market": "spot",
+   "strategy_name": "other_strategy",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 1792454400000,
+   "updated_at_ms": 3000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "other_interval": {
+   "run_id": "run-d",
+   "market": "spot_5m",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 1792454400000,
+   "updated_at_ms": 4000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "other_venue": {
+   "run_id": "run-e",
+   "market": "bybit_spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 1792454400000,
+   "updated_at_ms": 5000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "other_family": {
+   "run_id": "run-f",
+   "market": "linear",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 1792454400000,
+   "updated_at_ms": 6000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "tie_m": {
+   "run_id": "run-m",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 1,
+   "updated_at_ms": 9000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "tie_a": {
+   "run_id": "run-a",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 2,
+   "updated_at_ms": 9000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "tie_z": {
+   "run_id": "run-z",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 2,
+   "updated_at_ms": 9000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "tie_q": {
+   "run_id": "run-q",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 3,
+   "updated_at_ms": 9000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "tie_m_later": {
+   "run_id": "run-m",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 1,
+   "updated_at_ms": 9500,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "legacy": {
+   "run_id": "run-legacy",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "live",
+   "status": "stopped",
+   "last_processed_open_time_ms": 1792454460000,
+   "started_at_ms": 1792454400000,
+   "updated_at_ms": 1792454520000,
+   "stopped_at_ms": 1792454520000,
+   "last_error": null,
+   "position": {
+    "qty": "0.0254",
+    "entry_price": "3933.07",
+    "entry_time_ms": 1792454460100,
+    "entry_order_id": "7"
+   }
+  },
+  "legacy_no_mode": {
+   "run_id": "run-old",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 1792454400000,
+   "updated_at_ms": 1792454520000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  }
+ },
+ "orders": {
+  "o1": {
+   "symbol": "BTCUSDT",
+   "side": "BUY",
+   "order_type": "MARKET",
+   "status": "FILLED",
+   "order_id": "1",
+   "client_order_id": "qf-o1",
+   "requested_qty": null,
+   "requested_quote_qty": "100.00",
+   "executed_qty": "0.00150",
+   "cumulative_quote_qty": "100.5180000",
+   "avg_price": "67012.00",
+   "transact_time_ms": 1792454400001,
+   "fills": [
+    {
+     "price": "67012.00",
+     "qty": "0.00150",
+     "commission": "0.00000150",
+     "commission_asset": "BTC",
+     "trade_id": "1"
+    }
+   ],
+   "raw": {
+    "orderId": "1",
+    "note": "o1"
+   }
+  },
+  "o2": {
+   "symbol": "BTCUSDT",
+   "side": "SELL",
+   "order_type": "MARKET",
+   "status": "FILLED",
+   "order_id": "2",
+   "client_order_id": "qf-o2",
+   "requested_qty": null,
+   "requested_quote_qty": "100.00",
+   "executed_qty": null,
+   "cumulative_quote_qty": null,
+   "avg_price": "67012.00",
+   "transact_time_ms": 1792454400001,
+   "fills": null,
+   "raw": {
+    "orderId": "2",
+    "note": "o2"
+   }
+  },
+  "o3": {
+   "symbol": "BTCUSDT",
+   "side": "BUY",
+   "order_type": "MARKET",
+   "status": "PARTIALLY_FILLED",
+   "order_id": "1321003749386327552",
+   "client_order_id": "qf-o3",
+   "requested_qty": null,
+   "requested_quote_qty": "100.00",
+   "executed_qty": "0.00150",
+   "cumulative_quote_qty": "100.5180000",
+   "avg_price": "67012.00",
+   "transact_time_ms": 1792454400001,
+   "fills": [],
+   "raw": {
+    "orderId": "1321003749386327552",
+    "note": "o3"
+   }
+  },
+  "o7": {
+   "symbol": "BTCUSDT",
+   "side": "BUY",
+   "order_type": "MARKET",
+   "status": "FILLED",
+   "order_id": "7",
+   "client_order_id": "qf-o7",
+   "requested_qty": null,
+   "requested_quote_qty": "100.00",
+   "executed_qty": "0.00150",
+   "cumulative_quote_qty": "100.5180000",
+   "avg_price": "67012.00",
+   "transact_time_ms": 1792454400001,
+   "fills": [
+    {
+     "price": "67012.00",
+     "qty": "0.00150",
+     "commission": "0.00000150",
+     "commission_asset": "BTC",
+     "trade_id": "7"
+    }
+   ],
+   "raw": {
+    "orderId": "7",
+    "note": "o7"
+   }
+  },
+  "unknown_id": {
+   "symbol": "BTCUSDT",
+   "side": "BUY",
+   "order_type": "MARKET",
+   "status": "FILLED",
+   "order_id": null,
+   "client_order_id": null,
+   "requested_qty": null,
+   "requested_quote_qty": "100.00",
+   "executed_qty": "0.00150",
+   "cumulative_quote_qty": "100.5180000",
+   "avg_price": null,
+   "transact_time_ms": 1792454400001,
+   "fills": null,
+   "raw": {}
+  }
+ },
+ "trades": {
+  "t1": {
+   "symbol": "BTCUSDT",
+   "entry_time_ms": 1792454400000,
+   "exit_time_ms": 1792454460000,
+   "entry_price": "67012.34000000",
+   "exit_price": "67100.10",
+   "qty": "0.00150",
+   "gross_quote_pnl": "0.131640000000",
+   "entry_order_id": "7",
+   "exit_order_id": "8"
+  },
+  "t2": {
+   "symbol": "BTCUSDT",
+   "entry_time_ms": 1792454520000,
+   "exit_time_ms": 1792454580000,
+   "entry_price": "67012.34000000",
+   "exit_price": "67100.10",
+   "qty": "0.010",
+   "gross_quote_pnl": "-0.5",
+   "entry_order_id": null,
+   "exit_order_id": null
+  },
+  "t3": {
+   "symbol": "BTCUSDT",
+   "entry_time_ms": 1792454640000,
+   "exit_time_ms": 1792454700000,
+   "entry_price": "67012.34000000",
+   "exit_price": "67100.10",
+   "qty": "0.00150",
+   "gross_quote_pnl": "0.131640000000",
+   "entry_order_id": "a1b2c3-d4",
+   "exit_order_id": "00000042"
+  }
+ },
+ "candles": [
+  {
+   "id": "candles.empty_market",
+   "doc": "a market without candles reads nothing",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "eth",
+     "candles": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": []
+    },
+    {
+     "op": "recent",
+     "market": "spot",
+     "limit": 5,
+     "expect": []
+    },
+    {
+     "op": "max_open_time",
+     "market": "spot",
+     "expect": null
+    }
+   ]
+  },
+  {
+   "id": "candles.written_counts_statements",
+   "doc": "an upsert counts the candles it was given, not the rows it added",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [],
+     "written": 0
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "102",
+       "high": "102",
+       "low": "102",
+       "close": "102",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 2
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "102",
+       "high": "102",
+       "low": "102",
+       "close": "102",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 2
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "102",
+       "high": "102",
+       "low": "102",
+       "close": "102",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "candles.duplicate_overwrites",
+   "doc": "a candle written again under its open time replaces every other column",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "105",
+       "high": "105",
+       "low": "105",
+       "close": "105",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "101",
+       "high": "111",
+       "low": "91",
+       "close": "106",
+       "volume": "43.21",
+       "trades": 43
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59000,
+       "open": "101",
+       "high": "111",
+       "low": "91",
+       "close": "106",
+       "volume": "43.21",
+       "trades": 43
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "candles.later_duplicate_wins",
+   "doc": "of two candles with one open time in a batch, the later is kept",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "5",
+       "high": "5",
+       "low": "5",
+       "close": "5",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "2",
+       "high": "2",
+       "low": "2",
+       "close": "2",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 3
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "2",
+       "high": "2",
+       "low": "2",
+       "close": "2",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "5",
+       "high": "5",
+       "low": "5",
+       "close": "5",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "candles.bounds_order_and_limit",
+   "doc": "a load is ascending with both bounds included and keeps the oldest; recent keeps the newest, ascending",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 180000,
+       "close_time_ms": 239999,
+       "open": "102",
+       "high": "102",
+       "low": "102",
+       "close": "102",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "105",
+       "high": "105",
+       "low": "105",
+       "close": "105",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 240000,
+       "close_time_ms": 299999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 120000,
+       "close_time_ms": 179999,
+       "open": "103",
+       "high": "103",
+       "low": "103",
+       "close": "103",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "104",
+       "high": "104",
+       "low": "104",
+       "close": "104",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 5
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": 60000,
+     "end": 180000,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "104",
+       "high": "104",
+       "low": "104",
+       "close": "104",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 120000,
+       "close_time_ms": 179999,
+       "open": "103",
+       "high": "103",
+       "low": "103",
+       "close": "103",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 180000,
+       "close_time_ms": 239999,
+       "open": "102",
+       "high": "102",
+       "low": "102",
+       "close": "102",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "105",
+       "high": "105",
+       "low": "105",
+       "close": "105",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "104",
+       "high": "104",
+       "low": "104",
+       "close": "104",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 120000,
+       "close_time_ms": 179999,
+       "open": "103",
+       "high": "103",
+       "low": "103",
+       "close": "103",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 180000,
+       "close_time_ms": 239999,
+       "open": "102",
+       "high": "102",
+       "low": "102",
+       "close": "102",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 240000,
+       "close_time_ms": 299999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": 2,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "105",
+       "high": "105",
+       "low": "105",
+       "close": "105",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "104",
+       "high": "104",
+       "low": "104",
+       "close": "104",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": 60000,
+     "end": null,
+     "limit": 2,
+     "expect": [
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "104",
+       "high": "104",
+       "low": "104",
+       "close": "104",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 120000,
+       "close_time_ms": 179999,
+       "open": "103",
+       "high": "103",
+       "low": "103",
+       "close": "103",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "recent",
+     "market": "spot",
+     "limit": 2,
+     "expect": [
+      {
+       "open_time_ms": 180000,
+       "close_time_ms": 239999,
+       "open": "102",
+       "high": "102",
+       "low": "102",
+       "close": "102",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 240000,
+       "close_time_ms": 299999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "recent",
+     "market": "spot",
+     "limit": 50,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "105",
+       "high": "105",
+       "low": "105",
+       "close": "105",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "104",
+       "high": "104",
+       "low": "104",
+       "close": "104",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 120000,
+       "close_time_ms": 179999,
+       "open": "103",
+       "high": "103",
+       "low": "103",
+       "close": "103",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 180000,
+       "close_time_ms": 239999,
+       "open": "102",
+       "high": "102",
+       "low": "102",
+       "close": "102",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 240000,
+       "close_time_ms": 299999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "candles.empty_ranges",
+   "doc": "a range holding no candle, a zero limit and a reversed range read nothing",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 120000,
+       "close_time_ms": 179999,
+       "open": "2",
+       "high": "2",
+       "low": "2",
+       "close": "2",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 240000,
+       "close_time_ms": 299999,
+       "open": "3",
+       "high": "3",
+       "low": "3",
+       "close": "3",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 3
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": 180000,
+     "end": 60000,
+     "limit": null,
+     "expect": []
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": 60000,
+     "end": 119999,
+     "limit": null,
+     "expect": []
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": 0,
+     "expect": []
+    },
+    {
+     "op": "recent",
+     "market": "spot",
+     "limit": 0,
+     "expect": []
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": 300000,
+     "end": null,
+     "limit": null,
+     "expect": []
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": -1,
+     "limit": null,
+     "expect": []
+    }
+   ]
+  },
+  {
+   "id": "candles.exact_bounds",
+   "doc": "a bound on a candle's open time includes it, and one past it does not",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 120000,
+       "close_time_ms": 179999,
+       "open": "2",
+       "high": "2",
+       "low": "2",
+       "close": "2",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 240000,
+       "close_time_ms": 299999,
+       "open": "3",
+       "high": "3",
+       "low": "3",
+       "close": "3",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 3
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": 120000,
+     "end": 120000,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 120000,
+       "close_time_ms": 179999,
+       "open": "2",
+       "high": "2",
+       "low": "2",
+       "close": "2",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": 120001,
+     "end": 239999,
+     "limit": null,
+     "expect": []
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": 119999,
+     "end": 120001,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 120000,
+       "close_time_ms": 179999,
+       "open": "2",
+       "high": "2",
+       "low": "2",
+       "close": "2",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "candles.markets_isolated",
+   "doc": "the same open time on every product line, symbol and interval reads back only its own candle",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "100.00",
+       "high": "100.00",
+       "low": "100.00",
+       "close": "100.00",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "linear",
+     "candles": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "101.10",
+       "high": "101.10",
+       "low": "101.10",
+       "close": "101.10",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "inverse",
+     "candles": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "102.20",
+       "high": "102.20",
+       "low": "102.20",
+       "close": "102.20",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "bybit_spot",
+     "candles": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "103.30",
+       "high": "103.30",
+       "low": "103.30",
+       "close": "103.30",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "bybit_linear",
+     "candles": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "104.40",
+       "high": "104.40",
+       "low": "104.40",
+       "close": "104.40",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "bybit_inverse",
+     "candles": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "105.50",
+       "high": "105.50",
+       "low": "105.50",
+       "close": "105.50",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "eth",
+     "candles": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "106.60",
+       "high": "106.60",
+       "low": "106.60",
+       "close": "106.60",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "spot_5m",
+     "candles": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454699999,
+       "open": "107.70",
+       "high": "107.70",
+       "low": "107.70",
+       "close": "107.70",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "100.00",
+       "high": "100.00",
+       "low": "100.00",
+       "close": "100.00",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "max_open_time",
+     "market": "spot",
+     "expect": 1792454400000
+    },
+    {
+     "op": "load",
+     "market": "linear",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "101.10",
+       "high": "101.10",
+       "low": "101.10",
+       "close": "101.10",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "max_open_time",
+     "market": "linear",
+     "expect": 1792454400000
+    },
+    {
+     "op": "load",
+     "market": "inverse",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "102.20",
+       "high": "102.20",
+       "low": "102.20",
+       "close": "102.20",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "max_open_time",
+     "market": "inverse",
+     "expect": 1792454400000
+    },
+    {
+     "op": "load",
+     "market": "bybit_spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "103.30",
+       "high": "103.30",
+       "low": "103.30",
+       "close": "103.30",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "max_open_time",
+     "market": "bybit_spot",
+     "expect": 1792454400000
+    },
+    {
+     "op": "load",
+     "market": "bybit_linear",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "104.40",
+       "high": "104.40",
+       "low": "104.40",
+       "close": "104.40",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "max_open_time",
+     "market": "bybit_linear",
+     "expect": 1792454400000
+    },
+    {
+     "op": "load",
+     "market": "bybit_inverse",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "105.50",
+       "high": "105.50",
+       "low": "105.50",
+       "close": "105.50",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "max_open_time",
+     "market": "bybit_inverse",
+     "expect": 1792454400000
+    },
+    {
+     "op": "load",
+     "market": "eth",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "106.60",
+       "high": "106.60",
+       "low": "106.60",
+       "close": "106.60",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "max_open_time",
+     "market": "eth",
+     "expect": 1792454400000
+    },
+    {
+     "op": "load",
+     "market": "spot_5m",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454699999,
+       "open": "107.70",
+       "high": "107.70",
+       "low": "107.70",
+       "close": "107.70",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "max_open_time",
+     "market": "spot_5m",
+     "expect": 1792454400000
+    },
+    {
+     "op": "max_open_time",
+     "market": "eth_5m",
+     "expect": null
+    },
+    {
+     "op": "recent",
+     "market": "eth_5m",
+     "limit": 1,
+     "expect": []
+    }
+   ]
+  },
+  {
+   "id": "candles.decimal_scale",
+   "doc": "every decimal column keeps the text it was written with, scale included",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "100.50",
+       "high": "110.000",
+       "low": "0.010",
+       "close": "105.5000",
+       "volume": "12.340",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "0.0000001",
+       "high": "0.0000001",
+       "low": "0.0000001",
+       "close": "0.0000001",
+       "volume": "123456789.123456789012345678",
+       "trades": 1
+      }
+     ],
+     "written": 2
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "100.50",
+       "high": "110.000",
+       "low": "0.010",
+       "close": "105.5000",
+       "volume": "12.340",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "0.0000001",
+       "high": "0.0000001",
+       "low": "0.0000001",
+       "close": "0.0000001",
+       "volume": "123456789.123456789012345678",
+       "trades": 1
+      }
+     ]
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT open, high, low, close, volume FROM candles WHERE exchange = 'binance_spot' AND symbol = 'BTCUSDT' AND interval = '1m' ORDER BY open_time_ms",
+     "expect": [
+      [
+       "100.50",
+       "110.000",
+       "0.010",
+       "105.5000",
+       "12.340"
+      ],
+      [
+       "0.0000001",
+       "0.0000001",
+       "0.0000001",
+       "0.0000001",
+       "123456789.123456789012345678"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "candles.unknown_trades",
+   "doc": "an unknown trade count stays unknown and is not zero",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": null
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 0
+      }
+     ],
+     "written": 2
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": null
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 0
+      }
+     ]
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 0
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": 0,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 0
+      }
+     ]
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": null
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": 0,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "candles.trade_count_range",
+   "doc": "every trade count from 0 to the largest unsigned 64-bit one reads back unchanged",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 0
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 120000,
+       "close_time_ms": 179999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 9223372036854775807
+      },
+      {
+       "open_time_ms": 180000,
+       "close_time_ms": 239999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 9223372036854775808
+      },
+      {
+       "open_time_ms": 240000,
+       "close_time_ms": 299999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 18446744073709551615
+      }
+     ],
+     "written": 5
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 0
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 120000,
+       "close_time_ms": 179999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 9223372036854775807
+      },
+      {
+       "open_time_ms": 180000,
+       "close_time_ms": 239999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 9223372036854775808
+      },
+      {
+       "open_time_ms": 240000,
+       "close_time_ms": 299999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 18446744073709551615
+      }
+     ]
+    },
+    {
+     "op": "recent",
+     "market": "spot",
+     "limit": 2,
+     "expect": [
+      {
+       "open_time_ms": 180000,
+       "close_time_ms": 239999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 9223372036854775808
+      },
+      {
+       "open_time_ms": 240000,
+       "close_time_ms": 299999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 18446744073709551615
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "candles.unwritable_batch",
+   "doc": "a batch holding a candle no segment window can hold is refused whole",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 9223372036854775707,
+       "close_time_ms": 9223372036854775807,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "9223372036854775707"
+     }
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": []
+    },
+    {
+     "op": "max_open_time",
+     "market": "spot",
+     "expect": null
+    }
+   ]
+  },
+  {
+   "id": "candles.reopened",
+   "doc": "a store opened again on the same database resumes from its newest candle",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 120000,
+       "close_time_ms": 179999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 3
+    },
+    {
+     "op": "reopen"
+    },
+    {
+     "op": "max_open_time",
+     "market": "spot",
+     "expect": 120000
+    },
+    {
+     "op": "load",
+     "market": "spot",
+     "start": null,
+     "end": null,
+     "limit": null,
+     "expect": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 120000,
+       "close_time_ms": 179999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "journal": [
+  {
+   "id": "journal.round_trip",
+   "doc": "a run reads back in full: position, cursor, error and configuration",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "full",
+     "identity": {
+      "environment": "testnet",
+      "account": {
+       "key": "a",
+       "fingerprint": "ca978112ca1bbdca"
+      },
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "load_run",
+     "run_id": "run-1",
+     "expect": "full"
+    },
+    {
+     "op": "run_identity",
+     "run_id": "run-1",
+     "expect": {
+      "environment": "testnet",
+      "account": {
+       "key": "a",
+       "fingerprint": "ca978112ca1bbdca"
+      },
+      "source": "recorded"
+     }
+    }
+   ]
+  },
+  {
+   "id": "journal.unknown_run",
+   "doc": "a run never created reads nothing",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "first",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "load_run",
+     "run_id": "missing",
+     "expect": null
+    },
+    {
+     "op": "run_identity",
+     "run_id": "missing",
+     "expect": null
+    },
+    {
+     "op": "list_order_events",
+     "run_id": "missing",
+     "limit": 10,
+     "expect": []
+    },
+    {
+     "op": "list_closed_trades",
+     "run_id": "missing",
+     "limit": 10,
+     "expect": []
+    },
+    {
+     "op": "latest_run",
+     "market": "eth",
+     "strategy": "sma_cross",
+     "expect": null
+    }
+   ]
+  },
+  {
+   "id": "journal.created_once",
+   "doc": "a run is created once, and its first identity stays",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "first",
+     "identity": {
+      "environment": "testnet",
+      "account": {
+       "key": "a",
+       "fingerprint": "ca978112ca1bbdca"
+      },
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "create_run",
+     "run": "first",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     },
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "run run-1 already exists"
+     }
+    },
+    {
+     "op": "run_identity",
+     "run_id": "run-1",
+     "expect": {
+      "environment": "testnet",
+      "account": {
+       "key": "a",
+       "fingerprint": "ca978112ca1bbdca"
+      },
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "create_run",
+     "run": "second",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "legacy"
+     },
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "only a migration marks runs legacy"
+     }
+    },
+    {
+     "op": "load_run",
+     "run_id": "run-2",
+     "expect": null
+    }
+   ]
+  },
+  {
+   "id": "journal.saved_after_created",
+   "doc": "a run is saved only after it was created",
+   "steps": [
+    {
+     "op": "save_run",
+     "run": "first",
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "run run-1 was never created"
+     }
+    },
+    {
+     "op": "load_run",
+     "run_id": "run-1",
+     "expect": null
+    },
+    {
+     "op": "run_identity",
+     "run_id": "run-1",
+     "expect": null
+    }
+   ]
+  },
+  {
+   "id": "journal.save_keeps_identity",
+   "doc": "saving replaces the state and never the identity",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "first",
+     "identity": {
+      "environment": "testnet",
+      "account": {
+       "key": "a",
+       "fingerprint": "ca978112ca1bbdca"
+      },
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "save_run",
+     "run": "first_stopped"
+    },
+    {
+     "op": "load_run",
+     "run_id": "run-1",
+     "expect": "first_stopped"
+    },
+    {
+     "op": "run_identity",
+     "run_id": "run-1",
+     "expect": {
+      "environment": "testnet",
+      "account": {
+       "key": "a",
+       "fingerprint": "ca978112ca1bbdca"
+      },
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT environment, account_kind, account_id, identity_source, status FROM bot_runs WHERE run_id = 'run-1'",
+     "expect": [
+      [
+       "testnet",
+       "key_fingerprint",
+       "ca978112ca1bbdca",
+       "recorded",
+       "stopped"
+      ]
+     ]
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT CAST(COUNT(*) AS TEXT) FROM bot_runs",
+     "expect": [
+      [
+       "1"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "journal.latest_per_market",
+   "doc": "the latest run is the last updated of its market and strategy; another strategy, interval, venue or family never wins",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "older",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "create_run",
+     "run": "newer",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "create_run",
+     "run": "other_strategy",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "create_run",
+     "run": "other_interval",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "create_run",
+     "run": "other_venue",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "create_run",
+     "run": "other_family",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "latest_run",
+     "market": "spot",
+     "strategy": "sma_cross",
+     "expect": "newer"
+    },
+    {
+     "op": "latest_run",
+     "market": "spot",
+     "strategy": "other_strategy",
+     "expect": "other_strategy"
+    },
+    {
+     "op": "latest_run",
+     "market": "spot_5m",
+     "strategy": "sma_cross",
+     "expect": "other_interval"
+    },
+    {
+     "op": "latest_run",
+     "market": "bybit_spot",
+     "strategy": "sma_cross",
+     "expect": "other_venue"
+    },
+    {
+     "op": "latest_run",
+     "market": "linear",
+     "strategy": "sma_cross",
+     "expect": "other_family"
+    },
+    {
+     "op": "latest_run",
+     "market": "eth",
+     "strategy": "sma_cross",
+     "expect": null
+    }
+   ]
+  },
+  {
+   "id": "journal.latest_tie",
+   "doc": "of runs updated in the same millisecond the one started later is the latest, then the greater run ID",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "tie_m",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "create_run",
+     "run": "tie_a",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "latest_run",
+     "market": "spot",
+     "strategy": "sma_cross",
+     "expect": "tie_a"
+    },
+    {
+     "op": "create_run",
+     "run": "tie_z",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "latest_run",
+     "market": "spot",
+     "strategy": "sma_cross",
+     "expect": "tie_z"
+    },
+    {
+     "op": "create_run",
+     "run": "tie_q",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "latest_run",
+     "market": "spot",
+     "strategy": "sma_cross",
+     "expect": "tie_q"
+    },
+    {
+     "op": "save_run",
+     "run": "tie_m_later"
+    },
+    {
+     "op": "latest_run",
+     "market": "spot",
+     "strategy": "sma_cross",
+     "expect": "tie_m_later"
+    }
+   ]
+  },
+  {
+   "id": "journal.order_events",
+   "doc": "order events read back newest first, up to the limit, exactly as appended",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "first",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "append_order_event",
+     "run_id": "run-1",
+     "order": "o1"
+    },
+    {
+     "op": "append_order_event",
+     "run_id": "run-1",
+     "order": "o2"
+    },
+    {
+     "op": "append_order_event",
+     "run_id": "run-1",
+     "order": "o3"
+    },
+    {
+     "op": "append_order_event",
+     "run_id": "run-1",
+     "order": "unknown_id"
+    },
+    {
+     "op": "list_order_events",
+     "run_id": "run-1",
+     "limit": 10,
+     "expect": [
+      "unknown_id",
+      "o3",
+      "o2",
+      "o1"
+     ]
+    },
+    {
+     "op": "list_order_events",
+     "run_id": "run-1",
+     "limit": 2,
+     "expect": [
+      "unknown_id",
+      "o3"
+     ]
+    },
+    {
+     "op": "list_order_events",
+     "run_id": "run-1",
+     "limit": 0,
+     "expect": []
+    },
+    {
+     "op": "value_types",
+     "table": "order_events",
+     "column": "order_id",
+     "expect": [
+      "text"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "journal.duplicate_event",
+   "doc": "an order event appended twice is listed twice",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "first",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "append_order_event",
+     "run_id": "run-1",
+     "order": "o7"
+    },
+    {
+     "op": "append_order_event",
+     "run_id": "run-1",
+     "order": "o7"
+    },
+    {
+     "op": "list_order_events",
+     "run_id": "run-1",
+     "limit": 10,
+     "expect": [
+      "o7",
+      "o7"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "journal.closed_trades",
+   "doc": "closed trades read back newest first with their scale and their missing order IDs",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "first",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "append_closed_trade",
+     "run_id": "run-1",
+     "trade": "t1"
+    },
+    {
+     "op": "append_closed_trade",
+     "run_id": "run-1",
+     "trade": "t2"
+    },
+    {
+     "op": "append_closed_trade",
+     "run_id": "run-1",
+     "trade": "t3"
+    },
+    {
+     "op": "list_closed_trades",
+     "run_id": "run-1",
+     "limit": 10,
+     "expect": [
+      "t3",
+      "t2",
+      "t1"
+     ]
+    },
+    {
+     "op": "list_closed_trades",
+     "run_id": "run-1",
+     "limit": 1,
+     "expect": [
+      "t3"
+     ]
+    },
+    {
+     "op": "value_types",
+     "table": "closed_trades",
+     "column": "entry_order_id",
+     "expect": [
+      "text"
+     ]
+    },
+    {
+     "op": "value_types",
+     "table": "closed_trades",
+     "column": "exit_order_id",
+     "expect": [
+      "text"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "journal.runs_apart",
+   "doc": "two runs' journals never mix",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "first",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "create_run",
+     "run": "second",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "append_order_event",
+     "run_id": "run-1",
+     "order": "o1"
+    },
+    {
+     "op": "append_order_event",
+     "run_id": "run-2",
+     "order": "o2"
+    },
+    {
+     "op": "append_order_event",
+     "run_id": "run-1",
+     "order": "o3"
+    },
+    {
+     "op": "append_closed_trade",
+     "run_id": "run-2",
+     "trade": "t1"
+    },
+    {
+     "op": "append_closed_trade",
+     "run_id": "run-1",
+     "trade": "t2"
+    },
+    {
+     "op": "list_order_events",
+     "run_id": "run-1",
+     "limit": 10,
+     "expect": [
+      "o3",
+      "o1"
+     ]
+    },
+    {
+     "op": "list_order_events",
+     "run_id": "run-2",
+     "limit": 10,
+     "expect": [
+      "o2"
+     ]
+    },
+    {
+     "op": "list_closed_trades",
+     "run_id": "run-1",
+     "limit": 10,
+     "expect": [
+      "t2"
+     ]
+    },
+    {
+     "op": "list_closed_trades",
+     "run_id": "run-2",
+     "limit": 10,
+     "expect": [
+      "t1"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "journal.reopened",
+   "doc": "a store opened again on the same database loads a run for resume",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "full",
+     "identity": {
+      "environment": "testnet",
+      "account": {
+       "key": "a",
+       "fingerprint": "ca978112ca1bbdca"
+      },
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "reopen"
+    },
+    {
+     "op": "load_run",
+     "run_id": "run-1",
+     "expect": "full"
+    },
+    {
+     "op": "run_identity",
+     "run_id": "run-1",
+     "expect": {
+      "environment": "testnet",
+      "account": {
+       "key": "a",
+       "fingerprint": "ca978112ca1bbdca"
+      },
+      "source": "recorded"
+     }
+    }
+   ]
+  },
+  {
+   "id": "journal.wire_forms",
+   "doc": "columns hold the wire forms and the JSON the serde tokens",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "first",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "append_order_event",
+     "run_id": "run-1",
+     "order": "o1"
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT exchange, symbol, interval, strategy_name, status FROM bot_runs WHERE run_id = 'run-1'",
+     "expect": [
+      [
+       "binance_spot",
+       "BTCUSDT",
+       "1m",
+       "sma_cross",
+       "running"
+      ]
+     ]
+    },
+    {
+     "op": "raw_contains",
+     "sql": "SELECT state_json FROM bot_runs WHERE run_id = 'run-1'",
+     "contains": [
+      "\"BinanceSpot\"",
+      "\"M1\"",
+      "\"DryRun\"",
+      "\"Running\""
+     ]
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT symbol, side, order_type, status, order_id FROM order_events WHERE run_id = 'run-1'",
+     "expect": [
+      [
+       "BTCUSDT",
+       "BUY",
+       "MARKET",
+       "FILLED",
+       "1"
+      ]
+     ]
+    },
+    {
+     "op": "raw_contains",
+     "sql": "SELECT raw_json FROM order_events WHERE run_id = 'run-1'",
+     "contains": [
+      "\"Buy\"",
+      "\"Filled\"",
+      "\"1\""
+     ]
+    }
+   ]
+  },
+  {
+   "id": "journal.legacy_unresolved",
+   "doc": "a legacy run loads with no environment and no account, is found as the latest, and is never driven",
+   "steps": [
+    {
+     "op": "raw_execute",
+     "sql": "INSERT INTO bot_runs(run_id, exchange, symbol, interval, strategy_name, status, state_json, started_at_ms, updated_at_ms, stopped_at_ms, last_error, environment, account_kind, account_id, identity_source, identity_at_ms, legacy_state_json) VALUES ('run-legacy', 'binance_spot', 'BTCUSDT', '1m', 'sma_cross', 'stopped', '{\"run_id\":\"run-legacy\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"Live\",\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454460000,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":1792454520000,\"last_error\":null,\"position\":{\"qty\":\"0.0254\",\"entry_price\":\"3933.07\",\"entry_time_ms\":1792454460100,\"entry_order_id\":\"7\"}}', 1792454400000, 1792454520000, 1792454520000, NULL, NULL, NULL, NULL, 'legacy', NULL, '{\"run_id\":\"run-legacy\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"Live\",\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454460000,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":1792454520000,\"last_error\":null,\"position\":{\"qty\":\"0.0254\",\"entry_price\":\"3933.07\",\"entry_time_ms\":1792454460100,\"entry_order_id\":\"7\"}}')"
+    },
+    {
+     "op": "load_run",
+     "run_id": "run-legacy",
+     "expect": "legacy"
+    },
+    {
+     "op": "run_identity",
+     "run_id": "run-legacy",
+     "expect": {
+      "environment": null,
+      "account": null,
+      "source": "legacy"
+     }
+    },
+    {
+     "op": "latest_run",
+     "market": "spot",
+     "strategy": "sma_cross",
+     "expect": "legacy"
+    },
+    {
+     "op": "identity_matches",
+     "run_id": "run-legacy",
+     "invocation": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     },
+     "expect": "unverified"
+    },
+    {
+     "op": "identity_matches",
+     "run_id": "run-legacy",
+     "invocation": {
+      "environment": "testnet",
+      "account": null,
+      "source": "recorded"
+     },
+     "expect": "unverified"
+    },
+    {
+     "op": "create_run",
+     "run": "legacy",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     },
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "run run-legacy already exists"
+     }
+    },
+    {
+     "op": "load_run",
+     "run_id": "run-legacy",
+     "expect": "legacy"
+    }
+   ]
+  },
+  {
+   "id": "journal.legacy_without_mode",
+   "doc": "a legacy run that recorded no execution mode is refused on load, never given one",
+   "steps": [
+    {
+     "op": "raw_execute",
+     "sql": "INSERT INTO bot_runs(run_id, exchange, symbol, interval, strategy_name, status, state_json, started_at_ms, updated_at_ms, stopped_at_ms, last_error, environment, account_kind, account_id, identity_source, identity_at_ms, legacy_state_json) VALUES ('run-old', 'binance_spot', 'BTCUSDT', '1m', 'sma_cross', 'running', '{\"run_id\":\"run-old\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"status\":\"Running\",\"last_processed_open_time_ms\":null,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":null,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}', 1792454400000, 1792454520000, NULL, NULL, NULL, NULL, NULL, 'legacy', NULL, '{\"run_id\":\"run-old\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"status\":\"Running\",\"last_processed_open_time_ms\":null,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":null,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}')"
+    },
+    {
+     "op": "load_run",
+     "run_id": "run-old",
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "run run-old was recorded by QuantForge 0.2.0 without its execution mode"
+     }
+    },
+    {
+     "op": "latest_run",
+     "market": "spot",
+     "strategy": "sma_cross",
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "run run-old was recorded by QuantForge 0.2.0 without its execution mode"
+     }
+    },
+    {
+     "op": "run_identity",
+     "run_id": "run-old",
+     "expect": {
+      "environment": null,
+      "account": null,
+      "source": "legacy"
+     }
+    }
+   ]
+  }
+ ],
+ "segments": [
+  {
+   "id": "segments.no_candles",
+   "doc": "a market without candles is all tip",
+   "steps": [
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 0,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [],
+      "tip": {
+       "first_open_ms": 1792454400000,
+       "last_open_ms": 1792540800000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "segments.packs_closed_windows",
+   "doc": "a refresh packs every closed window and leaves the tip",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 2881
+     },
+     "written": 2881
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 2,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792713600000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+        "payload_len": 92176
+       },
+       {
+        "window_start_ms": 1792540800000,
+        "first_open_ms": 1792540800000,
+        "last_open_ms": 1792627140000,
+        "bar_count": 1440,
+        "hash": "sha256:61905828f3361bae4025bc305214feff154cba67e182d22b7ed2853283fa5791",
+        "payload_len": 92176
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792627200000,
+       "last_open_ms": 1792713600000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "segments.fill_order",
+   "doc": "candles written in any order pack to the same segments",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 2881,
+      "range": [
+       2381,
+       2881
+      ]
+     },
+     "written": 500
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 2881,
+      "range": [
+       1881,
+       2381
+      ]
+     },
+     "written": 500
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 2881,
+      "range": [
+       1381,
+       1881
+      ]
+     },
+     "written": 500
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 2881,
+      "range": [
+       881,
+       1381
+      ]
+     },
+     "written": 500
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 2881,
+      "range": [
+       381,
+       881
+      ]
+     },
+     "written": 500
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 2881,
+      "range": [
+       0,
+       381
+      ]
+     },
+     "written": 381
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 2,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792713600000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+        "payload_len": 92176
+       },
+       {
+        "window_start_ms": 1792540800000,
+        "first_open_ms": 1792540800000,
+        "last_open_ms": 1792627140000,
+        "bar_count": 1440,
+        "hash": "sha256:61905828f3361bae4025bc305214feff154cba67e182d22b7ed2853283fa5791",
+        "payload_len": 92176
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792627200000,
+       "last_open_ms": 1792713600000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "segments.nothing_changed",
+   "doc": "a second refresh, and an identical resync, change nothing",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 1441
+     },
+     "written": 1441
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+        "payload_len": 92176
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792540800000,
+       "last_open_ms": 1792540800000
+      }
+     }
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 0,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 1441
+     },
+     "written": 1441
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 0,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+        "payload_len": 92176
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792540800000,
+       "last_open_ms": 1792540800000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "segments.changed_back",
+   "doc": "a window changed and changed back keeps its segment",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 1441
+     },
+     "written": 1441
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 1,
+      "close": "999"
+     },
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 1441,
+      "range": [
+       0,
+       1
+      ]
+     },
+     "written": 1
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 0,
+      "unchanged": 1,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+        "payload_len": 92176
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792540800000,
+       "last_open_ms": 1792540800000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "segments.tip_until_next_window",
+   "doc": "the window of the newest candle stays in the tip until a later window starts",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 1440
+     },
+     "written": 1440
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 0,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [],
+      "tip": {
+       "first_open_ms": 1792454400000,
+       "last_open_ms": 1792540800000
+      }
+     }
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792540800000,
+      "count": 1,
+      "close": "1"
+     },
+     "written": 1
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+        "payload_len": 92176
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792540800000,
+       "last_open_ms": 1792540800000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "segments.backfill_keeps_old_segment",
+   "doc": "a backfill reopens its window at once, the next refresh packs only that window, and the segment it replaced still loads",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 2881,
+      "skip": [
+       100
+      ]
+     },
+     "written": 2880
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 2,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792713600000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1439,
+        "hash": "sha256:98ab8d5ebce48968db2174d0621c8905cc3e460bcab31fa4ab441ef953cf12ec",
+        "payload_len": 92112
+       },
+       {
+        "window_start_ms": 1792540800000,
+        "first_open_ms": 1792540800000,
+        "last_open_ms": 1792627140000,
+        "bar_count": 1440,
+        "hash": "sha256:61905828f3361bae4025bc305214feff154cba67e182d22b7ed2853283fa5791",
+        "payload_len": 92176
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792627200000,
+       "last_open_ms": 1792713600000
+      }
+     }
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 2881,
+      "range": [
+       100,
+       101
+      ]
+     },
+     "written": 1
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792713600000,
+     "expect": {
+      "segments": [],
+      "tip": {
+       "first_open_ms": 1792454400000,
+       "last_open_ms": 1792713600000
+      }
+     }
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792713600000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+        "payload_len": 92176
+       },
+       {
+        "window_start_ms": 1792540800000,
+        "first_open_ms": 1792540800000,
+        "last_open_ms": 1792627140000,
+        "bar_count": 1440,
+        "hash": "sha256:61905828f3361bae4025bc305214feff154cba67e182d22b7ed2853283fa5791",
+        "payload_len": 92176
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792627200000,
+       "last_open_ms": 1792713600000
+      }
+     }
+    },
+    {
+     "op": "load_segment",
+     "hash": "sha256:98ab8d5ebce48968db2174d0621c8905cc3e460bcab31fa4ab441ef953cf12ec",
+     "expect": {
+      "bar_count": 1439
+     }
+    }
+   ]
+  },
+  {
+   "id": "segments.scale_is_a_change",
+   "doc": "a candle written again with another scale packs to a new segment",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 1,
+      "close": "1.10"
+     },
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792540800000,
+      "count": 1,
+      "close": "1"
+     },
+     "written": 1
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792454400000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792454400000,
+        "bar_count": 1,
+        "hash": "sha256:dfcda05e0cd8b28a9f7db613f09d3362f1d331258e4eee4eea77ae66053a8ce9",
+        "payload_len": 72
+       }
+      ],
+      "tip": null
+     }
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 1,
+      "close": "1.1"
+     },
+     "written": 1
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792454400000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792454400000,
+        "bar_count": 1,
+        "hash": "sha256:a6cca564cc2a307a33af74301cb5e553d40b57a6feb000159dd5397022aef55c",
+        "payload_len": 68
+       }
+      ],
+      "tip": null
+     }
+    },
+    {
+     "op": "load_segment",
+     "hash": "sha256:dfcda05e0cd8b28a9f7db613f09d3362f1d331258e4eee4eea77ae66053a8ce9",
+     "expect": {
+      "bar_count": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": "segments.plan_ranges",
+   "doc": "a plan lists the segments a range overlaps, oldest first, then the tip",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 4321
+     },
+     "written": 4321
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 3,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1791590400000,
+     "last": 1792454399999,
+     "expect": {
+      "segments": [],
+      "tip": null
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792456200000,
+     "last": 1792541400000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+        "payload_len": 92176
+       },
+       {
+        "window_start_ms": 1792540800000,
+        "first_open_ms": 1792540800000,
+        "last_open_ms": 1792627140000,
+        "bar_count": 1440,
+        "hash": "sha256:61905828f3361bae4025bc305214feff154cba67e182d22b7ed2853283fa5791",
+        "payload_len": 92176
+       }
+      ],
+      "tip": null
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792540740000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+        "payload_len": 92176
+       },
+       {
+        "window_start_ms": 1792540800000,
+        "first_open_ms": 1792540800000,
+        "last_open_ms": 1792627140000,
+        "bar_count": 1440,
+        "hash": "sha256:61905828f3361bae4025bc305214feff154cba67e182d22b7ed2853283fa5791",
+        "payload_len": 92176
+       }
+      ],
+      "tip": null
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792540800000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792540800000,
+        "first_open_ms": 1792540800000,
+        "last_open_ms": 1792627140000,
+        "bar_count": 1440,
+        "hash": "sha256:61905828f3361bae4025bc305214feff154cba67e182d22b7ed2853283fa5791",
+        "payload_len": 92176
+       }
+      ],
+      "tip": null
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792627200005,
+     "last": 1792800000000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792627200000,
+        "first_open_ms": 1792627200000,
+        "last_open_ms": 1792713540000,
+        "bar_count": 1440,
+        "hash": "sha256:8be15f4ea8d5fb9715ab01a26dd3160744cbe09e39010c616443292d22403a86",
+        "payload_len": 92176
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792713600000,
+       "last_open_ms": 1792800000000
+      }
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792713600000,
+     "last": 1792886400000,
+     "expect": {
+      "segments": [],
+      "tip": {
+       "first_open_ms": 1792713600000,
+       "last_open_ms": 1792886400000
+      }
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1793318400000,
+     "last": 1793404800000,
+     "expect": {
+      "segments": [],
+      "tip": {
+       "first_open_ms": 1793318400000,
+       "last_open_ms": 1793404800000
+      }
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792713599999,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+        "payload_len": 92176
+       },
+       {
+        "window_start_ms": 1792540800000,
+        "first_open_ms": 1792540800000,
+        "last_open_ms": 1792627140000,
+        "bar_count": 1440,
+        "hash": "sha256:61905828f3361bae4025bc305214feff154cba67e182d22b7ed2853283fa5791",
+        "payload_len": 92176
+       },
+       {
+        "window_start_ms": 1792627200000,
+        "first_open_ms": 1792627200000,
+        "last_open_ms": 1792713540000,
+        "bar_count": 1440,
+        "hash": "sha256:8be15f4ea8d5fb9715ab01a26dd3160744cbe09e39010c616443292d22403a86",
+        "payload_len": 92176
+       }
+      ],
+      "tip": null
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400001,
+     "last": 1792454400000,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "after the last"
+     }
+    }
+   ]
+  },
+  {
+   "id": "segments.long_windows",
+   "doc": "three-day and weekly candles stay in the tip of their long windows",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot_3d",
+     "series": {
+      "from": 1502928000000,
+      "count": 100,
+      "close": "100"
+     },
+     "written": 100
+    },
+    {
+     "op": "refresh",
+     "market": "spot_3d",
+     "expect": {
+      "built": 0,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot_3d",
+     "first": 1502928000000,
+     "last": 1528588800000,
+     "expect": {
+      "segments": [],
+      "tip": {
+       "first_open_ms": 1502928000000,
+       "last_open_ms": 1528588800000
+      }
+     }
+    },
+    {
+     "op": "upsert",
+     "market": "spot_1w",
+     "series": {
+      "from": 1502668800000,
+      "count": 100,
+      "close": "100"
+     },
+     "written": 100
+    },
+    {
+     "op": "refresh",
+     "market": "spot_1w",
+     "expect": {
+      "built": 0,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot_1w",
+     "first": 1502668800000,
+     "last": 1562544000000,
+     "expect": {
+      "segments": [],
+      "tip": {
+       "first_open_ms": 1502668800000,
+       "last_open_ms": 1562544000000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "segments.crowded_window",
+   "doc": "a window holding more candles than a segment keeps itself and every later window in the tip",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 1441,
+      "spacing_ms": 30000,
+      "close": "1"
+     },
+     "written": 1441
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792540800000,
+      "count": 10
+     },
+     "written": 10
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792627200000,
+      "count": 1,
+      "close": "1"
+     },
+     "written": 1
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 1
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792713600000,
+     "expect": {
+      "segments": [],
+      "tip": {
+       "first_open_ms": 1792454400000,
+       "last_open_ms": 1792713600000
+      }
+     }
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 0,
+      "unchanged": 0,
+      "blocked": 1
+     }
+    }
+   ]
+  },
+  {
+   "id": "segments.inexact_text",
+   "doc": "stored text not in its exact form is left unpacked rather than corrected",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 3
+     },
+     "written": 3
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792540800000,
+      "count": 1,
+      "close": "1"
+     },
+     "written": 1
+    },
+    {
+     "op": "raw_execute",
+     "sql": "UPDATE candles SET close = '0100.00' WHERE exchange = 'binance_spot' AND symbol = 'BTCUSDT' AND interval = '1m' AND open_time_ms = 1792454400000"
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 0,
+      "unchanged": 0,
+      "blocked": 1
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792454400000,
+     "expect": {
+      "segments": [],
+      "tip": {
+       "first_open_ms": 1792454400000,
+       "last_open_ms": 1792454400000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "segments.opens_to_its_candles",
+   "doc": "a stored segment opens under its name to the candles it packs; an unknown name loads nothing",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 1441
+     },
+     "written": 1441
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792454400000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+        "payload_len": 92176
+       }
+      ],
+      "tip": null
+     }
+    },
+    {
+     "op": "load_segment",
+     "hash": "sha256:8681bb8a6cf7ad27883c5888f69d31d15e24a263c6e1b42a9e60a74149d37e12",
+     "expect": null
+    }
+   ]
+  },
+  {
+   "id": "segments.shared_name",
+   "doc": "the same candles under two product lines share one segment, listed by two index entries",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 3
+     },
+     "written": 3
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792540800000,
+      "count": 1,
+      "close": "1"
+     },
+     "written": 1
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "upsert",
+     "market": "linear",
+     "series": {
+      "from": 1792454400000,
+      "count": 3
+     },
+     "written": 3
+    },
+    {
+     "op": "upsert",
+     "market": "linear",
+     "series": {
+      "from": 1792540800000,
+      "count": 1,
+      "close": "1"
+     },
+     "written": 1
+    },
+    {
+     "op": "refresh",
+     "market": "linear",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792454520000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792454520000,
+        "bar_count": 3,
+        "hash": "sha256:ed9522e11f902b8262101847f7afcac759eb7bda592fc217704989b52d11a1c8",
+        "payload_len": 208
+       }
+      ],
+      "tip": null
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "linear",
+     "first": 1792454400000,
+     "last": 1792454520000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792454520000,
+        "bar_count": 3,
+        "hash": "sha256:ed9522e11f902b8262101847f7afcac759eb7bda592fc217704989b52d11a1c8",
+        "payload_len": 208
+       }
+      ],
+      "tip": null
+     }
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT CAST(COUNT(*) AS TEXT) FROM segments WHERE hash = 'sha256:ed9522e11f902b8262101847f7afcac759eb7bda592fc217704989b52d11a1c8'",
+     "expect": [
+      [
+       "1"
+      ]
+     ]
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT exchange FROM segment_index WHERE hash = 'sha256:ed9522e11f902b8262101847f7afcac759eb7bda592fc217704989b52d11a1c8' ORDER BY exchange",
+     "expect": [
+      [
+       "binance_linear"
+      ],
+      [
+       "binance_spot"
+      ]
+     ]
+    }
+   ]
+  }
+ ],
+ "races": [
+  {
+   "id": "races.write_between_read_and_write_back",
+   "doc": "a write between a refresh's read and its write-back keeps the window dirty, and the next refresh packs the new candles",
+   "setup": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 7
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 7
+      },
+      {
+       "open_time_ms": 86400000,
+       "close_time_ms": 86459999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 7
+      }
+     ]
+    }
+   ],
+   "window_start_ms": 0,
+   "steps": [
+    {
+     "op": "read",
+     "as": "a"
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "2",
+       "high": "2",
+       "low": "2",
+       "close": "2",
+       "volume": "1.000",
+       "trades": 7
+      }
+     ]
+    },
+    {
+     "op": "write_back",
+     "of": "a",
+     "expect": "dirty"
+    }
+   ],
+   "after": [
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 0,
+     "last": 172800000,
+     "expect": {
+      "segments": [],
+      "tip": {
+       "first_open_ms": 0,
+       "last_open_ms": 172800000
+      }
+     }
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 0,
+     "last": 172800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 0,
+        "first_open_ms": 0,
+        "last_open_ms": 60000,
+        "bar_count": 2,
+        "hash": "sha256:207a3dac2df084651099d40e604bbfd30609db738466e17ad015e4d3e687c165",
+        "payload_len": 94
+       }
+      ],
+      "tip": {
+       "first_open_ms": 86400000,
+       "last_open_ms": 172800000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "races.two_refreshes",
+   "doc": "of two refreshes packing one window, the later finds it done elsewhere",
+   "setup": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 7
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 7
+      },
+      {
+       "open_time_ms": 86400000,
+       "close_time_ms": 86459999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 7
+      }
+     ]
+    }
+   ],
+   "window_start_ms": 0,
+   "steps": [
+    {
+     "op": "read",
+     "as": "a"
+    },
+    {
+     "op": "read",
+     "as": "b"
+    },
+    {
+     "op": "write_back",
+     "of": "a",
+     "expect": "done"
+    },
+    {
+     "op": "write_back",
+     "of": "b",
+     "expect": "elsewhere"
+    }
+   ],
+   "after": [
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 0,
+     "last": 172800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 0,
+        "first_open_ms": 0,
+        "last_open_ms": 60000,
+        "bar_count": 2,
+        "hash": "sha256:8411acc8ca7c5bb62f465c9cf0f9d5d5b90091e9455abc517a328f5e7bdb2406",
+        "payload_len": 94
+       }
+      ],
+      "tip": {
+       "first_open_ms": 86400000,
+       "last_open_ms": 172800000
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

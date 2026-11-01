@@ -199,7 +199,8 @@ pub(super) fn read_window(
                         row.get(5)?,
                         row.get(6)?,
                     ],
-                    trades: row.get(7)?,
+                    // Stored as `upsert_candles` writes it, in a signed column.
+                    trades: row.get::<_, Option<i64>>(7)?.map(|value| value as u64),
                 })
             },
         )
