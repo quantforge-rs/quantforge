@@ -1,6 +1,6 @@
-//! The storage contract through [`AnyStore`], opened by the built-in
-//! factory: every port reaches the SQLite store behind it. The raw reads,
-//! and the answers compared, come from a `SqliteStore` on the same file.
+//! The shared conformance suite through [`AnyStore`], opened by the
+//! built-in factory: every port reaches the SQLite store behind it. The raw
+//! view, and the answers compared below, come from the SQLite file itself.
 
 use quantforge::{
     AnyStore, Candle, CandleStore, Environment, ExchangeId, Interval, MarketId, SegmentRefresh,
@@ -8,46 +8,67 @@ use quantforge::{
     StoreFactory, StoreOwner, Supplied, Symbol,
 };
 use rust_decimal::Decimal;
+use std::path::Path;
 use std::str::FromStr;
 use tempfile::TempDir;
 
-use crate::contract;
-use crate::sqlite::{raw_event_ids, raw_texts};
+use crate::conformance::{self, Backend, Fixture};
+use crate::sqlite::SqliteRaw;
+
+/// What the factory opens for a SQLite path.
+fn open(path: &Path) -> AnyStore {
+    let mut request = StorageRequest::default();
+    request.sqlite_path = Some(Supplied::new(path.to_path_buf(), "--db"));
+    let settings = StorageSettings::resolve(request, StoreOwner::Command).expect("settings");
+    let store = StoreFactory::builtin().open(&settings).expect("a store");
+    assert_eq!(store.backend(), StorageBackend::Sqlite);
+    store
+}
+
+/// An `AnyStore` the factory opened on a file of its own.
+pub struct Factory;
+
+impl Backend for Factory {
+    type Store = AnyStore;
+    const NAME: &'static str = "any_store (sqlite)";
+
+    fn fresh() -> Fixture<AnyStore> {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("market.sqlite");
+        let reopen = {
+            let path = path.clone();
+            move || open(&path)
+        };
+        Fixture {
+            store: reopen(),
+            raw: Box::new(SqliteRaw(path)),
+            reopen: Box::new(reopen),
+            guard: Box::new(tempdir),
+        }
+    }
+}
+
+#[test]
+fn candles() {
+    conformance::candles::<Factory>();
+}
+
+#[test]
+fn journal() {
+    conformance::journal::<Factory>();
+}
+
+#[test]
+fn segments() {
+    conformance::segments::<Factory>();
+}
 
 /// An `AnyStore` the factory opened, and a `SqliteStore` on its file.
 fn opened() -> (TempDir, AnyStore, SqliteStore) {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let path = tempdir.path().join("market.sqlite");
-    let mut request = StorageRequest::default();
-    request.sqlite_path = Some(Supplied::new(path.clone(), "--db"));
-    let settings = StorageSettings::resolve(request, StoreOwner::Command).expect("settings");
-    let store = StoreFactory::builtin().open(&settings).expect("a store");
-    assert_eq!(store.backend(), StorageBackend::Sqlite);
+    let store = open(&path);
     (tempdir, store, SqliteStore::new(path))
-}
-
-#[test]
-fn product_lines_are_stored_as_the_cases_say() {
-    let (_tempdir, store, sqlite) = opened();
-    contract::product_lines_are_stored_as_the_cases_say(&store, &raw_texts(&sqlite));
-}
-
-#[test]
-fn decimal_texts_keep_their_scale() {
-    let (_tempdir, store, sqlite) = opened();
-    contract::decimal_texts_keep_their_scale(&store, &raw_texts(&sqlite));
-}
-
-#[test]
-fn venue_ids_are_text() {
-    let (_tempdir, store, sqlite) = opened();
-    contract::venue_ids_are_text(&store, &raw_event_ids(&sqlite));
-}
-
-#[test]
-fn environments_and_accounts_are_isolated() {
-    let (_tempdir, store, _sqlite) = opened();
-    contract::environments_and_accounts_are_isolated(&store);
 }
 
 const HOUR: i64 = 3_600_000;

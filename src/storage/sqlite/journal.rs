@@ -300,7 +300,7 @@ impl RunJournalStore for SqliteStore {
                   AND symbol = ?2
                   AND interval = ?3
                   AND strategy_name = ?4
-                ORDER BY updated_at_ms DESC
+                ORDER BY updated_at_ms DESC, started_at_ms DESC, run_id DESC
                 LIMIT 1
                 "#,
                 params![

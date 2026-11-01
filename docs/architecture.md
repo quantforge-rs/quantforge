@@ -201,7 +201,7 @@ src/
 │       └── segments/           segment tables and the SegmentStore implementation
 │           ├── mod.rs          the tables, the dirty marks, resolving a range, loading a segment
 │           ├── build.rs        refresh: packs each dirty closed window outside the write lock
-│           └── tests.rs        a refresh racing writers and other refreshes, step by step
+│           └── tests.rs        the shared conformance races, stepped through read, pack and write-back
 ├── sdk/                        the strategy boundary
 │   ├── mod.rs                  StrategyError and the re-exports
 │   ├── strategy.rs             the Strategy trait and its StrategyContext
@@ -272,14 +272,16 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
 - `tests/snapshots/`: the committed `--help` output of every command, plus
   `version.txt` for `--version`
 - `tests/backtest_engine.rs`, `tests/candle_validation.rs`,
-  `tests/candle_batch.rs`, `tests/decimal_float.rs`, `tests/sqlite_store.rs`,
-  and `tests/live_engine.rs`: library integration tests
+  `tests/candle_batch.rs`, `tests/decimal_float.rs`, and
+  `tests/live_engine.rs`: library integration tests
 - `tests/storage/`: the storage contract of
-  [storage-schema.md](storage-schema.md) — the shared identity cases of
-  `tests/fixtures/storage_identity_cases.json`, isolation of product lines,
-  environments and accounts, decimal scale, the schema chain from every
-  earlier schema in `tests/fixtures/sqlite/`, the same checks through
-  `AnyStore`, and the document held to the code
+  [storage-schema.md](storage-schema.md) and
+  [storage-conformance.md](storage-conformance.md) — the shared
+  conformance suite, its scenarios read from
+  `tests/fixtures/storage_conformance_cases.json`, run on the SQLite store
+  and through `AnyStore`, with an isolated PostgreSQL database per fixture
+  ready for the PostgreSQL stores; the schema chain from every earlier
+  schema in `tests/fixtures/sqlite/`; and both documents held to the code
 - `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
   from naming a concrete exchange adapter, the code and `--help` outside
   the Binance adapter from hardcoding Binance, and each venue's own
@@ -299,9 +301,8 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   `tar`, and [bundle-spec.md](bundle-spec.md) held to the code
 - `tests/segments/`: candle segments — the shared cases of
   `tests/fixtures/segment_cases.json` and every payload a reader refuses,
-  [segment-spec.md](segment-spec.md) held to the code, the SQLite store
-  packing and resolving segments as candles change, and data sync storing
-  settled candles only
+  [segment-spec.md](segment-spec.md) held to the code, and data sync
+  storing settled candles only and packing the windows it closes
 - `tests/conformance/`: the conformance suite against every registered
   exchange — replayed from the recorded or hand-written fixtures in
   `tests/conformance/fixtures/`, or live against a testnet when

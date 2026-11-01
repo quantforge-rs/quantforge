@@ -1,6 +1,7 @@
 //! The storage ports: what a persistence backend implements, with the one
 //! failure channel they report through. SQLite implements them today;
-//! PostgreSQL follows (`docs/storage-schema.md` is their shared contract).
+//! PostgreSQL follows. `docs/storage-schema.md` is their shared schema, and
+//! `docs/storage-conformance.md` the behavior every backend passes.
 
 use std::error::Error as StdError;
 use thiserror::Error;
@@ -111,6 +112,9 @@ pub trait RunJournalStore: Send + Sync {
     fn load_run_state(&self, run_id: &str) -> Result<Option<BotRunState>, StorageError>;
     /// The identity a run was created or adopted with.
     fn run_identity(&self, run_id: &str) -> Result<Option<RunIdentity>, StorageError>;
+    /// The run of `market` and `strategy_name` updated last. Of runs
+    /// updated in the same millisecond, the one started last; of those, the
+    /// one with the greatest `run_id`.
     fn latest_run_for_market(
         &self,
         market: &MarketId,

@@ -8,13 +8,61 @@ use std::time::Duration;
 use quantforge::{
     Candle, CandleQuery, CandleStore, DataSyncConfig, DataSyncEngine, ExchangeCapabilities,
     ExchangeConnector, ExchangeError, ExchangeId, Interval, KlineRequest, MarketDataConnector,
-    SegmentStore, Symbol, SymbolRules, TimestampMs, now_utc_ms,
+    MarketId, SegmentPlan, SegmentStore, SqliteStore, Symbol, SymbolRules, TimestampMs, now_utc_ms,
 };
+use rust_decimal::Decimal;
+use tempfile::TempDir;
 
-use crate::store::{DAY, MINUTE, candle, m1, minutes, plan, store};
-
+const MINUTE: i64 = 60_000;
+const DAY: i64 = 86_400_000;
 /// 2024-01-01T00:00:00Z: long settled.
 const T: i64 = 1_704_067_200_000;
+
+fn m1() -> MarketId {
+    MarketId::new(
+        ExchangeId::BinanceSpot,
+        Symbol::new("BTCUSDT").expect("symbol"),
+        Interval::M1,
+    )
+}
+
+fn candle(interval: Interval, open_time_ms: i64, close: &str) -> Candle {
+    let close: Decimal = close.parse().expect("close");
+    Candle {
+        open_time_ms,
+        close_time_ms: open_time_ms + interval.step_ms() - 1,
+        open: close,
+        high: close,
+        low: close,
+        close,
+        volume: "0.50000000".parse().expect("volume"),
+        trades: Some(open_time_ms.rem_euclid(97) as u64),
+    }
+}
+
+/// `count` one-minute candles from `from`, each with its own close.
+fn minutes(from: i64, count: i64) -> Vec<Candle> {
+    (0..count)
+        .map(|index| {
+            candle(
+                Interval::M1,
+                from + index * MINUTE,
+                &format!("{}.{:02}", 100 + index % 50, index % 100),
+            )
+        })
+        .collect()
+}
+
+fn store() -> (TempDir, SqliteStore) {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let store = SqliteStore::new(tempdir.path().join("market.sqlite"));
+    CandleStore::init(&store).expect("init");
+    (tempdir, store)
+}
+
+fn plan(store: &SqliteStore, market: &MarketId, first: i64, last: i64) -> SegmentPlan {
+    store.resolve_segments(market, first, last).expect("plan")
+}
 
 /// Serves its pages in order, then nothing.
 struct ScriptedSource {

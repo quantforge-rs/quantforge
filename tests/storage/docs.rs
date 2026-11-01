@@ -1,23 +1,29 @@
-//! `docs/storage-schema.md` held to the code: the schema version, the
-//! SQLite DDL as a fresh store has it, the PostgreSQL DDL naming the same
-//! tables and columns, and the ownership table covering every table. Each
+//! The storage documents held to the code and the fixtures:
+//! `docs/storage-schema.md`'s schema version, its SQLite DDL as a fresh
+//! store has it, its PostgreSQL DDL naming the same tables and columns, and
+//! its ownership table covering every table; and
+//! `docs/storage-conformance.md`'s lists of every scenario and check. Each
 //! part is found between `<!-- begin: name -->` and `<!-- end: name -->`.
 
 use quantforge::storage::sqlite::SCHEMA_VERSION;
 use quantforge::{CandleStore, SqliteStore};
 use rusqlite::Connection;
 
-use crate::cases::fixture;
+use crate::conformance::{self, cases::fixture};
 
 fn section(name: &str) -> Vec<String> {
-    let doc = std::fs::read_to_string(fixture("docs/storage-schema.md")).expect("read the doc");
+    section_in("docs/storage-schema.md", name)
+}
+
+fn section_in(path: &str, name: &str) -> Vec<String> {
+    let doc = std::fs::read_to_string(fixture(path)).expect("read the doc");
     let lines: Vec<&str> = doc.lines().collect();
     let marker = |kind: &str| {
         let marker = format!("<!-- {kind}: {name} -->");
         lines
             .iter()
             .position(|line| line.trim() == marker)
-            .unwrap_or_else(|| panic!("docs/storage-schema.md has no {marker}"))
+            .unwrap_or_else(|| panic!("{path} has no {marker}"))
     };
     let (begin, end) = (marker("begin"), marker("end"));
     lines[begin + 1..end]
@@ -246,5 +252,80 @@ fn every_table_has_an_owner() {
             "{} has no owner in the table",
             table.name
         );
+    }
+}
+
+/// The items of a list, `- `id`: statement`, each joined onto one line.
+fn items(lines: &[String]) -> Vec<(String, String)> {
+    let mut items: Vec<(String, String)> = Vec::new();
+    for line in lines.iter().filter(|line| !line.trim().is_empty()) {
+        if let Some(item) = line.strip_prefix("- `") {
+            let (id, statement) = item
+                .split_once("`: ")
+                .unwrap_or_else(|| panic!("an item is `id`: statement: {line}"));
+            items.push((id.to_string(), statement.to_string()));
+        } else {
+            let (_, statement) = items
+                .last_mut()
+                .unwrap_or_else(|| panic!("a line before the first item: {line}"));
+            statement.push(' ');
+            statement.push_str(line.trim());
+        }
+    }
+    items
+}
+
+#[test]
+fn the_conformance_doc_lists_every_scenario_and_check_with_its_statement() {
+    let cases = conformance::cases::load();
+    let pairs = |scenarios: &[conformance::Scenario], checks: &[(&str, &str)]| {
+        scenarios
+            .iter()
+            .map(|scenario| (scenario.id.clone(), scenario.doc.clone()))
+            .chain(
+                checks
+                    .iter()
+                    .map(|(id, doc)| (id.to_string(), doc.to_string())),
+            )
+            .collect::<Vec<_>>()
+    };
+    let races = cases
+        .races
+        .iter()
+        .map(|race| {
+            let text = |key: &str| race[key].as_str().expect("text").to_string();
+            (text("id"), text("doc"))
+        })
+        .collect();
+    for (group, expected) in [
+        (
+            "candles",
+            pairs(&cases.candles, conformance::candles::CHECKS),
+        ),
+        (
+            "journal",
+            pairs(&cases.journal, conformance::journal::CHECKS),
+        ),
+        (
+            "segments",
+            pairs(&cases.segments, conformance::segments::CHECKS),
+        ),
+        ("races", races),
+    ] {
+        for (id, _) in &expected {
+            assert!(
+                id.starts_with(&format!("{group}.")),
+                "{id} is not in {group}"
+            );
+        }
+        let listed = items(&section_in("docs/storage-conformance.md", group));
+        assert_eq!(
+            listed, expected,
+            "the {group} list of docs/storage-conformance.md"
+        );
+    }
+    // The rule the Rust generator follows names every setting a series has.
+    for setting in ["count", "range", "skip", "spacing_ms", "close"] {
+        assert!(cases.series_rule.contains(setting), "{setting}");
     }
 }

@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `docs/storage-conformance.md` and `tests/storage/conformance/`: the shared storage conformance suite every backend passes, with candle, journal and segment scenarios read from `tests/fixtures/storage_conformance_cases.json`, whose answers an independent reference model, `spikes/storage-contract/conformance_cases.py`, writes, and the dirty-window races each backend steps through itself; SQLite passes it directly and through `AnyStore`, and `tests/storage/postgres.rs` gives every fixture a PostgreSQL database of its own, ready for the PostgreSQL stores
 - `--storage` (`QF_STORAGE`) selects the storage backend, `sqlite` (the default, at `--db`) or `postgres`, whose connection comes from `--postgres-url` (`QF_POSTGRES_URL`), `--postgres-pool-size` (`QF_POSTGRES_POOL_SIZE`; 2, or 8 for `serve run`) and `--postgres-connect-timeout-secs` (`QF_POSTGRES_CONNECT_TIMEOUT_SECS`, 5); this release checks the PostgreSQL settings and refuses the command, since PostgreSQL has no stores yet, and never falls back to SQLite
 - a PostgreSQL setting with no backend selected, and `--db` or `QF_DB` with `--storage postgres`, are refused before anything is created, naming the flag or variable that set them
 - the PostgreSQL URL takes libpq's form and its `sslmode` and `sslrootcert`; plain text, or a fallback to it, is refused for any host but this machine, every other parameter is refused, and its password never appears in `--help`, a log line, an error or a `Debug` output
@@ -90,6 +91,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- of two runs of one market and strategy last updated in the same millisecond, `trade close` and `monitor status` without `--run-id` take the one started later, then the one with the greater run ID, instead of whichever the database listed first
 - `--help` lists `--db` with the new storage flags under a "Storage" heading
 - the venue's order and trade IDs are text everywhere, Spot included: `ExchangeOrder.order_id`, `Fill.trade_id`, `AccountTrade.trade_id` and `order_id`, `ClosedTrade.entry_order_id` and `exit_order_id`, `PositionState.entry_order_id`, and the `order_id` of a cancel or query request are `VenueOrderId`/`VenueTradeId`; `monitor cancel-order --order-id` takes the ID as the exchange spells it, and `order: id=` lines print it without `Some(..)`
 - the SQLite schema version is 5; `RunJournalStore::save_run_state` updates a run that `create_run` recorded with its identity and refuses an unknown one; `StorageError` is `#[non_exhaustive]` and `SchemaVersionMismatch` became `SchemaUnsupported`, raised only for a database from a newer build
@@ -152,6 +154,8 @@ All notable changes to this project will be documented in this file.
 - `BacktestConfig` no longer implements `Default`; construct its fields explicitly instead of relying on fabricated cash and fee values
 
 ### Fixed
+
+- refreshing a market's segments failed on a stored candle whose trade count was above 9223372036854775807, so no later window of that market was packed again; such a count is now packed as stored, as the segment format allows
 
 - `data sync` stored the candle still forming at the end of each pass and never fetched it again, so a following sync kept a snapshot of nearly every candle taken seconds after it opened; it now stores a candle only once it has settled, and fetches the forming one again on a later pass
 

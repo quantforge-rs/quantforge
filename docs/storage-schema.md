@@ -447,8 +447,11 @@ the `state_json` token of one market, and the decimal texts a store must
 return unchanged. They were written by an independent Python script,
 `spikes/storage-contract/identity_cases.py`, not by the Rust code under
 test, and a backend conforms when it stores and returns every case as
-given: `tests/storage/contract.rs` runs them against SQLite, and the
-PostgreSQL store runs the same module.
+given. The shared storage conformance suite,
+[storage-conformance.md](storage-conformance.md), runs them on every
+backend beside its own scenarios: how candles are written and read, how
+runs and their journals are kept, legacy runs included, and how segments
+are packed and planned.
 
 ## Backends and ownership
 
