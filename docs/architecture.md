@@ -178,14 +178,17 @@ src/
 │   ├── factory.rs              StoreFactory: opens the selected backend through its registered provider
 │   ├── factory/                the factory's unit tests
 │   │   └── tests.rs            dispatch to test providers, and no fallback for a backend without one
-│   ├── postgres/               the PostgreSQL bridge of ADR 0001, built with the postgres feature
-│   │   ├── mod.rs              PostgresStore: connect and ping; no storage port yet
+│   ├── postgres/               PostgreSQL: the bridge of ADR 0001 and the schema chain, built with the postgres feature
+│   │   ├── mod.rs              PostgresStore: connect, ping and init; no storage port yet
 │   │   ├── runner.rs           the bridge's own runtime, and the reply channel callers block on
 │   │   ├── bridge.rs           the bounded pool, each call's deadline and cancel, lost reads and writes
 │   │   ├── tls.rs              the rustls connector: the system's roots plus an optional CA file
-│   │   └── tests/              the bridge's unit tests
+│   │   ├── schema.rs           the DDL of every schema version, the advisory lock, the control row
+│   │   ├── migrate.rs          the schema chain: created at init, one transaction per step under the lock
+│   │   └── tests/              the bridge's and the chain's unit tests
 │   │       ├── mod.rs          every calling context, the refusals, and the TLS connector
-│   │       └── database.rs     against a real database: pool bound, deadlines, drop, password, TLS
+│   │       ├── database.rs     against a real database: pool bound, deadlines, drop, password, TLS
+│   │       └── migrate.rs      the chain over steps no build has: an upgrade, a failure, stores together
 │   ├── segments/               segment format 1: a window of candles, packed and named by its hash
 │   │   ├── mod.rs              windows, compression, the hash, opening a fetched segment, SegmentError
 │   │   └── payload.rs          the payload: candles as columns, exact decimal text, strict decoding
@@ -281,7 +284,10 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   `tests/fixtures/storage_conformance_cases.json`, run on the SQLite store
   and through `AnyStore`, with an isolated PostgreSQL database per fixture
   ready for the PostgreSQL stores; the schema chain from every earlier
-  schema in `tests/fixtures/sqlite/`; and both documents held to the code
+  schema in `tests/fixtures/sqlite/`; the PostgreSQL schema `init` creates,
+  its refusals, exact round trips and the query plans of
+  [postgres-query-plans.md](postgres-query-plans.md) (`postgres/`); and the
+  documents held to the code
 - `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
   from naming a concrete exchange adapter, the code and `--help` outside
   the Binance adapter from hardcoding Binance, and each venue's own

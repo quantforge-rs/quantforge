@@ -1,8 +1,10 @@
 //! The bridge from every context QuantForge calls storage from, its
 //! refusals, and its TLS connector: none of these needs a database.
-//! [`database`] runs the rest against a real one.
+//! [`database`] runs the rest against a real one, and [`migrate`] the
+//! schema chain, over steps no build has.
 
 mod database;
+mod migrate;
 
 use super::bridge::{Bridge, Effect};
 use super::runner::{RunError, Runner};

@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio_postgres::types::Type;
 
 /// The database these tests run against, or `None` to skip them.
-fn database_url(variable: &str) -> Option<String> {
+pub(super) fn database_url(variable: &str) -> Option<String> {
     let url = std::env::var(variable).ok().filter(|url| !url.is_empty());
     if url.is_none() {
         eprintln!("skipping: {variable} is unset");
@@ -18,11 +18,11 @@ fn database_url(variable: &str) -> Option<String> {
     url
 }
 
-const DATABASE: &str = "QUANTFORGE_TEST_POSTGRES_URL";
+pub(super) const DATABASE: &str = "QUANTFORGE_TEST_POSTGRES_URL";
 const TLS_DATABASE: &str = "QUANTFORGE_TEST_POSTGRES_TLS_URL";
 
 /// An `application_name` no other test in this run uses.
-fn unique(prefix: &str) -> String {
+pub(super) fn unique(prefix: &str) -> String {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     format!(
         "qf_{prefix}_{}_{}",

@@ -1,8 +1,8 @@
 # The storage schema
 
 **Schema 5.** Every QuantForge store holds the same tables under one schema
-version: SQLite today, PostgreSQL from ALG-404 on. This page is the contract
-between them: the identities their rows carry, the record a store keeps
+version, on SQLite and on PostgreSQL. This page is the contract between
+them: the identities their rows carry, the record a store keeps
 about itself and the activation contract behind it, who owns which tables
 and how the schema moves forward, and the DDL on both backends.
 `tests/storage/docs.rs` holds it to the code, and the shared cases in
@@ -20,9 +20,11 @@ operator's side of the same contract.
 - [The store's record](#the-stores-record)
 - [Versioning and ownership](#versioning-and-ownership)
 - [The chain on SQLite](#the-chain-on-sqlite)
+- [The chain on PostgreSQL](#the-chain-on-postgresql)
 - [Legacy runs](#legacy-runs)
 - [SQLite DDL](#sqlite-ddl)
 - [PostgreSQL DDL](#postgresql-ddl)
+- [Segments on PostgreSQL](#segments-on-postgresql)
 - [The shared cases](#the-shared-cases)
 - [Backends and ownership](#backends-and-ownership)
 
@@ -133,11 +135,34 @@ story exist yet.
 | Asset defaults, risk capital and per-asset policies | ALG-735 | a later schema |
 | The signal inbox, intents, protection and the event outbox | ALG-738 | a later schema |
 | Notifications | ALG-749 | a later schema |
+| Jobs and their provenance: the server's job records and the reproducibility ledger | ALG-509, ALG-516 | a later schema |
 <!-- end: table owners -->
 
 **PostgreSQL** starts at schema 5 with the same version numbers and the
 same steps from there on; a step that applies to a backend that never had
 the earlier schema is the whole step's DDL for that backend.
+
+**A later step.** A story that changes the schema, such as ALG-735's
+policies, ALG-738's execution store, or the jobs and provenance of ALG-509
+and ALG-516:
+
+- adds one step for the next version on both backends in the same change:
+  SQLite's to `src/storage/sqlite/migrate.rs`, PostgreSQL's to
+  `src/storage/postgres/migrate.rs` with its DDL in
+  `src/storage/postgres/schema.rs`; a PostgreSQL chain that stops short of
+  SQLite's version fails the unit tests;
+- adds its tables to the DDL of both backends below and to the owners
+  table;
+- never edits an earlier step, deletes nothing, and keeps a row it rewrites
+  beside the original;
+- proves on both backends what the chain promises: a fresh store, a repeat
+  that changes nothing, stores starting together that apply it once, a
+  failure that rolls back whole, and an upgrade that keeps every row it
+  found;
+- keeps its records in the store the host selected, beside the candles and
+  runs they describe. A job's provenance names segment hashes this store
+  holds, and no segment is ever deleted (see
+  [Segments on PostgreSQL](#segments-on-postgresql)).
 
 ## The chain on SQLite
 
@@ -156,6 +181,42 @@ untouched (`StorageError::SchemaUnsupported`).
 | 2 → 3 | development | Nothing: `state_json` gained a required `execution_mode`, which a run 0.2.0 wrote does not have and is never given by guesswork. |
 | 3 → 4 | development | The segment tables, and one dirty mark per window that holds candles, so the next refresh packs the candles the earlier build stored. |
 | 4 → 5 | QUA-37 | The identity columns of `bot_runs` (every existing run `legacy`, its `state_json` copied to `legacy_state_json`); `order_events` and `closed_trades` rebuilt with text IDs, every row and its `seq` copied, `raw_json` copied to `legacy_raw_json`; the numeric IDs inside `state_json` and `raw_json` rewritten as strings; `store_control` with a fresh ID, no environment, `inactive`, epoch 0; `schema_migrations`. |
+
+## The chain on PostgreSQL
+
+The chain runs when `PostgresStore::init` opens a store, in
+`src/storage/postgres/migrate.rs`; the DDL is in
+`src/storage/postgres/schema.rs`. Each pass is one transaction whose first
+statement takes the advisory lock `pg_advisory_xact_lock(5856459913882324289)`
+(the bytes of `QFSCHEMA`), which PostgreSQL scopes to the database and
+releases when the transaction ends. Under the lock the pass reads the
+version, applies the step that leaves it (on a database without a schema,
+the whole chain), stamps the version, logs the step and commits.
+PostgreSQL's DDL is transactional, so a step that fails rolls back whole
+and leaves the store at the last completed version, and processes starting
+together wait on the lock and find the work done. The transaction is `READ
+COMMITTED` whatever the server's default: a `REPEATABLE READ` snapshot
+would be taken at the lock statement, before the previous holder
+committed, and the waiting process would apply the step again.
+
+| Step | Build | What it does |
+| --- | --- | --- |
+| 0 → 5 | QUA-125 | Every table of schema 5, as [below](#postgresql-ddl), and the store's control record: a fresh ID, no environment, `inactive`, epoch 0. Logged as one step from 0. |
+
+Refused untouched, before anything is created:
+
+- a newer schema (`StorageError::SchemaUnsupported`);
+- a schema that holds any of the tables below but no `meta`, or a `meta`
+  that records no version: it is not a QuantForge store;
+- a role whose `search_path` names no schema that exists.
+
+The tables are created unqualified, in the first schema of the role's
+`search_path` that exists, normally `public`: one store per database, as
+one store per SQLite file. Give QuantForge a database of its own and a role
+that may create tables in it. Nothing needs an extension. A pass is one
+storage call, so a step finishes within the statement timeout (30 s) and
+the call's deadline; a pass that loses its answer is
+`StorageError::OutcomeUnknown`, and running `init` again is always safe.
 
 ## Legacy runs
 
@@ -304,16 +365,28 @@ CREATE TABLE schema_migrations (
 
 ## PostgreSQL DDL
 
-The same tables and columns for ALG-404, reviewed here and not yet
-executed by any build; `tests/storage/docs.rs` checks that it names the
-tables and columns of the SQLite schema and nothing else. The mapping
-follows ADR 0001: decimals stay `TEXT`, written with `to_string` and read
-with `from_str`, so PostgreSQL returns the same text as SQLite; timestamps
-are `BIGINT` milliseconds; a sequence number is an identity column that
-never reuses a value, as `AUTOINCREMENT` never does; `init` runs the chain
-under `pg_advisory_lock`, so processes starting together cannot race on it;
-`INSERT OR REPLACE` becomes `ON CONFLICT ... DO UPDATE` with a fresh
-identity value, and `IS NOT` becomes `IS DISTINCT FROM`.
+The schema `PostgresStore::init` creates, as it runs it:
+`src/storage/postgres/schema.rs` holds this text, and a unit test holds
+the two equal line for line. `tests/storage/postgres/schema.rs` compares
+the catalog of a fresh database with it, and `tests/storage/docs.rs`
+checks that it names the tables and columns of the SQLite schema and
+nothing else. The mapping follows ADR 0001:
+
+- Decimals stay `TEXT`, written with `to_string`, so PostgreSQL returns
+  the text SQLite returns, scale included (`1.10` is never `1.1`). No
+  `NUMERIC` or `REAL` column, and no `CHECK` on a decimal, changes or
+  refuses text: a store holds what was written, inexact text written
+  behind its back included. The
+  PostgreSQL stores read it back with `Decimal::from_str_exact`, so text a
+  `Decimal` cannot hold exactly (more than 28 decimal places, or beyond
+  its range) is an error, never rounded.
+- Timestamps are `BIGINT` milliseconds, and a trade count is a `u64`
+  stored in a signed column, as on SQLite.
+- A sequence number is an identity column that never reuses a value, as
+  `AUTOINCREMENT` never does.
+- `INSERT OR REPLACE` becomes `ON CONFLICT ... DO UPDATE` with a fresh
+  identity value (`SET id = DEFAULT`), and `IS NOT` becomes `IS DISTINCT
+  FROM`.
 
 <!-- begin: postgres schema -->
 ```sql
@@ -336,8 +409,6 @@ CREATE TABLE candles (
   trades BIGINT,
   PRIMARY KEY (exchange, symbol, interval, open_time_ms)
 );
-CREATE INDEX idx_candles_market_time
-  ON candles(exchange, symbol, interval, open_time_ms);
 
 CREATE TABLE bot_runs (
   run_id TEXT PRIMARY KEY,
@@ -438,6 +509,46 @@ CREATE TABLE schema_migrations (
 );
 ```
 <!-- end: postgres schema -->
+
+The indexes are SQLite's, except where a query plan says otherwise;
+[postgres-query-plans.md](postgres-query-plans.md) records, on
+representative data, the index each query the stores run is planned on:
+
+<!-- begin: postgres index differences -->
+- `idx_candles_market_time`: not on PostgreSQL. It repeats the candles
+  primary key column for column; the key serves every candle query, and a
+  copy would double every upsert's index writes on the largest table
+<!-- end: postgres index differences -->
+
+A BRIN index on `candles(open_time_ms)` was evaluated and is not built: no
+query the stores run picks it, since every candle query names its market
+([the evaluation](postgres-query-plans.md#brin)).
+
+## Segments on PostgreSQL
+
+The segment tables are SQLite's, and so is the protocol over them, which
+the PostgreSQL segment store (QUA-112) follows:
+
+- **Blobs are immutable.** A segment row is inserted with `ON CONFLICT
+  (hash) DO NOTHING` and never updated or deleted: a replaced segment
+  stays loadable, and a hash a job's provenance names (ALG-516) never
+  disappears. Only an index entry moves to another hash, or goes when its
+  window has no candles left.
+- **Every mark is a revision.** Writing candles that change a window marks
+  it with `INSERT ... ON CONFLICT (exchange, symbol, interval,
+  window_start_ms) DO UPDATE SET id = DEFAULT`, in the writer's
+  transaction: the mark's `id` is a fresh, larger revision each time.
+- **Reads are one snapshot.** A refresh reads a window, and a plan its
+  index entries, dirty marks and tip, in one read-only `REPEATABLE READ`
+  transaction, then packs with no transaction open.
+- **A write-back publishes only what it read.** One `READ COMMITTED`
+  transaction locks the window's mark (`SELECT id ... FOR UPDATE`), which
+  holds back a writer re-marking it; finds none (another refresh did it:
+  `elsewhere`), another revision (a writer marked it again: `dirty`), or
+  the revision it read, in which case it inserts the blob, writes or
+  removes the index entry, and deletes the mark by that revision, then
+  commits. A plan never sees an index entry without its blob, or a window
+  packed from candles older than its mark.
 
 ## The shared cases
 
