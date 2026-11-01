@@ -8,9 +8,11 @@ schema; this page holds the measurements.
 
 `tests/storage/postgres/plans.rs` reproduces it. It seeds the data below in
 a database of its own, asserts that every query is planned on the indexes
-listed here and never scans its table whole, asserts that no query picks
-the BRIN index, and prints every plan with its timings. The list between
-the markers is held to the test's own.
+listed here and never scans whole a table its `never_scanned` list names
+(every table it reads, except `bot_runs` for `runs.legacy`, which scans it
+by design), asserts that no query picks the BRIN index, and prints every
+plan with its timings. The list between the markers is held to the test's
+own.
 
 ## Contents
 
