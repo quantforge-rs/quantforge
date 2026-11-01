@@ -9,12 +9,21 @@
 //! `docs/storage-conformance.md` serve it); the store itself connects to
 //! the isolated database through `PostgresStore`, TLS rules and all.
 //!
-//! No group runs yet: `PostgresStore` implements no port. Each story adds
-//! its group's test here as its store lands, the way `sqlite.rs` calls
+//! Every fixture's store has run `init`, so the schema of QUA-125 is in
+//! place. No group runs yet: `PostgresStore` implements no port. Each story
+//! adds its group's test here as its store lands, the way `sqlite.rs` calls
 //! them: `conformance::candles::<Postgres>()` with QUA-124,
 //! `conformance::journal::<Postgres>()` with QUA-123, and
-//! `conformance::segments::<Postgres>()` with QUA-112, once `fresh` also
-//! initializes the schema of QUA-125.
+//! `conformance::segments::<Postgres>()` with QUA-112.
+//!
+//! - `schema`: the schema `init` creates, held to the doc: a repeat, stores
+//!   starting together, the refusals, exact round trips, and identities
+//!   that never collide.
+//! - `plans`: representative data, and the index each query the ports run
+//!   is planned on; the evidence `docs/postgres-query-plans.md` records.
+
+mod plans;
+mod schema;
 
 use quantforge::storage::postgres::PostgresStore;
 use quantforge::storage::settings::PostgresSettings;
@@ -61,7 +70,7 @@ fn query(url: &str, sql: &str) -> Vec<Vec<Option<String>>> {
             .await
             .simple_query(sql)
             .await
-            .unwrap_or_else(|error| panic!("{sql}: {error}"));
+            .unwrap_or_else(|error| panic!("{sql}: {error:?}"));
         messages
             .into_iter()
             .filter_map(|message| match message {
@@ -133,7 +142,11 @@ impl Backend for Postgres {
         let database = IsolatedDatabase::create(&server);
         let reopen = {
             let settings = settings(&database.url);
-            move || PostgresStore::connect(&settings).expect("the isolated database")
+            move || {
+                let store = PostgresStore::connect(&settings).expect("the isolated database");
+                store.init().expect("init");
+                store
+            }
         };
         Fixture {
             store: reopen(),

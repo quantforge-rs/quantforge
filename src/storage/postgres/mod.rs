@@ -10,19 +10,26 @@
 //!   cancelled past it, and what a lost answer means for a read and for a
 //!   write.
 //! - `tls`: the rustls connector.
+//! - `schema`: the DDL of every schema version, and the lock `init` takes.
+//! - `migrate`: the chain that creates the schema and brings an earlier one
+//!   forward, one transaction per step (`docs/storage-schema.md`).
 //!
-//! [`PostgresStore`] connects and answers; it implements no storage port
-//! yet. The candle, journal and segment stores come with QUA-124, QUA-123
-//! and QUA-112, and QUA-116 makes it selectable through
-//! `storage::factory`.
+//! [`PostgresStore`] connects, answers and creates its schema; it
+//! implements no storage port yet. The candle, journal and segment stores
+//! come with QUA-124, QUA-123 and QUA-112, and QUA-116 makes it selectable
+//! through `storage::factory`.
 
 mod bridge;
+mod migrate;
 mod runner;
+mod schema;
 #[cfg(test)]
 mod tests;
 mod tls;
 
 use std::fmt;
+
+use tracing::info;
 
 use crate::ports::StorageError;
 use crate::storage::settings::PostgresSettings;
@@ -47,6 +54,20 @@ impl PostgresStore {
         };
         store.ping()?;
         Ok(store)
+    }
+
+    /// Creates the schema in a database that holds none and brings an
+    /// earlier one to the version this build writes, one transaction per
+    /// step under an advisory lock, so processes starting together create
+    /// it once; run again, it changes nothing. A database from a newer
+    /// build is refused as [`StorageError::SchemaUnsupported`], and one
+    /// holding tables of ours without a recorded version is refused too,
+    /// both untouched. An answer lost on the way is
+    /// [`StorageError::OutcomeUnknown`], and running `init` again is safe.
+    pub fn init(&self) -> Result<(), StorageError> {
+        migrate::ensure_current(&self.bridge, &self.shown)?;
+        info!(connection = %self.shown, "postgres store initialized");
+        Ok(())
     }
 
     /// Runs `SELECT 1` on a pooled connection.

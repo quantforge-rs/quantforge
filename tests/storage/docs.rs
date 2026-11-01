@@ -1,7 +1,8 @@
 //! The storage documents held to the code and the fixtures:
 //! `docs/storage-schema.md`'s schema version, its SQLite DDL as a fresh
-//! store has it, its PostgreSQL DDL naming the same tables and columns, and
-//! its ownership table covering every table; and
+//! store has it, its PostgreSQL DDL naming the same tables and columns, its
+//! indexes differing only as the doc lists, and its ownership table
+//! covering every table; and
 //! `docs/storage-conformance.md`'s lists of every scenario and check. Each
 //! part is found between `<!-- begin: name -->` and `<!-- end: name -->`.
 
@@ -15,7 +16,7 @@ fn section(name: &str) -> Vec<String> {
     section_in("docs/storage-schema.md", name)
 }
 
-fn section_in(path: &str, name: &str) -> Vec<String> {
+pub(crate) fn section_in(path: &str, name: &str) -> Vec<String> {
     let doc = std::fs::read_to_string(fixture(path)).expect("read the doc");
     let lines: Vec<&str> = doc.lines().collect();
     let marker = |kind: &str| {
@@ -34,21 +35,23 @@ fn section_in(path: &str, name: &str) -> Vec<String> {
 
 /// One column as the DDL declares it.
 #[derive(Debug, PartialEq, Eq)]
-struct Column {
-    name: String,
-    kind: String,
-    not_null: bool,
-    primary_key: bool,
+pub(crate) struct Column {
+    pub(crate) name: String,
+    pub(crate) kind: String,
+    pub(crate) not_null: bool,
+    pub(crate) primary_key: bool,
+    /// Numbered by the database, as PostgreSQL's identity columns are.
+    pub(crate) identity: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct Table {
-    name: String,
-    columns: Vec<Column>,
+pub(crate) struct Table {
+    pub(crate) name: String,
+    pub(crate) columns: Vec<Column>,
 }
 
 /// The tables and indexes of a fenced DDL block, in order.
-fn parse(lines: &[String]) -> (Vec<Table>, Vec<String>) {
+pub(crate) fn parse(lines: &[String]) -> (Vec<Table>, Vec<String>) {
     let mut tables = Vec::new();
     let mut indexes = Vec::new();
     let mut current: Option<Table> = None;
@@ -109,6 +112,7 @@ fn parse(lines: &[String]) -> (Vec<Table>, Vec<String>) {
             kind,
             not_null: line.contains("NOT NULL"),
             primary_key: line.contains("PRIMARY KEY"),
+            identity: line.contains("GENERATED ALWAYS AS IDENTITY"),
         });
     }
     (tables, indexes)
@@ -164,6 +168,7 @@ fn the_sqlite_ddl_in_the_doc_is_the_schema_a_fresh_store_has() {
                     kind: row.get(1)?,
                     not_null: row.get::<_, i64>(2)? != 0,
                     primary_key: row.get::<_, i64>(3)? != 0,
+                    identity: false,
                 })
             })
             .expect("query")
@@ -206,7 +211,31 @@ fn the_postgres_ddl_names_the_same_tables_and_columns_in_the_same_order() {
             .collect()
     };
     assert_eq!(names(&postgres), names(&sqlite));
-    assert_eq!(postgres_indexes, sqlite_indexes);
+    // The indexes differ only as the doc lists, each on one side alone.
+    let differences = items(&section("postgres index differences"));
+    let listed: Vec<&str> = differences.iter().map(|(name, _)| name.as_str()).collect();
+    for name in &listed {
+        let (on_sqlite, on_postgres) = (
+            sqlite_indexes.iter().any(|index| index == name),
+            postgres_indexes.iter().any(|index| index == name),
+        );
+        assert!(
+            on_sqlite != on_postgres,
+            "{name} is listed as a difference but is on both backends or neither"
+        );
+    }
+    let shared = |indexes: &[String]| -> Vec<String> {
+        indexes
+            .iter()
+            .filter(|index| !listed.contains(&index.as_str()))
+            .cloned()
+            .collect()
+    };
+    assert_eq!(
+        shared(&postgres_indexes),
+        shared(&sqlite_indexes),
+        "an index on one backend only must be listed with its reason"
+    );
     let constraints = |tables: &[Table]| -> Vec<(String, String, bool, bool)> {
         tables
             .iter()
@@ -256,7 +285,7 @@ fn every_table_has_an_owner() {
 }
 
 /// The items of a list, `- `id`: statement`, each joined onto one line.
-fn items(lines: &[String]) -> Vec<(String, String)> {
+pub(crate) fn items(lines: &[String]) -> Vec<(String, String)> {
     let mut items: Vec<(String, String)> = Vec::new();
     for line in lines.iter().filter(|line| !line.trim().is_empty()) {
         if let Some(item) = line.strip_prefix("- `") {

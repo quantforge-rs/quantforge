@@ -37,17 +37,11 @@ const WATCHDOG_MARGIN: Duration = Duration::from_secs(5);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Effect {
     Read,
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the PostgreSQL journal and candle stores write through it (QUA-123, QUA-124)"
-        )
-    )]
     Write,
 }
 
-/// The work of one call: a future over a pooled connection.
+/// The work of one call: a future over a pooled connection, which it may
+/// borrow mutably to open a transaction.
 pub(crate) type Work<'c, T> =
     Pin<Box<dyn Future<Output = Result<T, tokio_postgres::Error>> + Send + 'c>>;
 
@@ -132,18 +126,18 @@ impl Bridge {
     /// spends the same deadline, and running out of it there is unavailable:
     /// nothing was sent. Past the deadline the query is cancelled on the
     /// server and the connection discarded, so no later call queues behind
-    /// it.
+    /// it. A transaction the work leaves open is rolled back.
     pub(crate) fn execute<T, F>(&self, effect: Effect, work: F) -> Result<T, StorageError>
     where
         T: Send + 'static,
-        F: for<'c> FnOnce(&'c ClientWrapper) -> Work<'c, T> + Send + 'static,
+        F: for<'c> FnOnce(&'c mut ClientWrapper) -> Work<'c, T> + Send + 'static,
     {
         let pool = self.pool.clone();
         let tls = self.tls.clone();
         let deadline = self.deadline;
         let job = async move {
             let until = tokio::time::Instant::now() + deadline;
-            let client = match tokio::time::timeout_at(until, pool.get()).await {
+            let mut client = match tokio::time::timeout_at(until, pool.get()).await {
                 Ok(client) => client.map_err(|error| match error {
                     PoolError::Timeout(TimeoutType::Wait) => {
                         StorageError::Unavailable("no free connection in time".to_string())
@@ -161,7 +155,7 @@ impl Bridge {
                 }
             };
             let token = client.cancel_token();
-            match tokio::time::timeout_at(until, work(&client)).await {
+            match tokio::time::timeout_at(until, work(&mut client)).await {
                 Ok(result) => result.map_err(|error| from_driver(effect, error)),
                 Err(_) => {
                     // Best effort, and bounded by the connect timeout.

@@ -248,6 +248,7 @@ text only to a loopback host. CI's service container and a local cluster
 both serve that; a local one, with Homebrew:
 
 ```bash
+PATH="$(brew --prefix postgresql@16)/bin:$PATH"
 initdb -D pg -U quant --auth=scram-sha-256 --pwfile=<(printf 'local-pw\n')
 printf "port = 54329\nlisten_addresses = 'localhost'\nunix_socket_directories = ''\n" >> pg/postgresql.conf
 pg_ctl -D pg -l pg.log -w start
@@ -256,11 +257,14 @@ QUANTFORGE_TEST_POSTGRES_URL='postgres://quant:local-pw@127.0.0.1:54329/postgres
 pg_ctl -D pg -w stop
 ```
 
-No group runs on PostgreSQL yet, because `PostgresStore` implements no port:
-QUA-124 switches on the candle group, QUA-123 the journal group, and QUA-112
-the segment group and the PostgreSQL race stepper, each with the schema of
-QUA-125 initialized in `fresh`. QUA-118 runs them in CI against a PostgreSQL
-service container.
+Each fixture's store, and each one `reopen` opens, has run
+`PostgresStore::init`, so every scenario starts on a new store's schema
+(QUA-125). No group runs on PostgreSQL yet, because `PostgresStore`
+implements no port: QUA-124 switches on the candle group, QUA-123 the
+journal group, and QUA-112 the segment group and the PostgreSQL race
+stepper. QUA-118 runs them in CI against a PostgreSQL service container.
+The same command also runs the schema's own tests and the query plans of
+[postgres-query-plans.md](postgres-query-plans.md).
 
 ## The races
 
