@@ -381,7 +381,11 @@ impl IdentityText {
         let account = self.account.as_ref().map(|account| {
             // The oracle hashed the key itself: the two must agree.
             let fingerprint = KeyFingerprint::of(&account.key);
-            assert_eq!(fingerprint.as_str(), account.fingerprint, "{account:?}");
+            assert_eq!(
+                fingerprint.as_str(),
+                account.fingerprint,
+                "account fingerprint mismatch"
+            );
             VenueAccountId::KeyFingerprint(fingerprint)
         });
         match self.source.as_str() {
