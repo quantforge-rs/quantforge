@@ -5153,7 +5153,7 @@
   },
   {
    "id": "control.legacy_runs_listed",
-   "doc": "legacy runs are listed oldest first, then by run ID, with the mode only a run that recorded one has; recorded runs are not",
+   "doc": "legacy runs are listed oldest first, then by run ID, with the mode only a run that recorded one has; recorded runs are not listed",
    "steps": [
     {
      "op": "create_run",
@@ -5299,7 +5299,7 @@
      "execution_mode": null,
      "refused": {
       "kind": "invalid_argument",
-      "contains": "run run-legacy already has a adopted identity"
+      "contains": "run run-legacy already has an identity (adopted)"
      }
     }
    ]
@@ -5404,7 +5404,7 @@
      "execution_mode": null,
      "refused": {
       "kind": "invalid_argument",
-      "contains": "run run-1 already has a recorded identity"
+      "contains": "run run-1 already has an identity (recorded)"
      }
     },
     {

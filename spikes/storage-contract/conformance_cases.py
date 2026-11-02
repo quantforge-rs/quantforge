@@ -458,7 +458,7 @@ class Model:
         if record is None:
             return refusal(f"no run found for run_id={run_id}")
         if record["identity"]["source"] != "legacy":
-            return refusal(f"run {run_id} already has a {record['identity']['source']} identity")
+            return refusal(f"run {run_id} already has an identity ({record['identity']['source']})")
         if record["loads"] and mode is not None:
             return refusal(f"run {run_id} already records its execution mode")
         if not record["loads"] and mode is None:
@@ -1278,7 +1278,7 @@ def control_scenarios():
 
     s = Scenario(
         "control.legacy_runs_listed",
-        "legacy runs are listed oldest first, then by run ID, with the mode only a run that recorded one has; recorded runs are not",
+        "legacy runs are listed oldest first, then by run ID, with the mode only a run that recorded one has; recorded runs are not listed",
     )
     s.create_run("first", identity())
     s.seed_legacy_run("legacy_no_mode", False)

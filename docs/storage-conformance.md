@@ -170,7 +170,7 @@ exist.
   binding it again to the same one changes nothing
 - `control.legacy_runs_listed`: legacy runs are listed oldest first, then by
   run ID, with the mode only a run that recorded one has; recorded runs are
-  not
+  not listed
 - `control.adopt_a_legacy_run`: an adopted legacy run takes the verified
   identity, loads, matches only that identity, and keeps its original state
   beside it
@@ -305,10 +305,12 @@ pg_ctl -D pg -w stop
 Each fixture's store, and each one `reopen` opens, has run
 `PostgresStore::init`, so every scenario starts on a new store's schema
 (QUA-125). The candle group runs on PostgreSQL (QUA-124), and so do the
-journal and store-record groups (QUA-123), once more on a database whose
-collation is `en_US.UTF-8`, where only byte order keeps a tie on run IDs
-SQLite's; QUA-112 switches on the segment group and the PostgreSQL race
-stepper. QUA-118 runs them in CI against a PostgreSQL service container.
+journal and store-record groups (QUA-123). Those two run once more on a
+database whose collation is `en_US.UTF-8`, where only byte order keeps a tie
+on run IDs SQLite's, but only when the server can create one: a server
+without that locale skips the run, saying so, so byte order is not proven
+on every setup. QUA-112 switches on the segment group and the PostgreSQL
+race stepper. QUA-118 runs them in CI against a PostgreSQL service container.
 The same command also runs the schema's own tests, the candle store's
 writes raced against a refresh's write-back, writers appending to one run
 at once, and the query plans of

@@ -403,7 +403,9 @@ fn a_zero_two_zero_store_gets_its_windows_marked_and_its_runs_adopted_one_by_one
         .adopt_run("run-a", &dry, Some(ExecutionMode::DryRun))
         .expect_err("adopted once");
     assert!(
-        error.to_string().contains("already has a adopted identity")
+        error
+            .to_string()
+            .contains("already has an identity (adopted)")
             || error.to_string().contains("only a legacy run"),
         "{error}"
     );

@@ -294,7 +294,8 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   ready for the PostgreSQL stores; the schema chain from every earlier
   schema in `tests/fixtures/sqlite/`; the PostgreSQL schema `init` creates,
   its refusals, exact round trips, the candle, journal and store-record
-  groups (again under a linguistic collation), the candle store's writes
+  groups, the journal and store-record groups again under a linguistic
+  collation, the candle store's writes
   raced against a refresh's write-back, writers appending to one run at
   once, and the query plans of
   [postgres-query-plans.md](postgres-query-plans.md) (`postgres/`); the
