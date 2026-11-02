@@ -194,7 +194,7 @@ pub(crate) fn adopted_state(
     };
     if source != IdentitySource::Legacy.as_str() {
         return Err(StorageError::InvalidArgument(format!(
-            "run {run_id} already has a {source} identity; only a legacy run is adopted"
+            "run {run_id} already has an identity ({source}); only a legacy run is adopted"
         )));
     }
     let mut state: serde_json::Value =
