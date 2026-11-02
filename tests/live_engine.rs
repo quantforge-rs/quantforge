@@ -5,13 +5,13 @@
 
 use quantforge::{
     AccountConnector, AccountTrade, AssetBalance, BotRunState, BuiltInStrategyConfig,
-    CancelOrderRequest, Candle, CandleStore, ClosedTrade, EngineError, ExchangeCapabilities,
-    ExchangeConnector, ExchangeError, ExchangeId, ExchangeOrder, ExecutionMode, Interval,
-    KeyFingerprint, KlineRequest, LiveTradeConfig, LiveTradeEngine, LiveTradeSummary,
-    MarketDataConnector, MarketId, MarketOrderRequest, OrderQueryRequest, OrderStatus,
-    PositionState, RunIdentity, RunJournalStore, RunStatus, Side, SignedConnectors, SqliteStore,
-    StorageError, Symbol, SymbolRules, TimestampMs, TradingConnector, VenueAccountId, VenueOrderId,
-    now_utc_ms,
+    CancelOrderRequest, Candle, CandleStore, ClosedTrade, EngineError, Environment,
+    ExchangeCapabilities, ExchangeConnector, ExchangeError, ExchangeId, ExchangeOrder,
+    ExecutionMode, Interval, KeyFingerprint, KlineRequest, LiveTradeConfig, LiveTradeEngine,
+    LiveTradeSummary, MarketDataConnector, MarketId, MarketOrderRequest, OrderQueryRequest,
+    OrderStatus, PositionState, RunIdentity, RunJournalStore, RunStatus, Side, SignedConnectors,
+    SqliteStore, StorageError, Symbol, SymbolRules, TimestampMs, TradingConnector, VenueAccountId,
+    VenueOrderId, now_utc_ms,
 };
 use rust_decimal::Decimal;
 use std::collections::VecDeque;
@@ -425,15 +425,35 @@ fn seeded_open_run_state(cfg: &LiveTradeConfig, anchor: TimestampMs) -> BotRunSt
     }
 }
 
+// ── Dry runs on every store ──────────────────────────────────────────
+//
+// The engine reads and writes through the ports alone, so the dry runs
+// below take any store: each runs here on SQLite and, in the `postgres`
+// module, on PostgreSQL (QUA-123): the bootstrap, a poll, the journal
+// writes, and the checks that decide whether a run may be resumed.
+
+/// A new, empty SQLite store in `dir`.
+fn sqlite_store(dir: &tempfile::TempDir) -> SqliteStore {
+    let store = SqliteStore::new(dir.path().join("live.sqlite"));
+    CandleStore::init(&store).expect("init");
+    store
+}
+
 #[tokio::test]
 async fn dry_run_entry_journals_synthetic_order_and_never_calls_the_trading_venue() {
-    let (_anchor, warmup, poll_bar) = timeline(Decimal::from(12_500));
     let tempdir = tempdir().expect("tempdir");
-    let store = seeded_store(&tempdir, &warmup);
+    dry_run_entry(&sqlite_store(&tempdir)).await;
+}
+
+async fn dry_run_entry<S: CandleStore + RunJournalStore>(store: &S) {
+    let (_anchor, warmup, poll_bar) = timeline(Decimal::from(12_500));
+    store
+        .upsert_candles(&market(), &warmup)
+        .expect("seed warmup");
     let source = ScriptedMarketData::new(vec![Vec::new(), vec![poll_bar.clone()]]);
     let venue = RefusingVenue;
 
-    let engine = LiveTradeEngine::new(&source, &store, &store, Some(signed(&venue)));
+    let engine = LiveTradeEngine::new(&source, store, store, Some(signed(&venue)));
     let summary = engine
         .run(&engine_config(ExecutionMode::DryRun, "run-dry-entry"))
         .await
@@ -490,9 +510,15 @@ async fn dry_run_entry_journals_synthetic_order_and_never_calls_the_trading_venu
 
 #[tokio::test]
 async fn dry_run_exit_on_resume_sells_journaled_qty_and_writes_closed_trade_without_venue_calls() {
-    let (anchor, warmup, poll_bar) = timeline(Decimal::from(9_000));
     let tempdir = tempdir().expect("tempdir");
-    let store = seeded_store(&tempdir, &warmup);
+    dry_run_exit_on_resume(&sqlite_store(&tempdir)).await;
+}
+
+async fn dry_run_exit_on_resume<S: CandleStore + RunJournalStore>(store: &S) {
+    let (anchor, warmup, poll_bar) = timeline(Decimal::from(9_000));
+    store
+        .upsert_candles(&market(), &warmup)
+        .expect("seed warmup");
     let cfg = engine_config(ExecutionMode::DryRun, "run-dry-exit");
     store
         .create_run(
@@ -503,7 +529,7 @@ async fn dry_run_exit_on_resume_sells_journaled_qty_and_writes_closed_trade_with
     let source = ScriptedMarketData::new(vec![Vec::new(), vec![poll_bar.clone()]]);
     let venue = RefusingVenue;
 
-    let engine = LiveTradeEngine::new(&source, &store, &store, Some(signed(&venue)));
+    let engine = LiveTradeEngine::new(&source, store, store, Some(signed(&venue)));
     let summary = engine.run(&cfg).await.expect("dry run");
 
     assert_eq!(
@@ -556,6 +582,134 @@ async fn dry_run_exit_on_resume_sells_journaled_qty_and_writes_closed_trade_with
             entry_order_id: None,
             exit_order_id: None,
         }]
+    );
+}
+
+/// Runs a dry run of `cfg` that must be refused before it changes the run
+/// `recorded`, and returns the refusal.
+async fn refused_resume<S: CandleStore + RunJournalStore>(
+    store: &S,
+    cfg: &LiveTradeConfig,
+    recorded: &BotRunState,
+) -> String {
+    let (_anchor, warmup, poll_bar) = timeline(Decimal::from(9_000));
+    store
+        .upsert_candles(&market(), &warmup)
+        .expect("seed warmup");
+    let source = ScriptedMarketData::new(vec![Vec::new(), vec![poll_bar]]);
+    let venue = RefusingVenue;
+    let engine = LiveTradeEngine::new(&source, store, store, Some(signed(&venue)));
+    let error = engine.run(cfg).await.expect_err("refused to resume");
+    assert!(matches!(error, EngineError::InvalidConfig(_)), "{error}");
+    let run_id = &recorded.run_id;
+    assert_eq!(
+        store
+            .load_run_state(run_id)
+            .expect("load")
+            .expect("state")
+            .position,
+        recorded.position,
+        "the run's position is untouched"
+    );
+    assert!(
+        store
+            .list_order_events(run_id, 10)
+            .expect("events")
+            .is_empty(),
+        "nothing was journaled"
+    );
+    error.to_string()
+}
+
+#[tokio::test]
+async fn resume_refuses_a_run_another_exchange_recorded_under_the_same_id() {
+    let tempdir = tempdir().expect("tempdir");
+    resume_of_another_exchanges_run(&sqlite_store(&tempdir)).await;
+}
+
+/// A run ID names one run on one market: a run another exchange recorded
+/// under it is never resumed, and never read as this market's journal.
+async fn resume_of_another_exchanges_run<S: CandleStore + RunJournalStore>(store: &S) {
+    let cfg = engine_config(ExecutionMode::DryRun, "run-elsewhere");
+    let mut recorded = seeded_open_run_state(&cfg, anchor_ms());
+    recorded.market = MarketId::new(
+        ExchangeId::BybitSpot,
+        Symbol::new("BTCUSDT").expect("symbol"),
+        Interval::M1,
+    );
+    store
+        .create_run(&recorded, &RunIdentity::recorded(None, None))
+        .expect("seed state");
+    let refused = refused_resume(store, &cfg, &recorded).await;
+    assert!(
+        refused.contains(
+            "run run-elsewhere was recorded for market bybit_spot BTCUSDT 1m, but this \
+             invocation targets binance_spot BTCUSDT 1m; refusing to resume"
+        ),
+        "{refused}"
+    );
+}
+
+#[tokio::test]
+async fn resume_refuses_a_run_recorded_under_another_environment() {
+    let tempdir = tempdir().expect("tempdir");
+    resume_under_another_identity(&sqlite_store(&tempdir)).await;
+}
+
+/// A run recorded on a store bound to testnet is never driven by an
+/// invocation on an unbound one.
+async fn resume_under_another_identity<S: CandleStore + RunJournalStore>(store: &S) {
+    let cfg = engine_config(ExecutionMode::DryRun, "run-testnet");
+    let recorded = seeded_open_run_state(&cfg, anchor_ms());
+    store
+        .create_run(
+            &recorded,
+            &RunIdentity::recorded(Some(Environment::Testnet), None),
+        )
+        .expect("seed state");
+    let refused = refused_resume(store, &cfg, &recorded).await;
+    assert!(
+        refused.contains(
+            "run run-testnet: environment was recorded as testnet, but this invocation is"
+        ) && refused.ends_with("refusing to resume"),
+        "{refused}"
+    );
+}
+
+#[tokio::test]
+async fn resume_refuses_a_legacy_run() {
+    let tempdir = tempdir().expect("tempdir");
+    let store = sqlite_store(&tempdir);
+    let path = store.path().to_path_buf();
+    resume_of_a_legacy_run(&store, |sql| {
+        rusqlite::Connection::open(&path)
+            .expect("open")
+            .execute_batch(sql)
+            .expect("a legacy run");
+    })
+    .await;
+}
+
+/// A run a build before schema 5 wrote, as the migration or a transfer
+/// leaves it, is never resumed: nothing proves which environment or
+/// account it traded under. `raw` writes behind the store's back.
+async fn resume_of_a_legacy_run<S: CandleStore + RunJournalStore>(store: &S, raw: impl Fn(&str)) {
+    let cfg = engine_config(ExecutionMode::DryRun, "run-legacy");
+    let recorded = seeded_open_run_state(&cfg, anchor_ms());
+    let json = serde_json::to_string(&recorded).expect("state json");
+    raw(&format!(
+        "INSERT INTO bot_runs(run_id, exchange, symbol, interval, strategy_name, status, \
+         state_json, started_at_ms, updated_at_ms, identity_source, legacy_state_json) \
+         VALUES ('run-legacy', 'binance_spot', 'BTCUSDT', '1m', 'sma_cross', 'running', \
+         '{json}', {started}, {updated}, 'legacy', '{json}')",
+        started = recorded.started_at_ms,
+        updated = recorded.updated_at_ms,
+    ));
+    let refused = refused_resume(store, &cfg, &recorded).await;
+    assert!(
+        refused.contains("run run-legacy: the run's environment and account were never verified")
+            && refused.ends_with("refusing to resume"),
+        "{refused}"
     );
 }
 
@@ -836,4 +990,76 @@ async fn live_mode_refuses_to_resume_a_run_under_an_identity_without_an_account(
         .expect("load")
         .expect("state");
     assert_eq!(state, seeded, "the persisted run is untouched");
+}
+
+#[cfg(feature = "postgres")]
+#[allow(dead_code, reason = "the storage tests use the rest of it")]
+#[path = "storage/postgres/server.rs"]
+mod server;
+
+/// The dry runs above on PostgreSQL, each on a database of its own on the
+/// server `QUANTFORGE_TEST_POSTGRES_URL` names, through `PostgresStore`
+/// as both the candle store and the journal. Without the variable they
+/// skip.
+#[cfg(feature = "postgres")]
+mod postgres {
+    use super::server::{IsolatedDatabase, VARIABLE, query, server_url, settings};
+    use super::*;
+    use quantforge::storage::postgres::PostgresStore;
+
+    /// A store on a database of its own, dropped before the database.
+    struct Fresh {
+        store: PostgresStore,
+        database: IsolatedDatabase,
+    }
+
+    fn fresh() -> Option<Fresh> {
+        let Some(server) = server_url() else {
+            eprintln!("skipping: {VARIABLE} is unset");
+            return None;
+        };
+        let database = IsolatedDatabase::create(&server);
+        let store = PostgresStore::connect(&settings(&database.url)).expect("a store");
+        store.init().expect("init");
+        Some(Fresh { store, database })
+    }
+
+    #[tokio::test]
+    async fn dry_run_entry_journals_synthetic_order_and_never_calls_the_trading_venue() {
+        if let Some(fresh) = fresh() {
+            dry_run_entry(&fresh.store).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn dry_run_exit_on_resume_sells_journaled_qty_and_writes_closed_trade() {
+        if let Some(fresh) = fresh() {
+            dry_run_exit_on_resume(&fresh.store).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn resume_refuses_a_run_another_exchange_recorded_under_the_same_id() {
+        if let Some(fresh) = fresh() {
+            resume_of_another_exchanges_run(&fresh.store).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn resume_refuses_a_run_recorded_under_another_environment() {
+        if let Some(fresh) = fresh() {
+            resume_under_another_identity(&fresh.store).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn resume_refuses_a_legacy_run() {
+        if let Some(fresh) = fresh() {
+            let url = fresh.database.url.clone();
+            resume_of_a_legacy_run(&fresh.store, |sql| {
+                query(&url, sql);
+            })
+            .await;
+        }
+    }
 }

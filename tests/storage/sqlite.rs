@@ -99,6 +99,11 @@ fn journal() {
 }
 
 #[test]
+fn control() {
+    conformance::control::<Sqlite>();
+}
+
+#[test]
 fn segments() {
     conformance::segments::<Sqlite>();
 }

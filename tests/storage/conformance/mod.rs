@@ -6,18 +6,19 @@
 //!
 //! A backend joins by implementing [`Backend`] and [`Raw`], then calling
 //! the group of each port it implements: [`candles`], [`journal`],
-//! [`segments`]. Every scenario and check runs on a fresh, empty store,
-//! and a group fails listing every one that failed.
+//! [`segments`], [`control`]. Every scenario and check runs on a fresh,
+//! empty store, and a group fails listing every one that failed.
 
 pub mod candles;
 pub mod cases;
+pub mod control;
 pub mod journal;
 pub mod segments;
 
 use std::any::Any;
 use std::panic::{self, AssertUnwindSafe};
 
-use quantforge::{CandleStore, RunJournalStore, SegmentStore, StorageError};
+use quantforge::{CandleStore, RunJournalStore, SegmentStore, StorageError, StoreControl};
 
 pub use cases::{Cases, Refusal, Scenario, Step};
 
@@ -93,6 +94,26 @@ where
         journal::check,
         |cases, raw, reopen, store, step| {
             shared_step(raw, reopen, store, step) || journal::step(cases, store, step)
+        },
+    );
+}
+
+/// The store record's scenarios and checks; they write runs too.
+pub fn control<B: Backend>()
+where
+    B::Store: RunJournalStore + StoreControl,
+{
+    let cases = cases::load();
+    run_group::<B, _>(
+        "control",
+        &cases,
+        &cases.control,
+        control::CHECKS,
+        control::check,
+        |cases, raw, reopen, store, step| {
+            shared_step(raw, reopen, store, step)
+                || journal::step(cases, store, step)
+                || control::step(cases, store, step)
         },
     );
 }

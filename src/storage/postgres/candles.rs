@@ -16,8 +16,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use tokio_postgres::types::Type;
 use tokio_postgres::{IsolationLevel, Row};
 
-use super::PostgresStore;
 use super::bridge::Effect;
+use super::{PostgresStore, limit};
 use crate::storage::common::{self, read_decimal};
 use crate::{Candle, CandleQuery, CandleStore, MarketId, StorageError, TimestampMs};
 
@@ -223,11 +223,6 @@ impl Stored {
             trades: self.trades.map(|value| value as u64),
         })
     }
-}
-
-/// A limit as PostgreSQL takes it; one beyond `i64` is no limit at all.
-fn limit(value: usize) -> i64 {
-    i64::try_from(value).unwrap_or(i64::MAX)
 }
 
 impl PostgresStore {

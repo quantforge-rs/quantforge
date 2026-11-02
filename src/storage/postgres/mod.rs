@@ -15,13 +15,17 @@
 //!   forward, one transaction per step (`docs/storage-schema.md`).
 //! - `candles`: `CandleStore`, with SQLite's semantics and batches that
 //!   mark the windows they change in the same transaction.
+//! - `journal`: `RunJournalStore`, one statement per call.
+//! - `control`: `StoreControl`, the store's record and legacy runs.
 //!
-//! [`PostgresStore`] connects, answers, creates its schema and stores
-//! candles. The journal and segment stores come with QUA-123 and QUA-112,
-//! and QUA-116 makes it selectable through `storage::factory`.
+//! [`PostgresStore`] connects, answers, creates its schema, and stores
+//! candles and runs. The segment store comes with QUA-112, and QUA-116
+//! makes it selectable through `storage::factory`.
 
 mod bridge;
 mod candles;
+mod control;
+mod journal;
 mod migrate;
 mod runner;
 mod schema;
@@ -36,6 +40,11 @@ use tracing::info;
 use crate::ports::StorageError;
 use crate::storage::settings::PostgresSettings;
 use bridge::{Bridge, Effect};
+
+/// A limit as PostgreSQL takes it; one beyond `i64` is no limit at all.
+fn limit(value: usize) -> i64 {
+    i64::try_from(value).unwrap_or(i64::MAX)
+}
 
 /// A PostgreSQL database behind the bridge; see the module docs. Dropping
 /// it closes its pool, then stops its runtime in the background, so it may

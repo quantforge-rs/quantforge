@@ -89,7 +89,7 @@ market by market; where the other order differs, it is in brackets.
 | `candles.max_open_time` | `max_open_time_ms`, and a segment refresh's tip | Index Only Scan Backward on `candles_pkey` | 1 | 4 | 0.04 ms (0.06) |
 | `candles.upsert` | `upsert_candles` | The batch read from its unnested arrays, conflicts checked on `candles_pkey` | | | |
 | `candles.window` | a refresh reading one window | Bitmap Index Scan on `candles_pkey`, then a sort | 1,440 | 36 (190) | 0.52 ms (0.78) |
-| `runs.latest` | `latest_run_for_market` | Index Scan on `idx_bot_runs_market`, the tie-breakers sorted incrementally | 1 of 3 | 13 | 0.04 ms |
+| `runs.latest` | `latest_run_for_market` | Index Scan on `idx_bot_runs_market`, the tie-breakers sorted incrementally, run IDs in byte order | 1 of 3 | 13 | 0.04 ms |
 | `runs.by_id` | `load_run_state`, `run_identity` | Index Scan on `bot_runs_pkey` | 1 | 3 | 0.03 ms (0.02) |
 | `runs.legacy` | `StoreControl::legacy_runs` (`store status`) | Seq Scan of `bot_runs`, then a sort | 0 of 2,000 | 54 | 0.23 ms (0.20) |
 | `order_events.latest` | `list_order_events` | Bitmap Index Scan on `idx_order_events_run`, then a sort | 50 | 56 | 0.15 ms (0.13) |

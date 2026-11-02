@@ -85,11 +85,16 @@ cases of [segment-spec.md](segment-spec.md#the-shared-cases).
 - `journal.saved_after_created`: a run is saved only after it was created
 - `journal.save_keeps_identity`: saving replaces the state and never the
   identity
+- `journal.last_save_wins`: the last save replaces the state whatever its
+  times, and a refused create changes nothing: one process drives a run at a
+  time
 - `journal.latest_per_market`: the latest run is the last updated of its
   market and strategy; another strategy, interval, venue or family never
   wins
 - `journal.latest_tie`: of runs updated in the same millisecond the one
   started later is the latest, then the greater run ID
+- `journal.latest_tie_by_bytes`: on a tie of both times, run IDs compare
+  byte by byte, so run-a outranks run-B whatever the database's collation
 - `journal.order_events`: order events read back newest first, up to the
   limit, exactly as appended
 - `journal.duplicate_event`: an order event appended twice is listed twice
@@ -150,6 +155,34 @@ segment stores both exist.
 - `segments.spec_cases`: every case of the segment spec, stored and closed
   by a later candle, packs to the case's name
 <!-- end: segments -->
+
+### The store's record
+
+`StoreControl`: the store's own record, its migration log, the environment
+it is bound to, and the legacy runs an operator adopts. Its scenarios write
+runs too, so a backend runs them once its journal and store record both
+exist.
+
+<!-- begin: control -->
+- `control.new_store`: a new store is inactive at epoch 0, bound to no
+  environment, and logs one step to the current schema from 0
+- `control.bound_for_life`: a store is bound to one environment for life;
+  binding it again to the same one changes nothing
+- `control.legacy_runs_listed`: legacy runs are listed oldest first, then by
+  run ID, with the mode only a run that recorded one has; recorded runs are
+  not
+- `control.adopt_a_legacy_run`: an adopted legacy run takes the verified
+  identity, loads, matches only that identity, and keeps its original state
+  beside it
+- `control.adopt_states_the_missing_mode`: a legacy run that recorded no
+  execution mode is adopted only with the mode the operator states, then
+  loads with it
+- `control.adopt_refusals`: only a legacy run is adopted, only under an
+  adopted identity, and a run that recorded its mode refuses another; a
+  refusal changes nothing
+- `control.store_id_kept`: a store's ID is 32 lowercase hex digits and stays
+  the same when the store is opened again
+<!-- end: control -->
 
 ## The fixtures
 
@@ -271,12 +304,17 @@ pg_ctl -D pg -w stop
 
 Each fixture's store, and each one `reopen` opens, has run
 `PostgresStore::init`, so every scenario starts on a new store's schema
-(QUA-125). The candle group runs on PostgreSQL (QUA-124); QUA-123 switches
-on the journal group, and QUA-112 the segment group and the PostgreSQL race
+(QUA-125). The candle group runs on PostgreSQL (QUA-124), and so do the
+journal and store-record groups (QUA-123), once more on a database whose
+collation is `en_US.UTF-8`, where only byte order keeps a tie on run IDs
+SQLite's; QUA-112 switches on the segment group and the PostgreSQL race
 stepper. QUA-118 runs them in CI against a PostgreSQL service container.
 The same command also runs the schema's own tests, the candle store's
-writes raced against a refresh's write-back, and the query plans of
-[postgres-query-plans.md](postgres-query-plans.md).
+writes raced against a refresh's write-back, writers appending to one run
+at once, and the query plans of
+[postgres-query-plans.md](postgres-query-plans.md); `tests/live_engine.rs`
+runs the engine's dry runs and resume checks on PostgreSQL with the same
+variable.
 
 ## The races
 

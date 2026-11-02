@@ -11,125 +11,31 @@
 //!
 //! Every fixture's store has run `init`, so the schema of QUA-125 is in
 //! place. Each port's group runs here once its store lands, as `sqlite.rs`
-//! calls them: the candle group since QUA-124, the journal group with
-//! QUA-123, and the segment group with QUA-112.
+//! calls them: the candle group since QUA-124, the journal and store-record
+//! groups since QUA-123, and the segment group with QUA-112.
 //!
 //! - `schema`: the schema `init` creates, held to the doc: a repeat, stores
 //!   starting together, the refusals, exact round trips, and identities
 //!   that never collide.
 //! - `candles`: a correction racing a refresh's write-back, which never
 //!   leaves its window published as clean.
+//! - `journal`: the journal and store record under a linguistic collation,
+//!   and writers appending to one run at once.
+//! - `server`: the server and its isolated databases, shared with the live
+//!   engine's tests.
 //! - `plans`: representative data, and the index each query the ports run
 //!   is planned on; the evidence `docs/postgres-query-plans.md` records.
 
 mod candles;
+mod journal;
 mod plans;
 mod schema;
+pub mod server;
 
 use quantforge::storage::postgres::PostgresStore;
-use quantforge::storage::settings::PostgresSettings;
-use quantforge::{
-    ConnectionString, StorageBackend, StorageRequest, StorageSettings, StoreOwner, Supplied,
-};
-use std::future::Future;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use tokio_postgres::{Client, NoTls, SimpleQueryMessage};
 
 use crate::conformance::{self, Backend, Fixture, Raw};
-
-/// The server the isolated databases are created on, or `None` to skip.
-fn server_url() -> Option<String> {
-    std::env::var(VARIABLE).ok().filter(|url| !url.is_empty())
-}
-
-const VARIABLE: &str = "QUANTFORGE_TEST_POSTGRES_URL";
-
-/// Runs one piece of async work on a runtime of its own: the raw view is
-/// synchronous, like the ports.
-fn block_on<F: Future>(work: F) -> F::Output {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("a runtime")
-        .block_on(work)
-}
-
-async fn client(url: &str) -> Client {
-    let (client, connection) = tokio_postgres::connect(url, NoTls)
-        .await
-        .unwrap_or_else(|error| panic!("cannot reach {VARIABLE}'s server: {error}"));
-    tokio::spawn(async move {
-        let _ = connection.await;
-    });
-    client
-}
-
-/// Every row of `sql`, each value as the server's text, NULL as `None`.
-fn query(url: &str, sql: &str) -> Vec<Vec<Option<String>>> {
-    block_on(async {
-        let messages = client(url)
-            .await
-            .simple_query(sql)
-            .await
-            .unwrap_or_else(|error| panic!("{sql}: {error:?}"));
-        messages
-            .into_iter()
-            .filter_map(|message| match message {
-                SimpleQueryMessage::Row(row) => Some(
-                    (0..row.len())
-                        .map(|index| row.get(index).map(str::to_string))
-                        .collect(),
-                ),
-                _ => None,
-            })
-            .collect()
-    })
-}
-
-/// A database of its own on the server, dropped with it.
-pub struct IsolatedDatabase {
-    server: String,
-    pub name: String,
-    pub url: String,
-}
-
-impl IsolatedDatabase {
-    pub fn create(server: &str) -> Self {
-        static NEXT: AtomicUsize = AtomicUsize::new(0);
-        let name = format!(
-            "qf_conformance_{}_{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        );
-        query(server, &format!("CREATE DATABASE {name}"));
-        let mut url = url::Url::parse(server).expect("the server URL");
-        url.set_path(&format!("/{name}"));
-        Self {
-            server: server.to_string(),
-            name,
-            url: url.to_string(),
-        }
-    }
-}
-
-impl Drop for IsolatedDatabase {
-    fn drop(&mut self) {
-        // Never a second panic while a failed scenario unwinds.
-        let drop = format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.name);
-        let _ = std::panic::catch_unwind(|| query(&self.server, &drop));
-    }
-}
-
-/// The settings the store opens the isolated database with.
-fn settings(url: &str) -> PostgresSettings {
-    let mut request = StorageRequest::default();
-    request.backend = Some(Supplied::new(StorageBackend::Postgres, "--storage"));
-    request.postgres_url = Some(Supplied::new(ConnectionString::new(url), VARIABLE));
-    match StorageSettings::resolve(request, StoreOwner::Command).expect("settings") {
-        StorageSettings::Postgres(settings) => *settings,
-        other => panic!("not postgres: {other}"),
-    }
-}
+pub use server::{IsolatedDatabase, VARIABLE, block_on, client, query, server_url, settings};
 
 /// A `PostgresStore` on a database of its own.
 pub struct Postgres;
@@ -140,21 +46,25 @@ impl Backend for Postgres {
 
     fn fresh() -> Fixture<PostgresStore> {
         let server = server_url().unwrap_or_else(|| panic!("{VARIABLE} is unset"));
-        let database = IsolatedDatabase::create(&server);
-        let reopen = {
-            let settings = settings(&database.url);
-            move || {
-                let store = PostgresStore::connect(&settings).expect("the isolated database");
-                store.init().expect("init");
-                store
-            }
-        };
-        Fixture {
-            store: reopen(),
-            raw: Box::new(PostgresRaw(database.url.clone())),
-            reopen: Box::new(reopen),
-            guard: Box::new(database),
+        fixture_on(IsolatedDatabase::create(&server))
+    }
+}
+
+/// A fixture whose store has run `init` on `database`.
+pub fn fixture_on(database: IsolatedDatabase) -> Fixture<PostgresStore> {
+    let reopen = {
+        let settings = settings(&database.url);
+        move || {
+            let store = PostgresStore::connect(&settings).expect("the isolated database");
+            store.init().expect("init");
+            store
         }
+    };
+    Fixture {
+        store: reopen(),
+        raw: Box::new(PostgresRaw(database.url.clone())),
+        reopen: Box::new(reopen),
+        guard: Box::new(database),
     }
 }
 
@@ -246,4 +156,22 @@ fn candles() {
         return;
     }
     conformance::candles::<Postgres>();
+}
+
+#[test]
+fn journal() {
+    if server_url().is_none() {
+        eprintln!("skipping: {VARIABLE} is unset");
+        return;
+    }
+    conformance::journal::<Postgres>();
+}
+
+#[test]
+fn control() {
+    if server_url().is_none() {
+        eprintln!("skipping: {VARIABLE} is unset");
+        return;
+    }
+    conformance::control::<Postgres>();
 }
