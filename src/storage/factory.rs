@@ -7,11 +7,10 @@
 //!
 //! A backend with no provider is refused, and no other provider is asked
 //! instead: selecting PostgreSQL never ends in a SQLite file. The built-in
-//! factory registers SQLite only. PostgreSQL's provider is registered by
-//! QUA-116 once its candle, journal and segment stores exist (QUA-124,
-//! QUA-123, QUA-112); until then its settings are checked and the open is
-//! refused. The execution store (ALG-738) is the next thing a host opens
-//! from the same settings, in the same process, through this factory.
+//! factory registers SQLite only. PostgreSQL's stores exist, and QUA-116
+//! registers their provider; until then its settings are checked and the
+//! open is refused. The execution store (ALG-738) is the next thing a host
+//! opens from the same settings, in the same process, through this factory.
 
 use crate::ports::{CandleStore, StorageError};
 use crate::storage::SqliteStore;

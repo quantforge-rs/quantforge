@@ -2,10 +2,11 @@
 //! `docs/storage-schema.md` ("Segments on PostgreSQL"): a batch writes its
 //! candles and the marks of the windows they change in one transaction,
 //! and every mark is a fresh revision. A refresh's write-back is played
-//! here in raw SQL, as QUA-112's store will run it, against the real
-//! `upsert_candles`: a correction racing it either waits for it and then
-//! marks the window again, or commits first and stops it publishing, so a
-//! window is never published as clean over candles it does not pack.
+//! here in raw SQL, one statement at a time as the segment store runs it,
+//! against the real `upsert_candles`: a correction racing it either waits
+//! for it and then marks the window again, or commits first and stops it
+//! publishing, so a window is never published as clean over candles it does
+//! not pack.
 //! Without `QUANTFORGE_TEST_POSTGRES_URL` every test skips.
 
 use quantforge::storage::postgres::PostgresStore;

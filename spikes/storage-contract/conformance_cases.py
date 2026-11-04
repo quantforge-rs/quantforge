@@ -293,8 +293,10 @@ class Model:
         return [c for c in self.rows(market) if start <= c["open_time_ms"] < end]
 
     def pack(self, market, start):
-        """('blocked', None), ('keep', None) or ('write', ref), as packing finds it."""
+        """('blocked', None), ('clear', None), ('keep', None) or ('write', ref), as packing finds it."""
         candles = self.window_candles(market, start)
+        if not candles:
+            return "clear", None
         try:
             data = payload(candles)
         except ValueError:
@@ -318,6 +320,8 @@ class Model:
             ref = dict(ref)
             self.segments.setdefault(ref["hash"], ref.pop("_payload"))
             self.index.setdefault(market, {})[start] = ref
+        elif kind == "clear":
+            self.index.get(market, {}).pop(start, None)
         del self.dirty[market][start]
 
     def refresh(self, market):
@@ -1410,6 +1414,49 @@ def segment_scenarios():
     s.load_segment(before["segments"][0]["hash"])
     out.append(s)
 
+    s = Scenario(
+        "segments.correction_keeps_old_segment",
+        "a corrected window is indexed under its new segment, and the segment it replaced stays stored and opens under its own name",
+    )
+    s.upsert("spot", series={"from": T, "count": 1441})
+    s.refresh("spot")
+    old = s.resolve("spot", T, T)["segments"][0]["hash"]
+    s.upsert("spot", series={"from": T, "count": 1, "close": "999"})
+    s.refresh("spot")
+    new = s.resolve("spot", T, T)["segments"][0]["hash"]
+    assert old != new
+    s.load_segment(old)
+    s.load_segment(new)
+    s.raw_select("SELECT CAST(COUNT(*) AS TEXT) FROM segments", [["2"]])
+    s.raw_select(f"SELECT hash FROM segment_index WHERE {where('spot')}", [[new]])
+    out.append(s)
+
+    s = Scenario(
+        "segments.emptied_window",
+        "a marked window with no candles left loses its index entry, and its segment stays stored",
+    )
+    s.upsert("spot", series={"from": T, "count": 3})
+    s.upsert("spot", series={"from": T + DAY, "count": 1, "close": "1"})
+    s.refresh("spot")
+    packed = s.resolve("spot", T, T + 2 * MINUTE)["segments"][0]["hash"]
+    # Written behind the store's back, as a repair might: the candles go, and
+    # the mark a writer would leave comes.
+    s.raw_execute(f"DELETE FROM candles WHERE {where('spot')} AND open_time_ms < {T + DAY}")
+    exchange, symbol, interval = MARKETS["spot"]
+    s.raw_execute(
+        "INSERT INTO segment_dirty(exchange, symbol, interval, window_start_ms) "
+        f"VALUES ('{exchange}', '{symbol}', '{interval}', {T})"
+    )
+    s.model.candles["spot"] = {t: c for t, c in s.model.candles["spot"].items() if t >= T + DAY}
+    s.model.marks += 1
+    s.model.dirty.setdefault("spot", {})[T] = s.model.marks
+    s.resolve("spot", T, T + 2 * MINUTE)
+    s.refresh("spot")
+    s.resolve("spot", T, T + 2 * MINUTE)
+    s.load_segment(packed)
+    s.raw_select(f"SELECT CAST(COUNT(*) AS TEXT) FROM segment_index WHERE {where('spot')}", [["0"]])
+    out.append(s)
+
     s = Scenario("segments.scale_is_a_change", "a candle written again with another scale packs to a new segment")
     s.upsert("spot", series={"from": T, "count": 1, "close": "1.10"})
     s.upsert("spot", series={"from": T + DAY, "count": 1, "close": "1"})
@@ -1434,6 +1481,7 @@ def segment_scenarios():
         (T + 10 * DAY, T + 11 * DAY),
         (T, T + 3 * DAY - 1),
         (T + 1, T),
+        (-(2**63), 2**63 - 1),
     ]:
         s.resolve("spot", first, last)
     out.append(s)
@@ -1492,6 +1540,26 @@ def segment_scenarios():
         [["binance_linear"], ["binance_spot"]],
     )
     out.append(s)
+
+    s = Scenario(
+        "segments.product_lines_apart",
+        "the same symbol on two product lines keeps its own windows: a refresh of one packs none of the other's, and a change to one leaves the other's plan as it was",
+    )
+    for market, close in [("spot", "1.5"), ("linear", "2.5")]:
+        s.upsert(market, series={"from": T, "count": 3, "close": close})
+        s.upsert(market, series={"from": T + DAY, "count": 1, "close": close})
+    s.refresh("spot")
+    s.resolve("spot", T, T + DAY)
+    s.resolve("linear", T, T + DAY)
+    s.refresh("linear")
+    s.resolve("linear", T, T + DAY)
+    s.upsert("linear", series={"from": T, "count": 1, "close": "9"})
+    s.resolve("spot", T, T + DAY)
+    s.resolve("linear", T, T + DAY)
+    s.refresh("spot")
+    s.refresh("linear")
+    s.resolve("linear", T, T + DAY)
+    out.append(s)
     return out
 
 
@@ -1537,20 +1605,25 @@ def races():
         }
     )
 
+    def settle(model, reads):
+        """Writes each read back in turn, and what each answers."""
+        outcomes = []
+        for mark, packed in reads:
+            current = model.dirty["spot"].get(window_start)
+            if current is None:
+                outcomes.append("elsewhere")
+            elif current != mark:
+                outcomes.append("dirty")
+            else:
+                model.write_back("spot", window_start, packed)
+                outcomes.append("done")
+        return outcomes
+
     model = Model()
     steps = setup(model)
     first = (model.dirty["spot"][window_start], model.pack("spot", window_start))
     second = (model.dirty["spot"][window_start], model.pack("spot", window_start))
-    outcomes = []
-    for mark, packed in [first, second]:
-        current = model.dirty["spot"].get(window_start)
-        if current is None:
-            outcomes.append("elsewhere")
-        elif current != mark:
-            outcomes.append("dirty")
-        else:
-            model.write_back("spot", window_start, packed)
-            outcomes.append("done")
+    outcomes = settle(model, [first, second])
     plan, _ = model.resolve("spot", 0, 2 * DAY)
     out.append(
         {
@@ -1563,6 +1636,55 @@ def races():
                 {"op": "read", "as": "b"},
                 {"op": "write_back", "of": "a", "expect": outcomes[0]},
                 {"op": "write_back", "of": "b", "expect": outcomes[1]},
+            ],
+            "after": [{"op": "resolve", "market": "spot", "first": 0, "last": 2 * DAY, "expect": plan}],
+        }
+    )
+
+    model = Model()
+    steps = setup(model)
+    read = (model.dirty["spot"][window_start], model.pack("spot", window_start))
+    same = [candle(MINUTE, "1", trades=7)]
+    model.upsert("spot", same)
+    outcomes = settle(model, [read])
+    assert outcomes == ["done"]
+    plan, _ = model.resolve("spot", 0, 2 * DAY)
+    out.append(
+        {
+            "id": "races.identical_write_between_read_and_write_back",
+            "doc": "a write that changes nothing between a refresh's read and its write-back leaves the mark as it was, and the write-back publishes",
+            "setup": steps,
+            "window_start_ms": window_start,
+            "steps": [
+                {"op": "read", "as": "a"},
+                {"op": "upsert", "market": "spot", "candles": same},
+                {"op": "write_back", "of": "a", "expect": outcomes[0]},
+            ],
+            "after": [{"op": "resolve", "market": "spot", "first": 0, "last": 2 * DAY, "expect": plan}],
+        }
+    )
+
+    model = Model()
+    steps = setup(model)
+    stale = (model.dirty["spot"][window_start], model.pack("spot", window_start))
+    later = [candle(MINUTE, "2", trades=7)]
+    model.upsert("spot", later)
+    fresh = (model.dirty["spot"][window_start], model.pack("spot", window_start))
+    outcomes = settle(model, [fresh, stale])
+    assert outcomes == ["done", "elsewhere"]
+    plan, _ = model.resolve("spot", 0, 2 * DAY)
+    out.append(
+        {
+            "id": "races.stale_refresh_after_a_newer_one",
+            "doc": "a refresh that read before a correction finds the window done elsewhere once a later refresh published it, and publishes nothing over it",
+            "setup": steps,
+            "window_start_ms": window_start,
+            "steps": [
+                {"op": "read", "as": "a"},
+                {"op": "upsert", "market": "spot", "candles": later},
+                {"op": "read", "as": "b"},
+                {"op": "write_back", "of": "b", "expect": outcomes[0]},
+                {"op": "write_back", "of": "a", "expect": outcomes[1]},
             ],
             "after": [{"op": "resolve", "market": "spot", "first": 0, "last": 2 * DAY, "expect": plan}],
         }

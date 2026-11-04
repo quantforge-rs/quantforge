@@ -86,6 +86,20 @@ impl Raw for SqliteRaw {
             .map(|row| row.into_iter().next().flatten().expect("a type"))
             .collect()
     }
+
+    fn blob(&self, bytes: &[u8]) -> String {
+        format!("X'{}'", hex::encode(bytes))
+    }
+
+    fn write_refusal(&self, table: &str) -> [String; 2] {
+        [
+            format!(
+                "CREATE TRIGGER refuse_writes BEFORE INSERT ON {table} \
+                 BEGIN SELECT RAISE(ABORT, 'refused'); END"
+            ),
+            "DROP TRIGGER refuse_writes".to_string(),
+        ]
+    }
 }
 
 #[test]

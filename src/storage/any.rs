@@ -3,10 +3,9 @@
 //! trait object cannot stand in for the others; this enum implements each
 //! port by handing the call to its backend (ADR 0001).
 //!
-//! SQLite is its only variant today. PostgreSQL joins when its candle,
-//! journal and segment stores exist (QUA-124, QUA-123, QUA-112): QUA-116
-//! adds the variant, one arm in `delegate!`, and its provider in
-//! [`crate::storage::factory`].
+//! PostgreSQL is a variant of its own with the `postgres` feature, every
+//! store of it behind the same ports. Hosts cannot select it yet: QUA-116
+//! adds its provider in [`crate::storage::factory`].
 
 use crate::model::{
     BotRunState, Candle, ClosedTrade, Environment, ExchangeOrder, ExecutionMode, LegacyRun,
@@ -17,6 +16,8 @@ use crate::ports::{
     CandleQuery, CandleStore, RunJournalStore, SegmentStore, StorageError, StoreControl,
 };
 use crate::storage::SqliteStore;
+#[cfg(feature = "postgres")]
+use crate::storage::postgres::PostgresStore;
 use crate::storage::settings::StorageBackend;
 
 /// An open store of any backend; see the module docs.
@@ -24,6 +25,8 @@ use crate::storage::settings::StorageBackend;
 #[non_exhaustive]
 pub enum AnyStore {
     Sqlite(SqliteStore),
+    #[cfg(feature = "postgres")]
+    Postgres(PostgresStore),
 }
 
 impl AnyStore {
@@ -31,6 +34,8 @@ impl AnyStore {
     pub fn backend(&self) -> StorageBackend {
         match self {
             Self::Sqlite(_) => StorageBackend::Sqlite,
+            #[cfg(feature = "postgres")]
+            Self::Postgres(_) => StorageBackend::Postgres,
         }
     }
 }
@@ -41,6 +46,8 @@ macro_rules! delegate {
     ($any:expr, $store:ident => $call:expr) => {
         match $any {
             AnyStore::Sqlite($store) => $call,
+            #[cfg(feature = "postgres")]
+            AnyStore::Postgres($store) => $call,
         }
     };
 }

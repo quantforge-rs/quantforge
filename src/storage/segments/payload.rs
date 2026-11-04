@@ -21,8 +21,8 @@ const MAGIC: &[u8; 8] = b"QFSEGMNT";
 const DECIMALS: [&str; 5] = ["open", "high", "low", "close", "volume"];
 
 /// A candle with its decimals as written text: open, high, low, close and
-/// volume, in that order. The SQLite store keeps candles this way and packs
-/// the text as it is, never reading it as a number in between.
+/// volume, in that order. The stores keep candles this way and pack the
+/// text as it is, never reading it as a number in between.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TextCandle {
     pub(crate) open_time_ms: TimestampMs,

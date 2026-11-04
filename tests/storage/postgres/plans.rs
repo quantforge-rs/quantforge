@@ -25,9 +25,8 @@ struct Query {
 }
 
 /// Every statement shape the SQLite stores run, as the PostgreSQL stores
-/// run it: the candle store's, the journal's and the store record's own
-/// statements (`src/storage/postgres/`), and the segment store's as QUA-112
-/// will. The values pick one market, run and window of the data.
+/// run it (`src/storage/postgres/`). The values pick one market, run and
+/// window of the data.
 const QUERIES: &[Query] = &[
     Query {
         id: "candles.load",
@@ -149,7 +148,8 @@ const QUERIES: &[Query] = &[
         write: false,
         sql: "SELECT MIN(window_start_ms) FROM segment_dirty \
               WHERE exchange = 'binance_spot' AND symbol = 'BTCUSDT' AND interval = '1m' \
-                AND window_start_ms < 1790812800000 AND window_start_ms > 1750000000000",
+                AND (CAST(1750000000000 AS bigint) IS NULL OR window_start_ms > 1750000000000) \
+                AND (CAST(1790812800000 AS bigint) IS NULL OR window_start_ms < 1790812800000)",
     },
     Query {
         id: "segments.mark",
@@ -171,6 +171,16 @@ const QUERIES: &[Query] = &[
                 AND window_start_ms = 1780704000000",
     },
     Query {
+        id: "segments.lock_mark",
+        indexes: &["segment_dirty_exchange_symbol_interval_window_start_ms_key"],
+        never_scanned: &["segment_dirty"],
+        write: false,
+        sql: "SELECT id FROM segment_dirty \
+              WHERE exchange = 'binance_spot' AND symbol = 'BTCUSDT' AND interval = '1m' \
+                AND window_start_ms = 1780704000000 \
+              FOR UPDATE",
+    },
+    Query {
         id: "segments.entry_of_window",
         indexes: &["segment_index_pkey"],
         never_scanned: &["segment_index"],
@@ -188,7 +198,7 @@ const QUERIES: &[Query] = &[
                      s.payload_len, length(s.data) \
               FROM segment_index i JOIN segments s ON s.hash = i.hash \
               WHERE i.exchange = 'binance_spot' AND i.symbol = 'BTCUSDT' AND i.interval = '1m' \
-                AND i.window_start_ms < 1790208000000 \
+                AND i.window_start_ms >= 1787616000000 AND i.window_start_ms < 1790208000000 \
                 AND i.last_open_ms >= 1787616000000 AND i.first_open_ms <= 1790208000000 \
               ORDER BY i.window_start_ms ASC",
     },
@@ -199,6 +209,46 @@ const QUERIES: &[Query] = &[
         write: false,
         sql: "SELECT data FROM segments \
               WHERE hash = 'sha256:0000000000000000000000000000000000000000000000000000000000000400'",
+    },
+    Query {
+        id: "segments.store",
+        indexes: &["segments_pkey"],
+        never_scanned: &["segments"],
+        write: true,
+        sql: "INSERT INTO segments(hash, format, payload_len, data) \
+              VALUES ('sha256:0000000000000000000000000000000000000000000000000000000000000400', \
+                      1, 2048, '\\x00') \
+              ON CONFLICT (hash) DO NOTHING",
+    },
+    Query {
+        id: "segments.index",
+        indexes: &["segment_index_pkey"],
+        never_scanned: &["segment_index"],
+        write: true,
+        sql: "INSERT INTO segment_index(exchange, symbol, interval, window_start_ms, \
+                                        first_open_ms, last_open_ms, bar_count, hash) \
+              VALUES ('binance_spot', 'BTCUSDT', '1m', 1780704000000, 1780704000000, \
+                      1780790340000, 1440, \
+                      'sha256:0000000000000000000000000000000000000000000000000000000000000400') \
+              ON CONFLICT (exchange, symbol, interval, window_start_ms) DO UPDATE SET \
+                first_open_ms = excluded.first_open_ms, last_open_ms = excluded.last_open_ms, \
+                bar_count = excluded.bar_count, hash = excluded.hash",
+    },
+    Query {
+        id: "segments.unindex",
+        indexes: &["segment_index_pkey"],
+        never_scanned: &["segment_index"],
+        write: true,
+        sql: "DELETE FROM segment_index \
+              WHERE exchange = 'binance_spot' AND symbol = 'BTCUSDT' AND interval = '1m' \
+                AND window_start_ms = 1780704000000",
+    },
+    Query {
+        id: "segments.unmark",
+        indexes: &["segment_dirty_pkey"],
+        never_scanned: &["segment_dirty"],
+        write: true,
+        sql: "DELETE FROM segment_dirty WHERE id = 4000",
     },
 ];
 

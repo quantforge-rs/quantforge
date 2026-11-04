@@ -4219,6 +4219,228 @@
    ]
   },
   {
+   "id": "segments.correction_keeps_old_segment",
+   "doc": "a corrected window is indexed under its new segment, and the segment it replaced stays stored and opens under its own name",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 1441
+     },
+     "written": 1441
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792454400000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+        "payload_len": 92176
+       }
+      ],
+      "tip": null
+     }
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 1,
+      "close": "999"
+     },
+     "written": 1
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792454400000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:f1054780fbae5733e754dfbd27ccd726ff5aeeaf46c79d56bb5d6726c0319f68",
+        "payload_len": 92164
+       }
+      ],
+      "tip": null
+     }
+    },
+    {
+     "op": "load_segment",
+     "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+     "expect": {
+      "bar_count": 1440
+     }
+    },
+    {
+     "op": "load_segment",
+     "hash": "sha256:f1054780fbae5733e754dfbd27ccd726ff5aeeaf46c79d56bb5d6726c0319f68",
+     "expect": {
+      "bar_count": 1440
+     }
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT CAST(COUNT(*) AS TEXT) FROM segments",
+     "expect": [
+      [
+       "2"
+      ]
+     ]
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT hash FROM segment_index WHERE exchange = 'binance_spot' AND symbol = 'BTCUSDT' AND interval = '1m'",
+     "expect": [
+      [
+       "sha256:f1054780fbae5733e754dfbd27ccd726ff5aeeaf46c79d56bb5d6726c0319f68"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "segments.emptied_window",
+   "doc": "a marked window with no candles left loses its index entry, and its segment stays stored",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 3
+     },
+     "written": 3
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792540800000,
+      "count": 1,
+      "close": "1"
+     },
+     "written": 1
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792454520000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792454520000,
+        "bar_count": 3,
+        "hash": "sha256:ed9522e11f902b8262101847f7afcac759eb7bda592fc217704989b52d11a1c8",
+        "payload_len": 208
+       }
+      ],
+      "tip": null
+     }
+    },
+    {
+     "op": "raw_execute",
+     "sql": "DELETE FROM candles WHERE exchange = 'binance_spot' AND symbol = 'BTCUSDT' AND interval = '1m' AND open_time_ms < 1792540800000"
+    },
+    {
+     "op": "raw_execute",
+     "sql": "INSERT INTO segment_dirty(exchange, symbol, interval, window_start_ms) VALUES ('binance_spot', 'BTCUSDT', '1m', 1792454400000)"
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792454520000,
+     "expect": {
+      "segments": [],
+      "tip": {
+       "first_open_ms": 1792454400000,
+       "last_open_ms": 1792454520000
+      }
+     }
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792454520000,
+     "expect": {
+      "segments": [],
+      "tip": null
+     }
+    },
+    {
+     "op": "load_segment",
+     "hash": "sha256:ed9522e11f902b8262101847f7afcac759eb7bda592fc217704989b52d11a1c8",
+     "expect": {
+      "bar_count": 3
+     }
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT CAST(COUNT(*) AS TEXT) FROM segment_index WHERE exchange = 'binance_spot' AND symbol = 'BTCUSDT' AND interval = '1m'",
+     "expect": [
+      [
+       "0"
+      ]
+     ]
+    }
+   ]
+  },
+  {
    "id": "segments.scale_is_a_change",
    "doc": "a candle written again with another scale packs to a new segment",
    "steps": [
@@ -4513,6 +4735,44 @@
      "refused": {
       "kind": "invalid_argument",
       "contains": "after the last"
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": -9223372036854775808,
+     "last": 9223372036854775807,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792540740000,
+        "bar_count": 1440,
+        "hash": "sha256:b0389716303780806eeefca50e0737f98a7eeadefa9125f7adf1d94b93109ff9",
+        "payload_len": 92176
+       },
+       {
+        "window_start_ms": 1792540800000,
+        "first_open_ms": 1792540800000,
+        "last_open_ms": 1792627140000,
+        "bar_count": 1440,
+        "hash": "sha256:61905828f3361bae4025bc305214feff154cba67e182d22b7ed2853283fa5791",
+        "payload_len": 92176
+       },
+       {
+        "window_start_ms": 1792627200000,
+        "first_open_ms": 1792627200000,
+        "last_open_ms": 1792713540000,
+        "bar_count": 1440,
+        "hash": "sha256:8be15f4ea8d5fb9715ab01a26dd3160744cbe09e39010c616443292d22403a86",
+        "payload_len": 92176
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792713600000,
+       "last_open_ms": 9223372036854775807
+      }
      }
     }
    ]
@@ -4873,6 +5133,212 @@
      ]
     }
    ]
+  },
+  {
+   "id": "segments.product_lines_apart",
+   "doc": "the same symbol on two product lines keeps its own windows: a refresh of one packs none of the other's, and a change to one leaves the other's plan as it was",
+   "steps": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792454400000,
+      "count": 3,
+      "close": "1.5"
+     },
+     "written": 3
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "series": {
+      "from": 1792540800000,
+      "count": 1,
+      "close": "1.5"
+     },
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "linear",
+     "series": {
+      "from": 1792454400000,
+      "count": 3,
+      "close": "2.5"
+     },
+     "written": 3
+    },
+    {
+     "op": "upsert",
+     "market": "linear",
+     "series": {
+      "from": 1792540800000,
+      "count": 1,
+      "close": "2.5"
+     },
+     "written": 1
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792454520000,
+        "bar_count": 3,
+        "hash": "sha256:aec0437624c7870b974c64312f8975445c58fc0235b572834b80f8892705e0e4",
+        "payload_len": 172
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792540800000,
+       "last_open_ms": 1792540800000
+      }
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "linear",
+     "first": 1792454400000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [],
+      "tip": {
+       "first_open_ms": 1792454400000,
+       "last_open_ms": 1792540800000
+      }
+     }
+    },
+    {
+     "op": "refresh",
+     "market": "linear",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "linear",
+     "first": 1792454400000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792454520000,
+        "bar_count": 3,
+        "hash": "sha256:3a4266665eea561d60a7ae483275ad3b29e666159a655e00be1f84cfe0dd6786",
+        "payload_len": 172
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792540800000,
+       "last_open_ms": 1792540800000
+      }
+     }
+    },
+    {
+     "op": "upsert",
+     "market": "linear",
+     "series": {
+      "from": 1792454400000,
+      "count": 1,
+      "close": "9"
+     },
+     "written": 1
+    },
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 1792454400000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792454520000,
+        "bar_count": 3,
+        "hash": "sha256:aec0437624c7870b974c64312f8975445c58fc0235b572834b80f8892705e0e4",
+        "payload_len": 172
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792540800000,
+       "last_open_ms": 1792540800000
+      }
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "linear",
+     "first": 1792454400000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [],
+      "tip": {
+       "first_open_ms": 1792454400000,
+       "last_open_ms": 1792540800000
+      }
+     }
+    },
+    {
+     "op": "refresh",
+     "market": "spot",
+     "expect": {
+      "built": 0,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "refresh",
+     "market": "linear",
+     "expect": {
+      "built": 1,
+      "unchanged": 0,
+      "blocked": 0
+     }
+    },
+    {
+     "op": "resolve",
+     "market": "linear",
+     "first": 1792454400000,
+     "last": 1792540800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 1792454400000,
+        "first_open_ms": 1792454400000,
+        "last_open_ms": 1792454520000,
+        "bar_count": 3,
+        "hash": "sha256:9cb25fda40c3df47a3d6c660f5945a5a61529cfaffe8af7d1ece3d140167dc88",
+        "payload_len": 164
+       }
+      ],
+      "tip": {
+       "first_open_ms": 1792540800000,
+       "last_open_ms": 1792540800000
+      }
+     }
+    }
+   ]
   }
  ],
  "races": [
@@ -5068,6 +5534,203 @@
         "last_open_ms": 60000,
         "bar_count": 2,
         "hash": "sha256:8411acc8ca7c5bb62f465c9cf0f9d5d5b90091e9455abc517a328f5e7bdb2406",
+        "payload_len": 94
+       }
+      ],
+      "tip": {
+       "first_open_ms": 86400000,
+       "last_open_ms": 172800000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "races.identical_write_between_read_and_write_back",
+   "doc": "a write that changes nothing between a refresh's read and its write-back leaves the mark as it was, and the write-back publishes",
+   "setup": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 7
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 7
+      },
+      {
+       "open_time_ms": 86400000,
+       "close_time_ms": 86459999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 7
+      }
+     ]
+    }
+   ],
+   "window_start_ms": 0,
+   "steps": [
+    {
+     "op": "read",
+     "as": "a"
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 7
+      }
+     ]
+    },
+    {
+     "op": "write_back",
+     "of": "a",
+     "expect": "done"
+    }
+   ],
+   "after": [
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 0,
+     "last": 172800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 0,
+        "first_open_ms": 0,
+        "last_open_ms": 60000,
+        "bar_count": 2,
+        "hash": "sha256:8411acc8ca7c5bb62f465c9cf0f9d5d5b90091e9455abc517a328f5e7bdb2406",
+        "payload_len": 94
+       }
+      ],
+      "tip": {
+       "first_open_ms": 86400000,
+       "last_open_ms": 172800000
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "races.stale_refresh_after_a_newer_one",
+   "doc": "a refresh that read before a correction finds the window done elsewhere once a later refresh published it, and publishes nothing over it",
+   "setup": [
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 0,
+       "close_time_ms": 59999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 7
+      },
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 7
+      },
+      {
+       "open_time_ms": 86400000,
+       "close_time_ms": 86459999,
+       "open": "1",
+       "high": "1",
+       "low": "1",
+       "close": "1",
+       "volume": "1.000",
+       "trades": 7
+      }
+     ]
+    }
+   ],
+   "window_start_ms": 0,
+   "steps": [
+    {
+     "op": "read",
+     "as": "a"
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 60000,
+       "close_time_ms": 119999,
+       "open": "2",
+       "high": "2",
+       "low": "2",
+       "close": "2",
+       "volume": "1.000",
+       "trades": 7
+      }
+     ]
+    },
+    {
+     "op": "read",
+     "as": "b"
+    },
+    {
+     "op": "write_back",
+     "of": "b",
+     "expect": "done"
+    },
+    {
+     "op": "write_back",
+     "of": "a",
+     "expect": "elsewhere"
+    }
+   ],
+   "after": [
+    {
+     "op": "resolve",
+     "market": "spot",
+     "first": 0,
+     "last": 172800000,
+     "expect": {
+      "segments": [
+       {
+        "window_start_ms": 0,
+        "first_open_ms": 0,
+        "last_open_ms": 60000,
+        "bar_count": 2,
+        "hash": "sha256:207a3dac2df084651099d40e604bbfd30609db738466e17ad015e4d3e687c165",
         "payload_len": 94
        }
       ],

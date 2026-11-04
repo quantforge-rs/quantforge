@@ -6,10 +6,10 @@
 //! - [`any_store`]: the suite again through `AnyStore`, opened by the
 //!   built-in store factory, with the segment and store-control ports
 //!   compared against the SQLite store on the same file;
-//! - `postgres`: the suite on the PostgreSQL stores so far, an isolated
-//!   database per fixture on the server `QUANTFORGE_TEST_POSTGRES_URL`
-//!   names, with the schema, the candle store's writes against the segment
-//!   protocol, and the query plans;
+//! - `postgres`: the suite on the PostgreSQL stores, directly and through
+//!   `AnyStore`, an isolated database per fixture on the server
+//!   `QUANTFORGE_TEST_POSTGRES_URL` names, with the schema, the candle
+//!   store's writes against the segment protocol, and the query plans;
 //! - [`migration`]: the schema chain from every schema an earlier build
 //!   wrote, loaded from `tests/fixtures/sqlite/`, with every row carried
 //!   forward unchanged, and the controls that prove a failed step leaves

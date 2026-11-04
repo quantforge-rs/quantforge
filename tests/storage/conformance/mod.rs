@@ -57,6 +57,11 @@ pub trait Raw {
     /// column, distinct and sorted: SQLite's `typeof`, PostgreSQL's
     /// `pg_typeof`.
     fn value_types(&self, table: &str, column: &str) -> Vec<String>;
+    /// `bytes` as a literal of the backend's SQL.
+    fn blob(&self, bytes: &[u8]) -> String;
+    /// The statements that make `table` refuse every new row, and that let
+    /// it take them again.
+    fn write_refusal(&self, table: &str) -> [String; 2];
 }
 
 /// A check coded here rather than written in the fixture.
@@ -121,7 +126,7 @@ where
 /// The segment store's scenarios and checks; they write candles too.
 pub fn segments<B: Backend>()
 where
-    B::Store: CandleStore + SegmentStore,
+    B::Store: CandleStore + SegmentStore + Send,
 {
     let cases = cases::load();
     run_group::<B, _>(

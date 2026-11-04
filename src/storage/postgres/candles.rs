@@ -72,7 +72,7 @@ const RECENT: &str = r#"
     LIMIT $4
 "#;
 
-const MAX_OPEN_TIME: &str = r#"
+pub(super) const MAX_OPEN_TIME: &str = r#"
     SELECT MAX(open_time_ms) FROM candles
     WHERE exchange = $1 AND symbol = $2 AND interval = $3
 "#;
@@ -169,14 +169,14 @@ impl Batch {
 }
 
 /// A market's three key columns, owned, for work that runs on the bridge.
-struct Key {
-    exchange: String,
-    symbol: String,
-    interval: String,
+pub(super) struct Key {
+    pub(super) exchange: String,
+    pub(super) symbol: String,
+    pub(super) interval: String,
 }
 
 impl Key {
-    fn of(market: &MarketId) -> Self {
+    pub(super) fn of(market: &MarketId) -> Self {
         Self {
             exchange: market.exchange.as_str().to_string(),
             symbol: market.symbol.as_str().to_string(),
