@@ -17,10 +17,12 @@
 //!   mark the windows they change in the same transaction.
 //! - `journal`: `RunJournalStore`, one statement per call.
 //! - `control`: `StoreControl`, the store's record and legacy runs.
+//! - `segments`: `SegmentStore`, each window and plan read in one snapshot
+//!   and written back only over the revision it read.
 //!
-//! [`PostgresStore`] connects, answers, creates its schema, and stores
-//! candles and runs. The segment store comes with QUA-112, and QUA-116
-//! makes it selectable through `storage::factory`.
+//! [`PostgresStore`] connects, answers, creates its schema, and serves
+//! every storage port. QUA-116 makes it selectable through
+//! `storage::factory`.
 
 mod bridge;
 mod candles;
@@ -29,6 +31,7 @@ mod journal;
 mod migrate;
 mod runner;
 mod schema;
+mod segments;
 #[cfg(test)]
 mod tests;
 mod tls;

@@ -10,10 +10,12 @@
 //! the isolated database through `PostgresStore`, TLS rules and all.
 //!
 //! Every fixture's store has run `init`, so the schema of QUA-125 is in
-//! place. Each port's group runs here once its store lands, as `sqlite.rs`
-//! calls them: the candle group since QUA-124, the journal and store-record
-//! groups since QUA-123, and the segment group with QUA-112.
+//! place, and every port's group runs here, as `sqlite.rs` calls them: the
+//! candle group since QUA-124, the journal and store-record groups since
+//! QUA-123, and the segment group since QUA-112. `src/storage/postgres/tests/`
+//! steps the races through the store's own read and write-back.
 //!
+//! - `any_store`: every group again behind `AnyStore`.
 //! - `schema`: the schema `init` creates, held to the doc: a repeat, stores
 //!   starting together, the refusals, exact round trips, and identities
 //!   that never collide.
@@ -26,6 +28,7 @@
 //! - `plans`: representative data, and the index each query the ports run
 //!   is planned on; the evidence `docs/postgres-query-plans.md` records.
 
+mod any_store;
 mod candles;
 mod journal;
 mod plans;
@@ -89,6 +92,17 @@ impl Raw for PostgresRaw {
             .into_iter()
             .map(|row| row.into_iter().next().flatten().expect("a type"))
             .collect()
+    }
+
+    fn blob(&self, bytes: &[u8]) -> String {
+        format!("'\\x{}'", hex::encode(bytes))
+    }
+
+    fn write_refusal(&self, table: &str) -> [String; 2] {
+        [
+            format!("ALTER TABLE {table} ADD CONSTRAINT refuse_writes CHECK (false) NOT VALID"),
+            format!("ALTER TABLE {table} DROP CONSTRAINT refuse_writes"),
+        ]
     }
 }
 
@@ -174,4 +188,13 @@ fn control() {
         return;
     }
     conformance::control::<Postgres>();
+}
+
+#[test]
+fn segments() {
+    if server_url().is_none() {
+        eprintln!("skipping: {VARIABLE} is unset");
+        return;
+    }
+    conformance::segments::<Postgres>();
 }

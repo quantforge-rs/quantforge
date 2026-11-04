@@ -177,6 +177,8 @@ src/
 │   ├── any.rs                  AnyStore: every storage port, handed to the backend it holds
 │   ├── common.rs               what both backends share: exact decimal reads, a candle's window
 │   ├── runs.rs                 what both backends' journals share: identity columns, state, adoption
+│   ├── refresh.rs              what both backends' segment stores share: the refresh loop, packing, a plan
+│   ├── races.rs                the shared cases' races, stepped through any backend's read and write-back
 │   ├── factory.rs              StoreFactory: opens the selected backend through its registered provider
 │   ├── factory/                the factory's unit tests
 │   │   └── tests.rs            dispatch to test providers, and no fallback for a backend without one
@@ -190,11 +192,15 @@ src/
 │   │   ├── candles.rs          CandleStore: batches unnested into one upsert that marks changed windows
 │   │   ├── journal.rs          RunJournalStore: one statement per call, run IDs in byte order
 │   │   ├── control.rs          StoreControl: the store's record, its binding and legacy-run adoption
-│   │   └── tests/              the bridge's, the chain's and the candle store's unit tests
+│   │   ├── segments/           SegmentStore, by the protocol of docs/storage-schema.md
+│   │   │   ├── mod.rs          a plan in one snapshot, and loading a segment
+│   │   │   └── build.rs        a refresh's reads and writes: a snapshot, a write-back under the mark's lock
+│   │   └── tests/              the bridge's, the chain's and the stores' unit tests
 │   │       ├── mod.rs          every calling context, the refusals, and the TLS connector
 │   │       ├── candles.rs      a batch as one statement: the last duplicate, forced windows, sorted rows
 │   │       ├── database.rs     against a real database: pool bound, deadlines, drop, password, TLS
-│   │       └── migrate.rs      the chain over steps no build has: an upgrade, a failure, stores together
+│   │       ├── migrate.rs      the chain over steps no build has: an upgrade, a failure, stores together
+│   │       └── segments.rs     the races, a write-back waiting on a lock, reads that stay one snapshot
 │   ├── segments/               segment format 1: a window of candles, packed and named by its hash
 │   │   ├── mod.rs              windows, compression, the hash, opening a fetched segment, SegmentError
 │   │   └── payload.rs          the payload: candles as columns, exact decimal text, strict decoding
@@ -209,7 +215,7 @@ src/
 │       │   └── events.rs       order events and closed trades, and the schema-5 rewrite of their ids
 │       └── segments/           segment tables and the SegmentStore implementation
 │           ├── mod.rs          the tables, the dirty marks, resolving a range, loading a segment
-│           ├── build.rs        refresh: packs each dirty closed window outside the write lock
+│           ├── build.rs        a refresh's reads and writes: a deferred snapshot, a short write-back
 │           └── tests.rs        the shared conformance races, stepped through read, pack and write-back
 ├── sdk/                        the strategy boundary
 │   ├── mod.rs                  StrategyError and the re-exports
@@ -290,12 +296,11 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   [storage-conformance.md](storage-conformance.md) — the shared
   conformance suite, its scenarios read from
   `tests/fixtures/storage_conformance_cases.json`, run on the SQLite store
-  and through `AnyStore`, with an isolated PostgreSQL database per fixture
-  ready for the PostgreSQL stores; the schema chain from every earlier
-  schema in `tests/fixtures/sqlite/`; the PostgreSQL schema `init` creates,
-  its refusals, exact round trips, the candle, journal and store-record
-  groups, the journal and store-record groups again under a linguistic
-  collation, the candle store's writes
+  and through `AnyStore`; the schema chain from every earlier schema in
+  `tests/fixtures/sqlite/`; every group on PostgreSQL, an isolated database
+  per fixture, then again through `AnyStore`, and the journal and
+  store-record groups once more under a linguistic collation; the schema
+  `init` creates, its refusals, exact round trips, the candle store's writes
   raced against a refresh's write-back, writers appending to one run at
   once, and the query plans of
   [postgres-query-plans.md](postgres-query-plans.md) (`postgres/`); the

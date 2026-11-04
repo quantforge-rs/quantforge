@@ -5,10 +5,10 @@
 //! Every window below the tip, the window holding a market's newest candle,
 //! is either marked dirty or indexed under the name of exactly its current
 //! candles. Writers keep that true by marking a window in the transaction
-//! that changes its candles, and a refresh ([`build`]) by unmarking a
-//! window only in the transaction that indexes it, and only if no writer
-//! marked it again in between. A plan therefore trusts the index only below
-//! the lowest dirty window.
+//! that changes its candles, and a refresh ([`crate::storage::refresh`],
+//! over [`build`]) by unmarking a window only in the transaction that
+//! indexes it, and only if no writer marked it again in between. A plan
+//! therefore trusts the index only below the lowest dirty window.
 
 mod build;
 #[cfg(test)]
@@ -19,11 +19,11 @@ use std::collections::BTreeSet;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use super::{SqliteStore, to_from_sql_error};
-use crate::storage::common;
 use crate::storage::segments as format;
+use crate::storage::{common, refresh};
 use crate::{
-    MarketId, SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh, SegmentStore, SegmentTip,
-    StorageError, TimestampMs,
+    MarketId, SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh, SegmentStore, StorageError,
+    TimestampMs,
 };
 
 // Indentation inside this literal is load-bearing: SQLite records the exact
@@ -61,7 +61,7 @@ pub(super) const SCHEMA_DDL: &str = r#"
 
 impl SegmentStore for SqliteStore {
     fn refresh_segments(&self, market: &MarketId) -> Result<SegmentRefresh, StorageError> {
-        build::refresh(self, market)
+        refresh::refresh(&mut self.open()?, market)
     }
 
     fn resolve_segments(
@@ -70,22 +70,12 @@ impl SegmentStore for SqliteStore {
         first_open_ms: TimestampMs,
         last_open_ms: TimestampMs,
     ) -> Result<SegmentPlan, StorageError> {
-        if first_open_ms > last_open_ms {
-            return Err(StorageError::InvalidArgument(format!(
-                "the first open time {first_open_ms} is after the last, {last_open_ms}"
-            )));
-        }
+        refresh::check_range(first_open_ms, last_open_ms)?;
         let mut connection = self.open()?;
         // One snapshot, so that the marks and the index agree.
         let transaction = connection.transaction().map_err(StorageError::other)?;
         let Some(tip_window) = tip_window(&transaction, market)? else {
-            return Ok(SegmentPlan {
-                segments: Vec::new(),
-                tip: Some(SegmentTip {
-                    first_open_ms,
-                    last_open_ms,
-                }),
-            });
+            return Ok(refresh::all_tip(first_open_ms, last_open_ms));
         };
         let lowest_dirty: Option<TimestampMs> = transaction
             .query_row(
@@ -101,7 +91,7 @@ impl SegmentStore for SqliteStore {
                 |row| row.get(0),
             )
             .map_err(StorageError::other)?;
-        let tip_start = lowest_dirty.map_or(tip_window, |dirty| dirty.min(tip_window));
+        let tip_start = refresh::tip_start(tip_window, lowest_dirty);
 
         let mut stmt = transaction
             .prepare(
@@ -146,13 +136,12 @@ impl SegmentStore for SqliteStore {
             segments.push(row.map_err(StorageError::other)?);
         }
 
-        Ok(SegmentPlan {
+        Ok(refresh::plan(
             segments,
-            tip: (last_open_ms >= tip_start).then(|| SegmentTip {
-                first_open_ms: first_open_ms.max(tip_start),
-                last_open_ms,
-            }),
-        })
+            tip_start,
+            first_open_ms,
+            last_open_ms,
+        ))
     }
 
     fn load_segment(&self, hash: &SegmentHash) -> Result<Option<Vec<u8>>, StorageError> {

@@ -26,6 +26,7 @@ operator's side of the same contract.
 - [SQLite DDL](#sqlite-ddl)
 - [PostgreSQL DDL](#postgresql-ddl)
 - [Segments on PostgreSQL](#segments-on-postgresql)
+- [Keeping segments](#keeping-segments)
 - [The shared cases](#the-shared-cases)
 - [Backends and ownership](#backends-and-ownership)
 
@@ -167,8 +168,8 @@ and ALG-516:
   found;
 - keeps its records in the store the host selected, beside the candles and
   runs they describe. A job's provenance names segment hashes this store
-  holds, and no segment is ever deleted (see
-  [Segments on PostgreSQL](#segments-on-postgresql)).
+  holds, and no release deletes a segment (see
+  [Keeping segments](#keeping-segments)).
 
 ## The chain on SQLite
 
@@ -575,20 +576,27 @@ query the stores run picks it, since every candle query names its market
 ## Segments on PostgreSQL
 
 The segment tables are SQLite's, and so is the protocol over them, which
-the PostgreSQL segment store (QUA-112) follows:
+the PostgreSQL segment store (QUA-112) follows. A refresh's loop and its
+packing are the same code on both backends (`src/storage/refresh.rs`), and
+`src/storage/postgres/segments/` is this protocol:
 
+- **Blobs live in the store's own database.** `segments.data` is `BYTEA`,
+  so PostgreSQL mode needs no SQLite file and no blob store beside it, and a
+  blob commits with its index entry. A segment's payload is at most 266,416
+  bytes before compression, too small for a separate blob store to repay the
+  second system to run.
 - **Blobs are immutable.** A segment row is inserted with `ON CONFLICT
-  (hash) DO NOTHING` and never updated or deleted: a replaced segment
-  stays loadable, and a hash a job's provenance names (ALG-516) never
-  disappears. Only an index entry moves to another hash, or goes when its
-  window has no candles left.
+  (hash) DO NOTHING` and never updated: a replaced segment stays loadable,
+  and a hash a job's provenance names (ALG-516) stays there. Only an index
+  entry moves to another hash, or goes when its window has no candles left.
 - **Every mark is a revision.** Writing candles that change a window marks
   it with `INSERT ... ON CONFLICT (exchange, symbol, interval,
   window_start_ms) DO UPDATE SET id = DEFAULT`, in the writer's
   transaction: the mark's `id` is a fresh, larger revision each time.
 - **Reads are one snapshot.** A refresh reads a window, and a plan its
-  index entries, dirty marks and tip, in one read-only `REPEATABLE READ`
-  transaction, then packs with no transaction open.
+  tip, dirty marks and index entries, each in one read-only `REPEATABLE
+  READ` transaction. A refresh then packs with no transaction open, on the
+  caller's thread, never on the bridge's workers.
 - **A write-back publishes only what it read.** One `READ COMMITTED`
   transaction locks the window's mark (`SELECT id ... FOR UPDATE`), which
   holds back a writer re-marking it; finds none (another refresh did it:
@@ -597,6 +605,40 @@ the PostgreSQL segment store (QUA-112) follows:
   removes the index entry, and deletes the mark by that revision, then
   commits. A plan never sees an index entry without its blob, or a window
   packed from candles older than its mark.
+- **A lost answer repeats safely.** A write-back that loses its answer is
+  `OutcomeUnknown`. Refreshing again is safe: the mark decides every step,
+  so the window is found done or packed once more.
+
+## Keeping segments
+
+No release deletes a segment, on either backend. A segment a correction
+replaced stays stored and opens under its name, because a job's provenance
+(ALG-516) names the segments it read by hash, and a rerun must find their
+bytes. The shared suite holds this on both backends with
+`segments.correction_keeps_old_segment`, `segments.backfill_keeps_old_segment`
+and `segments.emptied_window`.
+
+Replaced segments take up space in proportion to what corrections replace.
+A later story may reclaim it with an operator command. Nothing in 0.3 does,
+and the rules below need no schema change:
+
+- **What counts as a reference.** A segment may go only when no
+  `segment_index` row and no retained provenance record names it. Both are
+  read when the command runs; no reference is counted or cached.
+- **Retention belongs to the records.** ALG-516 decides how long a job's
+  record is kept, and a hash stays referenced for as long as a record names
+  it. A segment has no clock of its own, and without that ledger nothing can
+  be collected at all.
+- **The check and the delete are one transaction that keeps write-backs
+  out.** A write-back can name a stored blob again at any moment, and `ON
+  CONFLICT (hash) DO NOTHING` locks no row. So the transaction starts with
+  `BEGIN IMMEDIATE` on SQLite and `LOCK TABLE segments IN SHARE MODE` on
+  PostgreSQL. A write-back writes `segments` before its index entry, so it
+  has either committed, and its entry is seen, or it waits and stores its
+  blob again.
+- **An operator runs it, nothing else.** A plan handed out before it ran can
+  name a segment it removed: `load_segment` answers `None`, and the reader
+  plans the range again.
 
 ## The shared cases
 
@@ -619,10 +661,9 @@ and opens it through `StoreFactory`, which hands back an `AnyStore` that
 serves every port above; [configuration.md](configuration.md#storage-backends)
 is the operator's side. The factory opens only the backend selected: a
 backend without a registered provider is refused, never replaced by
-another. PostgreSQL's provider is registered once its stores exist: the
-candle store (QUA-124), the journal and the store's record (QUA-123) do;
-the segment store comes with QUA-112, then QUA-116 registers the provider.
-Until then a PostgreSQL selection is checked and refused.
+another. PostgreSQL's stores all exist (QUA-124, QUA-123, QUA-112), and an
+`AnyStore` can hold one; QUA-116 registers its provider. Until then a
+PostgreSQL selection is checked and refused.
 
 The process that opens a store owns it, its pool and its credentials, for
 its whole life, and no other process receives them (ADR 0001): a CLI

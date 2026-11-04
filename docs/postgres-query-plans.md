@@ -29,8 +29,10 @@ own.
 
 PostgreSQL 16.15 from Homebrew, the oldest version ADR 0001 supports, on
 macOS 26.4.1 (arm64), with `initdb`'s default settings (128 MB of shared
-buffers), on 2026-11-01. Each query was explained with literal values,
-reads with `EXPLAIN (ANALYZE, BUFFERS)` and writes without running them.
+buffers), on 2026-11-01; the segment store's queries were measured again
+on 2026-11-04, when QUA-112 gave them the store's own shape. Each query was
+explained with literal values, reads with `EXPLAIN (ANALYZE, BUFFERS)` and
+writes without running them.
 The PostgreSQL stores send the same values as parameters of unnamed
 statements (tokio-postgres' `query_typed`), which PostgreSQL plans when
 they are bound, for those values, as it plans the literals.
@@ -57,8 +59,8 @@ rows land in the table, and so what a scan by time costs.
 
 ## The queries
 
-Every statement shape the SQLite stores run, as the PostgreSQL stores will
-run it, with the indexes its plan uses:
+Every statement shape the SQLite stores run, as the PostgreSQL stores run
+it, with the indexes its plan uses:
 
 <!-- begin: queries -->
 - `candles.load`: `candles_pkey`
@@ -74,9 +76,14 @@ run it, with the indexes its plan uses:
 - `segments.lowest_dirty`: `segment_dirty_exchange_symbol_interval_window_start_ms_key`
 - `segments.mark`: `segment_dirty_exchange_symbol_interval_window_start_ms_key`
 - `segments.mark_of_window`: `segment_dirty_exchange_symbol_interval_window_start_ms_key`
+- `segments.lock_mark`: `segment_dirty_exchange_symbol_interval_window_start_ms_key`
 - `segments.entry_of_window`: `segment_index_pkey`
 - `segments.plan`: `segment_index_pkey`, `segments_pkey`
 - `segments.blob`: `segments_pkey`
+- `segments.store`: `segments_pkey`
+- `segments.index`: `segment_index_pkey`
+- `segments.unindex`: `segment_index_pkey`
+- `segments.unmark`: `segment_dirty_pkey`
 <!-- end: queries -->
 
 Both orders gave the same plans. The figures are from the data written
@@ -94,24 +101,28 @@ market by market; where the other order differs, it is in brackets.
 | `runs.legacy` | `StoreControl::legacy_runs` (`store status`) | Seq Scan of `bot_runs`, then a sort | 0 of 2,000 | 54 | 0.23 ms (0.20) |
 | `order_events.latest` | `list_order_events` | Bitmap Index Scan on `idx_order_events_run`, then a sort | 50 | 56 | 0.15 ms (0.13) |
 | `closed_trades.latest` | `list_closed_trades` | Bitmap Index Scan on `idx_closed_trades_run`, then a sort | 15 | 20 | 0.06 ms |
-| `segments.lowest_dirty` | a refresh's next window, and a plan's effective tip | Index Only Scan on the dirty marks' unique key | 1 | 3 | 0.04 ms (0.05) |
+| `segments.lowest_dirty` | a refresh's next window, and a plan's effective tip | Index Only Scan on the dirty marks' unique key | 1 | 3 | 0.06 ms (0.05) |
 | `segments.mark` | `upsert_candles` marking the windows it changed | The windows unnested from one array, conflicts checked on the dirty marks' unique key | | | |
-| `segments.mark_of_window` | a refresh's read and its write-back | Index Scan on the dirty marks' unique key | 1 | 3 | 0.02 ms |
-| `segments.entry_of_window` | a refresh comparing the hash it packed | Index Scan on `segment_index_pkey` | 1 | 3 | 0.03 ms (0.02) |
-| `segments.plan` | `resolve_segments` | Bitmap Index Scan on `segment_index_pkey`, then a nested loop on `segments_pkey` | 30 | 154 | 0.28 ms (0.27) |
-| `segments.blob` | `load_segment` | Index Scan on `segments_pkey` | 1 | 4 | 0.02 ms (0.03) |
+| `segments.mark_of_window` | a refresh's read | Index Scan on the dirty marks' unique key | 1 | 3 | 0.02 ms |
+| `segments.lock_mark` | a write-back, before it decides anything | The same scan, under `LockRows` | 1 | 4 | 0.04 ms |
+| `segments.entry_of_window` | a refresh comparing the hash it packed | Index Scan on `segment_index_pkey` | 1 | 3 | 0.03 ms |
+| `segments.plan` | `resolve_segments` | Bitmap Index Scan on `segment_index_pkey`, then a nested loop on `segments_pkey` | 30 | 127 | 0.10 ms |
+| `segments.blob` | `load_segment` | Index Scan on `segments_pkey` | 1 | 4 | 0.03 ms |
+| `segments.store` | a write-back storing its blob | One row, conflicts checked on `segments_pkey` | | | |
+| `segments.index` | a write-back writing its index entry | One row, conflicts checked on `segment_index_pkey` | | | |
+| `segments.unindex` | a write-back for a window with no candles left | Index Scan on `segment_index_pkey` | | | |
+| `segments.unmark` | a write-back ending the mark by its revision | Index Scan on `segment_dirty_pkey` | | | |
 
 Two plans are worth knowing:
 
 - `runs.legacy` is the one query no index serves. `store status` lists the
   legacy runs once per command by reading every run; a store holds
   thousands of runs at most, and SQLite has no index for it either.
-- `segments.plan` reads the market's 1,095 index entries below the tip and
-  keeps the 30 that overlap the range. An entry's last open time is before
-  its window ends, so a lower bound of the range's first open time minus
-  one window on `window_start_ms` changes no answer, and lets the key read
-  only the entries in range: a choice for the PostgreSQL segment store
-  (QUA-112), not the schema.
+- `segments.plan` bounds `window_start_ms` from below as well as above: an
+  entry that overlaps the range starts no earlier than the window of the
+  range's first open time, so the bound changes no answer, and the key reads
+  only the 30 entries in range. Without it the query read the market's 1,095
+  entries below the tip and kept those 30, at 154 buffers and 0.28 ms.
 
 ## The candles key and its copy
 

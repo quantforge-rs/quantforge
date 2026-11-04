@@ -1,9 +1,9 @@
 # The storage conformance suite
 
 Every QuantForge storage backend passes one suite: the same scenarios, with
-the same answers, whatever keeps the data. SQLite passes it today, directly
-and through `AnyStore`; the PostgreSQL stores pass it as they land, and so
-would any later backend, such as TimescaleDB. This page lists what the suite
+the same answers, whatever keeps the data. SQLite and PostgreSQL pass it,
+each directly and through `AnyStore`, and so would any later backend, such
+as TimescaleDB. This page lists what the suite
 holds a backend to, where its answers come from, and how a backend joins.
 [storage-schema.md](storage-schema.md) is the schema the backends share; the
 suite is the behavior behind the ports of `src/ports/storage.rs`. The
@@ -138,6 +138,11 @@ segment stores both exist.
 - `segments.backfill_keeps_old_segment`: a backfill reopens its window at
   once, the next refresh packs only that window, and the segment it replaced
   still loads
+- `segments.correction_keeps_old_segment`: a corrected window is indexed
+  under its new segment, and the segment it replaced stays stored and opens
+  under its own name
+- `segments.emptied_window`: a marked window with no candles left loses its
+  index entry, and its segment stays stored
 - `segments.scale_is_a_change`: a candle written again with another scale
   packs to a new segment
 - `segments.plan_ranges`: a plan lists the segments a range overlaps, oldest
@@ -152,8 +157,20 @@ segment stores both exist.
   the candles it packs; an unknown name loads nothing
 - `segments.shared_name`: the same candles under two product lines share one
   segment, listed by two index entries
+- `segments.product_lines_apart`: the same symbol on two product lines keeps
+  its own windows: a refresh of one packs none of the other's, and a change
+  to one leaves the other's plan as it was
 - `segments.spec_cases`: every case of the segment spec, stored and closed
   by a later candle, packs to the case's name
+- `segments.altered_bytes_refused`: bytes altered behind the store's back
+  load as stored and are refused when opened: another segment's bytes, bytes
+  that are no segment, and a payload of a format this build does not read
+- `segments.failed_write_back_changes_nothing`: a write-back that fails
+  stores no segment and no index entry and leaves every mark, so the next
+  refresh packs the window
+- `segments.refreshes_racing_writers`: with refreshes racing writers, every
+  plan that lists a window packs each correction committed before it, and
+  every window ends indexed under exactly its final candles
 <!-- end: segments -->
 
 ### The store's record
@@ -195,8 +212,8 @@ exist.
   candles take one line;
 - `runs`, `orders` and `trades`: the records the journal scenarios write,
   every decimal as its exact text;
-- `candles`, `journal` and `segments`: the scenarios, each an `id`, the
-  statement listed above, and its `steps`;
+- `candles`, `journal`, `segments` and `control`: the scenarios, each an
+  `id`, the statement listed above, and its `steps`;
 - `races`: the interleavings each backend steps through itself.
 
 A step is one operation and its answer: a result, or a refusal of a kind
@@ -208,6 +225,7 @@ A step is one operation and its answer: a result, or a refusal of a kind
 | `create_run`, `save_run`, `load_run`, `run_identity`, `latest_run`, `identity_matches` | runs and their identities, every state compared as its JSON |
 | `append_order_event`, `list_order_events`, `append_closed_trade`, `list_closed_trades` | the two journals |
 | `refresh`, `resolve`, `load_segment` | the segment store; every listed segment must also load, open under its name, and be as long as listed |
+| `store_record`, `migrations`, `bind_environment`, `legacy_runs`, `adopt_run` | the store's record |
 | `raw_select`, `raw_contains`, `raw_execute`, `value_types` | the backend's own tables, for what the ports do not show: the text a column holds, a row written behind the store's back, the type a value is stored as |
 | `reopen` | the same database opened again, as a restarted process opens it |
 
@@ -235,7 +253,8 @@ The rules it models, beyond what the statements above say:
   candle: a window that cannot be packed (more than 1,440 candles, or a
   decimal not in its exact form) is counted blocked and stays dirty; one
   that packs to the name it is indexed under is unchanged; any other is
-  built, and the segment it had stays stored;
+  built, and the segment it had stays stored; one with no candles left
+  loses its index entry and counts as built;
 - a plan lists the indexed windows below the lower of the tip window and
   the lowest dirty window that overlap the range, then the rest of the range
   as the tip;
@@ -251,7 +270,7 @@ The rules it models, beyond what the statements above say:
 ## Registering a backend
 
 A backend joins the suite in its own file under `tests/storage/`, the way
-`sqlite.rs`, `any_store.rs` and `postgres.rs` do:
+`sqlite.rs`, `any_store.rs` and `postgres/mod.rs` do:
 
 1. Implement `conformance::Backend`. Its `fresh` returns a `Fixture`: a store
    that is initialized, empty, and isolated from every other store the suite
@@ -261,15 +280,19 @@ A backend joins the suite in its own file under `tests/storage/`, the way
 2. Implement `conformance::Raw` over the backend's own client. The
    scenarios' SQL is portable: plain `SELECT`, `INSERT` and `UPDATE` on the
    tables of [storage-schema.md](storage-schema.md), every selected column
-   text or `CAST(… AS TEXT)`, no function of one dialect. Only `value_types`
-   is written per backend: SQLite's `typeof`, PostgreSQL's `pg_typeof`.
+   text or `CAST(… AS TEXT)`, no function of one dialect. Only three things
+   are written per backend: `value_types` (SQLite's `typeof`, PostgreSQL's
+   `pg_typeof`), `blob` (a literal of bytes), and `write_refusal` (how a
+   table is made to refuse new rows: a trigger, a constraint).
 3. Add one test per port the backend implements, calling its group:
    `conformance::candles::<B>()` once it implements `CandleStore`,
-   `conformance::journal::<B>()` with `RunJournalStore`, and
-   `conformance::segments::<B>()` with `CandleStore` and `SegmentStore`.
+   `conformance::journal::<B>()` with `RunJournalStore`,
+   `conformance::control::<B>()` with `RunJournalStore` and `StoreControl`,
+   and `conformance::segments::<B>()` with `CandleStore` and `SegmentStore`.
    The groups are generic over the ports, so a backend switches each on as
    its store lands.
-4. Step through the races in the backend's own unit tests, as
+4. Implement `DirtyWindows` (`src/storage/refresh.rs`) for the store, and
+   step through the races in its own unit tests, as
    `src/storage/sqlite/segments/tests.rs` does; see [the races](#the-races).
 
 A later backend, such as TimescaleDB, registers the same way and reuses the
@@ -279,7 +302,7 @@ changes for one backend.
 
 ## PostgreSQL
 
-`tests/storage/postgres.rs` registers PostgreSQL. Every fixture creates a
+`tests/storage/postgres/mod.rs` registers PostgreSQL. Every fixture creates a
 database of its own, `qf_conformance_<pid>_<n>`, on the server
 `QUANTFORGE_TEST_POSTGRES_URL` names, opens it through `PostgresStore`, and
 drops it with `DROP DATABASE … WITH (FORCE)` (PostgreSQL 13 or later) when
@@ -304,19 +327,24 @@ pg_ctl -D pg -w stop
 
 Each fixture's store, and each one `reopen` opens, has run
 `PostgresStore::init`, so every scenario starts on a new store's schema
-(QUA-125). The candle group runs on PostgreSQL (QUA-124), and so do the
-journal and store-record groups (QUA-123). Those two run once more on a
-database whose collation is `en_US.UTF-8`, where only byte order keeps a tie
-on run IDs SQLite's, but only when the server can create one: a server
-without that locale skips the run, saying so, so byte order is not proven
-on every setup. QUA-112 switches on the segment group and the PostgreSQL
-race stepper. QUA-118 runs them in CI against a PostgreSQL service container.
+(QUA-125). Every group runs on PostgreSQL: candles (QUA-124), the journal
+and the store's record (QUA-123), and segments (QUA-112), then all four
+again behind `AnyStore`. The journal and store-record groups run once more
+on a database whose collation is `en_US.UTF-8`, where only byte order keeps
+a tie on run IDs SQLite's, but only when the server can create one: a server
+without that locale skips the run, saying so, so byte order is not proven on
+every setup. QUA-118 runs them in CI against a PostgreSQL service container.
 The same command also runs the schema's own tests, the candle store's
 writes raced against a refresh's write-back, writers appending to one run
 at once, and the query plans of
 [postgres-query-plans.md](postgres-query-plans.md); `tests/live_engine.rs`
 runs the engine's dry runs and resume checks on PostgreSQL with the same
-variable.
+variable. With it, `cargo test --lib postgres` steps [the races](#the-races)
+through the store's own read and write-back, and proves what the ports
+cannot show: a write-back that waits on a correction's lock finds its
+revision, and a window and a plan stay one snapshot while a commit lands.
+
+Every group, race and check passed on PostgreSQL 16.15 on 2026-11-04.
 
 ## The races
 
@@ -332,12 +360,20 @@ and write-back:
   the new candles
 - `races.two_refreshes`: of two refreshes packing one window, the later
   finds it done elsewhere
+- `races.identical_write_between_read_and_write_back`: a write that changes
+  nothing between a refresh's read and its write-back leaves the mark as it
+  was, and the write-back publishes
+- `races.stale_refresh_after_a_newer_one`: a refresh that read before a
+  correction finds the window done elsewhere once a later refresh published
+  it, and publishes nothing over it
 <!-- end: races -->
 
 A write-back answers `done`, `elsewhere` when another refresh unmarked the
 window first, or `dirty` when a writer marked it again; the plan and refresh
-counts after each race are in the fixture too. SQLite steps through them in
-`src/storage/sqlite/segments/tests.rs`.
+counts after each race are in the fixture too. Both backends step through
+them with one stepper, `src/storage/races.rs`, called from
+`src/storage/sqlite/segments/tests.rs` and
+`src/storage/postgres/tests/segments.rs`.
 
 ## What the suite leaves open
 
@@ -346,5 +382,6 @@ counts after each race are in the fixture too. SQLite steps through them in
 - A segment's stored bytes: their length depends on the compression level,
   which is not part of the [segment format](segment-spec.md#compression).
   The suite checks only that a plan lists the length its bytes have.
-- Concurrency beyond the races above, and how fast a backend answers.
+- Concurrency beyond the races above and `segments.refreshes_racing_writers`,
+  and how fast a backend answers.
 - The rest of an error's message, beyond the text a refusal names.

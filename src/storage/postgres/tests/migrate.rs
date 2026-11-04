@@ -98,14 +98,14 @@ const FAILING: [Step; 2] = with_step_6(step_6_fails);
 const SLOW: [Step; 2] = with_step_6(step_6_slow);
 
 /// A database of its own on the test server, dropped with it.
-struct Scratch {
+pub(super) struct Scratch {
     server: PostgresStore,
     name: String,
     url: String,
 }
 
 impl Scratch {
-    fn create(server_url: &str) -> Self {
+    pub(super) fn create(server_url: &str) -> Self {
         let server =
             PostgresStore::connect(&settings(server_url, &unique("server"))).expect("the server");
         let name = unique("migrate");
@@ -120,7 +120,7 @@ impl Scratch {
     }
 
     /// A store on the scratch database, its schema as the test left it.
-    fn store(&self) -> PostgresStore {
+    pub(super) fn store(&self) -> PostgresStore {
         PostgresStore::connect(&settings(&self.url, &unique("store"))).expect("a store")
     }
 }
@@ -140,7 +140,7 @@ fn scratch() -> Option<Scratch> {
 }
 
 /// Every row of `sql`, each value as the server's text, NULL as `None`.
-fn rows(store: &PostgresStore, sql: &str) -> Vec<Vec<Option<String>>> {
+pub(super) fn rows(store: &PostgresStore, sql: &str) -> Vec<Vec<Option<String>>> {
     let owned = sql.to_string();
     store
         .bridge
