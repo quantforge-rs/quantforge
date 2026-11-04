@@ -7,10 +7,12 @@ pub(super) mod events;
 mod identity;
 
 use identity::decode_identity;
-pub(super) use identity::{identity_columns, parse_environment};
 
 use super::SqliteStore;
-use crate::model::{IdentitySource, RunIdentity};
+use crate::model::RunIdentity;
+use crate::storage::runs::{
+    already_exists, decode_state, identity_columns, never_created, refuse_legacy_creation,
+};
 use crate::{
     BotRunState, ClosedTrade, ExchangeOrder, MarketId, RunJournalStore, StorageError, now_utc_ms,
 };
@@ -139,26 +141,6 @@ pub(super) const IDENTITY_DDL: &str = r#"
                   ON closed_trades(run_id, seq DESC);
 "#;
 
-/// A run's state from its JSON. A run QuantForge 0.2.0 wrote recorded no
-/// execution mode, and loads only once an operator has stated it.
-fn decode_state(run_id: &str, json: &str) -> Result<BotRunState, StorageError> {
-    match serde_json::from_str::<BotRunState>(json) {
-        Ok(state) => Ok(state),
-        Err(err) => {
-            let value: serde_json::Value =
-                serde_json::from_str(json).map_err(StorageError::other)?;
-            if value.get("execution_mode").is_none() {
-                return Err(StorageError::InvalidArgument(format!(
-                    "run {run_id} was recorded by QuantForge 0.2.0 without its execution mode; \
-                     adopt it with `quantforge store adopt-run --run-id {run_id} --execution-mode \
-                     <dry-run|live> --yes`, or start a new run"
-                )));
-            }
-            Err(StorageError::other(err))
-        }
-    }
-}
-
 fn load_state(connection: &Connection, run_id: &str) -> Result<Option<BotRunState>, StorageError> {
     let state_json = connection
         .query_row(
@@ -184,12 +166,7 @@ impl RunJournalStore for SqliteStore {
     // `BotRunState`. The identity columns are read back, through
     // `run_identity`, and never change after `create_run`.
     fn create_run(&self, state: &BotRunState, identity: &RunIdentity) -> Result<(), StorageError> {
-        if identity.source == IdentitySource::Legacy {
-            return Err(StorageError::InvalidArgument(format!(
-                "run {} cannot be created as a legacy run; only a migration marks runs legacy",
-                state.run_id
-            )));
-        }
+        refuse_legacy_creation(state, identity)?;
         let connection = self.open()?;
         let state_json = serde_json::to_string(state).map_err(StorageError::other)?;
         let (environment, account_kind, account_id) = identity_columns(identity);
@@ -226,10 +203,7 @@ impl RunJournalStore for SqliteStore {
             Err(rusqlite::Error::SqliteFailure(failure, _))
                 if failure.code == ErrorCode::ConstraintViolation =>
             {
-                Err(StorageError::InvalidArgument(format!(
-                    "run {} already exists; resume it with --run-id, or start a new run",
-                    state.run_id
-                )))
+                Err(already_exists(&state.run_id))
             }
             Err(err) => Err(StorageError::other(err)),
         }
@@ -257,10 +231,7 @@ impl RunJournalStore for SqliteStore {
             )
             .map_err(StorageError::other)?;
         if updated == 0 {
-            return Err(StorageError::InvalidArgument(format!(
-                "run {} was never created; a run is created with its identity before it is saved",
-                state.run_id
-            )));
+            return Err(never_created(&state.run_id));
         }
         Ok(())
     }

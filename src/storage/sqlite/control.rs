@@ -3,13 +3,16 @@
 //! and the operator's actions on legacy runs — the `StoreControl`
 //! implementation.
 
-use super::{SqliteStore, journal, migrate, to_from_sql_error};
+use super::{SqliteStore, migrate, to_from_sql_error};
 use crate::model::futures::ActivationEpoch;
 use crate::model::{
-    Environment, ExchangeId, ExecutionMode, IdentitySource, Interval, LegacyRun, MarketId,
-    RunIdentity, RunStatus, SchemaMigration, StoreActivation, StoreId, StoreIdentity, Symbol,
+    Environment, ExecutionMode, IdentitySource, LegacyRun, RunIdentity, SchemaMigration,
+    StoreActivation, StoreId, StoreIdentity,
 };
-use crate::{BotRunState, StorageError, StoreControl, now_utc_ms};
+use crate::storage::runs::{
+    adopted_state, already_bound, identity_columns, legacy_run, parse_environment, refuse_unadopted,
+};
+use crate::{StorageError, StoreControl, now_utc_ms};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use std::str::FromStr;
 
@@ -55,7 +58,7 @@ fn read_identity(connection: &Connection) -> Result<StoreIdentity, StorageError>
                 let store_id = StoreId::new(row.get::<_, String>(0)?).map_err(to_from_sql_error)?;
                 let environment = row
                     .get::<_, Option<String>>(1)?
-                    .map(|text| journal::parse_environment(&text))
+                    .map(|text| parse_environment(&text))
                     .transpose()
                     .map_err(to_from_sql_error)?;
                 let activation = StoreActivation::from_str(&row.get::<_, String>(2)?)
@@ -117,12 +120,7 @@ impl StoreControl for SqliteStore {
         let identity = read_identity(&transaction)?;
         match identity.environment {
             Some(bound) if bound == environment => return Ok(()),
-            Some(bound) => {
-                return Err(StorageError::InvalidArgument(format!(
-                    "store {} is bound to {bound}; a store keeps its environment for life",
-                    identity.store_id
-                )));
-            }
+            Some(bound) => return Err(already_bound(&identity.store_id, bound)),
             None => {}
         }
         transaction
@@ -148,34 +146,15 @@ impl StoreControl for SqliteStore {
             .map_err(StorageError::other)?;
         let rows = stmt
             .query_map([IdentitySource::Legacy.as_str()], |row| {
-                let run_id: String = row.get(0)?;
-                let exchange: String = row.get(1)?;
-                let exchange = ExchangeId::from_storage_name(&exchange).ok_or_else(|| {
-                    to_from_sql_error(StorageError::InvalidArgument(format!(
-                        "run {run_id} is stored under unknown exchange {exchange:?}"
-                    )))
-                })?;
-                let symbol = Symbol::new(row.get::<_, String>(2)?).map_err(to_from_sql_error)?;
-                let interval =
-                    Interval::from_str(&row.get::<_, String>(3)?).map_err(to_from_sql_error)?;
-                let state: serde_json::Value =
-                    serde_json::from_str(&row.get::<_, String>(4)?).map_err(to_from_sql_error)?;
-                let status: RunStatus =
-                    serde_json::from_value(state["status"].clone()).map_err(to_from_sql_error)?;
-                let execution_mode = match state.get("execution_mode") {
-                    None => None,
-                    Some(value) => Some(
-                        serde_json::from_value::<ExecutionMode>(value.clone())
-                            .map_err(to_from_sql_error)?,
-                    ),
-                };
-                Ok(LegacyRun {
-                    run_id,
-                    market: MarketId::new(exchange, symbol, interval),
-                    status,
-                    execution_mode,
-                    started_at_ms: row.get(5)?,
-                })
+                legacy_run(
+                    row.get(0)?,
+                    &row.get::<_, String>(1)?,
+                    &row.get::<_, String>(2)?,
+                    &row.get::<_, String>(3)?,
+                    &row.get::<_, String>(4)?,
+                    row.get(5)?,
+                )
+                .map_err(to_from_sql_error)
             })
             .map_err(StorageError::other)?;
         rows.collect::<Result<_, _>>().map_err(StorageError::other)
@@ -187,17 +166,12 @@ impl StoreControl for SqliteStore {
         identity: &RunIdentity,
         execution_mode: Option<ExecutionMode>,
     ) -> Result<(), StorageError> {
-        if identity.source != IdentitySource::Adopted {
-            return Err(StorageError::InvalidArgument(format!(
-                "an adopted run's identity source is adopted, not {}",
-                identity.source
-            )));
-        }
+        refuse_unadopted(identity)?;
         let mut connection = self.open()?;
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(StorageError::other)?;
-        let row: Option<(String, String)> = transaction
+        let found: Option<(String, String)> = transaction
             .query_row(
                 "SELECT identity_source, state_json FROM bot_runs WHERE run_id = ?1",
                 [run_id],
@@ -205,43 +179,8 @@ impl StoreControl for SqliteStore {
             )
             .optional()
             .map_err(StorageError::other)?;
-        let Some((source, state_json)) = row else {
-            return Err(StorageError::InvalidArgument(format!(
-                "no run found for run_id={run_id}"
-            )));
-        };
-        if source != IdentitySource::Legacy.as_str() {
-            return Err(StorageError::InvalidArgument(format!(
-                "run {run_id} already has a {source} identity; only a legacy run is adopted"
-            )));
-        }
-        let mut state: serde_json::Value =
-            serde_json::from_str(&state_json).map_err(StorageError::other)?;
-        match (state.get("execution_mode").is_some(), execution_mode) {
-            (true, Some(_)) => {
-                return Err(StorageError::InvalidArgument(format!(
-                    "run {run_id} already records its execution mode"
-                )));
-            }
-            (false, None) => {
-                return Err(StorageError::InvalidArgument(format!(
-                    "run {run_id} recorded no execution mode; the operator states it"
-                )));
-            }
-            (false, Some(mode)) => {
-                let token = serde_json::to_value(mode).map_err(StorageError::other)?;
-                state["execution_mode"] = token;
-            }
-            (true, None) => {}
-        }
-        // The adopted record must load as a run, or the adoption is refused
-        // before anything is written.
-        serde_json::from_value::<BotRunState>(state.clone()).map_err(|err| {
-            StorageError::InvalidArgument(format!(
-                "run {run_id} cannot be adopted: its state does not load ({err})"
-            ))
-        })?;
-        let (environment, account_kind, account_id) = journal::identity_columns(identity);
+        let state_json = adopted_state(run_id, found, execution_mode)?;
+        let (environment, account_kind, account_id) = identity_columns(identity);
         transaction
             .execute(
                 r#"
@@ -252,7 +191,7 @@ impl StoreControl for SqliteStore {
                 "#,
                 params![
                     run_id,
-                    serde_json::to_string(&state).map_err(StorageError::other)?,
+                    state_json,
                     environment,
                     account_kind,
                     account_id,

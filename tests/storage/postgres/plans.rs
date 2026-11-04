@@ -25,9 +25,9 @@ struct Query {
 }
 
 /// Every statement shape the SQLite stores run, as the PostgreSQL stores
-/// run it: the candle store's own statements (`src/storage/postgres/
-/// candles.rs`, a batch unnested from arrays), and the rest as QUA-123 and
-/// QUA-112 will. The values pick one market, run and window of the data.
+/// run it: the candle store's, the journal's and the store record's own
+/// statements (`src/storage/postgres/`), and the segment store's as QUA-112
+/// will. The values pick one market, run and window of the data.
 const QUERIES: &[Query] = &[
     Query {
         id: "candles.load",
@@ -106,7 +106,8 @@ const QUERIES: &[Query] = &[
         sql: "SELECT run_id, state_json FROM bot_runs \
               WHERE exchange = 'binance_spot' AND symbol = 'BTCUSDT' AND interval = '1m' \
                 AND strategy_name = 'sma_cross' \
-              ORDER BY updated_at_ms DESC, started_at_ms DESC, run_id DESC LIMIT 1",
+              ORDER BY updated_at_ms DESC, started_at_ms DESC, run_id COLLATE \"C\" DESC \
+              LIMIT 1",
     },
     Query {
         id: "runs.by_id",
@@ -122,7 +123,7 @@ const QUERIES: &[Query] = &[
         write: false,
         sql: "SELECT run_id, exchange, symbol, interval, state_json, started_at_ms \
               FROM bot_runs WHERE identity_source = 'legacy' \
-              ORDER BY started_at_ms ASC, run_id ASC",
+              ORDER BY started_at_ms ASC, run_id COLLATE \"C\" ASC",
     },
     Query {
         id: "order_events.latest",

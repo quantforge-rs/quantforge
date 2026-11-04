@@ -176,6 +176,7 @@ src/
 │   │       └── connection.rs   the sslmode table, every URL refusal, and the redaction
 │   ├── any.rs                  AnyStore: every storage port, handed to the backend it holds
 │   ├── common.rs               what both backends share: exact decimal reads, a candle's window
+│   ├── runs.rs                 what both backends' journals share: identity columns, state, adoption
 │   ├── factory.rs              StoreFactory: opens the selected backend through its registered provider
 │   ├── factory/                the factory's unit tests
 │   │   └── tests.rs            dispatch to test providers, and no fallback for a backend without one
@@ -187,6 +188,8 @@ src/
 │   │   ├── schema.rs           the DDL of every schema version, the advisory lock, the control row
 │   │   ├── migrate.rs          the schema chain: created at init, one transaction per step under the lock
 │   │   ├── candles.rs          CandleStore: batches unnested into one upsert that marks changed windows
+│   │   ├── journal.rs          RunJournalStore: one statement per call, run IDs in byte order
+│   │   ├── control.rs          StoreControl: the store's record, its binding and legacy-run adoption
 │   │   └── tests/              the bridge's, the chain's and the candle store's unit tests
 │   │       ├── mod.rs          every calling context, the refusals, and the TLS connector
 │   │       ├── candles.rs      a batch as one statement: the last duplicate, forced windows, sorted rows
@@ -279,7 +282,9 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   `version.txt` for `--version`
 - `tests/backtest_engine.rs`, `tests/candle_validation.rs`,
   `tests/candle_batch.rs`, `tests/decimal_float.rs`, and
-  `tests/live_engine.rs`: library integration tests
+  `tests/live_engine.rs`: library integration tests; the live engine's dry
+  runs and resume checks run on SQLite and, with
+  `QUANTFORGE_TEST_POSTGRES_URL`, on PostgreSQL
 - `tests/storage/`: the storage contract of
   [storage-schema.md](storage-schema.md) and
   [storage-conformance.md](storage-conformance.md) — the shared
@@ -288,8 +293,11 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   and through `AnyStore`, with an isolated PostgreSQL database per fixture
   ready for the PostgreSQL stores; the schema chain from every earlier
   schema in `tests/fixtures/sqlite/`; the PostgreSQL schema `init` creates,
-  its refusals, exact round trips, the candle group, the candle store's
-  writes raced against a refresh's write-back, and the query plans of
+  its refusals, exact round trips, the candle, journal and store-record
+  groups, the journal and store-record groups again under a linguistic
+  collation, the candle store's writes
+  raced against a refresh's write-back, writers appending to one run at
+  once, and the query plans of
   [postgres-query-plans.md](postgres-query-plans.md) (`postgres/`); the
   documents held to the code; and, on demand, a 100,000-candle batch on
   each backend (`measure.rs`)

@@ -32,6 +32,8 @@ DAY = 86_400_000
 T = 1_792_454_400_000
 # 29 decimal places: more than a Decimal holds.
 INEXACT = "1.00000000000000000000000000001"
+# The schema every backend creates; a new store logs one step to it from 0.
+SCHEMA_VERSION = 5
 WINDOW_BARS = 1440
 STEP_MS = {
     "1s": 1_000,
@@ -236,6 +238,7 @@ class Model:
         self.runs = {}  # run_id -> record
         self.journal = []  # (kind, run_id, name), in append order
         self.edits = {}  # (run_id, trade name) -> columns written behind the store's back
+        self.environment = None  # the store's binding
 
     # Candles.
 
@@ -422,6 +425,51 @@ class Model:
     def append(self, kind, run_id, item):
         self.journal.append((kind, run_id, item))
 
+    # The store's record.
+
+    def bind(self, environment):
+        if self.environment in (None, environment):
+            self.environment = environment
+            return None
+        return refusal(f"is bound to {self.environment}; a store keeps its environment for life")
+
+    def legacy_runs(self):
+        found = sorted(
+            (r["started"], run_id) for run_id, r in self.runs.items() if r["identity"]["source"] == "legacy"
+        )
+        out = []
+        for _, run_id in found:
+            spec = RUNS[self.runs[run_id]["spec"]]
+            out.append(
+                {
+                    "run_id": run_id,
+                    "market": spec["market"],
+                    "status": spec["status"],
+                    "execution_mode": spec["execution_mode"] if self.runs[run_id]["loads"] else None,
+                    "started_at_ms": spec["started_at_ms"],
+                }
+            )
+        return out
+
+    def adopt(self, run_id, ident, mode):
+        if ident["source"] != "adopted":
+            return refusal(f"identity source is adopted, not {ident['source']}")
+        record = self.runs.get(run_id)
+        if record is None:
+            return refusal(f"no run found for run_id={run_id}")
+        if record["identity"]["source"] != "legacy":
+            return refusal(f"run {run_id} already has an identity ({record['identity']['source']})")
+        if record["loads"] and mode is not None:
+            return refusal(f"run {run_id} already records its execution mode")
+        if not record["loads"] and mode is None:
+            return refusal(f"run {run_id} recorded no execution mode")
+        # A run that recorded no mode loads with the one stated, which the
+        # scenarios take from its spec.
+        assert mode is None or mode == RUNS[record["spec"]]["execution_mode"]
+        record["identity"] = ident
+        record["loads"] = True
+        return None
+
     def listed(self, kind, run_id, limit):
         names = [item for k, r, item in self.journal if k == kind and r == run_id]
         names = list(reversed(names))[:limit]
@@ -550,6 +598,31 @@ class Scenario:
         answer = {"refused": refused} if refused else {"expect": expect}
         self.step("list_closed_trades", run_id=run_id, limit=limit, **answer)
 
+    def store_record(self):
+        expect = {
+            "schema_version": SCHEMA_VERSION,
+            "environment": self.model.environment,
+            "activation": "inactive",
+            "activation_epoch": 0,
+        }
+        self.step("store_record", expect=expect)
+
+    def migrations(self):
+        self.step("migrations", expect=[{"to_version": SCHEMA_VERSION, "from_version": 0}])
+
+    def bind_environment(self, environment):
+        refused = self.model.bind(environment)
+        answer = {"refused": refused} if refused else {}
+        self.step("bind_environment", environment=environment, **answer)
+
+    def legacy_runs(self):
+        self.step("legacy_runs", expect=self.model.legacy_runs())
+
+    def adopt_run(self, run_id, ident, mode=None):
+        refused = self.model.adopt(run_id, ident, mode)
+        answer = {"refused": refused} if refused else {}
+        self.step("adopt_run", run_id=run_id, identity=ident, execution_mode=mode, **answer)
+
 
 def where(market):
     exchange, symbol, interval = MARKETS[market]
@@ -622,6 +695,10 @@ RUNS = {
         run("tie_z", "run-z", updated_at_ms=9_000, started_at_ms=2),
         run("tie_q", "run-q", updated_at_ms=9_000, started_at_ms=3),
         run("tie_m_later", "run-m", updated_at_ms=9_500, started_at_ms=1),
+        # Byte order puts "B" (0x42) before "a" (0x61); a linguistic
+        # collation would not.
+        run("tie_upper", "run-B", updated_at_ms=9_000, started_at_ms=2),
+        run("tie_lower", "run-a", updated_at_ms=9_000, started_at_ms=2),
         run(
             "legacy",
             "run-legacy",
@@ -633,6 +710,8 @@ RUNS = {
             position={"qty": "0.0254", "entry_price": "3933.07", "entry_time_ms": T + 60_100, "entry_order_id": "7"},
         ),
         run("legacy_no_mode", "run-old", updated_at_ms=T + 120_000),
+        # Byte order lists "run-Z" first; a linguistic collation would not.
+        run("legacy_upper", "run-Z", updated_at_ms=T + 120_000),
     ]
 }
 
@@ -1003,6 +1082,21 @@ def journal_scenarios():
     out.append(s)
 
     s = Scenario(
+        "journal.last_save_wins",
+        "the last save replaces the state whatever its times, and a refused create changes nothing: one process drives a run at a time",
+    )
+    s.create_run("first", identity())
+    s.save_run("first_stopped")
+    # Older than the save before it, as a second process driving the run
+    # would write: it still replaces the state.
+    s.save_run("first")
+    s.load_run("run-1")
+    s.create_run("full", identity("testnet", "key-a"))
+    s.load_run("run-1")
+    s.run_identity("run-1")
+    out.append(s)
+
+    s = Scenario(
         "journal.latest_per_market",
         "the latest run is the last updated of its market and strategy; another strategy, interval, venue or family never wins",
     )
@@ -1030,6 +1124,15 @@ def journal_scenarios():
     s.create_run("tie_q", identity())
     s.latest_run("spot")
     s.save_run("tie_m_later")
+    s.latest_run("spot")
+    out.append(s)
+
+    s = Scenario(
+        "journal.latest_tie_by_bytes",
+        "on a tie of both times, run IDs compare byte by byte, so run-a outranks run-B whatever the database's collation",
+    )
+    s.create_run("tie_lower", identity())
+    s.create_run("tie_upper", identity())
     s.latest_run("spot")
     out.append(s)
 
@@ -1142,6 +1245,100 @@ def journal_scenarios():
     s.load_run("run-old")
     s.latest_run("spot")
     s.run_identity("run-old")
+    out.append(s)
+    return out
+
+
+# --- The store record's scenarios --------------------------------------------
+
+
+def control_scenarios():
+    out = []
+
+    s = Scenario(
+        "control.new_store",
+        "a new store is inactive at epoch 0, bound to no environment, and logs one step to the current schema from 0",
+    )
+    s.store_record()
+    s.migrations()
+    s.reopen()
+    s.store_record()
+    out.append(s)
+
+    s = Scenario(
+        "control.bound_for_life",
+        "a store is bound to one environment for life; binding it again to the same one changes nothing",
+    )
+    s.bind_environment("testnet")
+    s.bind_environment("testnet")
+    s.bind_environment("mainnet")
+    s.reopen()
+    s.store_record()
+    out.append(s)
+
+    s = Scenario(
+        "control.legacy_runs_listed",
+        "legacy runs are listed oldest first, then by run ID, with the mode only a run that recorded one has; recorded runs are not listed",
+    )
+    s.create_run("first", identity())
+    s.seed_legacy_run("legacy_no_mode", False)
+    s.seed_legacy_run("legacy", True)
+    s.seed_legacy_run("legacy_upper", True)
+    s.legacy_runs()
+    out.append(s)
+
+    s = Scenario(
+        "control.adopt_a_legacy_run",
+        "an adopted legacy run takes the verified identity, loads, matches only that identity, and keeps its original state beside it",
+    )
+    s.seed_legacy_run("legacy", True)
+    s.bind_environment("testnet")
+    adopted = identity("testnet", "key-a", source="adopted")
+    s.adopt_run("run-legacy", adopted)
+    s.run_identity("run-legacy")
+    s.load_run("run-legacy")
+    s.identity_matches("run-legacy", identity("testnet", "key-a"))
+    s.identity_matches("run-legacy", identity("testnet", "key-b"))
+    s.legacy_runs()
+    s.raw_select(
+        "SELECT legacy_state_json FROM bot_runs WHERE run_id = 'run-legacy'",
+        [[state_json(RUNS["legacy"], True)]],
+    )
+    s.adopt_run("run-legacy", adopted)
+    out.append(s)
+
+    s = Scenario(
+        "control.adopt_states_the_missing_mode",
+        "a legacy run that recorded no execution mode is adopted only with the mode the operator states, then loads with it",
+    )
+    s.seed_legacy_run("legacy_no_mode", False)
+    s.bind_environment("testnet")
+    adopted = identity("testnet", source="adopted")
+    s.adopt_run("run-old", adopted)
+    s.load_run("run-old")
+    s.adopt_run("run-old", adopted, mode="dry_run")
+    s.load_run("run-old")
+    s.run_identity("run-old")
+    s.raw_select(
+        "SELECT legacy_state_json FROM bot_runs WHERE run_id = 'run-old'",
+        [[state_json(RUNS["legacy_no_mode"], False)]],
+    )
+    out.append(s)
+
+    s = Scenario(
+        "control.adopt_refusals",
+        "only a legacy run is adopted, only under an adopted identity, and a run that recorded its mode refuses another; a refusal changes nothing",
+    )
+    s.create_run("first", identity())
+    s.seed_legacy_run("legacy", True)
+    adopted = identity("testnet", "key-a", source="adopted")
+    s.adopt_run("run-1", adopted)
+    s.adopt_run("run-none", adopted)
+    s.adopt_run("run-legacy", adopted, mode="live")
+    s.adopt_run("run-legacy", identity("testnet", "key-a"))
+    s.run_identity("run-legacy")
+    s.run_identity("run-1")
+    s.legacy_runs()
     out.append(s)
     return out
 
@@ -1403,11 +1600,13 @@ def main() -> int:
     cases["journal"] = [s.out() for s in journal_scenarios()]
     cases["segments"] = [s.out() for s in segment_scenarios()]
     cases["races"] = races()
-    ids = [s["id"] for group in ("candles", "journal", "segments", "races") for s in cases[group]]
+    cases["control"] = [s.out() for s in control_scenarios()]
+    groups = ("candles", "journal", "segments", "races", "control")
+    ids = [s["id"] for group in groups for s in cases[group]]
     if len(ids) != len(set(ids)):
         raise SystemExit("scenario ids repeat")
     OUT.write_text(json.dumps(cases, indent=1, ensure_ascii=False) + "\n")
-    counts = ", ".join(f"{len(cases[g])} {g}" for g in ("candles", "journal", "segments", "races"))
+    counts = ", ".join(f"{len(cases[g])} {g}" for g in groups)
     print(f"wrote {OUT.relative_to(ROOT)}: {counts}")
     return 0
 

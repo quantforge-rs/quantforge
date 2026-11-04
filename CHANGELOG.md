@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `PostgresStore` implements `RunJournalStore` and `StoreControl` with SQLite's rules and messages: runs created once and saved only after, the latest run by update, start and then run ID compared byte by byte whatever the database's collation, order events and closed trades appended raw and listed newest first, and the store's binding, legacy runs and their adoption. PostgreSQL is not selectable yet (QUA-116)
+- `docs/storage-schema.md` states the journal's write contract: each write stands alone, a run's position is saved before its order event and never rolled back by a failed append, nothing is retried below the caller, one process drives a run at a time and the last save wins, and closed trades keep their Spot meaning
 - `PostgresStore` implements `CandleStore` with SQLite's semantics: a batch is one transaction that writes its candles as one statement and marks the segment windows it changed with a fresh revision, so a refresh never publishes a window over candles it did not pack; identical candles change no row. PostgreSQL is not selectable yet (QUA-116)
 - `PostgresStore::init` creates the PostgreSQL schema, schema 5 with SQLite's tables and exact `TEXT` decimals, in one transaction under an advisory lock: processes starting together create it once, a failure leaves nothing behind, and running it again changes nothing; a later build migrates it in place, one step per transaction. PostgreSQL is not selectable yet (QUA-116)
 - a PostgreSQL database from a newer build, or one whose schema holds tables named like QuantForge's but records no schema version, is refused untouched

@@ -59,6 +59,11 @@ fn journal() {
 }
 
 #[test]
+fn control() {
+    conformance::control::<Factory>();
+}
+
+#[test]
 fn segments() {
     conformance::segments::<Factory>();
 }

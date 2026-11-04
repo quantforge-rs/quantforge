@@ -49,6 +49,7 @@ pub struct Cases {
     pub journal: Vec<Scenario>,
     pub segments: Vec<Scenario>,
     pub races: Vec<serde_json::Value>,
+    pub control: Vec<Scenario>,
 }
 
 pub fn load() -> Cases {
@@ -193,6 +194,66 @@ pub enum Step {
         #[serde(default)]
         refused: Option<Refusal>,
     },
+    StoreRecord {
+        expect: StoreRecordText,
+    },
+    Migrations {
+        expect: Vec<MigrationText>,
+    },
+    BindEnvironment {
+        environment: String,
+        #[serde(default)]
+        refused: Option<Refusal>,
+    },
+    LegacyRuns {
+        expect: Vec<LegacyRunText>,
+    },
+    AdoptRun {
+        run_id: String,
+        identity: IdentityText,
+        execution_mode: Option<String>,
+        #[serde(default)]
+        refused: Option<Refusal>,
+    },
+}
+
+/// The store's record, but its ID, which is random.
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct StoreRecordText {
+    pub schema_version: u32,
+    pub environment: Option<String>,
+    pub activation: String,
+    pub activation_epoch: u32,
+}
+
+/// One step of the migration log, but when and by which build.
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MigrationText {
+    pub to_version: u32,
+    pub from_version: u32,
+}
+
+/// A legacy run as `StoreControl::legacy_runs` lists it, its market by
+/// name.
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct LegacyRunText {
+    pub run_id: String,
+    pub market: String,
+    pub status: String,
+    pub execution_mode: Option<String>,
+    pub started_at_ms: i64,
+}
+
+/// An execution mode from its wire form.
+pub fn execution_mode(text: &str) -> ExecutionMode {
+    match text {
+        "dry_run" => ExecutionMode::DryRun,
+        "live" => ExecutionMode::Live,
+        other => panic!("no execution mode {other}"),
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -399,6 +460,7 @@ impl IdentityText {
         });
         match self.source.as_str() {
             "recorded" => RunIdentity::recorded(environment, account),
+            "adopted" => RunIdentity::adopted(environment, account),
             "legacy" => {
                 assert!(environment.is_none() && account.is_none(), "{self:?}");
                 RunIdentity::legacy()
@@ -449,11 +511,7 @@ impl Cases {
             market: self.market(&text.market),
             strategy_name: text.strategy_name.clone(),
             strategy_config: text.strategy_config.clone(),
-            execution_mode: match text.execution_mode.as_str() {
-                "dry_run" => ExecutionMode::DryRun,
-                "live" => ExecutionMode::Live,
-                other => panic!("no execution mode {other}"),
-            },
+            execution_mode: execution_mode(&text.execution_mode),
             status: [
                 RunStatus::Starting,
                 RunStatus::Running,

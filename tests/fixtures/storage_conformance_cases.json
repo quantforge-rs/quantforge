@@ -406,6 +406,52 @@
     "entry_order_id": null
    }
   },
+  "tie_upper": {
+   "run_id": "run-B",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 2,
+   "updated_at_ms": 9000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "tie_lower": {
+   "run_id": "run-a",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 2,
+   "updated_at_ms": 9000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
   "legacy": {
    "run_id": "run-legacy",
    "market": "spot",
@@ -431,6 +477,29 @@
   },
   "legacy_no_mode": {
    "run_id": "run-old",
+   "market": "spot",
+   "strategy_name": "sma_cross",
+   "strategy_config": {
+    "kind": "sma_cross",
+    "fast": 20,
+    "slow": 50
+   },
+   "execution_mode": "dry_run",
+   "status": "running",
+   "last_processed_open_time_ms": null,
+   "started_at_ms": 1792454400000,
+   "updated_at_ms": 1792454520000,
+   "stopped_at_ms": null,
+   "last_error": null,
+   "position": {
+    "qty": "0",
+    "entry_price": null,
+    "entry_time_ms": null,
+    "entry_order_id": null
+   }
+  },
+  "legacy_upper": {
+   "run_id": "run-Z",
    "market": "spot",
    "strategy_name": "sma_cross",
    "strategy_config": {
@@ -2807,6 +2876,64 @@
    ]
   },
   {
+   "id": "journal.last_save_wins",
+   "doc": "the last save replaces the state whatever its times, and a refused create changes nothing: one process drives a run at a time",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "first",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "save_run",
+     "run": "first_stopped"
+    },
+    {
+     "op": "save_run",
+     "run": "first"
+    },
+    {
+     "op": "load_run",
+     "run_id": "run-1",
+     "expect": "first"
+    },
+    {
+     "op": "create_run",
+     "run": "full",
+     "identity": {
+      "environment": "testnet",
+      "account": {
+       "key": "key-a",
+       "fingerprint": "f10f781241e22466"
+      },
+      "source": "recorded"
+     },
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "run run-1 already exists"
+     }
+    },
+    {
+     "op": "load_run",
+     "run_id": "run-1",
+     "expect": "first"
+    },
+    {
+     "op": "run_identity",
+     "run_id": "run-1",
+     "expect": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    }
+   ]
+  },
+  {
    "id": "journal.latest_per_market",
    "doc": "the latest run is the last updated of its market and strategy; another strategy, interval, venue or family never wins",
    "steps": [
@@ -2969,6 +3096,36 @@
      "market": "spot",
      "strategy": "sma_cross",
      "expect": "tie_m_later"
+    }
+   ]
+  },
+  {
+   "id": "journal.latest_tie_by_bytes",
+   "doc": "on a tie of both times, run IDs compare byte by byte, so run-a outranks run-B whatever the database's collation",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "tie_lower",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "create_run",
+     "run": "tie_upper",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "latest_run",
+     "market": "spot",
+     "strategy": "sma_cross",
+     "expect": "tie_lower"
     }
    ]
   },
@@ -4919,6 +5076,417 @@
        "last_open_ms": 172800000
       }
      }
+    }
+   ]
+  }
+ ],
+ "control": [
+  {
+   "id": "control.new_store",
+   "doc": "a new store is inactive at epoch 0, bound to no environment, and logs one step to the current schema from 0",
+   "steps": [
+    {
+     "op": "store_record",
+     "expect": {
+      "schema_version": 5,
+      "environment": null,
+      "activation": "inactive",
+      "activation_epoch": 0
+     }
+    },
+    {
+     "op": "migrations",
+     "expect": [
+      {
+       "to_version": 5,
+       "from_version": 0
+      }
+     ]
+    },
+    {
+     "op": "reopen"
+    },
+    {
+     "op": "store_record",
+     "expect": {
+      "schema_version": 5,
+      "environment": null,
+      "activation": "inactive",
+      "activation_epoch": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "control.bound_for_life",
+   "doc": "a store is bound to one environment for life; binding it again to the same one changes nothing",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "testnet"
+    },
+    {
+     "op": "bind_environment",
+     "environment": "testnet"
+    },
+    {
+     "op": "bind_environment",
+     "environment": "mainnet",
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "is bound to testnet; a store keeps its environment for life"
+     }
+    },
+    {
+     "op": "reopen"
+    },
+    {
+     "op": "store_record",
+     "expect": {
+      "schema_version": 5,
+      "environment": "testnet",
+      "activation": "inactive",
+      "activation_epoch": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": "control.legacy_runs_listed",
+   "doc": "legacy runs are listed oldest first, then by run ID, with the mode only a run that recorded one has; recorded runs are not listed",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "first",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "raw_execute",
+     "sql": "INSERT INTO bot_runs(run_id, exchange, symbol, interval, strategy_name, status, state_json, started_at_ms, updated_at_ms, stopped_at_ms, last_error, environment, account_kind, account_id, identity_source, identity_at_ms, legacy_state_json) VALUES ('run-old', 'binance_spot', 'BTCUSDT', '1m', 'sma_cross', 'running', '{\"run_id\":\"run-old\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"status\":\"Running\",\"last_processed_open_time_ms\":null,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":null,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}', 1792454400000, 1792454520000, NULL, NULL, NULL, NULL, NULL, 'legacy', NULL, '{\"run_id\":\"run-old\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"status\":\"Running\",\"last_processed_open_time_ms\":null,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":null,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}')"
+    },
+    {
+     "op": "raw_execute",
+     "sql": "INSERT INTO bot_runs(run_id, exchange, symbol, interval, strategy_name, status, state_json, started_at_ms, updated_at_ms, stopped_at_ms, last_error, environment, account_kind, account_id, identity_source, identity_at_ms, legacy_state_json) VALUES ('run-legacy', 'binance_spot', 'BTCUSDT', '1m', 'sma_cross', 'stopped', '{\"run_id\":\"run-legacy\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"Live\",\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454460000,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":1792454520000,\"last_error\":null,\"position\":{\"qty\":\"0.0254\",\"entry_price\":\"3933.07\",\"entry_time_ms\":1792454460100,\"entry_order_id\":\"7\"}}', 1792454400000, 1792454520000, 1792454520000, NULL, NULL, NULL, NULL, 'legacy', NULL, '{\"run_id\":\"run-legacy\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"Live\",\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454460000,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":1792454520000,\"last_error\":null,\"position\":{\"qty\":\"0.0254\",\"entry_price\":\"3933.07\",\"entry_time_ms\":1792454460100,\"entry_order_id\":\"7\"}}')"
+    },
+    {
+     "op": "raw_execute",
+     "sql": "INSERT INTO bot_runs(run_id, exchange, symbol, interval, strategy_name, status, state_json, started_at_ms, updated_at_ms, stopped_at_ms, last_error, environment, account_kind, account_id, identity_source, identity_at_ms, legacy_state_json) VALUES ('run-Z', 'binance_spot', 'BTCUSDT', '1m', 'sma_cross', 'running', '{\"run_id\":\"run-Z\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"DryRun\",\"status\":\"Running\",\"last_processed_open_time_ms\":null,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":null,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}', 1792454400000, 1792454520000, NULL, NULL, NULL, NULL, NULL, 'legacy', NULL, '{\"run_id\":\"run-Z\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"DryRun\",\"status\":\"Running\",\"last_processed_open_time_ms\":null,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":null,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}')"
+    },
+    {
+     "op": "legacy_runs",
+     "expect": [
+      {
+       "run_id": "run-Z",
+       "market": "spot",
+       "status": "running",
+       "execution_mode": "dry_run",
+       "started_at_ms": 1792454400000
+      },
+      {
+       "run_id": "run-legacy",
+       "market": "spot",
+       "status": "stopped",
+       "execution_mode": "live",
+       "started_at_ms": 1792454400000
+      },
+      {
+       "run_id": "run-old",
+       "market": "spot",
+       "status": "running",
+       "execution_mode": null,
+       "started_at_ms": 1792454400000
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "control.adopt_a_legacy_run",
+   "doc": "an adopted legacy run takes the verified identity, loads, matches only that identity, and keeps its original state beside it",
+   "steps": [
+    {
+     "op": "raw_execute",
+     "sql": "INSERT INTO bot_runs(run_id, exchange, symbol, interval, strategy_name, status, state_json, started_at_ms, updated_at_ms, stopped_at_ms, last_error, environment, account_kind, account_id, identity_source, identity_at_ms, legacy_state_json) VALUES ('run-legacy', 'binance_spot', 'BTCUSDT', '1m', 'sma_cross', 'stopped', '{\"run_id\":\"run-legacy\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"Live\",\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454460000,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":1792454520000,\"last_error\":null,\"position\":{\"qty\":\"0.0254\",\"entry_price\":\"3933.07\",\"entry_time_ms\":1792454460100,\"entry_order_id\":\"7\"}}', 1792454400000, 1792454520000, 1792454520000, NULL, NULL, NULL, NULL, 'legacy', NULL, '{\"run_id\":\"run-legacy\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"Live\",\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454460000,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":1792454520000,\"last_error\":null,\"position\":{\"qty\":\"0.0254\",\"entry_price\":\"3933.07\",\"entry_time_ms\":1792454460100,\"entry_order_id\":\"7\"}}')"
+    },
+    {
+     "op": "bind_environment",
+     "environment": "testnet"
+    },
+    {
+     "op": "adopt_run",
+     "run_id": "run-legacy",
+     "identity": {
+      "environment": "testnet",
+      "account": {
+       "key": "key-a",
+       "fingerprint": "f10f781241e22466"
+      },
+      "source": "adopted"
+     },
+     "execution_mode": null
+    },
+    {
+     "op": "run_identity",
+     "run_id": "run-legacy",
+     "expect": {
+      "environment": "testnet",
+      "account": {
+       "key": "key-a",
+       "fingerprint": "f10f781241e22466"
+      },
+      "source": "adopted"
+     }
+    },
+    {
+     "op": "load_run",
+     "run_id": "run-legacy",
+     "expect": "legacy"
+    },
+    {
+     "op": "identity_matches",
+     "run_id": "run-legacy",
+     "invocation": {
+      "environment": "testnet",
+      "account": {
+       "key": "key-a",
+       "fingerprint": "f10f781241e22466"
+      },
+      "source": "recorded"
+     },
+     "expect": "ok"
+    },
+    {
+     "op": "identity_matches",
+     "run_id": "run-legacy",
+     "invocation": {
+      "environment": "testnet",
+      "account": {
+       "key": "key-b",
+       "fingerprint": "a30534a53b235473"
+      },
+      "source": "recorded"
+     },
+     "expect": "account"
+    },
+    {
+     "op": "legacy_runs",
+     "expect": []
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT legacy_state_json FROM bot_runs WHERE run_id = 'run-legacy'",
+     "expect": [
+      [
+       "{\"run_id\":\"run-legacy\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"Live\",\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454460000,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":1792454520000,\"last_error\":null,\"position\":{\"qty\":\"0.0254\",\"entry_price\":\"3933.07\",\"entry_time_ms\":1792454460100,\"entry_order_id\":\"7\"}}"
+      ]
+     ]
+    },
+    {
+     "op": "adopt_run",
+     "run_id": "run-legacy",
+     "identity": {
+      "environment": "testnet",
+      "account": {
+       "key": "key-a",
+       "fingerprint": "f10f781241e22466"
+      },
+      "source": "adopted"
+     },
+     "execution_mode": null,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "run run-legacy already has an identity (adopted)"
+     }
+    }
+   ]
+  },
+  {
+   "id": "control.adopt_states_the_missing_mode",
+   "doc": "a legacy run that recorded no execution mode is adopted only with the mode the operator states, then loads with it",
+   "steps": [
+    {
+     "op": "raw_execute",
+     "sql": "INSERT INTO bot_runs(run_id, exchange, symbol, interval, strategy_name, status, state_json, started_at_ms, updated_at_ms, stopped_at_ms, last_error, environment, account_kind, account_id, identity_source, identity_at_ms, legacy_state_json) VALUES ('run-old', 'binance_spot', 'BTCUSDT', '1m', 'sma_cross', 'running', '{\"run_id\":\"run-old\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"status\":\"Running\",\"last_processed_open_time_ms\":null,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":null,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}', 1792454400000, 1792454520000, NULL, NULL, NULL, NULL, NULL, 'legacy', NULL, '{\"run_id\":\"run-old\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"status\":\"Running\",\"last_processed_open_time_ms\":null,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":null,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}')"
+    },
+    {
+     "op": "bind_environment",
+     "environment": "testnet"
+    },
+    {
+     "op": "adopt_run",
+     "run_id": "run-old",
+     "identity": {
+      "environment": "testnet",
+      "account": null,
+      "source": "adopted"
+     },
+     "execution_mode": null,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "run run-old recorded no execution mode"
+     }
+    },
+    {
+     "op": "load_run",
+     "run_id": "run-old",
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "run run-old was recorded by QuantForge 0.2.0 without its execution mode"
+     }
+    },
+    {
+     "op": "adopt_run",
+     "run_id": "run-old",
+     "identity": {
+      "environment": "testnet",
+      "account": null,
+      "source": "adopted"
+     },
+     "execution_mode": "dry_run"
+    },
+    {
+     "op": "load_run",
+     "run_id": "run-old",
+     "expect": "legacy_no_mode"
+    },
+    {
+     "op": "run_identity",
+     "run_id": "run-old",
+     "expect": {
+      "environment": "testnet",
+      "account": null,
+      "source": "adopted"
+     }
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT legacy_state_json FROM bot_runs WHERE run_id = 'run-old'",
+     "expect": [
+      [
+       "{\"run_id\":\"run-old\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"status\":\"Running\",\"last_processed_open_time_ms\":null,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":null,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "control.adopt_refusals",
+   "doc": "only a legacy run is adopted, only under an adopted identity, and a run that recorded its mode refuses another; a refusal changes nothing",
+   "steps": [
+    {
+     "op": "create_run",
+     "run": "first",
+     "identity": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "raw_execute",
+     "sql": "INSERT INTO bot_runs(run_id, exchange, symbol, interval, strategy_name, status, state_json, started_at_ms, updated_at_ms, stopped_at_ms, last_error, environment, account_kind, account_id, identity_source, identity_at_ms, legacy_state_json) VALUES ('run-legacy', 'binance_spot', 'BTCUSDT', '1m', 'sma_cross', 'stopped', '{\"run_id\":\"run-legacy\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"Live\",\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454460000,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":1792454520000,\"last_error\":null,\"position\":{\"qty\":\"0.0254\",\"entry_price\":\"3933.07\",\"entry_time_ms\":1792454460100,\"entry_order_id\":\"7\"}}', 1792454400000, 1792454520000, 1792454520000, NULL, NULL, NULL, NULL, 'legacy', NULL, '{\"run_id\":\"run-legacy\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"Live\",\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454460000,\"started_at_ms\":1792454400000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":1792454520000,\"last_error\":null,\"position\":{\"qty\":\"0.0254\",\"entry_price\":\"3933.07\",\"entry_time_ms\":1792454460100,\"entry_order_id\":\"7\"}}')"
+    },
+    {
+     "op": "adopt_run",
+     "run_id": "run-1",
+     "identity": {
+      "environment": "testnet",
+      "account": {
+       "key": "key-a",
+       "fingerprint": "f10f781241e22466"
+      },
+      "source": "adopted"
+     },
+     "execution_mode": null,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "run run-1 already has an identity (recorded)"
+     }
+    },
+    {
+     "op": "adopt_run",
+     "run_id": "run-none",
+     "identity": {
+      "environment": "testnet",
+      "account": {
+       "key": "key-a",
+       "fingerprint": "f10f781241e22466"
+      },
+      "source": "adopted"
+     },
+     "execution_mode": null,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "no run found for run_id=run-none"
+     }
+    },
+    {
+     "op": "adopt_run",
+     "run_id": "run-legacy",
+     "identity": {
+      "environment": "testnet",
+      "account": {
+       "key": "key-a",
+       "fingerprint": "f10f781241e22466"
+      },
+      "source": "adopted"
+     },
+     "execution_mode": "live",
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "run run-legacy already records its execution mode"
+     }
+    },
+    {
+     "op": "adopt_run",
+     "run_id": "run-legacy",
+     "identity": {
+      "environment": "testnet",
+      "account": {
+       "key": "key-a",
+       "fingerprint": "f10f781241e22466"
+      },
+      "source": "recorded"
+     },
+     "execution_mode": null,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "identity source is adopted, not recorded"
+     }
+    },
+    {
+     "op": "run_identity",
+     "run_id": "run-legacy",
+     "expect": {
+      "environment": null,
+      "account": null,
+      "source": "legacy"
+     }
+    },
+    {
+     "op": "run_identity",
+     "run_id": "run-1",
+     "expect": {
+      "environment": null,
+      "account": null,
+      "source": "recorded"
+     }
+    },
+    {
+     "op": "legacy_runs",
+     "expect": [
+      {
+       "run_id": "run-legacy",
+       "market": "spot",
+       "status": "stopped",
+       "execution_mode": "live",
+       "started_at_ms": 1792454400000
+      }
+     ]
     }
    ]
   }

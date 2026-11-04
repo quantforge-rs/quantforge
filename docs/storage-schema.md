@@ -22,6 +22,7 @@ operator's side of the same contract.
 - [The chain on SQLite](#the-chain-on-sqlite)
 - [The chain on PostgreSQL](#the-chain-on-postgresql)
 - [Legacy runs](#legacy-runs)
+- [Writing the journal](#writing-the-journal)
 - [SQLite DDL](#sqlite-ddl)
 - [PostgreSQL DDL](#postgresql-ddl)
 - [Segments on PostgreSQL](#segments-on-postgresql)
@@ -236,6 +237,50 @@ A run without an execution mode takes the one the operator states, and the
 record it had before is kept in `legacy_state_json`. Loading such a run
 before its adoption fails with the adoption command in the message, and
 `trade run --run-id` and `trade close` refuse a legacy run.
+
+## Writing the journal
+
+What every backend's run journal promises the process writing it, and
+what it leaves to that process. The shared conformance cases hold both
+backends to it, and `tests/live_engine.rs` runs the engine's dry runs and
+resume checks on both.
+
+- **Each write stands alone.** Creating a run, saving its state, and
+  appending an order event or a closed trade are one statement each; a
+  refused or failed write leaves nothing of itself. No write covers a state
+  and an event together: the engine saves a run's position before it
+  appends the order event that changed it, and a failed append never rolls
+  that save back (safety rail 5), so an executed order's position is never
+  lost to a journal row.
+- **Nothing is retried below the caller.** A store never retries a write;
+  on PostgreSQL a write whose answer was lost is
+  `StorageError::OutcomeUnknown`, for the caller to look at before writing
+  again. Retrying a write and submitting an order are separate decisions: a
+  failed save never sends an order again.
+- **One process drives a run at a time.** The journal does not arbitrate
+  between processes driving one run: the last save wins whatever its times
+  (`journal.last_save_wins`), and appends never conflict, each a row of its
+  own numbered by a sequence that never reuses a value, so two writers'
+  rows interleave and each writer's keep their order. Who may drive is
+  decided above the journal, by the leases and the arming guard of ALG-738
+  and ALG-767.
+- **A run belongs to its market and identity.** The latest run is found by
+  exchange, symbol, interval and strategy, never across exchanges; a run
+  resumed by its ID is checked against the invocation's market, strategy,
+  execution mode, environment and account before anything is driven, and a
+  legacy run is never resumed. Run IDs that tie compare byte by byte, as
+  SQLite compares text; PostgreSQL sorts them `COLLATE "C"` whatever the
+  database's collation.
+- **Raw, not semantic.** The journal records what it is given: the same
+  order event twice is two rows, and nothing here deduplicates signals or
+  orders. ALG-738's signal inbox, intents and execution ledger do that, in
+  transactions and tables of their own.
+- **Closed trades keep their Spot meaning.** A `closed_trades` row is a
+  Spot round trip as QuantForge 0.2.0 defined it: its `gross_quote_pnl` is
+  the exit price less the entry price, times the quantity, with no fee
+  taken. A futures position's gross, fees, funding and net result belong to
+  ALG-738's execution ledger, in the accounting types of ALG-733, never to
+  these columns.
 
 ## SQLite DDL
 
@@ -575,9 +620,9 @@ serves every port above; [configuration.md](configuration.md#storage-backends)
 is the operator's side. The factory opens only the backend selected: a
 backend without a registered provider is refused, never replaced by
 another. PostgreSQL's provider is registered once its stores exist: the
-candle store does (QUA-124); the journal and segment stores come with
-QUA-123 and QUA-112, then QUA-116 registers the provider. Until then a
-PostgreSQL selection is checked and refused.
+candle store (QUA-124), the journal and the store's record (QUA-123) do;
+the segment store comes with QUA-112, then QUA-116 registers the provider.
+Until then a PostgreSQL selection is checked and refused.
 
 The process that opens a store owns it, its pool and its credentials, for
 its whole life, and no other process receives them (ADR 0001): a CLI
