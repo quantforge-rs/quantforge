@@ -405,8 +405,7 @@ fn a_zero_two_zero_store_gets_its_windows_marked_and_its_runs_adopted_one_by_one
     assert!(
         error
             .to_string()
-            .contains("already has an identity (adopted)")
-            || error.to_string().contains("only a legacy run"),
+            .contains("already has an identity (adopted)"),
         "{error}"
     );
     let original = rows(
