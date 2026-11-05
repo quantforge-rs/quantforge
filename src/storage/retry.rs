@@ -25,22 +25,38 @@ const LONGEST_PAUSE: Duration = Duration::from_millis(200);
 /// given all of it.
 pub fn retry_conflicts<T>(
     budget: Duration,
+    transaction: impl FnMut(Duration) -> Result<T, StorageError>,
+) -> Result<T, StorageError> {
+    retry_with(thread::sleep, budget, transaction)
+}
+
+/// [`retry_conflicts`], pausing through `sleep`, which in a test can run
+/// late. What is left is read from the clock after a pause, since a timer may
+/// wake long after the time it was asked for.
+fn retry_with<T>(
+    mut sleep: impl FnMut(Duration),
+    budget: Duration,
     mut transaction: impl FnMut(Duration) -> Result<T, StorageError>,
 ) -> Result<T, StorageError> {
     let deadline = Instant::now().checked_add(budget);
+    let time_left = || {
+        deadline.map_or(budget, |deadline| {
+            deadline.saturating_duration_since(Instant::now())
+        })
+    };
     let mut left = budget;
     let mut pause = FIRST_PAUSE;
     loop {
         match transaction(left) {
             Err(conflict) if conflict.kind() == StorageErrorKind::Conflict => {
-                if let Some(deadline) = deadline {
-                    left = deadline.saturating_duration_since(Instant::now());
-                    if left <= pause {
-                        return Err(conflict);
-                    }
-                    left -= pause;
+                if time_left() <= pause {
+                    return Err(conflict);
                 }
-                thread::sleep(pause);
+                sleep(pause);
+                left = time_left();
+                if left.is_zero() {
+                    return Err(conflict);
+                }
                 pause = (pause * 2).min(LONGEST_PAUSE);
             }
             answer => return answer,
@@ -89,7 +105,8 @@ mod tests {
 
     #[test]
     fn it_stops_inside_the_budget_and_answers_the_conflict() {
-        let budget = Duration::from_millis(100);
+        // More than one late pause can take: 100 ms, at a low priority.
+        let budget = Duration::from_millis(500);
         let started = Instant::now();
         let mut attempts = 0;
         let answer: Result<(), _> = retry_conflicts(budget, |_| {
@@ -138,5 +155,57 @@ mod tests {
         });
         answer.expect("through");
         assert_eq!(lefts, [Duration::MAX; 3]);
+    }
+
+    #[test]
+    fn a_pause_that_runs_late_comes_out_of_what_the_next_attempt_is_handed() {
+        let budget = Duration::from_secs(5);
+        let late = Duration::from_millis(100);
+        let mut lefts = Vec::new();
+        let answer = retry_with(
+            |pause| thread::sleep(pause + late),
+            budget,
+            |left| {
+                lefts.push(left);
+                if lefts.len() < 2 {
+                    Err(conflict())
+                } else {
+                    Ok(())
+                }
+            },
+        );
+        answer.expect("through");
+        assert!(lefts[1] <= budget - FIRST_PAUSE - late, "{lefts:?}");
+    }
+
+    #[test]
+    fn a_pause_that_outlasts_the_budget_answers_the_conflict() {
+        let budget = Duration::from_millis(50);
+        let mut attempts = 0;
+        let answer: Result<(), _> = retry_with(
+            |_| thread::sleep(budget),
+            budget,
+            |_| {
+                attempts += 1;
+                Err(conflict())
+            },
+        );
+        assert_eq!(
+            answer.expect_err("no time left").kind(),
+            StorageErrorKind::Conflict
+        );
+        assert_eq!(attempts, 1);
+    }
+
+    #[test]
+    fn a_pause_the_budget_has_no_room_for_is_not_taken() {
+        let mut pauses = 0;
+        let answer: Result<(), _> =
+            retry_with(|_| pauses += 1, FIRST_PAUSE / 2, |_| Err(conflict()));
+        assert_eq!(
+            answer.expect_err("no time left").kind(),
+            StorageErrorKind::Conflict
+        );
+        assert_eq!(pauses, 0);
     }
 }

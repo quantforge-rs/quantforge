@@ -133,7 +133,10 @@ limits.
 What is left of a call's budget divides so that the backend's own answer
 arrives first: a lock wait may take three quarters of it and a statement
 seven eighths, and only then does the bridge give up. So a held lock is
-`contention`, which changed nothing, rather than `outcome_unknown`.
+`contention`, which changed nothing, rather than `outcome_unknown`. On SQLite
+all of a call's lock waits share those three quarters, counted from when it
+opens its connection, since a call can be held up as it opens and again at
+its write.
 
 A budget covers one port call. `refresh_segments` is many calls, one or
 more per window, and each is bounded on its own.
@@ -144,12 +147,16 @@ take and never reads a clock, so late timers stretch it. A 1.5 s wait took
 a call with a 2 s budget took 3.3 s. So a connection waits with a busy handler
 of its own, which reads the clock and sleeps at most 10 ms between tries, where
 SQLite's sleeps grow to 100 ms and lose the lock to writers that keep
-committing.
+committing. It reads the clock again on waking, so a timer that ran late ends
+the wait instead of buying one more try.
 
 SQLite's budget bounds waiting for locks, not the disk. A call runs on the
 caller's thread, and a stalled flush cannot be interrupted, so a dying disk
-can hold a SQLite call past its budget. PostgreSQL's calls run on the bridge,
-so the caller stops waiting at the deadline whatever the server is doing.
+can hold a SQLite call past its budget. Nor does it bound the retries SQLite
+makes on its own shared memory, which never reach the busy handler: they are
+meant to last an instant, and give up as `contention` in under 10 s.
+PostgreSQL's calls run on the bridge, so the caller stops waiting at the
+deadline whatever the server is doing.
 
 ## When a call fails
 
@@ -176,10 +183,11 @@ is the caller's to use:
 retry_conflicts(budget, |left| store.within(left).upsert_candles(&market, &candles))
 ```
 
-It repeats only `conflict`, hands each attempt what is left of the budget, and
-stops inside it. `outcome_unknown` ends it at once, since a write that may
-have committed must never be made twice. The closure holds storage calls and
-nothing else: an exchange request inside it would be sent again.
+It repeats only `conflict`, hands each attempt what the clock says is left of
+the budget once its pause is over, and stops when nothing is. `outcome_unknown`
+ends it at once, since a write that may have committed must never be made
+twice. The closure holds storage calls and nothing else: an exchange request
+inside it would be sent again.
 
 An HTTP route answers `unavailable`, `contention` and `conflict` with a 503
 and `outcome_unknown` with a 500, in the terms of ADR 0001. None of them is
@@ -218,6 +226,7 @@ On PostgreSQL 16.15 and SQLite 3.46 on macOS 26.4.1 (arm64), on 2026-11-04.
 | Application crash, SQLite and PostgreSQL | A writer killed with `SIGKILL` after 200 acknowledgements (`tests/storage/crash.rs`) | Every acknowledged candle stored |
 | Database crash, PostgreSQL | `pg_ctl stop -m immediate` under a writer, then recovery on restart (the same file, on demand) | Every acknowledged candle stored, in 12 runs of 12. With `synchronous_commit = off` planted, the same test lost 3 to 6 acknowledged candles in 3 runs of 4, so it can tell the difference |
 | A held writer lock, both backends | `durability.contention_is_bounded`, also at macOS's background priority, where timers run late, on 2026-11-05 | `contention` inside the budget, nothing written |
+| A call held up as it opens and again at its write, SQLite | `src/storage/sqlite/wait.rs` | One wait between them, inside the budget |
 | A full pool, a slow statement, PostgreSQL | `src/storage/postgres/tests/durability.rs` | `unavailable` and `outcome_unknown` inside the budget |
 | A deadlock, a snapshot conflict | A real one on each backend | `conflict`, and a retry goes through on PostgreSQL |
 | A connection ended mid-write, PostgreSQL | `pg_terminate_backend` on a write waiting for a lock | `outcome_unknown`, and the store reconnects |

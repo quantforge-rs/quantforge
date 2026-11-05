@@ -19,6 +19,7 @@ use std::collections::BTreeSet;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use super::errors::failed;
+use super::wait::Waits;
 use super::{SqliteStore, to_from_sql_error};
 use crate::storage::segments as format;
 use crate::storage::{common, refresh};
@@ -62,7 +63,12 @@ pub(super) const SCHEMA_DDL: &str = r#"
 
 impl SegmentStore for SqliteStore {
     fn refresh_segments(&self, market: &MarketId) -> Result<SegmentRefresh, StorageError> {
-        refresh::refresh(&mut self.open()?, market)
+        // Many calls on one connection: a budget bounds each, not all of them.
+        let calls = Self {
+            waits: Waits::Apart,
+            ..self.clone()
+        };
+        refresh::refresh(&mut calls.open()?, market)
     }
 
     fn resolve_segments(

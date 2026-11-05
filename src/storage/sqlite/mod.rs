@@ -27,6 +27,7 @@ use std::{
     time::Duration,
 };
 use tracing::info;
+use wait::Waits;
 
 /// The schema this build writes, recorded in `meta.schema_version` and
 /// checked on every `init`.
@@ -63,6 +64,8 @@ pub struct SqliteStore {
     durability: Durability,
     /// How long a connection waits on another writer's lock.
     lock_wait: Duration,
+    /// Whether each of its waits has that long, or all of them.
+    waits: Waits,
 }
 
 impl SqliteStore {
@@ -76,15 +79,18 @@ impl SqliteStore {
             path: path.into(),
             durability: limits.durability,
             lock_wait: limits.wait_budget,
+            waits: Waits::Apart,
         }
     }
 
-    /// The same file, each call through it bounded by `budget`: it gives up
-    /// on another writer's lock in time to answer inside it. The disk's own
-    /// time cannot be bounded here, since a call runs on the caller's thread.
+    /// The same file, each call through it bounded by `budget`: however many
+    /// locks it meets, it gives up on them in time to answer inside it. The
+    /// disk's own time cannot be bounded here, since a call runs on the
+    /// caller's thread.
     pub fn within(&self, budget: Duration) -> Self {
         Self {
             lock_wait: self.lock_wait.min(lock_wait(budget)),
+            waits: Waits::Together,
             ..self.clone()
         }
     }
@@ -98,7 +104,7 @@ impl SqliteStore {
     /// applying the rest already waits as it should.
     fn open(&self) -> Result<Connection, StorageError> {
         let connection = Connection::open(&self.path).map_err(failed)?;
-        wait::at_most(&connection, self.lock_wait).map_err(failed)?;
+        wait::at_most(&connection, self.lock_wait, self.waits).map_err(failed)?;
         connection
             .pragma_update(None, "journal_mode", "WAL")
             .map_err(failed)?;

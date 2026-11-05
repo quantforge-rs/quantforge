@@ -26,7 +26,7 @@ pub const DEFAULT_ROUTE_BUDGET: Duration = Duration::from_secs(2);
 #[non_exhaustive]
 pub struct StorageLimits {
     pub durability: Durability,
-    /// The longest a storage call waits on others, for a lock or a free
+    /// The longest one wait in a storage call may take, for a lock or a free
     /// connection: SQLite's wait for a lock, PostgreSQL's `lock_timeout` and
     /// its pool wait.
     pub wait_budget: Duration,
