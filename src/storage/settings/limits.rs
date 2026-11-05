@@ -50,5 +50,5 @@ impl Default for StorageLimits {
 /// hears why from the backend, and a held lock is contention rather than an
 /// unknown outcome.
 pub(crate) fn lock_wait(remaining: Duration) -> Duration {
-    remaining * 3 / 4
+    remaining / 4 * 3
 }
