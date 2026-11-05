@@ -189,9 +189,17 @@ fn a_route_leaves_a_second_of_the_three_a_webhook_delivery_has_unless_a_host_set
 
 #[test]
 fn a_lock_wait_ends_before_the_call_does() {
-    for remaining in [Duration::from_millis(40), Duration::from_secs(2)] {
+    for remaining in [
+        Duration::from_millis(40),
+        Duration::from_secs(2),
+        Duration::MAX,
+    ] {
         assert!(lock_wait(remaining) < remaining);
     }
+    assert_eq!(
+        lock_wait(Duration::from_secs(2)),
+        Duration::from_millis(1500)
+    );
 }
 
 #[cfg(not(feature = "postgres"))]

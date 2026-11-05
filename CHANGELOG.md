@@ -104,6 +104,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - every SQLite connection now runs `synchronous=FULL` with `fullfsync`, so a commit is flushed before the store answers: on macOS that costs about 5 ms per commit, and on Linux what the disk's flush costs; every PostgreSQL connection raises `synchronous_commit = off` to `local`, and gives up on a lock after 5 s
+- a SQLite connection now waits for another writer's lock by the clock, sleeping at most 10 ms between tries, instead of through SQLite's busy timeout, which counts the sleeps it meant to take and so overran a caller's budget wherever timers run late
 - of two runs of one market and strategy last updated in the same millisecond, `trade close` and `monitor status` without `--run-id` take the one started later, then the one with the greater run ID, instead of whichever the database listed first
 - `--help` lists `--db` with the new storage flags under a "Storage" heading
 - the venue's order and trade IDs are text everywhere, Spot included: `ExchangeOrder.order_id`, `Fill.trade_id`, `AccountTrade.trade_id` and `order_id`, `ClosedTrade.entry_order_id` and `exit_order_id`, `PositionState.entry_order_id`, and the `order_id` of a cancel or query request are `VenueOrderId`/`VenueTradeId`; `monitor cancel-order --order-id` takes the ID as the exchange spells it, and `order: id=` lines print it without `Some(..)`

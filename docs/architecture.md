@@ -215,6 +215,7 @@ src/
 │       ├── migrate.rs          the schema chain: every earlier schema brought forward at init
 │       ├── control.rs          store_control and schema_migrations: the StoreControl implementation
 │       ├── errors.rs           SQLite's failures as the categories every backend shares
+│       ├── wait.rs             how a connection waits for another writer's lock, by the clock
 │       ├── candles.rs          candle table and the CandleStore implementation; marks changed windows
 │       ├── journal.rs          run table, run identity, and RunJournalStore; the journal DDL of every schema
 │       ├── journal/            the journals beside a run's state, and its identity columns

@@ -20,9 +20,12 @@ inbox and fencing semantics on top of it.
 
 ## The contract
 
-- **`Ok` from a write means committed and flushed.** The store answers only
-  after the backend's commit returned with the settings below in force. No
-  path turns a failure, a timeout or a lost answer into `Ok`.
+- **`Ok` from a write means committed and flushed,** on a store with [the
+  settings below](#the-settings-every-connection-gets): it answers only after
+  the backend's commit returned. A store without them is refused, unless it
+  runs in `Durability::Reported` mode, where an `Ok` promises the commit and
+  not the flush. No path turns a failure, a timeout or a lost answer into
+  `Ok`.
 - **Anything else is a failure of a known kind.** Every failure but
   `outcome_unknown` means the write changed nothing.
 - **A store never retries.** A caller may, within the rules of
@@ -112,7 +115,7 @@ on PostgreSQL never on the server either:
 | Wait | SQLite | PostgreSQL |
 | --- | --- | --- |
 | A free connection | None: a connection per call | `StorageLimits.wait_budget`, 5 s |
-| A lock | `wait_budget`, 5 s, as the busy timeout | `wait_budget`, 5 s, as `lock_timeout` |
+| A lock | `wait_budget`, 5 s, by the clock | `wait_budget`, 5 s, as `lock_timeout` |
 | A statement | Not bounded: it runs on the caller's thread | `statement_timeout`, 30 s |
 | The whole call | Not bounded, for the same reason | 35 s, then the query is cancelled and the connection discarded |
 
@@ -134,6 +137,14 @@ seven eighths, and only then does the bridge give up. So a held lock is
 
 A budget covers one port call. `refresh_segments` is many calls, one or
 more per window, and each is bounded on its own.
+
+SQLite's busy timeout cannot keep a budget: it adds up the sleeps it meant to
+take and never reads a clock, so late timers stretch it. A 1.5 s wait took
+3.7 s in a process at macOS's background priority, and on a macOS CI runner
+a call with a 2 s budget took 3.3 s. So a connection waits with a busy handler
+of its own, which reads the clock and sleeps at most 10 ms between tries, where
+SQLite's sleeps grow to 100 ms and lose the lock to writers that keep
+committing.
 
 SQLite's budget bounds waiting for locks, not the disk. A call runs on the
 caller's thread, and a stalled flush cannot be interrupted, so a dying disk
@@ -183,7 +194,10 @@ performance threshold pretends otherwise.
 - **Writers.** SQLite has one writer per file at a time, so `contention` means
   someone else is committing anywhere in the database. PostgreSQL locks rows,
   so it means someone holds the same rows or table.
-- **Readers.** Neither backend makes a reader wait for a writer.
+- **Readers.** Neither backend makes a reader wait for a writer. A SQLite
+  call can still wait on a quiet file: the last connection to close
+  checkpoints it, and one opening meanwhile waits for that, for as long as a
+  flush takes. So `contention` can reach a read as well.
 - **Commit cost.** SQLite pays one flush per commit on the caller's thread:
   about 5 ms on the machine below. PostgreSQL pays a network round trip and
   a flush it can share between concurrent commits, so it gains from many
@@ -203,7 +217,7 @@ On PostgreSQL 16.15 and SQLite 3.46 on macOS 26.4.1 (arm64), on 2026-11-04.
 | --- | --- | --- |
 | Application crash, SQLite and PostgreSQL | A writer killed with `SIGKILL` after 200 acknowledgements (`tests/storage/crash.rs`) | Every acknowledged candle stored |
 | Database crash, PostgreSQL | `pg_ctl stop -m immediate` under a writer, then recovery on restart (the same file, on demand) | Every acknowledged candle stored, in 12 runs of 12. With `synchronous_commit = off` planted, the same test lost 3 to 6 acknowledged candles in 3 runs of 4, so it can tell the difference |
-| A held writer lock, both backends | `durability.contention_is_bounded` | `contention` inside the budget, nothing written |
+| A held writer lock, both backends | `durability.contention_is_bounded`, also at macOS's background priority, where timers run late, on 2026-11-05 | `contention` inside the budget, nothing written |
 | A full pool, a slow statement, PostgreSQL | `src/storage/postgres/tests/durability.rs` | `unavailable` and `outcome_unknown` inside the budget |
 | A deadlock, a snapshot conflict | A real one on each backend | `conflict`, and a retry goes through on PostgreSQL |
 | A connection ended mid-write, PostgreSQL | `pg_terminate_backend` on a write waiting for a lock | `outcome_unknown`, and the store reconnects |

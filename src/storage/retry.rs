@@ -20,22 +20,27 @@ const LONGEST_PAUSE: Duration = Duration::from_millis(200);
 /// inside it: `|left| store.within(left).upsert_candles(market, candles)`.
 /// It holds storage calls and nothing else. An exchange request inside it
 /// would be sent again, so one never belongs here.
+///
+/// A budget longer than the clock can hold never runs out: every attempt is
+/// given all of it.
 pub fn retry_conflicts<T>(
     budget: Duration,
     mut transaction: impl FnMut(Duration) -> Result<T, StorageError>,
 ) -> Result<T, StorageError> {
-    let deadline = Instant::now() + budget;
+    let deadline = Instant::now().checked_add(budget);
     let mut left = budget;
     let mut pause = FIRST_PAUSE;
     loop {
         match transaction(left) {
             Err(conflict) if conflict.kind() == StorageErrorKind::Conflict => {
-                left = deadline.saturating_duration_since(Instant::now());
-                if left <= pause {
-                    return Err(conflict);
+                if let Some(deadline) = deadline {
+                    left = deadline.saturating_duration_since(Instant::now());
+                    if left <= pause {
+                        return Err(conflict);
+                    }
+                    left -= pause;
                 }
                 thread::sleep(pause);
-                left -= pause;
                 pause = (pause * 2).min(LONGEST_PAUSE);
             }
             answer => return answer,
@@ -116,5 +121,22 @@ mod tests {
         answer.expect("through");
         assert_eq!(lefts[0], budget);
         assert!(lefts.windows(2).all(|pair| pair[1] < pair[0]), "{lefts:?}");
+        // The pause before an attempt is spent before it starts.
+        assert!(lefts[1] <= budget - FIRST_PAUSE, "{lefts:?}");
+    }
+
+    #[test]
+    fn a_budget_longer_than_the_clock_can_hold_is_handed_whole_to_every_attempt() {
+        let mut lefts = Vec::new();
+        let answer = retry_conflicts(Duration::MAX, |left| {
+            lefts.push(left);
+            if lefts.len() < 3 {
+                Err(conflict())
+            } else {
+                Ok(())
+            }
+        });
+        answer.expect("through");
+        assert_eq!(lefts, [Duration::MAX; 3]);
     }
 }

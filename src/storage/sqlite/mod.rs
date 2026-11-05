@@ -13,6 +13,7 @@ mod errors;
 mod journal;
 mod migrate;
 mod segments;
+mod wait;
 
 use crate::StorageError;
 use crate::model::{DurabilityReport, DurabilitySetting};
@@ -61,7 +62,7 @@ pub struct SqliteStore {
     path: PathBuf,
     durability: Durability,
     /// How long a connection waits on another writer's lock.
-    busy_timeout: Duration,
+    lock_wait: Duration,
 }
 
 impl SqliteStore {
@@ -74,7 +75,7 @@ impl SqliteStore {
         Self {
             path: path.into(),
             durability: limits.durability,
-            busy_timeout: limits.wait_budget,
+            lock_wait: limits.wait_budget,
         }
     }
 
@@ -83,7 +84,7 @@ impl SqliteStore {
     /// time cannot be bounded here, since a call runs on the caller's thread.
     pub fn within(&self, budget: Duration) -> Self {
         Self {
-            busy_timeout: self.busy_timeout.min(lock_wait(budget)),
+            lock_wait: self.lock_wait.min(lock_wait(budget)),
             ..self.clone()
         }
     }
@@ -93,11 +94,11 @@ impl SqliteStore {
     }
 
     /// A connection with the settings of the durability contract, checked
-    /// when the store enforces them. The busy timeout goes first, so that
+    /// when the store enforces them. The wait for a lock goes first, so that
     /// applying the rest already waits as it should.
     fn open(&self) -> Result<Connection, StorageError> {
         let connection = Connection::open(&self.path).map_err(failed)?;
-        connection.busy_timeout(self.busy_timeout).map_err(failed)?;
+        wait::at_most(&connection, self.lock_wait).map_err(failed)?;
         connection
             .pragma_update(None, "journal_mode", "WAL")
             .map_err(failed)?;
@@ -313,12 +314,12 @@ mod tests {
     #[test]
     fn a_bounded_store_gives_up_on_a_lock_in_time_and_never_waits_longer_than_it_would() {
         let store = SqliteStore::new("market.sqlite");
-        let full = store.busy_timeout;
+        let full = store.lock_wait;
         assert_eq!(
-            store.within(Duration::from_secs(2)).busy_timeout,
+            store.within(Duration::from_secs(2)).lock_wait,
             Duration::from_millis(1500)
         );
-        assert_eq!(store.within(Duration::from_secs(60)).busy_timeout, full);
+        assert_eq!(store.within(Duration::from_secs(60)).lock_wait, full);
     }
 
     /// Connections are opened with the settings of the durability contract

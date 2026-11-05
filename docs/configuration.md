@@ -174,12 +174,14 @@ fixed:
 
 ### Durable commits
 
-A commit is flushed before the store answers: SQLite runs in WAL with
-`synchronous=FULL` and `fullfsync`, and PostgreSQL commits with
-`synchronous_commit` at `local` or stronger, on a server with `fsync` and
-`full_page_writes` on. `trade run --mode live` and `trade close` refuse a
-store that cannot do that, before any request; other commands log a warning
-and run. `quantforge store status` prints what it found.
+A commit is flushed before the store answers when the store has the settings
+that promise it: SQLite in WAL with `synchronous=FULL` and `fullfsync`, and
+PostgreSQL committing with `synchronous_commit` at `local` or stronger, on a
+server with `fsync` and `full_page_writes` on. `trade run --mode live` and
+`trade close` refuse a store without them, before any request; other commands
+log a warning and run, and their commits then carry no such promise.
+`quantforge store status` prints `durability: met`, or `durability: weakened`,
+with what it read back.
 [storage-durability.md](storage-durability.md) is the contract: what a
 commit survives, what it assumes of the disk, and what each failure means.
 
