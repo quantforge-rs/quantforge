@@ -340,6 +340,7 @@ fn the_conformance_doc_lists_every_scenario_and_check_with_its_statement() {
             pairs(&cases.segments, conformance::segments::CHECKS),
         ),
         ("races", races),
+        ("durability", pairs(&[], conformance::durability::CHECKS)),
         (
             "control",
             pairs(&cases.control, conformance::control::CHECKS),

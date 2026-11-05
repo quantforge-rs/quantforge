@@ -42,6 +42,12 @@ pub(crate) struct TradeRunArgs {
     max_loops: Option<usize>,
 }
 
+impl TradeRunArgs {
+    pub(super) fn is_live(&self) -> bool {
+        matches!(self.mode, CliExecutionMode::Live)
+    }
+}
+
 pub(crate) async fn handle_trade_run(ctx: &AppContext, args: TradeRunArgs) -> Result<()> {
     let store = &ctx.store;
     let market_data = ctx.exchange.market_data.as_ref();

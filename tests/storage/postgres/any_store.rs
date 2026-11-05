@@ -68,3 +68,12 @@ fn segments() {
     }
     conformance::segments::<ThroughAnyStore>();
 }
+
+#[test]
+fn durability() {
+    if server_url().is_none() {
+        eprintln!("skipping: {VARIABLE} is unset");
+        return;
+    }
+    conformance::durability::<ThroughAnyStore>();
+}

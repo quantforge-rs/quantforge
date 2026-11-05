@@ -167,9 +167,21 @@ fixed:
 | Limit | Value |
 | --- | --- |
 | Waiting for a free connection | 5 s, then the call fails as unavailable |
+| Waiting for a lock (`lock_timeout`) | 5 s, then the call fails as busy |
 | A statement on the server (`statement_timeout`) | 30 s |
 | One call, end to end | 35 s, then the query is cancelled on the server |
 | Idle time before TCP keepalives probe a connection | 30 s |
+
+### Durable commits
+
+A commit is flushed before the store answers: SQLite runs in WAL with
+`synchronous=FULL` and `fullfsync`, and PostgreSQL commits with
+`synchronous_commit` at `local` or stronger, on a server with `fsync` and
+`full_page_writes` on. `trade run --mode live` and `trade close` refuse a
+store that cannot do that, before any request; other commands log a warning
+and run. `quantforge store status` prints what it found.
+[storage-durability.md](storage-durability.md) is the contract: what a
+commit survives, what it assumes of the disk, and what each failure means.
 
 ## Renamed settings
 

@@ -110,6 +110,7 @@ src/
 │   ├── candle.rs               Candle and validate_candles
 │   ├── candle_batch.rs         CandleBatch: candles as columns, the Python interchange
 │   ├── decimal.rs              round_down_to_step and the decimal ↔ float64 conversions
+│   ├── durability.rs           DurabilityReport: the settings a store's commits rely on, read back
 │   ├── identity.rs             Environment, InstrumentId, venue ids as text, OperationId, the text_id! macro
 │   ├── interval.rs             Interval: wire form, step duration, parsing
 │   ├── market.rs               Symbol, Venue, Category, ExchangeId (the product lines), MarketId
@@ -171,6 +172,7 @@ src/
 │   ├── settings/               which backend, and how to reach it: resolved, checked, never shown
 │   │   ├── mod.rs              StorageBackend, StoreOwner, StorageRequest, StorageSettings, StorageConfigError
 │   │   ├── connection.rs       the PostgreSQL URL: libpq's form, the sslmode table, the password redacted
+│   │   ├── limits.rs           Durability and StorageLimits: what a commit promises, how long a call waits
 │   │   └── tests/              the resolver's unit tests
 │   │       ├── mod.rs          every resolve rule, and the shared limits
 │   │       └── connection.rs   the sslmode table, every URL refusal, and the redaction
@@ -179,13 +181,15 @@ src/
 │   ├── runs.rs                 what both backends' journals share: identity columns, state, adoption
 │   ├── refresh.rs              what both backends' segment stores share: the refresh loop, packing, a plan
 │   ├── races.rs                the shared cases' races, stepped through any backend's read and write-back
+│   ├── retry.rs                retry_conflicts: running a transaction again, within the caller's budget
 │   ├── factory.rs              StoreFactory: opens the selected backend through its registered provider
 │   ├── factory/                the factory's unit tests
 │   │   └── tests.rs            dispatch to test providers, and no fallback for a backend without one
 │   ├── postgres/               PostgreSQL: the bridge of ADR 0001, the schema chain and the stores, built with the postgres feature
 │   │   ├── mod.rs              PostgresStore: connect, ping and init
 │   │   ├── runner.rs           the bridge's own runtime, and the reply channel callers block on
-│   │   ├── bridge.rs           the bounded pool, each call's deadline and cancel, lost reads and writes
+│   │   ├── bridge.rs           the bounded pool, each call's deadline and cancel, what each failure means
+│   │   ├── durability.rs       what every connection is given, and what it found
 │   │   ├── tls.rs              the rustls connector: the system's roots plus an optional CA file
 │   │   ├── schema.rs           the DDL of every schema version, the advisory lock, the control row
 │   │   ├── migrate.rs          the schema chain: created at init, one transaction per step under the lock
@@ -199,7 +203,9 @@ src/
 │   │       ├── mod.rs          every calling context, the refusals, and the TLS connector
 │   │       ├── candles.rs      a batch as one statement: the last duplicate, forced windows, sorted rows
 │   │       ├── database.rs     against a real database: pool bound, deadlines, drop, password, TLS
+│   │       ├── durability.rs   real failures in their categories, bounded calls, weak servers
 │   │       ├── migrate.rs      the chain over steps no build has: an upgrade, a failure, stores together
+│   │       ├── scratch.rs      a database of its own for a test
 │   │       └── segments.rs     the races, a write-back waiting on a lock, reads that stay one snapshot
 │   ├── segments/               segment format 1: a window of candles, packed and named by its hash
 │   │   ├── mod.rs              windows, compression, the hash, opening a fetched segment, SegmentError
@@ -208,6 +214,7 @@ src/
 │       ├── mod.rs              SqliteStore: connections, SCHEMA_VERSION, row helpers
 │       ├── migrate.rs          the schema chain: every earlier schema brought forward at init
 │       ├── control.rs          store_control and schema_migrations: the StoreControl implementation
+│       ├── errors.rs           SQLite's failures as the categories every backend shares
 │       ├── candles.rs          candle table and the CandleStore implementation; marks changed windows
 │       ├── journal.rs          run table, run identity, and RunJournalStore; the journal DDL of every schema
 │       ├── journal/            the journals beside a run's state, and its identity columns
@@ -303,9 +310,10 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   `init` creates, its refusals, exact round trips, the candle store's writes
   raced against a refresh's write-back, writers appending to one run at
   once, and the query plans of
-  [postgres-query-plans.md](postgres-query-plans.md) (`postgres/`); the
-  documents held to the code; and, on demand, a 100,000-candle batch on
-  each backend (`measure.rs`)
+  [postgres-query-plans.md](postgres-query-plans.md) (`postgres/`);
+  acknowledged writes outliving a killed writer and, on demand, a crashed
+  server (`crash.rs`); the documents held to the code; and, on demand, a
+  100,000-candle batch on each backend (`measure.rs`)
 - `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
   from naming a concrete exchange adapter, the code and `--help` outside
   the Binance adapter from hardcoding Binance, and each venue's own

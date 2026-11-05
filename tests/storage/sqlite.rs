@@ -4,9 +4,11 @@
 use quantforge::{CandleStore, SqliteStore};
 use rusqlite::Connection;
 use rusqlite::types::ValueRef;
+use std::any::Any;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
-use crate::conformance::{self, Backend, Fixture, Raw};
+use crate::conformance::{self, Backend, Bounded, Fixture, Raw};
 
 /// A `SqliteStore` on a file of its own in a temporary directory.
 pub struct Sqlite;
@@ -100,6 +102,24 @@ impl Raw for SqliteRaw {
             "DROP TRIGGER refuse_writes".to_string(),
         ]
     }
+
+    /// One writer at a time holds the whole database.
+    fn hold_writes(&self, _table: &str) -> Box<dyn Any> {
+        let connection = self.connection();
+        connection
+            .execute_batch("BEGIN IMMEDIATE")
+            .expect("the write lock");
+        Box::new(connection)
+    }
+
+    /// A store opens a connection per call, so none outlives its call.
+    fn end_connections(&self) {}
+}
+
+impl Bounded for SqliteStore {
+    fn within(&self, budget: Duration) -> Self {
+        SqliteStore::within(self, budget)
+    }
 }
 
 #[test]
@@ -120,4 +140,9 @@ fn control() {
 #[test]
 fn segments() {
     conformance::segments::<Sqlite>();
+}
+
+#[test]
+fn durability() {
+    conformance::durability::<Sqlite>();
 }

@@ -37,8 +37,8 @@
 //!   [`exchange::binance`] is the only one today, and nothing outside this
 //!   module names it. [`exchange::conformance`] writes down what every
 //!   adapter must do, as checks each one passes.
-//! - [`storage`] — persistence adapters, one namespace per backend, with
-//!   [`storage::sqlite`] the only one today; and [`storage::segments`], the
+//! - [`storage`] — persistence adapters, one namespace per backend,
+//!   [`storage::sqlite`] and `storage::postgres`; and [`storage::segments`], the
 //!   format every backend packs a market's closed candles into, window by
 //!   window, as immutable segments named by their hash.
 //! - [`sdk`] — the [`Strategy`] contract, the indicator math it is built
@@ -142,14 +142,15 @@ pub mod storage;
 /// interchange, which no command uses yet.
 pub use model::{
     AccountTrade, AssetBalance, BotRunState, CancelOrderRequest, Candle, CandleBatch,
-    CandleColumns, Category, ClosedTrade, Environment, ExchangeId, ExchangeOrder, ExecutionMode,
-    Fill, IdentitySource, Interval, KeyFingerprint, KlineRequest, LegacyRun, MarketId,
-    MarketOrderRequest, ModelError, OrderQueryRequest, OrderStatus, PositionState, RunIdentity,
-    RunStatus, SchemaMigration, SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh, SegmentTip,
-    Side, StoreActivation, StoreId, StoreIdentity, Symbol, SymbolRules, TargetPosition,
-    TimestampMs, ValidationIssue, ValidationReport, Venue, VenueAccountId, VenueOrderId,
-    VenueTradeId, decimal_from_f64, decimal_to_f64, describe_account, describe_environment,
-    ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms, round_down_to_step, validate_candles,
+    CandleColumns, Category, ClosedTrade, DurabilityReport, DurabilitySetting, Environment,
+    ExchangeId, ExchangeOrder, ExecutionMode, Fill, IdentitySource, Interval, KeyFingerprint,
+    KlineRequest, LegacyRun, MarketId, MarketOrderRequest, ModelError, OrderQueryRequest,
+    OrderStatus, PositionState, RunIdentity, RunStatus, SchemaMigration, SegmentHash, SegmentPlan,
+    SegmentRef, SegmentRefresh, SegmentTip, Side, StoreActivation, StoreId, StoreIdentity, Symbol,
+    SymbolRules, TargetPosition, TimestampMs, ValidationIssue, ValidationReport, Venue,
+    VenueAccountId, VenueOrderId, VenueTradeId, decimal_from_f64, decimal_to_f64, describe_account,
+    describe_environment, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms, round_down_to_step,
+    validate_candles,
 };
 
 /// The seams. An out-of-tree exchange or storage backend implements these
@@ -164,8 +165,8 @@ pub use model::{
 pub use ports::{
     AccountConnector, CandleQuery, CandleStore, ExchangeCapabilities, ExchangeConnector,
     ExchangeError, ExchangeErrorKind, MarketDataCapabilities, MarketDataConnector,
-    OrderCapabilities, RunJournalStore, SegmentStore, SignedConnectors, StorageError, StoreControl,
-    StreamCapabilities, TradingConnector,
+    OrderCapabilities, RunJournalStore, SegmentStore, SignedConnectors, StorageError,
+    StorageErrorKind, StoreControl, StreamCapabilities, TradingConnector,
 };
 
 /// What building an exchange's connectors takes and returns. The registry
@@ -185,8 +186,8 @@ pub use storage::SqliteStore;
 pub use storage::AnyStore;
 pub use storage::factory::{StoreFactory, StoreOpenError};
 pub use storage::settings::{
-    ConnectionString, StorageBackend, StorageConfigError, StorageRequest, StorageSettings,
-    StoreOwner, Supplied,
+    ConnectionString, DEFAULT_ROUTE_BUDGET, Durability, StorageBackend, StorageConfigError,
+    StorageLimits, StorageRequest, StorageSettings, StoreOwner, Supplied,
 };
 
 /// The strategy boundary, published for strategy authors outside this

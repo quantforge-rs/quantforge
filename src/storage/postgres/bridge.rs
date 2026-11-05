@@ -10,6 +10,7 @@
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 
 use deadpool_postgres::{
@@ -20,17 +21,18 @@ use tokio_postgres::config::SslMode;
 use tokio_postgres::error::SqlState;
 use tokio_postgres_rustls::MakeRustlsConnect;
 
+use super::durability::{self, FLUSHED_COMMITS, STILL_DURABLE, limits_within, session_limits};
 use super::runner::{RunError, Runner};
 use super::tls;
 use crate::ports::StorageError;
-use crate::storage::settings::{PostgresSettings, TlsMode};
+use crate::storage::settings::{Durability, PostgresSettings, TlsMode};
 
 /// The bridge's worker threads: they only drive connections' I/O, so two
 /// serve every pool size ADR 0001 uses.
 const WORKERS: usize = 2;
 
-/// How long a caller keeps waiting past a call's deadline before it
-/// decides the bridge itself is wedged.
+/// The longest a caller keeps waiting past a call's deadline before it
+/// decides the bridge itself is wedged; a quarter of a shorter deadline.
 const WATCHDOG_MARGIN: Duration = Duration::from_secs(5);
 
 /// Whether a call reads or writes, which decides what a lost answer means.
@@ -45,13 +47,26 @@ pub(crate) enum Effect {
 pub(crate) type Work<'c, T> =
     Pin<Box<dyn Future<Output = Result<T, tokio_postgres::Error>> + Send + 'c>>;
 
-/// A pool on a runtime of its own; see the module docs.
+/// A handle on a pool on a runtime of its own; see the module docs. Every
+/// handle shares them, and may bound its own calls more tightly.
+#[derive(Clone)]
 pub(crate) struct Bridge {
+    /// Visible to the tests, which check where work runs.
+    pub(super) shared: Arc<Shared>,
+    /// All that a call through this handle may take, when it is bounded.
+    budget: Option<Duration>,
+}
+
+/// What every handle shares.
+pub(super) struct Shared {
     // Declared before the runner: the pool closes before the runtime stops.
     pool: Pool,
     tls: MakeRustlsConnect,
     deadline: Duration,
-    /// Visible to the tests, which check where work runs.
+    lock_wait: Duration,
+    statement_timeout: Duration,
+    /// The session's limits, as a bounded call leaves them.
+    limits: String,
     pub(super) runner: Runner,
 }
 
@@ -79,22 +94,36 @@ impl Bridge {
             config.password(password);
         }
 
-        // Set with SET, not the `options` startup parameter, which PgBouncer
-        // refuses.
-        let statement_timeout_ms = settings.statement_timeout.as_millis();
+        let limits = session_limits(settings.limits.wait_budget, settings.statement_timeout);
+        let setup = format!("{limits} {FLUSHED_COMMITS}");
+        let enforced = settings.limits.durability == Durability::Enforced;
         let post_create = Hook::async_fn(move |client: &mut ClientWrapper, _| {
+            let setup = setup.clone();
             Box::pin(async move {
                 client
-                    .batch_execute(&format!("SET statement_timeout = {statement_timeout_ms}"))
+                    .batch_execute(&setup)
                     .await
-                    .map_err(HookError::Backend)
+                    .map_err(HookError::Backend)?;
+                if enforced {
+                    let report = durability::effective(client)
+                        .await
+                        .map_err(HookError::Backend)?;
+                    if let Some(problem) = report.problem() {
+                        return Err(HookError::message(problem));
+                    }
+                }
+                Ok(())
             })
         });
         let manager = Manager::from_config(
             config,
             tls.clone(),
             ManagerConfig {
-                recycling_method: RecyclingMethod::Verified,
+                recycling_method: if enforced {
+                    RecyclingMethod::Custom(STILL_DURABLE.to_string())
+                } else {
+                    RecyclingMethod::Verified
+                },
             },
         );
         let pool_size = usize::try_from(settings.pool_size)
@@ -114,11 +143,25 @@ impl Bridge {
             StorageError::Unavailable(format!("cannot start the storage bridge: {error}"))
         })?;
         Ok(Self {
-            pool,
-            tls,
-            deadline: settings.call_deadline,
-            runner,
+            shared: Arc::new(Shared {
+                pool,
+                tls,
+                deadline: settings.call_deadline,
+                lock_wait: settings.limits.wait_budget,
+                statement_timeout: settings.statement_timeout,
+                limits,
+                runner,
+            }),
+            budget: None,
         })
+    }
+
+    /// The same pool, each call through the handle bounded by `budget`.
+    pub(crate) fn within(&self, budget: Duration) -> Self {
+        Self {
+            shared: Arc::clone(&self.shared),
+            budget: Some(budget),
+        }
     }
 
     /// Runs `work` on a pooled connection, on the bridge, within the
@@ -127,14 +170,24 @@ impl Bridge {
     /// nothing was sent. Past the deadline the query is cancelled on the
     /// server and the connection discarded, so no later call queues behind
     /// it. A transaction the work leaves open is rolled back.
+    ///
+    /// A bounded call first gives the session what remains of its budget, a
+    /// lock wait ending before a statement and a statement before the call,
+    /// and puts the session's own limits back after.
     pub(crate) fn execute<T, F>(&self, effect: Effect, work: F) -> Result<T, StorageError>
     where
         T: Send + 'static,
         F: for<'c> FnOnce(&'c mut ClientWrapper) -> Work<'c, T> + Send + 'static,
     {
-        let pool = self.pool.clone();
-        let tls = self.tls.clone();
-        let deadline = self.deadline;
+        let shared = Arc::clone(&self.shared);
+        let pool = shared.pool.clone();
+        let tls = shared.tls.clone();
+        let deadline = self
+            .budget
+            .map_or(shared.deadline, |budget| budget.min(shared.deadline));
+        let bounded = self.budget.is_some();
+        let (lock_wait, statement_timeout) = (shared.lock_wait, shared.statement_timeout);
+        let limits = shared.limits.clone();
         let job = async move {
             let until = tokio::time::Instant::now() + deadline;
             let mut client = match tokio::time::timeout_at(until, pool.get()).await {
@@ -144,6 +197,9 @@ impl Bridge {
                     }
                     PoolError::Backend(error) => {
                         StorageError::Unavailable(format!("cannot get a connection: {error}"))
+                    }
+                    PoolError::PostCreateHook(HookError::Message(problem)) => {
+                        StorageError::DurabilityUnmet(problem.into_owned())
                     }
                     other => StorageError::Unavailable(other.to_string()),
                 })?,
@@ -155,11 +211,33 @@ impl Bridge {
                 }
             };
             let token = client.cancel_token();
+            if bounded {
+                let left = until.saturating_duration_since(tokio::time::Instant::now());
+                let tightened = limits_within(left, lock_wait, statement_timeout);
+                let set = tokio::time::timeout_at(until, client.batch_execute(&tightened)).await;
+                if !matches!(set, Ok(Ok(()))) {
+                    drop(Object::take(client));
+                    return Err(StorageError::Unavailable(
+                        "cannot limit the session in time".to_string(),
+                    ));
+                }
+            }
             match tokio::time::timeout_at(until, work(&mut client)).await {
-                Ok(result) => result.map_err(|error| from_driver(effect, error)),
+                Ok(result) => {
+                    if bounded {
+                        let reset = client.batch_execute(&limits);
+                        if !matches!(tokio::time::timeout_at(until, reset).await, Ok(Ok(()))) {
+                            drop(Object::take(client));
+                        }
+                    }
+                    result.map_err(|error| from_driver(effect, error))
+                }
                 Err(_) => {
-                    // Best effort, and bounded by the connect timeout.
-                    let _ = token.cancel_query(tls).await;
+                    // Best effort, and never on the caller's time: a server
+                    // that stopped answering takes the connect timeout here.
+                    tokio::spawn(async move {
+                        let _ = token.cancel_query(tls).await;
+                    });
                     drop(Object::take(client));
                     Err(lost(
                         effect,
@@ -168,7 +246,8 @@ impl Bridge {
                 }
             }
         };
-        match self.runner.run(job, deadline + WATCHDOG_MARGIN) {
+        let margin = WATCHDOG_MARGIN.min(deadline / 4);
+        match self.shared.runner.run(job, deadline + margin) {
             Ok(result) => result,
             Err(error @ (RunError::Watchdog(_) | RunError::ShutDown)) => {
                 Err(lost(effect, error.to_string()))
@@ -187,11 +266,29 @@ fn lost(effect: Effect, what: String) -> StorageError {
     }
 }
 
-/// Classifies a driver error. One the server reported, with its SQLSTATE,
-/// is the statement's fault, except a statement timeout; any other means
-/// the connection failed.
-fn from_driver(effect: Effect, error: tokio_postgres::Error) -> StorageError {
+/// Classifies a driver error (`docs/storage-durability.md`). One the server
+/// reported, with its SQLSTATE, is the statement's fault, unless the
+/// SQLSTATE says it lost to another writer or ran out of time or room; any
+/// other means the connection failed. The categories that name no server
+/// text keep what it said out of the caller's message.
+pub(super) fn from_driver(effect: Effect, error: tokio_postgres::Error) -> StorageError {
     match error.code() {
+        Some(code)
+            if *code == SqlState::T_R_SERIALIZATION_FAILURE
+                || *code == SqlState::T_R_DEADLOCK_DETECTED =>
+        {
+            StorageError::Conflict(format!(
+                "the server rolled the transaction back (SQLSTATE {})",
+                code.code()
+            ))
+        }
+        Some(code) if *code == SqlState::LOCK_NOT_AVAILABLE => {
+            StorageError::Contention("another writer held a lock past the wait".to_string())
+        }
+        Some(code) if code.code().starts_with("53") => StorageError::Unavailable(format!(
+            "the server is out of resources (SQLSTATE {})",
+            code.code()
+        )),
         Some(code) if *code == SqlState::QUERY_CANCELED => {
             lost(effect, format!("the statement timed out: {error}"))
         }
@@ -210,13 +307,14 @@ fn from_driver(effect: Effect, error: tokio_postgres::Error) -> StorageError {
 impl fmt::Debug for Bridge {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Bridge")
-            .field("pool", &self.pool.status())
-            .field("deadline", &self.deadline)
+            .field("pool", &self.shared.pool.status())
+            .field("deadline", &self.shared.deadline)
+            .field("budget", &self.budget)
             .finish_non_exhaustive()
     }
 }
 
-impl Drop for Bridge {
+impl Drop for Shared {
     fn drop(&mut self) {
         // Closing wakes every waiter with `Closed` and drops idle
         // connections; the runner then stops in the background.

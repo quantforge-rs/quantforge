@@ -5,7 +5,6 @@
 mod connection;
 
 use super::*;
-use crate::storage::sqlite::{BUSY_TIMEOUT, SYNCHRONOUS};
 
 /// A password that must never be shown, and a URL carrying it.
 const SENTINEL: &str = "pw-sentinel-417";
@@ -149,12 +148,50 @@ fn an_explicit_sqlite_backend_leaves_the_postgres_settings_unused() {
 }
 
 #[test]
-fn the_shared_limits_are_what_every_sqlite_connection_uses_today() {
+fn a_store_enforces_the_contract_unless_a_host_says_otherwise() {
     let limits = StorageLimits::default();
-    assert_eq!(limits.durability, Durability::Normal);
-    assert_eq!(SYNCHRONOUS, "NORMAL");
-    assert_eq!(limits.wait_budget, BUSY_TIMEOUT);
+    assert_eq!(limits.durability, Durability::Enforced);
     assert_eq!(limits.wait_budget, POSTGRES_WAIT_TIMEOUT);
+
+    let resolved = |durability| {
+        let request = StorageRequest {
+            durability,
+            ..StorageRequest::default()
+        };
+        match StorageSettings::resolve(request, StoreOwner::Command).expect("settings") {
+            StorageSettings::Sqlite(sqlite) => sqlite.limits.durability,
+            other => panic!("not sqlite: {other}"),
+        }
+    };
+    assert_eq!(resolved(None), Durability::Enforced);
+    assert_eq!(resolved(Some(Durability::Reported)), Durability::Reported);
+}
+
+#[test]
+fn a_route_leaves_a_second_of_the_three_a_webhook_delivery_has_unless_a_host_sets_it() {
+    assert_eq!(DEFAULT_ROUTE_BUDGET, Duration::from_secs(2));
+    let resolved = |route_budget| {
+        let request = StorageRequest {
+            route_budget,
+            ..StorageRequest::default()
+        };
+        StorageSettings::resolve(request, StoreOwner::Command)
+            .expect("settings")
+            .limits()
+            .route_budget
+    };
+    assert_eq!(resolved(None), DEFAULT_ROUTE_BUDGET);
+    assert_eq!(
+        resolved(Some(Duration::from_millis(1500))),
+        Duration::from_millis(1500)
+    );
+}
+
+#[test]
+fn a_lock_wait_ends_before_the_call_does() {
+    for remaining in [Duration::from_millis(40), Duration::from_secs(2)] {
+        assert!(lock_wait(remaining) < remaining);
+    }
 }
 
 #[cfg(not(feature = "postgres"))]

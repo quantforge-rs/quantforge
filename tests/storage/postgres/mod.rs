@@ -36,8 +36,13 @@ mod schema;
 pub mod server;
 
 use quantforge::storage::postgres::PostgresStore;
+use std::any::Any;
+use std::sync::mpsc;
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
+use tokio::sync::oneshot;
 
-use crate::conformance::{self, Backend, Fixture, Raw};
+use crate::conformance::{self, Backend, Bounded, Fixture, Raw};
 pub use server::{IsolatedDatabase, VARIABLE, block_on, client, query, server_url, settings};
 
 /// A `PostgresStore` on a database of its own.
@@ -71,8 +76,31 @@ pub fn fixture_on(database: IsolatedDatabase) -> Fixture<PostgresStore> {
     }
 }
 
+impl Bounded for PostgresStore {
+    fn within(&self, budget: Duration) -> Self {
+        PostgresStore::within(self, budget)
+    }
+}
+
 /// The raw view of an isolated database, over its own connection.
 pub struct PostgresRaw(String);
+
+/// A table lock held from a thread of its own until it drops.
+struct HeldLock {
+    release: Option<oneshot::Sender<()>>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl Drop for HeldLock {
+    fn drop(&mut self) {
+        if let Some(release) = self.release.take() {
+            let _ = release.send(());
+        }
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
 
 impl Raw for PostgresRaw {
     fn select(&self, sql: &str) -> Vec<Vec<Option<String>>> {
@@ -103,6 +131,37 @@ impl Raw for PostgresRaw {
             format!("ALTER TABLE {table} ADD CONSTRAINT refuse_writes CHECK (false) NOT VALID"),
             format!("ALTER TABLE {table} DROP CONSTRAINT refuse_writes"),
         ]
+    }
+
+    /// `EXCLUSIVE` stops every other writer of the table and no reader.
+    fn hold_writes(&self, table: &str) -> Box<dyn Any> {
+        let (url, table) = (self.0.clone(), table.to_string());
+        let (locked, held) = mpsc::channel();
+        let (release, released) = oneshot::channel();
+        let thread = thread::spawn(move || {
+            block_on(async move {
+                let client = client(&url).await;
+                client
+                    .batch_execute(&format!("BEGIN; LOCK TABLE {table} IN EXCLUSIVE MODE;"))
+                    .await
+                    .expect("the lock");
+                let _ = locked.send(());
+                let _ = released.await;
+            });
+        });
+        held.recv().expect("the lock is held");
+        Box::new(HeldLock {
+            release: Some(release),
+            thread: Some(thread),
+        })
+    }
+
+    fn end_connections(&self) {
+        query(
+            &self.0,
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity \
+             WHERE datname = current_database() AND pid <> pg_backend_pid()",
+        );
     }
 }
 
@@ -197,4 +256,13 @@ fn segments() {
         return;
     }
     conformance::segments::<Postgres>();
+}
+
+#[test]
+fn durability() {
+    if server_url().is_none() {
+        eprintln!("skipping: {VARIABLE} is unset");
+        return;
+    }
+    conformance::durability::<Postgres>();
 }

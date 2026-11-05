@@ -3,11 +3,12 @@
 //! and the operator's actions on legacy runs — the `StoreControl`
 //! implementation.
 
-use super::{SqliteStore, migrate, to_from_sql_error};
+use super::errors::{commit_failed, failed};
+use super::{SqliteStore, effective, migrate, to_from_sql_error};
 use crate::model::futures::ActivationEpoch;
 use crate::model::{
-    Environment, ExecutionMode, IdentitySource, LegacyRun, RunIdentity, SchemaMigration,
-    StoreActivation, StoreId, StoreIdentity,
+    DurabilityReport, Environment, ExecutionMode, IdentitySource, LegacyRun, RunIdentity,
+    SchemaMigration, StoreActivation, StoreId, StoreIdentity,
 };
 use crate::storage::runs::{
     adopted_state, already_bound, identity_columns, legacy_run, parse_environment, refuse_unadopted,
@@ -44,7 +45,7 @@ pub(super) fn create_row(transaction: &Transaction<'_>) -> Result<(), StorageErr
                 now_utc_ms()
             ],
         )
-        .map_err(StorageError::other)?;
+        .map_err(failed)?;
     Ok(())
 }
 
@@ -80,12 +81,16 @@ fn read_identity(connection: &Connection) -> Result<StoreIdentity, StorageError>
                 })
             },
         )
-        .map_err(StorageError::other)
+        .map_err(failed)
 }
 
 impl StoreControl for SqliteStore {
     fn store_identity(&self) -> Result<StoreIdentity, StorageError> {
         read_identity(&self.open()?)
+    }
+
+    fn durability(&self) -> Result<DurabilityReport, StorageError> {
+        effective(&self.open()?)
     }
 
     fn migrations(&self) -> Result<Vec<SchemaMigration>, StorageError> {
@@ -98,7 +103,7 @@ impl StoreControl for SqliteStore {
                 ORDER BY version ASC
                 "#,
             )
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let rows = stmt
             .query_map([], |row| {
                 Ok(SchemaMigration {
@@ -108,15 +113,15 @@ impl StoreControl for SqliteStore {
                     quantforge_version: row.get(3)?,
                 })
             })
-            .map_err(StorageError::other)?;
-        rows.collect::<Result<_, _>>().map_err(StorageError::other)
+            .map_err(failed)?;
+        rows.collect::<Result<_, _>>().map_err(failed)
     }
 
     fn bind_environment(&self, environment: Environment) -> Result<(), StorageError> {
         let mut connection = self.open()?;
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let identity = read_identity(&transaction)?;
         match identity.environment {
             Some(bound) if bound == environment => return Ok(()),
@@ -128,8 +133,8 @@ impl StoreControl for SqliteStore {
                 "UPDATE store_control SET environment = ?1, changed_at_ms = ?2 WHERE id = 1",
                 params![environment.as_str(), now_utc_ms()],
             )
-            .map_err(StorageError::other)?;
-        transaction.commit().map_err(StorageError::other)
+            .map_err(failed)?;
+        transaction.commit().map_err(commit_failed)
     }
 
     fn legacy_runs(&self) -> Result<Vec<LegacyRun>, StorageError> {
@@ -143,7 +148,7 @@ impl StoreControl for SqliteStore {
                 ORDER BY started_at_ms ASC, run_id ASC
                 "#,
             )
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let rows = stmt
             .query_map([IdentitySource::Legacy.as_str()], |row| {
                 legacy_run(
@@ -156,8 +161,8 @@ impl StoreControl for SqliteStore {
                 )
                 .map_err(to_from_sql_error)
             })
-            .map_err(StorageError::other)?;
-        rows.collect::<Result<_, _>>().map_err(StorageError::other)
+            .map_err(failed)?;
+        rows.collect::<Result<_, _>>().map_err(failed)
     }
 
     fn adopt_run(
@@ -170,7 +175,7 @@ impl StoreControl for SqliteStore {
         let mut connection = self.open()?;
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let found: Option<(String, String)> = transaction
             .query_row(
                 "SELECT identity_source, state_json FROM bot_runs WHERE run_id = ?1",
@@ -178,7 +183,7 @@ impl StoreControl for SqliteStore {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let state_json = adopted_state(run_id, found, execution_mode)?;
         let (environment, account_kind, account_id) = identity_columns(identity);
         transaction
@@ -199,7 +204,7 @@ impl StoreControl for SqliteStore {
                     now_utc_ms()
                 ],
             )
-            .map_err(StorageError::other)?;
-        transaction.commit().map_err(StorageError::other)
+            .map_err(failed)?;
+        transaction.commit().map_err(commit_failed)
     }
 }

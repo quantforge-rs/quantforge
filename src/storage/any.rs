@@ -7,9 +7,11 @@
 //! store of it behind the same ports. Hosts cannot select it yet: QUA-116
 //! adds its provider in [`crate::storage::factory`].
 
+use std::time::Duration;
+
 use crate::model::{
-    BotRunState, Candle, ClosedTrade, Environment, ExchangeOrder, ExecutionMode, LegacyRun,
-    MarketId, RunIdentity, SchemaMigration, SegmentHash, SegmentPlan, SegmentRefresh,
+    BotRunState, Candle, ClosedTrade, DurabilityReport, Environment, ExchangeOrder, ExecutionMode,
+    LegacyRun, MarketId, RunIdentity, SchemaMigration, SegmentHash, SegmentPlan, SegmentRefresh,
     StoreIdentity, TimestampMs,
 };
 use crate::ports::{
@@ -36,6 +38,19 @@ impl AnyStore {
             Self::Sqlite(_) => StorageBackend::Sqlite,
             #[cfg(feature = "postgres")]
             Self::Postgres(_) => StorageBackend::Postgres,
+        }
+    }
+
+    /// The same store, its file or pool shared, each call through it bounded
+    /// by `budget`: waits, statements and all. A route hands it what its
+    /// caller's deadline leaves, such as `StorageLimits::route_budget`, and
+    /// a call that cannot finish in time fails as a [`StorageError`] of a
+    /// kind the caller can act on, never as a success.
+    pub fn within(&self, budget: Duration) -> Self {
+        match self {
+            Self::Sqlite(store) => Self::Sqlite(store.within(budget)),
+            #[cfg(feature = "postgres")]
+            Self::Postgres(store) => Self::Postgres(store.within(budget)),
         }
     }
 }
@@ -179,5 +194,9 @@ impl StoreControl for AnyStore {
         execution_mode: Option<ExecutionMode>,
     ) -> Result<(), StorageError> {
         delegate!(self, store => store.adopt_run(run_id, identity, execution_mode))
+    }
+
+    fn durability(&self) -> Result<DurabilityReport, StorageError> {
+        delegate!(self, store => store.durability())
     }
 }

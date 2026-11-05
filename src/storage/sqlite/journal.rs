@@ -9,6 +9,7 @@ mod identity;
 use identity::decode_identity;
 
 use super::SqliteStore;
+use super::errors::{commit_failed, failed};
 use crate::model::RunIdentity;
 use crate::storage::runs::{
     already_exists, decode_state, identity_columns, never_created, refuse_legacy_creation,
@@ -149,7 +150,7 @@ fn load_state(connection: &Connection, run_id: &str) -> Result<Option<BotRunStat
             |row| row.get::<_, String>(0),
         )
         .optional()
-        .map_err(StorageError::other)?;
+        .map_err(failed)?;
     state_json
         .map(|json| decode_state(run_id, &json))
         .transpose()
@@ -205,7 +206,7 @@ impl RunJournalStore for SqliteStore {
             {
                 Err(already_exists(&state.run_id))
             }
-            Err(err) => Err(StorageError::other(err)),
+            Err(err) => Err(commit_failed(err)),
         }
     }
 
@@ -229,7 +230,7 @@ impl RunJournalStore for SqliteStore {
                     state.last_error.as_deref(),
                 ],
             )
-            .map_err(StorageError::other)?;
+            .map_err(commit_failed)?;
         if updated == 0 {
             return Err(never_created(&state.run_id));
         }
@@ -253,7 +254,7 @@ impl RunJournalStore for SqliteStore {
                 |row| decode_identity(row, 0),
             )
             .optional()
-            .map_err(StorageError::other)
+            .map_err(failed)
     }
 
     fn latest_run_for_market(
@@ -283,7 +284,7 @@ impl RunJournalStore for SqliteStore {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         found
             .map(|(run_id, json)| decode_state(&run_id, &json))
             .transpose()

@@ -7,7 +7,7 @@
 //! `QUANTFORGE_TEST_POSTGRES_URL` names, and skips without the variable.
 
 use super::database::{DATABASE, database_url};
-use super::migrate::{Scratch, rows};
+use super::scratch::{Scratch, rows};
 use super::*;
 use crate::storage::races;
 use crate::storage::refresh::{DirtyWindows, Written, pack};
@@ -71,7 +71,7 @@ fn seeded() -> Option<(Scratch, PostgresStore)> {
 }
 
 /// A transaction on a store of its own, held open until [`Held::finish`].
-struct Held {
+pub(super) struct Held {
     finish: oneshot::Sender<()>,
     ended: JoinHandle<()>,
 }
@@ -79,7 +79,7 @@ struct Held {
 impl Held {
     /// Runs `first` in a new transaction and returns with it open.
     /// [`Held::finish`] then runs `last` and commits it.
-    fn start(scratch: &Scratch, first: String, last: String) -> Self {
+    pub(super) fn start(scratch: &Scratch, first: String, last: String) -> Self {
         let store = scratch.store();
         let (started, running) = mpsc::channel();
         let (finish, finishing) = oneshot::channel();
@@ -102,14 +102,14 @@ impl Held {
         Self { finish, ended }
     }
 
-    fn finish(self) {
+    pub(super) fn finish(self) {
         let _ = self.finish.send(());
         self.ended.join().expect("the held transaction ended");
     }
 }
 
 /// Waits until a session of the store's database waits on a lock.
-fn wait_for_a_lock(store: &PostgresStore) {
+pub(super) fn wait_for_a_lock(store: &PostgresStore) {
     let deadline = Instant::now() + 2 * PATIENCE;
     loop {
         let waiting = rows(

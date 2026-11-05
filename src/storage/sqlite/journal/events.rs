@@ -1,6 +1,7 @@
 //! The journals beside a run's state: order events and closed trades, and
 //! the schema-5 rewrite that turned their venue IDs into text.
 
+use super::super::errors::{commit_failed, failed};
 use super::super::{SqliteStore, parse_decimal_str, row_error, to_from_sql_error};
 use crate::{ClosedTrade, ExchangeOrder, StorageError, VenueOrderId};
 use rusqlite::{Transaction, params};
@@ -34,7 +35,7 @@ pub(super) fn append_order_event(
                 raw_json
             ],
         )
-        .map_err(StorageError::other)?;
+        .map_err(commit_failed)?;
     Ok(())
 }
 
@@ -66,7 +67,7 @@ pub(super) fn append_closed_trade(
                 trade.exit_order_id.as_ref().map(VenueOrderId::as_str)
             ],
         )
-        .map_err(StorageError::other)?;
+        .map_err(commit_failed)?;
     Ok(())
 }
 
@@ -86,15 +87,15 @@ pub(super) fn list_order_events(
             LIMIT ?2
             "#,
         )
-        .map_err(StorageError::other)?;
+        .map_err(failed)?;
 
     let rows = stmt
         .query_map(params![run_id, limit as i64], |row| row.get::<_, String>(0))
-        .map_err(StorageError::other)?;
+        .map_err(failed)?;
 
     let mut items = Vec::new();
     for row in rows {
-        let raw_json = row.map_err(StorageError::other)?;
+        let raw_json = row.map_err(failed)?;
         let order =
             serde_json::from_str::<ExchangeOrder>(&raw_json).map_err(StorageError::other)?;
         items.push(order);
@@ -119,7 +120,7 @@ pub(super) fn list_closed_trades(
             LIMIT ?2
             "#,
         )
-        .map_err(StorageError::other)?;
+        .map_err(failed)?;
 
     let rows = stmt
         .query_map(params![run_id, limit as i64], |row| {
@@ -144,7 +145,7 @@ pub(super) fn list_closed_trades(
                 exit_order_id: order_id(8)?,
             })
         })
-        .map_err(StorageError::other)?;
+        .map_err(failed)?;
 
     let mut trades = Vec::new();
     for row in rows {
@@ -164,12 +165,11 @@ pub(in crate::storage::sqlite) fn migrate_ids(
     let runs: Vec<(String, String)> = {
         let mut stmt = transaction
             .prepare("SELECT run_id, state_json FROM bot_runs")
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let rows = stmt
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-            .map_err(StorageError::other)?;
-        rows.collect::<Result<_, _>>()
-            .map_err(StorageError::other)?
+            .map_err(failed)?;
+        rows.collect::<Result<_, _>>().map_err(failed)?
     };
     for (run_id, json) in runs {
         let mut state: Value = serde_json::from_str(&json).map_err(StorageError::other)?;
@@ -186,19 +186,18 @@ pub(in crate::storage::sqlite) fn migrate_ids(
                         serde_json::to_string(&state).map_err(StorageError::other)?
                     ],
                 )
-                .map_err(StorageError::other)?;
+                .map_err(failed)?;
         }
     }
 
     let events: Vec<(i64, String)> = {
         let mut stmt = transaction
             .prepare("SELECT seq, raw_json FROM order_events")
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let rows = stmt
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-            .map_err(StorageError::other)?;
-        rows.collect::<Result<_, _>>()
-            .map_err(StorageError::other)?
+            .map_err(failed)?;
+        rows.collect::<Result<_, _>>().map_err(failed)?
     };
     for (seq, json) in events {
         let mut order: Value = serde_json::from_str(&json).map_err(StorageError::other)?;
@@ -220,7 +219,7 @@ pub(in crate::storage::sqlite) fn migrate_ids(
                         serde_json::to_string(&order).map_err(StorageError::other)?
                     ],
                 )
-                .map_err(StorageError::other)?;
+                .map_err(failed)?;
         }
     }
     Ok(())

@@ -503,6 +503,72 @@ fn backtest_reproduces_pinned_summary_for_seeded_fixture() {
         ));
 }
 
+/// A database whose VFS has no shared memory: asking for WAL there leaves
+/// the journal as it was, and no error says so.
+#[cfg(unix)]
+const WEAK_DB: &str = "file:market.sqlite?vfs=unix-dotfile";
+
+#[cfg(unix)]
+#[test]
+fn a_live_run_refuses_a_store_that_cannot_keep_its_commits_before_any_request() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut command = quantforge();
+    command
+        .current_dir(dir.path())
+        .args(["--db", WEAK_DB, "--log-level", "error"])
+        .args(["--base-url", "http://127.0.0.1:9/"])
+        .args(["--api-key", "key", "--api-secret", "secret"])
+        .args([
+            "trade", "run", "--symbol", "BTCUSDT", "--mode", "live", "--yes",
+        ]);
+    command
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "storage cannot keep its commits: journal_mode is delete, and needs wal",
+        ))
+        .stderr(predicate::str::contains("local disk"))
+        .stderr(predicate::str::contains("secret").not());
+}
+
+#[cfg(unix)]
+#[test]
+fn trade_close_refuses_a_store_that_cannot_keep_its_commits() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut command = quantforge();
+    command
+        .current_dir(dir.path())
+        .args(["--db", WEAK_DB, "--log-level", "error"])
+        .args(["--base-url", "http://127.0.0.1:9/"])
+        .args(["--api-key", "key", "--api-secret", "secret"])
+        .args([
+            "trade", "close", "--symbol", "BTCUSDT", "--run-id", "run-1", "--yes",
+        ]);
+    command.assert().failure().stderr(predicate::str::contains(
+        "storage cannot keep its commits: journal_mode is delete, and needs wal",
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn any_other_command_on_such_a_store_runs_and_warns() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut command = quantforge();
+    command
+        .current_dir(dir.path())
+        .args(["--db", WEAK_DB, "--log-level", "warn"])
+        .args(["store", "status"]);
+    command
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "this store's commits may not survive a crash, and live trading refuses it",
+        ))
+        .stdout(predicate::str::contains(
+            "durability: weakened (journal_mode=delete synchronous=full fullfsync=on)",
+        ));
+}
+
 #[test]
 fn store_status_reports_a_fresh_store_as_unbound_and_inactive() {
     let tempdir = tempdir().expect("tempdir");

@@ -5,7 +5,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use quantforge::protocol::ErrorCode;
 use quantforge::protocol::jobs::JobState;
-use quantforge::{ExchangeCapabilities, ExchangeErrorKind, OrderStatus, RunStatus};
+use quantforge::{
+    ExchangeCapabilities, ExchangeErrorKind, OrderStatus, RunStatus, StorageErrorKind,
+};
 
 use crate::model;
 
@@ -156,6 +158,28 @@ fn exchange_errors_are_the_error_kinds() {
         matrix.errors.exchange.len(),
         code.len(),
         "an exchange error is listed twice"
+    );
+}
+
+#[test]
+fn storage_errors_are_the_error_kinds() {
+    let matrix = model::load_matrix();
+    let kinds = [
+        StorageErrorKind::Unavailable,
+        StorageErrorKind::Contention,
+        StorageErrorKind::Conflict,
+        StorageErrorKind::OutcomeUnknown,
+        StorageErrorKind::DurabilityUnmet,
+        StorageErrorKind::InvalidArgument,
+        StorageErrorKind::SchemaUnsupported,
+        StorageErrorKind::Other,
+    ];
+    let code: BTreeSet<&str> = kinds.iter().map(|kind| kind.as_str()).collect();
+    assert_eq!(names(&matrix.errors.storage), code);
+    assert_eq!(
+        matrix.errors.storage.len(),
+        code.len(),
+        "a storage error is listed twice"
     );
 }
 

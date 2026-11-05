@@ -18,6 +18,7 @@ use std::collections::BTreeSet;
 
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
+use super::errors::failed;
 use super::{SqliteStore, to_from_sql_error};
 use crate::storage::segments as format;
 use crate::storage::{common, refresh};
@@ -73,7 +74,7 @@ impl SegmentStore for SqliteStore {
         refresh::check_range(first_open_ms, last_open_ms)?;
         let mut connection = self.open()?;
         // One snapshot, so that the marks and the index agree.
-        let transaction = connection.transaction().map_err(StorageError::other)?;
+        let transaction = connection.transaction().map_err(failed)?;
         let Some(tip_window) = tip_window(&transaction, market)? else {
             return Ok(refresh::all_tip(first_open_ms, last_open_ms));
         };
@@ -90,7 +91,7 @@ impl SegmentStore for SqliteStore {
                 ],
                 |row| row.get(0),
             )
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let tip_start = refresh::tip_start(tip_window, lowest_dirty);
 
         let mut stmt = transaction
@@ -104,7 +105,7 @@ impl SegmentStore for SqliteStore {
                 ORDER BY i.window_start_ms ASC
                 "#,
             )
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let rows = stmt
             .query_map(
                 params![
@@ -130,10 +131,10 @@ impl SegmentStore for SqliteStore {
                     })
                 },
             )
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let mut segments = Vec::new();
         for row in rows {
-            segments.push(row.map_err(StorageError::other)?);
+            segments.push(row.map_err(failed)?);
         }
 
         Ok(refresh::plan(
@@ -152,7 +153,7 @@ impl SegmentStore for SqliteStore {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(StorageError::other)
+            .map_err(failed)
     }
 }
 
@@ -172,7 +173,7 @@ pub(super) fn mark_dirty(
             VALUES (?1, ?2, ?3, ?4)
             "#,
         )
-        .map_err(StorageError::other)?;
+        .map_err(failed)?;
     for window_start in window_starts {
         stmt.execute(params![
             market.exchange.as_str(),
@@ -180,7 +181,7 @@ pub(super) fn mark_dirty(
             market.interval.as_str(),
             window_start
         ])
-        .map_err(StorageError::other)?;
+        .map_err(failed)?;
     }
     Ok(())
 }
@@ -204,7 +205,7 @@ fn tip_window(
             ],
             |row| row.get(0),
         )
-        .map_err(StorageError::other)?;
+        .map_err(failed)?;
     newest
         .map(|open_time_ms| common::window_start(market.interval, open_time_ms))
         .transpose()

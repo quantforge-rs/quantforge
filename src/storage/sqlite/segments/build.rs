@@ -6,6 +6,7 @@ use std::ops::Range;
 
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
+use super::super::errors::{commit_failed, failed};
 use super::{format, tip_window};
 use crate::storage::refresh::{DirtyWindows, Packed, Snapshot, Written};
 use crate::storage::segments::TextCandle;
@@ -37,7 +38,7 @@ impl DirtyWindows for Connection {
             ],
             |row| row.get(0),
         )
-        .map_err(StorageError::other)
+        .map_err(failed)
     }
 
     fn read_window(
@@ -45,7 +46,7 @@ impl DirtyWindows for Connection {
         market: &MarketId,
         window: &Range<TimestampMs>,
     ) -> Result<Option<Snapshot>, StorageError> {
-        let transaction = self.transaction().map_err(StorageError::other)?;
+        let transaction = self.transaction().map_err(failed)?;
         let key = params![
             market.exchange.as_str(),
             market.symbol.as_str(),
@@ -62,7 +63,7 @@ impl DirtyWindows for Connection {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let Some(id) = id else {
             return Ok(None);
         };
@@ -76,7 +77,7 @@ impl DirtyWindows for Connection {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let mut stmt = transaction
             .prepare(
                 r#"
@@ -87,7 +88,7 @@ impl DirtyWindows for Connection {
                 ORDER BY open_time_ms ASC
                 "#,
             )
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let rows = stmt
             .query_map(
                 params![
@@ -113,10 +114,10 @@ impl DirtyWindows for Connection {
                     })
                 },
             )
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let mut candles = Vec::new();
         for row in rows {
-            candles.push(row.map_err(StorageError::other)?);
+            candles.push(row.map_err(failed)?);
         }
         Ok(Some(Snapshot {
             id,
@@ -134,7 +135,7 @@ impl DirtyWindows for Connection {
     ) -> Result<Written, StorageError> {
         let transaction = self
             .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let key = params![
             market.exchange.as_str(),
             market.symbol.as_str(),
@@ -151,7 +152,7 @@ impl DirtyWindows for Connection {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         match current {
             None => return Ok(Written::Elsewhere),
             Some(current) if current != id => return Ok(Written::Marked),
@@ -176,7 +177,7 @@ impl DirtyWindows for Connection {
                         "#,
                         params![hash, format::FORMAT, *payload_len as i64, stored],
                     )
-                    .map_err(StorageError::other)?;
+                    .map_err(failed)?;
                 transaction
                     .execute(
                         r#"
@@ -202,7 +203,7 @@ impl DirtyWindows for Connection {
                             hash
                         ],
                     )
-                    .map_err(StorageError::other)?;
+                    .map_err(failed)?;
             }
             Packed::Keep => {}
             Packed::Clear => {
@@ -214,13 +215,13 @@ impl DirtyWindows for Connection {
                         "#,
                         key,
                     )
-                    .map_err(StorageError::other)?;
+                    .map_err(failed)?;
             }
         }
         transaction
             .execute("DELETE FROM segment_dirty WHERE id = ?1", [id])
-            .map_err(StorageError::other)?;
-        transaction.commit().map_err(StorageError::other)?;
+            .map_err(failed)?;
+        transaction.commit().map_err(commit_failed)?;
         Ok(Written::Done)
     }
 }

@@ -9,12 +9,12 @@ use std::str::FromStr;
 use tokio_postgres::types::Type;
 use tokio_postgres::{IsolationLevel, Row};
 
-use super::PostgresStore;
 use super::bridge::Effect;
+use super::{PostgresStore, durability};
 use crate::model::futures::ActivationEpoch;
 use crate::model::{
-    Environment, ExecutionMode, IdentitySource, LegacyRun, RunIdentity, SchemaMigration,
-    StoreActivation, StoreId, StoreIdentity,
+    DurabilityReport, Environment, ExecutionMode, IdentitySource, LegacyRun, RunIdentity,
+    SchemaMigration, StoreActivation, StoreId, StoreIdentity,
 };
 use crate::storage::runs::{
     adopted_state, already_bound, identity_columns, legacy_run, parse_environment, refuse_unadopted,
@@ -93,6 +93,12 @@ impl StoreControl for PostgresStore {
         self.bridge.execute(Effect::Read, |client| {
             Box::pin(async move { Ok(record(&client.query_typed_one(RECORD, &[]).await?)) })
         })?
+    }
+
+    fn durability(&self) -> Result<DurabilityReport, StorageError> {
+        self.bridge.execute(Effect::Read, |client| {
+            Box::pin(async move { durability::effective(client).await })
+        })
     }
 
     fn migrations(&self) -> Result<Vec<SchemaMigration>, StorageError> {

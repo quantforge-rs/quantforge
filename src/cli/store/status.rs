@@ -1,7 +1,7 @@
 //! `quantforge store status` — what the store knows about itself: its ID,
-//! schema, environment and activation, the schema steps it went through,
-//! and the legacy runs still waiting for an operator. Needs no credentials
-//! and sends nothing.
+//! schema, environment and activation, what its commits rely on, the schema
+//! steps it went through, and the legacy runs still waiting for an operator.
+//! Needs no credentials and sends nothing.
 
 use crate::cli::context::AppContext;
 use anyhow::Result;
@@ -18,6 +18,13 @@ pub(crate) fn handle_store_status(ctx: &AppContext, _args: StoreStatusArgs) -> R
     println!("environment: {}", ctx.environment_text());
     println!("activation: {}", identity.activation);
     println!("activation_epoch: {}", identity.activation_epoch.0);
+    let durability = ctx.store.durability()?;
+    let verdict = if durability.is_met() {
+        "met"
+    } else {
+        "weakened"
+    };
+    println!("durability: {verdict} ({durability})");
 
     let migrations = ctx.store.migrations()?;
     println!("migrations: {}", migrations.len());

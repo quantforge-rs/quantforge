@@ -9,6 +9,7 @@
 //! - `bridge`: the bounded pool on it, each call's deadline, the query
 //!   cancelled past it, and what a lost answer means for a read and for a
 //!   write.
+//! - `durability`: what every connection is given, and what it found.
 //! - `tls`: the rustls connector.
 //! - `schema`: the DDL of every schema version, and the lock `init` takes.
 //! - `migrate`: the chain that creates the schema and brings an earlier one
@@ -27,6 +28,7 @@
 mod bridge;
 mod candles;
 mod control;
+mod durability;
 mod journal;
 mod migrate;
 mod runner;
@@ -37,6 +39,7 @@ mod tests;
 mod tls;
 
 use std::fmt;
+use std::time::Duration;
 
 use tracing::info;
 
@@ -82,6 +85,16 @@ impl PostgresStore {
         migrate::ensure_current(&self.bridge, &self.shown)?;
         info!(connection = %self.shown, "postgres store initialized");
         Ok(())
+    }
+
+    /// The same store and pool, each call through it bounded by `budget`:
+    /// waiting for a connection, for locks and for statements together. It
+    /// shares the pool's connections, so it costs no connection of its own.
+    pub fn within(&self, budget: Duration) -> Self {
+        Self {
+            bridge: self.bridge.within(budget),
+            shown: self.shown.clone(),
+        }
     }
 
     /// Runs `SELECT 1` on a pooled connection.
