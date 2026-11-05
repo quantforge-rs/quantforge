@@ -1,4 +1,4 @@
-Sync candles from the exchange into SQLite
+Sync candles from the exchange into the selected store
 
 Usage: quantforge data sync [OPTIONS] --symbol <SYMBOL>
 

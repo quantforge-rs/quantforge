@@ -1,5 +1,5 @@
-//! `quantforge data` — historical and incremental data ingestion into
-//! SQLite, plus stored-candle validation.
+//! `quantforge data` — historical and incremental data ingestion into the
+//! store, plus stored-candle validation.
 
 use super::context::AppContext;
 use anyhow::Result;
@@ -13,7 +13,7 @@ use validate::{DataValidateArgs, handle_data_validate};
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum DataCommand {
-    /// Sync candles from the exchange into SQLite.
+    /// Sync candles from the exchange into the selected store.
     Sync(DataSyncArgs),
 
     /// Validate stored candles for duplicates, gaps, ordering, and OHLC sanity.

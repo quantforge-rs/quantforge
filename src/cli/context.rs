@@ -38,6 +38,8 @@ const URL_SHELL_HISTORY_WARNING: &str = "a PostgreSQL URL with a password was pa
 #[derive(Debug)]
 pub(crate) struct AppContext {
     pub(crate) store: AnyStore,
+    /// The selection `store` was opened from: which backend, and where.
+    pub(crate) storage: StorageSettings,
     /// What the store knows about itself after `init` brought it to the
     /// current schema: its ID, environment and activation.
     pub(crate) identity: StoreIdentity,
@@ -84,7 +86,9 @@ impl AppContext {
             }
         };
 
-        // Only a SQLite file can be created by opening it.
+        info!(%storage, "using storage");
+        // Only a SQLite file can be created by opening it; PostgreSQL warns
+        // for itself when it finds an empty database.
         let created = match &storage {
             StorageSettings::Sqlite(sqlite) => (!sqlite.path.exists()).then_some(&sqlite.path),
             _ => None,
@@ -92,8 +96,11 @@ impl AppContext {
         let store = StoreFactory::builtin()
             .open(&storage)
             .map_err(|error| match error {
-                StoreOpenError::Storage(error) => anyhow!(error)
-                    .context(format!("failed to initialize {} store", storage.backend())),
+                StoreOpenError::Storage(error) => anyhow!(error).context(format!(
+                    "failed to initialize {} store at {}",
+                    storage.backend(),
+                    storage.location()
+                )),
                 StoreOpenError::Config(error) => storage_refusal(error),
                 other => anyhow!(other),
             })?;
@@ -137,6 +144,7 @@ impl AppContext {
 
         Ok(Self {
             store,
+            storage,
             identity,
             base_url,
             exchange,
@@ -157,12 +165,21 @@ impl AppContext {
             let endpoint = if production { "production" } else { "test" };
             return Err(anyhow!(
                 "store {} is bound to {environment}, but {} is a {endpoint} endpoint; refusing \
-                 before any request (pass the {environment} base URL, or use another --db)",
+                 before any request (pass the {environment} base URL, or use {})",
                 self.identity.store_id,
-                display_url(&self.base_url)
+                display_url(&self.base_url),
+                self.another_store()
             ));
         }
         Ok(())
+    }
+
+    /// What an operator selects instead of this store, for a remedy.
+    pub(crate) fn another_store(&self) -> &'static str {
+        match self.storage {
+            StorageSettings::Sqlite(_) => "another --db",
+            _ => "another PostgreSQL database",
+        }
     }
 
     /// The identity a run started by this invocation records: the store's
@@ -210,10 +227,6 @@ fn storage_refusal(error: StorageConfigError) -> anyhow::Error {
         StorageConfigError::PostgresSettingWithoutBackend { .. } => {
             anyhow!("{error}: pass --storage postgres or --storage sqlite, or set QF_STORAGE")
         }
-        StorageConfigError::NoAdapter { .. } => anyhow!(
-            "{error}: this release checks PostgreSQL settings but cannot keep data there; use \
-             --storage sqlite"
-        ),
         other => anyhow!(other),
     }
 }

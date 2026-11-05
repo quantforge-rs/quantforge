@@ -286,8 +286,8 @@ them and report a 429, 418 or 10006 as `rate_limited`.
   labelled as such and never published as a full artifact.
 
 **No hidden SQLite state:** with PostgreSQL selected, no SQLite file may be
-created, opened or read. Today `AppContext::init` always creates the `--db`
-file, so ALG-401 and ALG-728 must change that.
+created, opened or read. `AppContext::init` opens only the store selected,
+and every command test on PostgreSQL ends by proving no file appeared.
 
 ## Who uses it
 

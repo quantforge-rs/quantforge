@@ -1,5 +1,6 @@
 //! `quantforge serve` — the server other QuantForge instances connect to.
 
+use super::context::AppContext;
 use anyhow::Result;
 use clap::Subcommand;
 
@@ -13,8 +14,8 @@ pub(crate) enum ServeCommand {
     Run(ServeRunArgs),
 }
 
-pub(crate) async fn dispatch(command: ServeCommand) -> Result<()> {
+pub(crate) async fn dispatch(ctx: &AppContext, command: ServeCommand) -> Result<()> {
     match command {
-        ServeCommand::Run(args) => handle_serve_run(args).await,
+        ServeCommand::Run(args) => handle_serve_run(ctx, args).await,
     }
 }

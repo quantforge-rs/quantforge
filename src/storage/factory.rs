@@ -7,14 +7,15 @@
 //!
 //! A backend with no provider is refused, and no other provider is asked
 //! instead: selecting PostgreSQL never ends in a SQLite file. The built-in
-//! factory registers SQLite only. PostgreSQL's stores exist, and QUA-116
-//! registers their provider; until then its settings are checked and the
-//! open is refused. The execution store (ALG-738) is the next thing a host
-//! opens from the same settings, in the same process, through this factory.
+//! factory registers SQLite and, with the `postgres` feature, PostgreSQL.
+//! The execution store (ALG-738) is the next thing a host opens from the
+//! same settings, in the same process, through this factory.
 
 use crate::ports::{CandleStore, StorageError};
 use crate::storage::SqliteStore;
 use crate::storage::any::AnyStore;
+#[cfg(feature = "postgres")]
+use crate::storage::postgres::PostgresStore;
 use crate::storage::settings::{StorageBackend, StorageConfigError, StorageSettings};
 use std::fmt;
 use std::sync::Arc;
@@ -39,10 +40,13 @@ impl StoreFactory {
         }
     }
 
-    /// The providers this build ships: SQLite. PostgreSQL has none yet;
-    /// see the module docs.
+    /// The providers this build ships: SQLite and, with the `postgres`
+    /// feature, PostgreSQL.
     pub fn builtin() -> Self {
-        Self::empty().register(StorageBackend::Sqlite, Arc::new(open_sqlite))
+        let factory = Self::empty().register(StorageBackend::Sqlite, Arc::new(open_sqlite));
+        #[cfg(feature = "postgres")]
+        let factory = factory.register(StorageBackend::Postgres, Arc::new(open_postgres));
+        factory
     }
 
     /// Registers `provider` for `backend`, replacing any earlier one.
@@ -119,6 +123,22 @@ fn open_sqlite(settings: &StorageSettings) -> Result<AnyStore, StorageError> {
     let store = SqliteStore::with_limits(&sqlite.path, sqlite.limits);
     CandleStore::init(&store)?;
     Ok(AnyStore::Sqlite(store))
+}
+
+/// PostgreSQL: connecting proves the URL, the password and the CA. The
+/// database must exist; `init` creates the schema in it, or brings an
+/// earlier one up to date.
+#[cfg(feature = "postgres")]
+fn open_postgres(settings: &StorageSettings) -> Result<AnyStore, StorageError> {
+    let StorageSettings::Postgres(postgres) = settings else {
+        return Err(StorageError::InvalidArgument(format!(
+            "the postgres provider was handed {} settings",
+            settings.backend()
+        )));
+    };
+    let store = PostgresStore::connect(postgres)?;
+    store.init()?;
+    Ok(AnyStore::Postgres(store))
 }
 
 #[cfg(test)]

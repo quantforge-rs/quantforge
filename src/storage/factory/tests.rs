@@ -41,9 +41,13 @@ fn the_builtin_factory_opens_sqlite_creating_its_directory_and_schema() {
         identity.schema_version,
         crate::storage::sqlite::SCHEMA_VERSION
     );
+    let built: Vec<_> = StorageBackend::ALL
+        .into_iter()
+        .filter(|backend| backend.is_built())
+        .collect();
     assert_eq!(
         StoreFactory::builtin().registered().collect::<Vec<_>>(),
-        [StorageBackend::Sqlite]
+        built
     );
 }
 
@@ -124,19 +128,19 @@ fn postgres_without_a_provider_is_refused_and_sqlite_is_never_asked() {
     };
     let postgres =
         StorageSettings::resolve(request, StoreOwner::Command).expect("postgres settings");
-    for factory in [&only_sqlite, &StoreFactory::builtin()] {
-        let refused = factory.open(&postgres).expect_err("no postgres provider");
-        assert!(
-            matches!(
-                refused,
-                StoreOpenError::Config(StorageConfigError::NoAdapter {
-                    backend: StorageBackend::Postgres
-                })
-            ),
-            "{refused:?}"
-        );
-        assert_eq!(refused.to_string(), "postgres storage has no adapter yet");
-    }
+    let refused = only_sqlite
+        .open(&postgres)
+        .expect_err("no postgres provider");
+    assert!(
+        matches!(
+            refused,
+            StoreOpenError::Config(StorageConfigError::NoAdapter {
+                backend: StorageBackend::Postgres
+            })
+        ),
+        "{refused:?}"
+    );
+    assert_eq!(refused.to_string(), "postgres storage has no adapter yet");
     assert!(calls(&sqlite_calls).is_empty(), "sqlite was asked instead");
     assert_eq!(
         std::fs::read_dir(dir.path()).expect("dir").count(),
@@ -180,6 +184,49 @@ fn a_providers_failure_is_a_storage_error() {
             refused,
             StoreOpenError::Storage(StorageError::Unavailable(_))
         ),
+        "{refused:?}"
+    );
+}
+
+/// The built-in factory has a provider for PostgreSQL, so what comes back is
+/// the server's absence and not the refusal of a backend it cannot open.
+#[cfg(feature = "postgres")]
+#[test]
+fn the_builtin_factory_reaches_for_the_postgres_server_it_is_given() {
+    let request = StorageRequest {
+        backend: Some(Supplied::new(StorageBackend::Postgres, "--storage")),
+        postgres_url: Some(Supplied::new(
+            crate::storage::settings::ConnectionString::new(
+                "postgres://u:pw-sentinel-417@127.0.0.1:9/db?sslmode=disable",
+            ),
+            "--postgres-url",
+        )),
+        ..StorageRequest::default()
+    };
+    let postgres = StorageSettings::resolve(request, StoreOwner::Command).expect("settings");
+    let refused = StoreFactory::builtin()
+        .open(&postgres)
+        .expect_err("nothing listens on port 9");
+    assert!(
+        matches!(
+            refused,
+            StoreOpenError::Storage(StorageError::Unavailable(_))
+        ),
+        "{refused:?}"
+    );
+    assert!(
+        !refused.to_string().contains("pw-sentinel-417"),
+        "the password leaked"
+    );
+}
+
+#[cfg(feature = "postgres")]
+#[test]
+fn the_postgres_provider_refuses_settings_of_another_backend() {
+    let settings = sqlite_settings(Path::new("unused.sqlite"));
+    let refused = open_postgres(&settings).expect_err("wrong settings");
+    assert!(
+        matches!(refused, StorageError::InvalidArgument(_)),
         "{refused:?}"
     );
 }

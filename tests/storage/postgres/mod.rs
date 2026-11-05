@@ -15,7 +15,8 @@
 //! QUA-123, and the segment group since QUA-112. `src/storage/postgres/tests/`
 //! steps the races through the store's own read and write-back.
 //!
-//! - `any_store`: every group again behind `AnyStore`.
+//! - `any_store`: every group again through the built-in factory, which
+//!   hands a host the same store behind `AnyStore`.
 //! - `schema`: the schema `init` creates, held to the doc: a repeat, stores
 //!   starting together, the refusals, exact round trips, and identities
 //!   that never collide.
@@ -43,7 +44,9 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 
 use crate::conformance::{self, Backend, Bounded, Fixture, Raw};
-pub use server::{IsolatedDatabase, VARIABLE, block_on, client, query, server_url, settings};
+pub use server::{
+    IsolatedDatabase, VARIABLE, block_on, client, query, selection, server_url, settings,
+};
 
 /// A `PostgresStore` on a database of its own.
 pub struct Postgres;

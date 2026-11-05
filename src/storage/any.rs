@@ -4,8 +4,8 @@
 //! port by handing the call to its backend (ADR 0001).
 //!
 //! PostgreSQL is a variant of its own with the `postgres` feature, every
-//! store of it behind the same ports. Hosts cannot select it yet: QUA-116
-//! adds its provider in [`crate::storage::factory`].
+//! store of it behind the same ports. A host gets either one from
+//! [`crate::storage::factory`].
 
 use std::time::Duration;
 

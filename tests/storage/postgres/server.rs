@@ -1,7 +1,7 @@
 //! The PostgreSQL server the tests run against, and a database of its own
 //! on it for each fixture: shared by the storage tests and, through
-//! `#[path]`, by the live engine's, so it uses nothing but the crate's
-//! public API and the drivers.
+//! `#[path]`, by the live engine's and the commands', so it uses nothing but
+//! the crate's public API and the drivers.
 
 use quantforge::storage::settings::PostgresSettings;
 use quantforge::{
@@ -110,12 +110,17 @@ impl Drop for IsolatedDatabase {
     }
 }
 
-/// The settings the store opens the isolated database with.
-pub fn settings(url: &str) -> PostgresSettings {
+/// What a host selecting the isolated database resolves.
+pub fn selection(url: &str) -> StorageSettings {
     let mut request = StorageRequest::default();
     request.backend = Some(Supplied::new(StorageBackend::Postgres, "--storage"));
     request.postgres_url = Some(Supplied::new(ConnectionString::new(url), VARIABLE));
-    match StorageSettings::resolve(request, StoreOwner::Command).expect("settings") {
+    StorageSettings::resolve(request, StoreOwner::Command).expect("settings")
+}
+
+/// The settings the store opens the isolated database with.
+pub fn settings(url: &str) -> PostgresSettings {
+    match selection(url) {
         StorageSettings::Postgres(settings) => *settings,
         other => panic!("not postgres: {other}"),
     }

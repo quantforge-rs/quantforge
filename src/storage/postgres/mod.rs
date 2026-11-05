@@ -22,8 +22,7 @@
 //!   and written back only over the revision it read.
 //!
 //! [`PostgresStore`] connects, answers, creates its schema, and serves
-//! every storage port. QUA-116 makes it selectable through
-//! `storage::factory`.
+//! every storage port. A host selects it through `storage::factory`.
 
 mod bridge;
 mod candles;

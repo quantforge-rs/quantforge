@@ -235,6 +235,15 @@ impl StorageSettings {
         }
     }
 
+    /// Where the data lives, as an operator may see it: a file's path, or
+    /// `postgres://host:port/database`, never a user or password.
+    pub fn location(&self) -> String {
+        match self {
+            Self::Sqlite(sqlite) => sqlite.path.display().to_string(),
+            Self::Postgres(postgres) => postgres.connection.to_string(),
+        }
+    }
+
     /// The limits every backend shares.
     pub fn limits(&self) -> StorageLimits {
         match self {
@@ -297,14 +306,11 @@ impl StorageSettings {
     }
 }
 
-/// `sqlite <path>` or `postgres postgres://host:port/database`: what an
-/// operator may see, never a user or password.
+/// `sqlite <path>` or `postgres postgres://host:port/database`: the backend
+/// and its [`location`](StorageSettings::location).
 impl fmt::Display for StorageSettings {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Sqlite(sqlite) => write!(f, "sqlite {}", sqlite.path.display()),
-            Self::Postgres(postgres) => write!(f, "postgres {}", postgres.connection),
-        }
+        write!(f, "{} {}", self.backend(), self.location())
     }
 }
 

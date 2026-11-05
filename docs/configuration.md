@@ -111,9 +111,8 @@ Explanations belong in the Setting cell.
 
 - **`sqlite`**, the default: one file at `--db`. Nothing about SQLite
   changes when no backend is selected.
-- **`postgres`**: the database `--postgres-url` names. This release checks
-  the PostgreSQL settings and refuses the command (`postgres storage has no
-  adapter yet`); a later release adds the PostgreSQL stores. A build
+- **`postgres`**: the database `--postgres-url` names, for every command:
+  candles, segments, runs and the store's own record all live there. A build
   compiled without the `postgres` cargo feature, which is on by default,
   refuses it as `not in this build`.
 
@@ -128,7 +127,36 @@ anything is created:
 - `--storage postgres` without a URL.
 
 PostgreSQL never falls back to SQLite, and never creates a SQLite file or
-directory.
+directory. A command that cannot reach its database fails, with exit status
+1, naming the database and why: the server refused the URL's user or
+password, the database does not exist, or what stopped the connection.
+
+Every command logs which store it uses, and `store status` and `serve run`
+print it, as `storage: sqlite data/market.sqlite` or `storage: postgres
+postgres://HOST:PORT/DATABASE`, never with a user or password.
+
+### The PostgreSQL database
+
+The database must exist, and hold QuantForge alone: the first command that
+opens it creates the schema, in the role's default schema, and logs a
+warning that it did, in case the URL named the wrong one. A schema that
+holds tables of the same names but no QuantForge version is refused,
+untouched.
+
+The role needs no superuser rights, only the right to create tables there.
+PostgreSQL 15 and later give that on `public` to a database's owner alone,
+so the simplest setup is a database the role owns:
+
+```bash
+createdb --owner=quant market
+```
+
+One database is one store, as one `--db` file is: keep testnet and production
+in separate databases, and bind each with `store bind`. Nothing moves from a
+SQLite file on its own, so a new database starts empty.
+
+`serve run`'s `--segment-cache-dir` stays on the local disk whichever backend
+is selected; it holds no store.
 
 ### The PostgreSQL URL
 

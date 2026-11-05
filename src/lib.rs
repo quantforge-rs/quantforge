@@ -68,8 +68,9 @@
 //! them: they drive the connectors and [`RunJournalStore`] directly, so that
 //! orchestration lives in the binary. The global `--storage` and its
 //! settings resolve to [`StorageSettings`], and [`StoreFactory`] opens the
-//! store they name ([`SqliteStore`] at `--db`); `--exchange` selects an exchange by its registry name
-//! ([`exchange::lookup`]), and `--base-url` with the credentials builds its
+//! store they name as an [`AnyStore`] ([`SqliteStore`] at `--db` unless
+//! PostgreSQL is selected); `--exchange` selects an exchange by its registry
+//! name ([`exchange::lookup`]), and `--base-url` with the credentials builds its
 //! connectors through [`exchange::connect`]; `--log-level` has no
 //! counterpart here, because this crate emits `tracing` events and the binary
 //! installs the subscriber.

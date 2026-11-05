@@ -3,7 +3,7 @@ CLI-first market data ingestion, research, and controlled live trading framework
 Usage: quantforge [OPTIONS] <COMMAND>
 
 Commands:
-  data      Historical and incremental data ingestion into SQLite
+  data      Historical and incremental data ingestion into the selected store
   backtest  Deterministic backtest using locally stored candles
   trade     Run or manually close the strategy bot
   monitor   Observe exchange state and manage orders manually when needed

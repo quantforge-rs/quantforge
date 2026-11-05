@@ -50,7 +50,7 @@ src/
 │   ├── tests.rs                root-parser unit tests and the config-matrix and README drift checks
 │   ├── data/                   market-data commands
 │   │   ├── mod.rs              quantforge data: subcommand enum and dispatch
-│   │   ├── sync.rs             quantforge data sync: pull klines from the exchange into SQLite
+│   │   ├── sync.rs             quantforge data sync: pull klines from the exchange into the store
 │   │   └── validate.rs         quantforge data validate: check stored candles
 │   ├── backtest/               a leaf command in directory form
 │   │   └── mod.rs              quantforge backtest: simulate the strategy on stored candles
@@ -259,7 +259,8 @@ hands it the listener. The engines reach the exchange
 and storage adapters only through the `ports` traits; the binary chooses
 which adapters to pass in, building the connectors of the exchange that
 `--exchange` names through `exchange::connect`, and opening the store that
-`--storage` selects through `storage::factory`. Nothing outside
+`--storage` selects through `storage::factory`; `tests/storage/boundary.rs`
+fails if a store is opened any other way. Nothing outside
 `src/exchange/` names a concrete exchange adapter, nothing outside the
 Binance adapter hardcodes Binance beyond the registry's entries and the
 `Venue` that names it with its product lines in `ExchangeId`, no venue's
@@ -289,7 +290,9 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
 - `tests/e2e/`: end-to-end tiers — `offline.rs` against a mock Binance
   server, `testnet.rs` against Binance Spot testnet, `precedence.rs` for
   flag, environment, and default precedence, `storage.rs` for selecting
-  the storage backend that way, `serve.rs` for `serve run` as
+  the storage backend that way, `backends.rs` for every command that reads
+  or writes the store, on SQLite and, with `QUANTFORGE_TEST_POSTGRES_URL`, on
+  PostgreSQL, `serve.rs` for `serve run` as
   a running process — its routes, and how it stops on a signal — and
   `snapshot.rs` and `layout.rs` for the CLI surface and this document
 - `tests/snapshots/`: the committed `--help` output of every command, plus
@@ -313,8 +316,9 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   once, and the query plans of
   [postgres-query-plans.md](postgres-query-plans.md) (`postgres/`);
   acknowledged writes outliving a killed writer and, on demand, a crashed
-  server (`crash.rs`); the documents held to the code; and, on demand, a
-  100,000-candle batch on each backend (`measure.rs`)
+  server (`crash.rs`); the documents held to the code; the factory as the
+  only way to a store (`boundary.rs`); and, on demand, a 100,000-candle batch
+  on each backend (`measure.rs`)
 - `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
   from naming a concrete exchange adapter, the code and `--help` outside
   the Binance adapter from hardcoding Binance, and each venue's own

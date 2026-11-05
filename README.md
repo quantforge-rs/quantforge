@@ -42,7 +42,7 @@ The public surface is layered as Rust modules, innermost first:
 - `model` - normalized market types, validation, the columnar candle batch, the exchange-agnostic requests, timestamp and decimal helpers
 - `ports` - the exchange connector and storage traits every adapter implements, and the capability descriptor that says what an exchange supports
 - `exchange` - the connector registry, which names each exchange (`--exchange binance`) and builds its connectors, and one adapter namespace per exchange; `binance` is the only one today, and nothing outside `exchange` names it. `exchange::conformance` writes down what every adapter must do as checks, and the [feature matrix](https://github.com/quantforge-rs/quantforge/blob/main/docs/exchange-feature-matrix.md) shows each exchange's results
-- `storage` - persistence adapters, one namespace per backend, `sqlite` and `postgres`, the latter complete but not selectable yet; `settings` and `factory`, which select a backend and open it; and `segments`, the [segment format](https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md) every backend packs a market's closed candles into, window by window, as immutable segments named by their hash
+- `storage` - persistence adapters, one namespace per backend, `sqlite` and `postgres`; `settings` and `factory`, which select a backend and open it; and `segments`, the [segment format](https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md) every backend packs a market's closed candles into, window by window, as immutable segments named by their hash
 - `sdk` - the strategy trait and its context, indicator math, and built-in strategies
 - `engine` - the drivers: `engine::backtest`, `engine::data_sync`, and `engine::live`
 - `protocol` - stands apart from the layers above: the versioned wire types between QuantForge instances, for remote backtest jobs, candle segments, and the live bar stream, and the [strategy bundle](https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md) a remote backtest runs; its rustdoc is the wire specification
@@ -57,7 +57,7 @@ annotates every source file and maps each command to its file.
 ## Scope and guardrails
 
 - exchange in 0.2.0: **Binance Spot**
-- storage in 0.2.0: **SQLite**
+- storage: **SQLite** by default, **PostgreSQL** with `--storage postgres`
 - strategy execution model: closed-bar, event-driven
 - built-in strategy in 0.2.0: SMA crossover example
 - default execution mode: **dry-run**
@@ -97,9 +97,17 @@ and `QF_API_SECRET`, and a flag always wins over its variable. So do
 `QF_SEGMENT_CACHE_DIR`. `--exchange` names the exchange (`binance`, the
 default and so far the only one), and an omitted `--base-url` is that
 exchange's production endpoint. `--storage` (`QF_STORAGE`) selects the
-storage backend: `sqlite`, the default, at `--db`, or `postgres`, whose
-settings this release checks and then refuses until its stores arrive;
-keep a PostgreSQL password in `QF_POSTGRES_URL`. The
+storage backend: `sqlite`, the default, at `--db`, or `postgres`, the
+database a URL names, which every command then uses. Keep the URL, and the
+password in it, in `QF_POSTGRES_URL`:
+
+```bash
+export QF_STORAGE=postgres
+export QF_POSTGRES_URL=postgres://USER:PASSWORD@HOST:5432/DATABASE
+cargo run -- store status
+```
+
+The
 [configuration matrix](https://github.com/quantforge-rs/quantforge/blob/main/docs/configuration.md)
 lists every flag with its environment variable, default, and scope, and the
 settings renamed from their earlier `--binance-*` and `QF_BINANCE_*` names.
@@ -329,7 +337,7 @@ back under a verified environment and account.
 - prices and volumes use decimal arithmetic, not floating-point math
 - strategies evaluate only closed bars
 - backtests execute intent on the **next bar open**
-- live trading polls closed bars and records run state into SQLite
+- live trading polls closed bars and records run state in the selected store
 
 ## Local development
 
@@ -358,7 +366,6 @@ explains the live modes and how to re-record.
 - additional exchanges such as Bybit
 - restart reconciliation between local bot state and exchange state
 - richer indicators and more built-in strategies
-- PostgreSQL as a second storage backend, with SQLite staying the default; how the storage ports reach it is decided in [ADR 0001](https://github.com/quantforge-rs/quantforge/blob/main/docs/adr/0001-postgres-client-strategy.md)
 - TradingView alerts executed as risk-sized trades in USDT-settled linear and coin-settled inverse futures on Binance and Bybit, with stop losses held by the exchange, monitoring, and Telegram notifications; its architecture is decided in [ADR 0002](https://github.com/quantforge-rs/quantforge/blob/main/docs/adr/0002-automation-architecture.md)
 - research-oriented parameter sweeps and snapshot reports
 

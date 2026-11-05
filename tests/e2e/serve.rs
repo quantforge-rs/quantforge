@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use predicates::prelude::*;
 use quantforge::protocol::{MIN_SUPPORTED, PROTO_VERSION};
 
-use crate::harness::{TestBed, isolated_std_cmd, unpinned_cmd};
+use crate::harness::{TestBed, isolated_std_cmd, on_each_backend, unpinned_cmd};
 
 /// How long one step may take before the test fails instead of hanging.
 const PATIENCE: Duration = Duration::from_secs(30);
@@ -21,22 +21,27 @@ const PATIENCE: Duration = Duration::from_secs(30);
 /// A running `serve run` on a free loopback port, logging errors only, so
 /// that its stdout holds just its `key: value` lines. Dropping it kills the
 /// process: declare it after its bed, whose directory outlives it.
-struct Served {
+pub(crate) struct Served {
     child: Child,
     lines: Receiver<String>,
     stderr: Option<JoinHandle<String>>,
+    storage: String,
     address: SocketAddr,
 }
 
 impl Served {
-    /// Starts `serve run` in the bed and waits until it says where it
-    /// listens.
-    fn start(bed: &TestBed) -> Self {
+    /// Starts `serve run` on the bed's store and waits until it says where
+    /// it listens.
+    pub(crate) fn start(bed: &TestBed) -> Self {
         let mut cmd = isolated_std_cmd();
-        cmd.current_dir(bed.dir())
-            .arg("--db")
-            .arg(bed.db_path())
-            .args(["--log-level", "error", "serve", "run"])
+        cmd.current_dir(bed.dir());
+        match bed.postgres_url() {
+            Some(url) => cmd
+                .args(["--storage", "postgres"])
+                .env("QF_POSTGRES_URL", url),
+            None => cmd.arg("--db").arg(bed.db_path()),
+        };
+        cmd.args(["--log-level", "error", "serve", "run"])
             .args(["--listen", "127.0.0.1:0", "--segment-cache-dir"])
             .arg(bed.dir().join("segments"))
             .stdin(Stdio::null())
@@ -63,8 +68,10 @@ impl Served {
             child,
             lines,
             stderr: Some(stderr),
+            storage: String::new(),
             address: SocketAddr::from(([127, 0, 0, 1], 0)),
         };
+        served.storage = served.next("storage");
         let url = served.next("listening");
         served.address = url
             .strip_prefix("http://")
@@ -147,10 +154,9 @@ fn get(address: SocketAddr, path: &str) -> (u16, String) {
     response(stream)
 }
 
-#[test]
-fn serve_run_says_where_it_listens_and_answers_health_and_version() {
-    let bed = TestBed::new();
-    let mut served = Served::start(&bed);
+fn serve_run_says_where_it_listens_and_answers_health_and_version(bed: &TestBed) {
+    let mut served = Served::start(bed);
+    assert_eq!(served.storage, bed.storage_text());
     assert_eq!(get(served.address, "/healthz"), (200, "ok".to_string()));
     let version = format!(
         r#"{{"version":"{}","proto_version":{},"min_supported":{}}}"#,
@@ -160,12 +166,14 @@ fn serve_run_says_where_it_listens_and_answers_health_and_version() {
     );
     assert_eq!(get(served.address, "/version"), (200, version));
     assert!(bed.dir().join("segments").is_dir(), "no segment cache");
-    assert!(bed.db_path().is_file(), "no database");
+    assert_eq!(bed.postgres_url().is_none(), bed.db_path().is_file());
 
     served.child.kill().expect("stop the server");
     served.wait();
     assert_eq!(served.stderr(), "");
 }
+
+on_each_backend!(serve_run_says_where_it_listens_and_answers_health_and_version);
 
 #[test]
 fn serve_run_fails_naming_an_address_it_cannot_listen_on() {
