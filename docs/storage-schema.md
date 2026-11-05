@@ -254,10 +254,12 @@ resume checks on both.
   that save back (safety rail 5), so an executed order's position is never
   lost to a journal row.
 - **Nothing is retried below the caller.** A store never retries a write;
-  on PostgreSQL a write whose answer was lost is
+  a write whose answer was lost, or that the disk failed at its commit, is
   `StorageError::OutcomeUnknown`, for the caller to look at before writing
   again. Retrying a write and submitting an order are separate decisions: a
   failed save never sends an order again.
+  [storage-durability.md](storage-durability.md) says what an answer means
+  and how long one may take.
 - **One process drives a run at a time.** The journal does not arbitrate
   between processes driving one run: the last save wins whatever its times
   (`journal.last_save_wins`), and appends never conflict, each a row of its

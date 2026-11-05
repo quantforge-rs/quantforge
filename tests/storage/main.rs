@@ -10,6 +10,8 @@
 //!   `AnyStore`, an isolated database per fixture on the server
 //!   `QUANTFORGE_TEST_POSTGRES_URL` names, with the schema, the candle
 //!   store's writes against the segment protocol, and the query plans;
+//! - [`crash`]: acknowledged writes outliving a killed process, and on
+//!   demand a crashed server;
 //! - [`migration`]: the schema chain from every schema an earlier build
 //!   wrote, loaded from `tests/fixtures/sqlite/`, with every row carried
 //!   forward unchanged, and the controls that prove a failed step leaves
@@ -19,6 +21,7 @@
 
 mod any_store;
 mod conformance;
+mod crash;
 mod docs;
 mod measure;
 mod migration;

@@ -173,6 +173,31 @@ segment stores both exist.
   every window ends indexed under exactly its final candles
 <!-- end: segments -->
 
+### Durable commits
+
+What a backend's acknowledgement means and how long it may take
+([storage-durability.md](storage-durability.md)). Its checks are all coded,
+since they hold locks and end connections. A failure only one backend can
+show is classified in that backend's own tests:
+`src/storage/sqlite/errors.rs` and `src/storage/postgres/tests/durability.rs`.
+`tests/storage/crash.rs` kills a writer on each backend.
+
+<!-- begin: durability -->
+- `durability.commit_visible`: a write the store answered is there for
+  another connection and for a store opened afterwards
+- `durability.rollback_leaves_nothing`: a batch that fails partway leaves no
+  candle and no mark, and goes through once it can
+- `durability.contention_is_bounded`: a write held up by another writer fails
+  as contention within its budget and changes nothing, and goes through once
+  the writer is done
+- `durability.reads_pass_a_held_writer`: a read answers at once while another
+  writer holds the write lock
+- `durability.reconnects`: a store keeps answering, reads and writes, after
+  its connections are gone
+- `durability.settings_read_back`: a store reads back every setting its
+  commits rely on, and all of them are met
+<!-- end: durability -->
+
 ### The store's record
 
 `StoreControl`: the store's own record, its migration log, the environment
@@ -280,17 +305,19 @@ A backend joins the suite in its own file under `tests/storage/`, the way
 2. Implement `conformance::Raw` over the backend's own client. The
    scenarios' SQL is portable: plain `SELECT`, `INSERT` and `UPDATE` on the
    tables of [storage-schema.md](storage-schema.md), every selected column
-   text or `CAST(… AS TEXT)`, no function of one dialect. Only three things
-   are written per backend: `value_types` (SQLite's `typeof`, PostgreSQL's
-   `pg_typeof`), `blob` (a literal of bytes), and `write_refusal` (how a
-   table is made to refuse new rows: a trigger, a constraint).
+   text or `CAST(… AS TEXT)`, no function of one dialect. A few things are
+   written per backend: `value_types` (SQLite's `typeof`, PostgreSQL's
+   `pg_typeof`), `blob` (a literal of bytes), `write_refusal` (how a table is
+   made to refuse new rows: a trigger, a constraint), `hold_writes` (how
+   another writer holds a table up) and `end_connections`.
 3. Add one test per port the backend implements, calling its group:
    `conformance::candles::<B>()` once it implements `CandleStore`,
    `conformance::journal::<B>()` with `RunJournalStore`,
    `conformance::control::<B>()` with `RunJournalStore` and `StoreControl`,
-   and `conformance::segments::<B>()` with `CandleStore` and `SegmentStore`.
-   The groups are generic over the ports, so a backend switches each on as
-   its store lands.
+   `conformance::segments::<B>()` with `CandleStore` and `SegmentStore`, and
+   `conformance::durability::<B>()` with those and a bounded view of the
+   store (`conformance::Bounded`). The groups are generic over the ports, so
+   a backend switches each on as its store lands.
 4. Implement `DirtyWindows` (`src/storage/refresh.rs`) for the store, and
    step through the races in its own unit tests, as
    `src/storage/sqlite/segments/tests.rs` does; see [the races](#the-races).
@@ -328,8 +355,9 @@ pg_ctl -D pg -w stop
 Each fixture's store, and each one `reopen` opens, has run
 `PostgresStore::init`, so every scenario starts on a new store's schema
 (QUA-125). Every group runs on PostgreSQL: candles (QUA-124), the journal
-and the store's record (QUA-123), and segments (QUA-112), then all four
-again behind `AnyStore`. The journal and store-record groups run once more
+and the store's record (QUA-123), segments (QUA-112) and durable commits
+(QUA-111), then all five again behind `AnyStore`. The journal and
+store-record groups run once more
 on a database whose collation is `en_US.UTF-8`, where only byte order keeps
 a tie on run IDs SQLite's, but only when the server can create one: a server
 without that locale skips the run, saying so, so byte order is not proven on
@@ -342,7 +370,20 @@ runs the engine's dry runs and resume checks on PostgreSQL with the same
 variable. With it, `cargo test --lib postgres` steps [the races](#the-races)
 through the store's own read and write-back, and proves what the ports
 cannot show: a write-back that waits on a correction's lock finds its
-revision, and a window and a plan stay one snapshot while a commit lands.
+revision, a window and a plan stay one snapshot while a commit lands, and
+each failure the server reports falls in its category.
+
+Two checks need more than one server, so they run on demand.
+`QUANTFORGE_TEST_POSTGRES_WEAK_URL` names a server with `fsync = off`, whose
+refusal `cargo test --lib postgres` then shows; without it that test skips.
+`QUANTFORGE_TEST_POSTGRES_DATA_DIR` names the data directory of the server
+`QUANTFORGE_TEST_POSTGRES_URL` reaches, for the test that crashes it, with
+`pg_ctl` on the `PATH`:
+
+```bash
+cargo test --test storage crash::postgres::acknowledged_writes_survive_the_server_crashing \
+  -- --ignored --exact
+```
 
 Every group, race and check passed on PostgreSQL 16.15 on 2026-11-04.
 

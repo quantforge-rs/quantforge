@@ -18,10 +18,13 @@
 //! `docs/configuration.md#storage-backends` is the operator's account.
 
 mod connection;
+mod limits;
 #[cfg(test)]
 mod tests;
 
 pub use connection::{ConnectionString, PostgresConnection, PostgresTls, TlsMode, UrlProblem};
+pub(crate) use limits::lock_wait;
+pub use limits::{DEFAULT_ROUTE_BUDGET, Durability, StorageLimits};
 
 use std::fmt;
 use std::path::PathBuf;
@@ -145,6 +148,11 @@ pub struct StorageRequest {
     pub postgres_url: Option<Supplied<ConnectionString>>,
     pub postgres_pool_size: Option<Supplied<u32>>,
     pub postgres_connect_timeout_secs: Option<Supplied<u64>>,
+    /// What the store does when its settings fall short. A store is
+    /// enforcing unless a host says otherwise.
+    pub durability: Option<Durability>,
+    /// All one call of a time-critical route may take, when a host sets it.
+    pub route_budget: Option<Duration>,
 }
 
 impl StorageRequest {
@@ -157,40 +165,6 @@ impl StorageRequest {
             .as_ref()
             .map(|s| s.label.as_str());
         [url, pool, timeout].into_iter().flatten()
-    }
-}
-
-/// What a committed write survives. Every store keeps today's behavior,
-/// which [`Durability::Normal`] names; ALG-758 adds the stronger mode and
-/// enforces the choice on both backends.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum Durability {
-    /// SQLite in WAL mode with `synchronous=NORMAL`, as every SQLite
-    /// connection is opened today, and the PostgreSQL server's own commit
-    /// settings: a commit survives the application crashing, though not
-    /// necessarily the machine losing power.
-    Normal,
-}
-
-/// Limits every backend shares. They hold today's values; ALG-758 enforces
-/// them on both backends and decides how an operator sets them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct StorageLimits {
-    pub durability: Durability,
-    /// The longest a storage call waits on others, for a lock or a free
-    /// connection, before it fails as unavailable. SQLite's busy timeout
-    /// and PostgreSQL's pool wait are both this long today.
-    pub wait_budget: Duration,
-}
-
-impl Default for StorageLimits {
-    fn default() -> Self {
-        Self {
-            durability: Durability::Normal,
-            wait_budget: Duration::from_secs(5),
-        }
     }
 }
 
@@ -261,7 +235,16 @@ impl StorageSettings {
         }
     }
 
+    /// The limits every backend shares.
+    pub fn limits(&self) -> StorageLimits {
+        match self {
+            Self::Sqlite(sqlite) => sqlite.limits,
+            Self::Postgres(postgres) => postgres.limits,
+        }
+    }
+
     fn sqlite(request: StorageRequest) -> Result<Self, StorageConfigError> {
+        let limits = limits_of(&request);
         let path = match request.sqlite_path {
             // SQLite would open a temporary database that vanishes on close.
             Some(path) if path.value.as_os_str().is_empty() => {
@@ -270,10 +253,7 @@ impl StorageSettings {
             Some(path) => path.value,
             None => PathBuf::from(DEFAULT_SQLITE_PATH),
         };
-        Ok(Self::Sqlite(SqliteSettings {
-            path,
-            limits: StorageLimits::default(),
-        }))
+        Ok(Self::Sqlite(SqliteSettings { path, limits }))
     }
 
     fn postgres(request: StorageRequest, owner: StoreOwner) -> Result<Self, StorageConfigError> {
@@ -285,6 +265,7 @@ impl StorageSettings {
         if let Some(path) = request.sqlite_path {
             return Err(StorageConfigError::SqlitePathWithPostgres { label: path.label });
         }
+        let limits = limits_of(&request);
         let url = request
             .postgres_url
             .ok_or(StorageConfigError::MissingPostgresUrl)?;
@@ -311,7 +292,7 @@ impl StorageSettings {
             call_deadline: POSTGRES_CALL_DEADLINE,
             keepalive_idle: POSTGRES_KEEPALIVE_IDLE,
             application_name: APPLICATION_NAME.to_string(),
-            limits: StorageLimits::default(),
+            limits,
         })))
     }
 }
@@ -325,6 +306,18 @@ impl fmt::Display for StorageSettings {
             Self::Postgres(postgres) => write!(f, "postgres {}", postgres.connection),
         }
     }
+}
+
+/// The shared limits, with what a host asked for.
+fn limits_of(request: &StorageRequest) -> StorageLimits {
+    let mut limits = StorageLimits::default();
+    if let Some(durability) = request.durability {
+        limits.durability = durability;
+    }
+    if let Some(route_budget) = request.route_budget {
+        limits.route_budget = route_budget;
+    }
+    limits
 }
 
 fn at_least_one<T: Copy + PartialOrd + From<u8>>(

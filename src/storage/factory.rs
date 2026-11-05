@@ -116,7 +116,7 @@ fn open_sqlite(settings: &StorageSettings) -> Result<AnyStore, StorageError> {
             ))
         })?;
     }
-    let store = SqliteStore::new(&sqlite.path);
+    let store = SqliteStore::with_limits(&sqlite.path, sqlite.limits);
     CandleStore::init(&store)?;
     Ok(AnyStore::Sqlite(store))
 }

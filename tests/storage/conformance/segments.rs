@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use quantforge::storage::segments::{self, SegmentError};
 use quantforge::{
     Candle, CandleQuery, CandleStore, ExchangeId, Interval, MarketId, SegmentHash, SegmentStore,
-    Symbol,
+    StorageError, StorageErrorKind, Symbol,
 };
 use rust_decimal::Decimal;
 
@@ -371,7 +371,7 @@ fn refreshes_racing_writers<S: CandleStore + SegmentStore + Send>(fixture: &Fixt
             let (market, writing) = (&market, &writing);
             scope.spawn(move || {
                 while writing.load(Ordering::Relaxed) {
-                    store.refresh_segments(market).expect("a refresh");
+                    past_contention(|| store.refresh_segments(market)).expect("a refresh");
                     // Room for a writer: a spinning refresh only starves it.
                     std::thread::sleep(Duration::from_millis(1));
                 }
@@ -388,9 +388,10 @@ fn refreshes_racing_writers<S: CandleStore + SegmentStore + Send>(fixture: &Fixt
                         let mut close = String::new();
                         for step in 0..BURST {
                             close = format!("{}.{step}", 200 + round);
-                            store
-                                .upsert_candles(market, &[candle(window, &close)])
-                                .expect("a correction");
+                            past_contention(|| {
+                                store.upsert_candles(market, &[candle(window, &close)])
+                            })
+                            .expect("a correction");
                         }
                         published_with(&store, market, window, &close);
                     }
@@ -440,11 +441,27 @@ fn refreshes_racing_writers<S: CandleStore + SegmentStore + Send>(fixture: &Fixt
 
 /// The candles of a stored segment.
 fn packed<S: SegmentStore + ?Sized>(store: &S, name: &SegmentHash) -> Vec<Candle> {
-    let bytes = store
-        .load_segment(name)
+    let bytes = past_contention(|| store.load_segment(name))
         .expect("load")
         .unwrap_or_else(|| panic!("{name} is listed but not stored"));
     segments::open(&bytes, name).expect("open")
+}
+
+/// `call`, made again while the others keep it from the lock. `contention`
+/// means nothing changed, and no store promises every call a turn within
+/// one wait: on a slow disk the others can outlast it. A store that never
+/// lets go still fails the check.
+fn past_contention<T>(
+    mut call: impl FnMut() -> Result<T, StorageError>,
+) -> Result<T, StorageError> {
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        match call() {
+            Err(busy)
+                if busy.kind() == StorageErrorKind::Contention && Instant::now() < deadline => {}
+            answer => return answer,
+        }
+    }
 }
 
 /// Waits for a plan to list `window`, and holds what it lists to the
@@ -452,9 +469,8 @@ fn packed<S: SegmentStore + ?Sized>(store: &S, name: &SegmentHash) -> Vec<Candle
 fn published_with<S: SegmentStore>(store: &S, market: &MarketId, window: i64, close: &str) {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        let plan = store
-            .resolve_segments(market, window, window)
-            .expect("a plan");
+        let plan =
+            past_contention(|| store.resolve_segments(market, window, window)).expect("a plan");
         if let [segment] = plan.segments.as_slice() {
             let candles = packed(store, &segment.hash);
             assert_eq!(

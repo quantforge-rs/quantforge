@@ -11,6 +11,7 @@ pub mod account;
 pub mod candle;
 pub mod candle_batch;
 pub mod decimal;
+pub mod durability;
 pub mod futures;
 pub mod identity;
 pub mod interval;
@@ -32,6 +33,7 @@ pub use account::{AccountRef, IssuedAccountId, KeyFingerprint, VenueAccountId};
 pub use candle::{Candle, ValidationIssue, ValidationReport, validate_candles};
 pub use candle_batch::{CandleBatch, CandleColumns};
 pub use decimal::{decimal_from_f64, decimal_to_f64, round_down_to_step};
+pub use durability::{DurabilityReport, DurabilitySetting};
 pub use identity::{
     Environment, InstrumentId, OperationId, VenueAlgoId, VenueOrderId, VenueTradeId,
 };

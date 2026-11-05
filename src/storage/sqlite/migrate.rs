@@ -8,6 +8,7 @@
 //! Nothing is ever deleted: a row an earlier build wrote stays, and where a
 //! step rewrites one, the original is kept beside it.
 
+use super::errors::{commit_failed, failed};
 use super::{META_DDL, SCHEMA_VERSION, SqliteStore, candles, control, journal, segments};
 use crate::storage::segments as format;
 use crate::{Interval, StorageError, now_utc_ms};
@@ -65,7 +66,7 @@ pub(super) fn ensure_current(store: &SqliteStore) -> Result<(), StorageError> {
     loop {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let found = current_version(&transaction)?;
         if found == SCHEMA_VERSION {
             return Ok(());
@@ -94,7 +95,7 @@ pub(super) fn ensure_current(store: &SqliteStore) -> Result<(), StorageError> {
             step.to
         };
         stamp(&transaction, found, to)?;
-        transaction.commit().map_err(StorageError::other)?;
+        transaction.commit().map_err(commit_failed)?;
         if found == 0 {
             info!(schema_version = to, db_path = %store.path().display(), "sqlite store created");
         } else {
@@ -117,7 +118,7 @@ pub(super) fn current_version(connection: &Connection) -> Result<u32, StorageErr
             |row| row.get(0),
         )
         .optional()
-        .map_err(StorageError::other)?;
+        .map_err(failed)?;
     if has_meta.is_none() {
         return Ok(0);
     }
@@ -128,7 +129,7 @@ pub(super) fn current_version(connection: &Connection) -> Result<u32, StorageErr
             |row| row.get(0),
         )
         .optional()
-        .map_err(StorageError::other)?;
+        .map_err(failed)?;
     match recorded {
         None => Ok(0),
         Some(value) => value.parse().map_err(|_| {
@@ -150,7 +151,7 @@ fn stamp(transaction: &Transaction<'_>, from: u32, to: u32) -> Result<(), Storag
             "#,
             [to.to_string()],
         )
-        .map_err(StorageError::other)?;
+        .map_err(failed)?;
     batch(transaction, LOG_DDL)?;
     transaction
         .execute(
@@ -160,12 +161,12 @@ fn stamp(transaction: &Transaction<'_>, from: u32, to: u32) -> Result<(), Storag
             "#,
             params![to, from, now_utc_ms(), env!("CARGO_PKG_VERSION")],
         )
-        .map_err(StorageError::other)?;
+        .map_err(failed)?;
     Ok(())
 }
 
 fn batch(transaction: &Transaction<'_>, ddl: &str) -> Result<(), StorageError> {
-    transaction.execute_batch(ddl).map_err(StorageError::other)
+    transaction.execute_batch(ddl).map_err(failed)
 }
 
 /// QuantForge 0.1.0: the candle table.
@@ -206,12 +207,11 @@ fn mark_every_window(transaction: &Transaction<'_>) -> Result<(), StorageError> 
     let markets: Vec<(String, String, String)> = {
         let mut stmt = transaction
             .prepare("SELECT DISTINCT exchange, symbol, interval FROM candles")
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         let rows = stmt
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
-            .map_err(StorageError::other)?;
-        rows.collect::<Result<_, _>>()
-            .map_err(StorageError::other)?
+            .map_err(failed)?;
+        rows.collect::<Result<_, _>>().map_err(failed)?
     };
     for (exchange, symbol, interval) in markets {
         let span = format::span_ms(Interval::from_str(&interval).map_err(StorageError::other)?);
@@ -223,12 +223,11 @@ fn mark_every_window(transaction: &Transaction<'_>) -> Result<(), StorageError> 
                     WHERE exchange = ?2 AND symbol = ?3 AND interval = ?4
                     "#,
                 )
-                .map_err(StorageError::other)?;
+                .map_err(failed)?;
             let rows = stmt
                 .query_map(params![span, exchange, symbol, interval], |row| row.get(0))
-                .map_err(StorageError::other)?;
-            rows.collect::<Result<_, _>>()
-                .map_err(StorageError::other)?
+                .map_err(failed)?;
+            rows.collect::<Result<_, _>>().map_err(failed)?
         };
         for start in starts {
             transaction
@@ -239,7 +238,7 @@ fn mark_every_window(transaction: &Transaction<'_>) -> Result<(), StorageError> 
                     "#,
                     params![exchange, symbol, interval, start],
                 )
-                .map_err(StorageError::other)?;
+                .map_err(failed)?;
         }
     }
     Ok(())

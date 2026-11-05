@@ -1,0 +1,211 @@
+//! Running a transaction again when the store says that is safe. The
+//! adapters themselves never retry (`docs/storage-schema.md`): only a caller
+//! knows that all it repeats is the transaction.
+
+use std::thread;
+use std::time::{Duration, Instant};
+
+use crate::{StorageError, StorageErrorKind};
+
+const FIRST_PAUSE: Duration = Duration::from_millis(10);
+const LONGEST_PAUSE: Duration = Duration::from_millis(200);
+
+/// Runs `transaction` until the store stops answering
+/// [`StorageError::Conflict`], or `budget` runs out, and returns its last
+/// answer. Nothing else is retried: a conflict alone says nothing was
+/// changed, and [`StorageError::OutcomeUnknown`] above all ends it, so a
+/// write that may have committed is never made twice.
+///
+/// `transaction` is given what is left of the budget, for the store calls
+/// inside it: `|left| store.within(left).upsert_candles(market, candles)`.
+/// It holds storage calls and nothing else. An exchange request inside it
+/// would be sent again, so one never belongs here.
+///
+/// A budget longer than the clock can hold never runs out: every attempt is
+/// given all of it.
+pub fn retry_conflicts<T>(
+    budget: Duration,
+    transaction: impl FnMut(Duration) -> Result<T, StorageError>,
+) -> Result<T, StorageError> {
+    retry_with(thread::sleep, budget, transaction)
+}
+
+/// [`retry_conflicts`], pausing through `sleep`, which in a test can run
+/// late. What is left is read from the clock after a pause, since a timer may
+/// wake long after the time it was asked for.
+fn retry_with<T>(
+    mut sleep: impl FnMut(Duration),
+    budget: Duration,
+    mut transaction: impl FnMut(Duration) -> Result<T, StorageError>,
+) -> Result<T, StorageError> {
+    let deadline = Instant::now().checked_add(budget);
+    let time_left = || {
+        deadline.map_or(budget, |deadline| {
+            deadline.saturating_duration_since(Instant::now())
+        })
+    };
+    let mut left = budget;
+    let mut pause = FIRST_PAUSE;
+    loop {
+        match transaction(left) {
+            Err(conflict) if conflict.kind() == StorageErrorKind::Conflict => {
+                if time_left() <= pause {
+                    return Err(conflict);
+                }
+                sleep(pause);
+                left = time_left();
+                if left.is_zero() {
+                    return Err(conflict);
+                }
+                pause = (pause * 2).min(LONGEST_PAUSE);
+            }
+            answer => return answer,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn conflict() -> StorageError {
+        StorageError::Conflict("lost".to_string())
+    }
+
+    #[test]
+    fn a_conflict_is_run_again_until_the_transaction_goes_through() {
+        let mut attempts = 0;
+        let answer = retry_conflicts(Duration::from_secs(5), |_| {
+            attempts += 1;
+            if attempts < 3 { Err(conflict()) } else { Ok(7) }
+        });
+        assert_eq!(answer.expect("the third attempt"), 7);
+        assert_eq!(attempts, 3);
+    }
+
+    #[test]
+    fn every_other_failure_ends_it_at_once() {
+        let failures: [fn() -> StorageError; 4] = [
+            || StorageError::OutcomeUnknown("lost its answer".to_string()),
+            || StorageError::Contention("held".to_string()),
+            || StorageError::Unavailable("gone".to_string()),
+            || StorageError::InvalidArgument("refused".to_string()),
+        ];
+        for failure in failures {
+            let mut attempts = 0;
+            let answer: Result<(), _> = retry_conflicts(Duration::from_secs(5), |_| {
+                attempts += 1;
+                Err(failure())
+            });
+            let refused = answer.expect_err("a failure");
+            assert_eq!(attempts, 1, "{refused}");
+            assert_eq!(refused.kind(), failure().kind());
+        }
+    }
+
+    #[test]
+    fn it_stops_inside_the_budget_and_answers_the_conflict() {
+        // More than one late pause can take: 100 ms, at a low priority.
+        let budget = Duration::from_millis(500);
+        let started = Instant::now();
+        let mut attempts = 0;
+        let answer: Result<(), _> = retry_conflicts(budget, |_| {
+            attempts += 1;
+            Err(conflict())
+        });
+        assert_eq!(
+            answer.expect_err("never through").kind(),
+            StorageErrorKind::Conflict
+        );
+        // A timer may wake late on a loaded machine, and never by this much.
+        let took = started.elapsed();
+        assert!(took < budget + Duration::from_secs(1), "{took:?}");
+        assert!(attempts > 1, "{attempts}");
+    }
+
+    #[test]
+    fn each_attempt_is_handed_what_is_left() {
+        let budget = Duration::from_secs(5);
+        let mut lefts = Vec::new();
+        let answer = retry_conflicts(budget, |left| {
+            lefts.push(left);
+            if lefts.len() < 3 {
+                Err(conflict())
+            } else {
+                Ok(())
+            }
+        });
+        answer.expect("through");
+        assert_eq!(lefts[0], budget);
+        assert!(lefts.windows(2).all(|pair| pair[1] < pair[0]), "{lefts:?}");
+        // The pause before an attempt is spent before it starts.
+        assert!(lefts[1] <= budget - FIRST_PAUSE, "{lefts:?}");
+    }
+
+    #[test]
+    fn a_budget_longer_than_the_clock_can_hold_is_handed_whole_to_every_attempt() {
+        let mut lefts = Vec::new();
+        let answer = retry_conflicts(Duration::MAX, |left| {
+            lefts.push(left);
+            if lefts.len() < 3 {
+                Err(conflict())
+            } else {
+                Ok(())
+            }
+        });
+        answer.expect("through");
+        assert_eq!(lefts, [Duration::MAX; 3]);
+    }
+
+    #[test]
+    fn a_pause_that_runs_late_comes_out_of_what_the_next_attempt_is_handed() {
+        let budget = Duration::from_secs(5);
+        let late = Duration::from_millis(100);
+        let mut lefts = Vec::new();
+        let answer = retry_with(
+            |pause| thread::sleep(pause + late),
+            budget,
+            |left| {
+                lefts.push(left);
+                if lefts.len() < 2 {
+                    Err(conflict())
+                } else {
+                    Ok(())
+                }
+            },
+        );
+        answer.expect("through");
+        assert!(lefts[1] <= budget - FIRST_PAUSE - late, "{lefts:?}");
+    }
+
+    #[test]
+    fn a_pause_that_outlasts_the_budget_answers_the_conflict() {
+        let budget = Duration::from_millis(50);
+        let mut attempts = 0;
+        let answer: Result<(), _> = retry_with(
+            |_| thread::sleep(budget),
+            budget,
+            |_| {
+                attempts += 1;
+                Err(conflict())
+            },
+        );
+        assert_eq!(
+            answer.expect_err("no time left").kind(),
+            StorageErrorKind::Conflict
+        );
+        assert_eq!(attempts, 1);
+    }
+
+    #[test]
+    fn a_pause_the_budget_has_no_room_for_is_not_taken() {
+        let mut pauses = 0;
+        let answer: Result<(), _> =
+            retry_with(|_| pauses += 1, FIRST_PAUSE / 2, |_| Err(conflict()));
+        assert_eq!(
+            answer.expect_err("no time left").kind(),
+            StorageErrorKind::Conflict
+        );
+        assert_eq!(pauses, 0);
+    }
+}

@@ -19,6 +19,16 @@ pub(crate) enum TradeCommand {
     Close(TradeCloseArgs),
 }
 
+impl TradeCommand {
+    /// Whether it can send an order, and so records what must survive.
+    pub(crate) fn is_live(&self) -> bool {
+        match self {
+            Self::Run(args) => args.is_live(),
+            Self::Close(_) => true,
+        }
+    }
+}
+
 pub(crate) async fn dispatch(ctx: &AppContext, command: TradeCommand) -> Result<()> {
     match command {
         TradeCommand::Run(args) => handle_trade_run(ctx, args).await,

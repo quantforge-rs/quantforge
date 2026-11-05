@@ -6,17 +6,20 @@
 //!
 //! A backend joins by implementing [`Backend`] and [`Raw`], then calling
 //! the group of each port it implements: [`candles`], [`journal`],
-//! [`segments`], [`control`]. Every scenario and check runs on a fresh,
-//! empty store, and a group fails listing every one that failed.
+//! [`segments`], [`control`], and, with all of them, [`durability`]. Every
+//! scenario and check runs on a fresh, empty store, and a group fails
+//! listing every one that failed.
 
 pub mod candles;
 pub mod cases;
 pub mod control;
+pub mod durability;
 pub mod journal;
 pub mod segments;
 
 use std::any::Any;
 use std::panic::{self, AssertUnwindSafe};
+use std::time::Duration;
 
 use quantforge::{CandleStore, RunJournalStore, SegmentStore, StorageError, StoreControl};
 
@@ -62,6 +65,17 @@ pub trait Raw {
     /// The statements that make `table` refuse every new row, and that let
     /// it take them again.
     fn write_refusal(&self, table: &str) -> [String; 2];
+    /// Holds the lock a writer of `table` needs, as another writer would,
+    /// until the guard drops. Readers pass it.
+    fn hold_writes(&self, table: &str) -> Box<dyn Any>;
+    /// Ends every connection a store of this database holds. A store that
+    /// holds none between calls has nothing to lose.
+    fn end_connections(&self);
+}
+
+/// A store whose calls can be bounded.
+pub trait Bounded: Sized {
+    fn within(&self, budget: Duration) -> Self;
 }
 
 /// A check coded here rather than written in the fixture.
@@ -140,6 +154,23 @@ where
                 || candles::step(cases, store, step)
                 || segments::step(cases, store, step)
         },
+    );
+}
+
+/// What a store's acknowledgement means, and how long it may take; its
+/// checks are all coded.
+pub fn durability<B: Backend>()
+where
+    B::Store: CandleStore + RunJournalStore + StoreControl + Bounded,
+{
+    let cases = cases::load();
+    run_group::<B, _>(
+        "durability",
+        &cases,
+        &[],
+        durability::CHECKS,
+        durability::check,
+        |_, _, _, _, _| false,
     );
 }
 

@@ -2,12 +2,16 @@
 //! refusals, and its TLS connector: none of these needs a database.
 //! [`database`] runs the rest against a real one, [`migrate`] the schema
 //! chain, over steps no build has, [`candles`] how a batch of candles
-//! becomes one statement, and [`segments`] the segment store where only
-//! its own read and write-back can show it.
+//! becomes one statement, [`segments`] the segment store where only its
+//! own read and write-back can show it, and [`durability`] what a commit
+//! means and how long a call may take. [`scratch`] gives a test a database
+//! of its own.
 
 mod candles;
 mod database;
+mod durability;
 mod migrate;
+mod scratch;
 mod segments;
 
 use super::bridge::{Bridge, Effect};
@@ -145,6 +149,7 @@ fn the_bridges_work_runs_on_its_own_named_threads() {
     ))
     .expect("a bridge");
     let name = bridge
+        .shared
         .runner
         .run(
             async { std::thread::current().name().map(str::to_string) },
@@ -162,6 +167,9 @@ fn a_database_that_does_not_answer_is_unavailable_and_never_shown_the_password()
         "nowhere",
     );
     settings.connect_timeout = Duration::from_millis(500);
+    // The system's trust store takes seconds on a busy Mac, once per process:
+    // what is timed here is the answer.
+    tls::connector(None).expect("the system's roots");
     let started = Instant::now();
     let refused = PostgresStore::connect(&settings).expect_err("nothing listens on port 9");
     assert!(

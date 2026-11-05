@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `docs/storage-durability.md` is the contract both backends keep: an `Ok` from a write means committed and flushed, what that survives (an application crash, a database crash, an operating system crash, a power loss), what it assumes of the disk, how long a call may take, and which crashes have actually been tried
+- `trade run --mode live` and `trade close` refuse, before any request, a store that cannot keep its commits, naming the setting and the remedy; other commands warn and run, and `quantforge store status` prints `durability: met` or `durability: weakened` with what it read back
+- `StorageError::kind()` gives every storage failure one category on both backends; `StorageError::Contention` is a writer held up past its budget and `StorageError::Conflict` a deadlock or serialization failure, and neither changed anything. `storage::retry_conflicts` runs a transaction again within a caller's budget, and only after a conflict
+- `AnyStore::within(budget)` bounds every call through it, waits and statements together, sharing the same file or pool; `StorageLimits::route_budget` is the 2 s webhook admission (ALG-743) will hand it, leaving a second of TradingView's three
 - `PostgresStore` implements `SegmentStore` with SQLite's answers: a window is read in one snapshot, packed with no transaction open, and written back only if its mark still carries the revision read, so a correction after the snapshot is never published as clean; segments live in the database as `BYTEA`, and a replaced segment stays stored. `AnyStore` can hold a `PostgresStore`. PostgreSQL is not selectable yet (QUA-116)
 - `docs/storage-schema.md` states the rules a later command must follow to reclaim replaced segments: only a segment no index entry and no retained provenance record names, in one transaction that keeps write-backs out, and only when an operator runs it; no release deletes a segment
 - `PostgresStore` implements `RunJournalStore` and `StoreControl` with SQLite's rules and messages: runs created once and saved only after, the latest run by update, start and then run ID compared byte by byte whatever the database's collation, order events and closed trades appended raw and listed newest first, and the store's binding, legacy runs and their adoption. PostgreSQL is not selectable yet (QUA-116)
@@ -99,6 +103,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- every SQLite connection now runs `synchronous=FULL` with `fullfsync`, so a commit is flushed before the store answers: on macOS that costs about 5 ms per commit, and on Linux what the disk's flush costs; every PostgreSQL connection raises `synchronous_commit = off` to `local`, and gives up on a lock after 5 s
+- a SQLite connection now waits for another writer's lock by the clock, sleeping at most 10 ms between tries, instead of through SQLite's busy timeout, which counts the sleeps it meant to take and so overran a caller's budget wherever timers run late
 - of two runs of one market and strategy last updated in the same millisecond, `trade close` and `monitor status` without `--run-id` take the one started later, then the one with the greater run ID, instead of whichever the database listed first
 - `--help` lists `--db` with the new storage flags under a "Storage" heading
 - the venue's order and trade IDs are text everywhere, Spot included: `ExchangeOrder.order_id`, `Fill.trade_id`, `AccountTrade.trade_id` and `order_id`, `ClosedTrade.entry_order_id` and `exit_order_id`, `PositionState.entry_order_id`, and the `order_id` of a cancel or query request are `VenueOrderId`/`VenueTradeId`; `monitor cancel-order --order-id` takes the ID as the exchange spells it, and `order: id=` lines print it without `Some(..)`

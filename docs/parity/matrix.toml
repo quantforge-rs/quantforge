@@ -165,7 +165,7 @@ exactness = "Decimals are exact text that keeps its scale; an amount the venue d
 # instead of reaching a venue.
 [errors]
 exchange = ["transport", "invalid_response", "invalid_request", "missing_credentials", "unauthorized", "clock_skew", "rate_limited", "unavailable", "outcome_unknown", "unknown_symbol", "unknown_order", "insufficient_balance", "rule_violation", "rejected", "other"]
-storage = ["unavailable", "outcome_unknown", "invalid_argument", "schema_unsupported", "other"]
+storage = ["unavailable", "contention", "conflict", "outcome_unknown", "durability_unmet", "invalid_argument", "schema_unsupported", "other"]
 wire = ["invalid_request", "unauthorized", "not_found", "conflict", "unsupported_version", "limit_exceeded", "rate_limited", "unavailable", "internal"]
 refusal = ["no_capital_in_settlement_asset", "stop_wrong_side", "no_stop", "below_min_qty", "above_market_max", "below_min_notional", "above_leverage_bracket", "insufficient_margin", "settlement_wallet_below_risk", "stop_crossed", "risk_drift", "stale", "future_timestamp", "not_armed", "conflict", "pyramiding", "reversal", "unowned_position", "unresolved_entry", "incident_open", "hedge_mode", "portfolio_margin", "unsupported_account", "ambiguous_selection", "environment_mismatch", "unknown_ticker", "outside_universe"]
 

@@ -4,7 +4,7 @@
 //! (`storage::settings`); this builds the connector.
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use rustls::pki_types::CertificateDer;
 use rustls::pki_types::pem::PemObject;
@@ -13,12 +13,22 @@ use tokio_postgres_rustls::MakeRustlsConnect;
 
 use crate::ports::StorageError;
 
+/// The system's trust store, read once per process: reading it is slow, and
+/// on macOS every reader in the process queues for it.
+fn system_roots() -> &'static RootCertStore {
+    static ROOTS: OnceLock<RootCertStore> = OnceLock::new();
+    ROOTS.get_or_init(|| {
+        let mut roots = RootCertStore::empty();
+        roots.add_parsable_certificates(rustls_native_certs::load_native_certs().certs);
+        roots
+    })
+}
+
 /// The connector: the system's trust store (`SSL_CERT_FILE` and
 /// `SSL_CERT_DIR` replace it, as for any rustls program) plus `ca_file`. The
 /// `ring` provider is passed in, never installed process-wide.
 pub(crate) fn connector(ca_file: Option<&Path>) -> Result<MakeRustlsConnect, StorageError> {
-    let mut roots = RootCertStore::empty();
-    roots.add_parsable_certificates(rustls_native_certs::load_native_certs().certs);
+    let mut roots = system_roots().clone();
     if let Some(path) = ca_file {
         let refused = |reason: String| {
             StorageError::InvalidArgument(format!(

@@ -1,6 +1,7 @@
 //! Candle table: its schema, the `CandleStore` implementation, and the row
 //! decoder shared by the two read paths.
 
+use super::errors::{commit_failed, failed};
 use super::{SqliteStore, parse_decimal_str, row_error, segments};
 use crate::storage::common;
 use crate::{Candle, CandleQuery, CandleStore, MarketId, StorageError, TimestampMs};
@@ -47,7 +48,7 @@ impl CandleStore for SqliteStore {
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut connection = self.open()?;
-        let transaction = connection.transaction().map_err(StorageError::other)?;
+        let transaction = connection.transaction().map_err(failed)?;
         let mut written = 0usize;
         let mut changed = BTreeSet::new();
 
@@ -79,7 +80,7 @@ impl CandleStore for SqliteStore {
                       OR candles.trades IS NOT excluded.trades
                     "#,
                 )
-                .map_err(StorageError::other)?;
+                .map_err(failed)?;
 
             for (candle, window_start) in candles.iter().zip(window_starts) {
                 let rows = stmt
@@ -96,7 +97,7 @@ impl CandleStore for SqliteStore {
                         candle.volume.to_string(),
                         candle.trades.map(|value| value as i64),
                     ])
-                    .map_err(StorageError::other)?;
+                    .map_err(failed)?;
                 if rows > 0 {
                     changed.insert(window_start);
                 }
@@ -105,7 +106,7 @@ impl CandleStore for SqliteStore {
         }
 
         segments::mark_dirty(&transaction, market, &changed)?;
-        transaction.commit().map_err(StorageError::other)?;
+        transaction.commit().map_err(commit_failed)?;
         Ok(written)
     }
 
@@ -146,7 +147,7 @@ impl CandleStore for SqliteStore {
             sql.push_str(&format!(" LIMIT {limit}"));
         }
 
-        let mut stmt = connection.prepare(&sql).map_err(StorageError::other)?;
+        let mut stmt = connection.prepare(&sql).map_err(failed)?;
         let rows = stmt
             .query_map(params_from_iter(sql_params), |row| {
                 parse_candle_row(
@@ -160,7 +161,7 @@ impl CandleStore for SqliteStore {
                     row.get::<_, Option<i64>>(7)?,
                 )
             })
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
 
         let mut candles = Vec::new();
         for row in rows {
@@ -185,7 +186,7 @@ impl CandleStore for SqliteStore {
                 LIMIT ?4
                 "#,
             )
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
 
         let rows = stmt
             .query_map(
@@ -208,7 +209,7 @@ impl CandleStore for SqliteStore {
                     )
                 },
             )
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
 
         let mut candles = Vec::new();
         for row in rows {
@@ -234,7 +235,7 @@ impl CandleStore for SqliteStore {
                 ],
                 |row| row.get::<_, Option<i64>>(0),
             )
-            .map_err(StorageError::other)?;
+            .map_err(failed)?;
         Ok(value)
     }
 }

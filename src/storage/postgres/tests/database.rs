@@ -90,7 +90,11 @@ impl Observer {
     }
 }
 
-fn sleep(store: &PostgresStore, effect: Effect, seconds: f64) -> Result<(), StorageError> {
+pub(super) fn sleep(
+    store: &PostgresStore,
+    effect: Effect,
+    seconds: f64,
+) -> Result<(), StorageError> {
     store.bridge.execute(effect, move |client| {
         Box::pin(async move {
             client

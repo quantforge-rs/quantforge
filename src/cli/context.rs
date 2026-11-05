@@ -8,9 +8,10 @@ use super::{Cli, Command};
 use anyhow::{Context, Result, anyhow};
 use quantforge::exchange;
 use quantforge::{
-    AnyStore, ApiCredentials, ConnectorConfig, ExchangeConnectors, ExchangeId, ExecutionMode,
-    RunIdentity, SignedConnectors, StorageConfigError, StorageSettings, StoreControl, StoreFactory,
-    StoreIdentity, StoreOpenError, StoreOwner, VenueAccountId, describe_environment,
+    AnyStore, ApiCredentials, ConnectorConfig, Durability, ExchangeConnectors, ExchangeId,
+    ExecutionMode, RunIdentity, SignedConnectors, StorageConfigError, StorageSettings,
+    StoreControl, StoreFactory, StoreIdentity, StoreOpenError, StoreOwner, VenueAccountId,
+    describe_environment,
 };
 use std::io::{self, IsTerminal, Write};
 use tracing::{info, warn};
@@ -63,8 +64,14 @@ impl AppContext {
             Command::Serve { .. } => StoreOwner::Server,
             _ => StoreOwner::Command,
         };
-        let storage =
-            StorageSettings::resolve(cli.storage.request(), owner).map_err(storage_refusal)?;
+        // A command that sends orders opens a store whose every connection
+        // is checked; any other can run on a weaker one, and warns below.
+        let mut request = cli.storage.request();
+        request.durability = Some(match &cli.command {
+            Command::Trade { command } if command.is_live() => Durability::Enforced,
+            _ => Durability::Reported,
+        });
+        let storage = StorageSettings::resolve(request, owner).map_err(storage_refusal)?;
 
         // Without a flag or variable, the exchange's own production
         // endpoint, as its registry entry names it.
@@ -93,6 +100,15 @@ impl AppContext {
         let identity = store
             .store_identity()
             .context("failed to read the store's identity")?;
+        let durability = store
+            .durability()
+            .context("failed to read the store's commit settings")?;
+        if let Some(problem) = durability.problem() {
+            warn!(
+                %problem,
+                "this store's commits may not survive a crash, and live trading refuses it"
+            );
+        }
         if let Some(path) = created {
             warn!(
                 db_path = %path.display(),

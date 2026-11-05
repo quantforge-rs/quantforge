@@ -6,14 +6,15 @@
 //! skips without the variable. Two tests need no database: the chain's
 //! shape, and its DDL held to the doc.
 
-use super::database::{DATABASE, database_url, unique};
+use super::database::{DATABASE, database_url};
+use super::scratch::{Scratch, rows};
 use super::*;
 use crate::storage::postgres::migrate::{STEPS, Step, StepWork, ensure_current_with};
 use crate::storage::postgres::schema::SCHEMA_5;
 use crate::storage::sqlite::SCHEMA_VERSION;
 use std::sync::Barrier;
+use tokio_postgres::Transaction;
 use tokio_postgres::error::SqlState;
-use tokio_postgres::{SimpleQueryMessage, Transaction};
 
 #[test]
 fn the_chain_starts_at_schema_5_and_ends_at_the_version_sqlite_writes() {
@@ -97,70 +98,9 @@ const UPGRADE: [Step; 2] = with_step_6(step_6_notes);
 const FAILING: [Step; 2] = with_step_6(step_6_fails);
 const SLOW: [Step; 2] = with_step_6(step_6_slow);
 
-/// A database of its own on the test server, dropped with it.
-pub(super) struct Scratch {
-    server: PostgresStore,
-    name: String,
-    url: String,
-}
-
-impl Scratch {
-    pub(super) fn create(server_url: &str) -> Self {
-        let server =
-            PostgresStore::connect(&settings(server_url, &unique("server"))).expect("the server");
-        let name = unique("migrate");
-        rows(&server, &format!("CREATE DATABASE {name}"));
-        let mut url = url::Url::parse(server_url).expect("a URL");
-        url.set_path(&format!("/{name}"));
-        Self {
-            server,
-            name,
-            url: url.to_string(),
-        }
-    }
-
-    /// A store on the scratch database, its schema as the test left it.
-    pub(super) fn store(&self) -> PostgresStore {
-        PostgresStore::connect(&settings(&self.url, &unique("store"))).expect("a store")
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let drop = format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.name);
-        let _ = self.server.bridge.execute(Effect::Write, move |client| {
-            Box::pin(async move { client.batch_execute(&drop).await })
-        });
-    }
-}
-
 /// The scratch database, or `None` to skip.
 fn scratch() -> Option<Scratch> {
     database_url(DATABASE).map(|url| Scratch::create(&url))
-}
-
-/// Every row of `sql`, each value as the server's text, NULL as `None`.
-pub(super) fn rows(store: &PostgresStore, sql: &str) -> Vec<Vec<Option<String>>> {
-    let owned = sql.to_string();
-    store
-        .bridge
-        .execute(Effect::Write, move |client| {
-            Box::pin(async move {
-                let messages = client.simple_query(&owned).await?;
-                Ok(messages
-                    .into_iter()
-                    .filter_map(|message| match message {
-                        SimpleQueryMessage::Row(row) => Some(
-                            (0..row.len())
-                                .map(|index| row.get(index).map(str::to_string))
-                                .collect(),
-                        ),
-                        _ => None,
-                    })
-                    .collect::<Vec<Vec<Option<String>>>>())
-            })
-        })
-        .unwrap_or_else(|error| panic!("{sql}: {error:?}"))
 }
 
 /// The first value of every row of `sql`.
@@ -360,8 +300,9 @@ fn stores_starting_together_apply_each_step_once() {
         if from_schema_5 {
             scratch.store().init().expect("schema 5");
         }
-        // Connected before the barrier, so they reach the chain together.
-        let stores: Vec<PostgresStore> = (0..6).map(|_| scratch.store()).collect();
+        // Connected before the barrier, so they reach the chain together,
+        // and each waits for the chain's lock past its own lock budget.
+        let stores: Vec<PostgresStore> = (0..6).map(|_| scratch.impatient_store()).collect();
         let barrier = Barrier::new(stores.len());
         let outcomes: Vec<Result<(), StorageError>> = std::thread::scope(|scope| {
             let started: Vec<_> = stores

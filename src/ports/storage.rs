@@ -4,11 +4,12 @@
 //! `docs/storage-conformance.md` the behavior every backend passes.
 
 use std::error::Error as StdError;
+use std::fmt;
 use thiserror::Error;
 
 use crate::model::{
-    BotRunState, Candle, ClosedTrade, Environment, ExchangeOrder, ExecutionMode, LegacyRun,
-    MarketId, RunIdentity, SchemaMigration, SegmentHash, SegmentPlan, SegmentRefresh,
+    BotRunState, Candle, ClosedTrade, DurabilityReport, Environment, ExchangeOrder, ExecutionMode,
+    LegacyRun, MarketId, RunIdentity, SchemaMigration, SegmentHash, SegmentPlan, SegmentRefresh,
     StoreIdentity, TimestampMs,
 };
 
@@ -21,9 +22,9 @@ pub struct CandleQuery {
 
 /// A storage backend's failures. Older schemas are never refused: `init`
 /// migrates them (`docs/storage-schema.md`); only a schema newer than the
-/// build is. A backend reached over a network tells a safe retry
-/// ([`StorageError::Unavailable`]) from a write that must be reconciled
-/// first ([`StorageError::OutcomeUnknown`]), as ADR 0001 sets out.
+/// build is. [`StorageError::kind`] tells callers what to do about one, the
+/// same on every backend: `docs/storage-durability.md` maps each backend's
+/// failures onto the kinds.
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum StorageError {
@@ -44,10 +45,26 @@ pub enum StorageError {
     #[error("storage unavailable: {0}")]
     Unavailable(String),
 
+    /// Nothing was changed: another writer held what this call needed past
+    /// its wait budget. Safe to retry once the writer is done.
+    #[error("storage busy: {0}")]
+    Contention(String),
+
+    /// Nothing was changed: the backend rolled the transaction back to
+    /// settle a deadlock or a serialization conflict. Safe to run the whole
+    /// transaction again, and only the transaction.
+    #[error("storage conflict: {0}")]
+    Conflict(String),
+
     /// A write lost its answer and may or may not have committed: look
     /// before retrying, since a blind retry can write a row twice.
     #[error("storage write outcome unknown: {0}; check what was written before retrying")]
     OutcomeUnknown(String),
+
+    /// The store's effective settings are weaker than the durability
+    /// contract, so an acknowledgement would promise more than it can keep.
+    #[error("storage cannot keep its commits: {0}")]
+    DurabilityUnmet(String),
 }
 
 impl StorageError {
@@ -56,6 +73,70 @@ impl StorageError {
         E: StdError + Send + Sync + 'static,
     {
         Self::Other(Box::new(err))
+    }
+
+    /// What a caller does about this failure.
+    pub fn kind(&self) -> StorageErrorKind {
+        match self {
+            Self::Other(_) => StorageErrorKind::Other,
+            Self::InvalidArgument(_) => StorageErrorKind::InvalidArgument,
+            Self::SchemaUnsupported { .. } => StorageErrorKind::SchemaUnsupported,
+            Self::Unavailable(_) => StorageErrorKind::Unavailable,
+            Self::Contention(_) => StorageErrorKind::Contention,
+            Self::Conflict(_) => StorageErrorKind::Conflict,
+            Self::OutcomeUnknown(_) => StorageErrorKind::OutcomeUnknown,
+            Self::DurabilityUnmet(_) => StorageErrorKind::DurabilityUnmet,
+        }
+    }
+}
+
+/// What a storage failure asks of its caller, with the same meaning on
+/// every backend.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum StorageErrorKind {
+    /// Nothing was changed, and the store could not be reached in time.
+    /// Retry.
+    Unavailable,
+    /// Nothing was changed, and another writer held a lock past the budget.
+    /// Retry.
+    Contention,
+    /// Nothing was changed, and the transaction lost to another. Run the
+    /// whole transaction again.
+    Conflict,
+    /// A write may or may not have committed. Find out before anything
+    /// else, and never report it as done.
+    OutcomeUnknown,
+    /// The store's settings are weaker than the contract. Fix them.
+    DurabilityUnmet,
+    /// The call was refused: fix the argument.
+    InvalidArgument,
+    /// The database is from a newer build.
+    SchemaUnsupported,
+    /// A failure with no category: the database refused a statement, or
+    /// its contents could not be read.
+    Other,
+}
+
+impl StorageErrorKind {
+    /// The kind's name as reports print it, such as `outcome_unknown`.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Unavailable => "unavailable",
+            Self::Contention => "contention",
+            Self::Conflict => "conflict",
+            Self::OutcomeUnknown => "outcome_unknown",
+            Self::DurabilityUnmet => "durability_unmet",
+            Self::InvalidArgument => "invalid_argument",
+            Self::SchemaUnsupported => "schema_unsupported",
+            Self::Other => "other",
+        }
+    }
+}
+
+impl fmt::Display for StorageErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -158,4 +239,7 @@ pub trait StoreControl: Send + Sync {
         identity: &RunIdentity,
         execution_mode: Option<ExecutionMode>,
     ) -> Result<(), StorageError>;
+    /// The settings this store's commits rely on, read back from a
+    /// connection (`docs/storage-durability.md`).
+    fn durability(&self) -> Result<DurabilityReport, StorageError>;
 }

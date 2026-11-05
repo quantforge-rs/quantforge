@@ -172,13 +172,14 @@ dataset, nothing more.
   every close a cent higher, which changes every row and marks all 70
   windows.
 - **The environment:** an Apple M2 Max with 96 GB, macOS 26.4.1, rustc
-  1.99.0 in release, on 2026-11-01. PostgreSQL 16.15 from Homebrew with
-  `initdb`'s default settings, over TCP to `127.0.0.1`; SQLite in WAL with
-  `synchronous = NORMAL`, on the internal SSD.
+  1.99.0 in release, on 2026-11-01, and SQLite again on 2026-11-04 with its
+  durable settings. PostgreSQL 16.15 from Homebrew with `initdb`'s default
+  settings, over TCP to `127.0.0.1`; SQLite in WAL with `synchronous = FULL`
+  and `fullfsync`, on the internal SSD.
 
 | Backend | Into the empty market | The same batch again | Every close changed |
 | --- | --- | --- | --- |
-| SQLite | 0.260 to 0.266 s | 0.155 to 0.158 s | 0.187 to 0.197 s |
+| SQLite | 0.274 to 0.291 s | 0.149 to 0.151 s | 0.202 to 0.206 s |
 | PostgreSQL | 0.585 to 0.619 s | 0.435 to 0.442 s | 1.077 to 1.129 s |
 
 PostgreSQL takes the batch as one statement, its columns sent as arrays,
@@ -186,7 +187,11 @@ and the marks as a second, in one transaction; SQLite writes it row by row
 in one transaction on a local file. Changing every row costs PostgreSQL
 most: each update writes a new row version and a new key entry, since the
 freshly filled pages leave no room to update in place (`pg_stat_user_tables`
-counts none of 100,000 such updates as in place).
+counts none of 100,000 such updates as in place). A batch is one commit, so
+SQLite's flush adds little here: at `synchronous = NORMAL` the first and last
+columns took 0.260 to 0.266 s and 0.187 to 0.197 s. Many small commits are
+where a flush shows ([what differs by
+design](storage-durability.md#what-differs-by-design)).
 
 ## Reproducing it
 

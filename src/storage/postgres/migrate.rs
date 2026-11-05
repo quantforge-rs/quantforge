@@ -91,9 +91,11 @@ async fn run_pass(
         .isolation_level(IsolationLevel::ReadCommitted)
         .start()
         .await?;
+    // Stores starting together wait their turn, however long a step takes:
+    // only the statement limit bounds the wait, never the session's lock wait.
     transaction
         .batch_execute(&format!(
-            "SELECT pg_advisory_xact_lock({})",
+            "SET LOCAL lock_timeout = 0; SELECT pg_advisory_xact_lock({})",
             schema::LOCK_KEY
         ))
         .await?;

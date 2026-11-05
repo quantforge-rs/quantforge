@@ -10,10 +10,17 @@ use quantforge::{
 use rust_decimal::Decimal;
 use std::path::Path;
 use std::str::FromStr;
+use std::time::Duration;
 use tempfile::TempDir;
 
-use crate::conformance::{self, Backend, Fixture};
+use crate::conformance::{self, Backend, Bounded, Fixture};
 use crate::sqlite::SqliteRaw;
+
+impl Bounded for AnyStore {
+    fn within(&self, budget: Duration) -> Self {
+        AnyStore::within(self, budget)
+    }
+}
 
 /// What the factory opens for a SQLite path.
 fn open(path: &Path) -> AnyStore {
@@ -66,6 +73,11 @@ fn control() {
 #[test]
 fn segments() {
     conformance::segments::<Factory>();
+}
+
+#[test]
+fn durability() {
+    conformance::durability::<Factory>();
 }
 
 /// An `AnyStore` the factory opened, and a `SqliteStore` on its file.

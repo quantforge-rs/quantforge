@@ -23,7 +23,8 @@ mod storage;
 
 pub use clock::{Clock, SystemClock};
 pub use storage::{
-    CandleQuery, CandleStore, RunJournalStore, SegmentStore, StorageError, StoreControl,
+    CandleQuery, CandleStore, RunJournalStore, SegmentStore, StorageError, StorageErrorKind,
+    StoreControl,
 };
 
 use async_trait::async_trait;
