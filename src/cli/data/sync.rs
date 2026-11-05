@@ -1,6 +1,6 @@
-//! `quantforge data sync` — pull klines from the exchange into SQLite, bounded
-//! or following, resuming from the stored high-water mark, and pack each
-//! closed window into a segment.
+//! `quantforge data sync` — pull klines from the exchange into the store,
+//! bounded or following, resuming from the stored high-water mark, and pack
+//! each closed window into a segment.
 
 use crate::cli::common::{MarketArgs, PollArgs, parse_market};
 use crate::cli::context::AppContext;

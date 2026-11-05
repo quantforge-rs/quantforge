@@ -3,8 +3,9 @@
 //!
 //! # Isolation guarantees
 //!
-//! - Every [`TestBed`] owns a fresh temp directory and database path;
-//!   nothing is shared between tests and everything is deleted on drop.
+//! - Every [`TestBed`] owns a fresh temp directory and database path, or a
+//!   database of its own on PostgreSQL; nothing is shared between tests and
+//!   everything is deleted on drop.
 //! - Every command starts from [`isolated_cmd`], or from
 //!   [`isolated_std_cmd`] when it must keep running while the test talks
 //!   to it (`serve run`): `env_clear()` plus an explicit allowlist, so the
@@ -12,13 +13,22 @@
 //!   credentials and a base-URL override) can never leak into a test. The
 //!   only `QF_*` values a child sees are the ones a builder injects
 //!   explicitly.
-//! - Every builder from [`cli_cmd`] up passes `--db` and `--log-level` as
-//!   flags, so even a hypothetical `QF_DB`/`QF_LOG` leak would be inert
-//!   (flags win). Precedence tests pin nothing and start from
-//!   [`unpinned_cmd`] instead.
+//! - Every builder from [`cli_cmd`] up selects the bed's store and passes
+//!   `--log-level` as a flag, so even a hypothetical `QF_DB`/`QF_LOG` leak
+//!   would be inert (flags win). Precedence tests pin nothing and start
+//!   from [`unpinned_cmd`] instead.
 //! - Bed-bound commands run with the bed as their working directory, so a
 //!   relative path — including the default `data/market.sqlite` — resolves
 //!   inside the bed, never in the checkout.
+//!
+//! # Backends
+//!
+//! [`on_each_backend!`] runs a scenario, a `fn(&TestBed)`, as two tests of
+//! its name: `sqlite`, and `postgres`, which needs
+//! `QUANTFORGE_TEST_POSTGRES_URL` and otherwise skips. The scenario reaches
+//! the store only through the builders and [`TestBed::store`], so the same
+//! assertions hold on both, and the `postgres` test then proves no SQLite
+//! file appeared in the bed. Everything else runs on a plain SQLite bed.
 //!
 //! # Tiers
 //!
@@ -58,8 +68,10 @@
 //! assert_eq!(output.get("issues"), Some("0"));
 //! ```
 
+#[cfg(feature = "postgres")]
+use crate::server::{IsolatedDatabase, VARIABLE, query, selection, server_url};
 use assert_cmd::Command;
-use quantforge::SqliteStore;
+use quantforge::{AnyStore, StorageRequest, StorageSettings, StoreFactory, StoreOwner, Supplied};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::process::Output;
@@ -70,16 +82,43 @@ pub const FAKE_API_KEY: &str = "test-key";
 pub const FAKE_API_SECRET: &str = "test-secret";
 pub const TESTNET_BASE_URL: &str = "https://testnet.binance.vision/";
 
-/// Per-test isolated working directory and database.
-#[derive(Debug)]
+/// What `serve run` is told to make in a bed.
+const SEGMENT_CACHE: &str = "segments";
+
+/// Per-test isolated working directory and store: a SQLite file in the
+/// directory unless the bed has a database of its own on PostgreSQL.
 pub struct TestBed {
     tempdir: TempDir,
+    #[cfg(feature = "postgres")]
+    database: Option<IsolatedDatabase>,
 }
 
 impl TestBed {
     pub fn new() -> Self {
         Self {
             tempdir: tempfile::tempdir().expect("tempdir"),
+            #[cfg(feature = "postgres")]
+            database: None,
+        }
+    }
+
+    /// A bed on a database of its own on the server the tests were given,
+    /// or `None`, with a note, when there is none.
+    #[cfg(feature = "postgres")]
+    pub fn on_postgres() -> Option<Self> {
+        let Some(server) = server_url() else {
+            eprintln!("skipping: {VARIABLE} is unset");
+            return None;
+        };
+        Some(Self::on_server(&server))
+    }
+
+    /// A bed on a database of its own on `server`.
+    #[cfg(feature = "postgres")]
+    pub fn on_server(server: &str) -> Self {
+        Self {
+            database: Some(IsolatedDatabase::create(server)),
+            ..Self::new()
         }
     }
 
@@ -91,11 +130,90 @@ impl TestBed {
         self.dir().join("market.sqlite")
     }
 
-    /// Open the bed's database for direct state assertions. Does not
-    /// create the schema — the binary does on first run; when seeding
-    /// before any CLI invocation, call `CandleStore::init` first.
-    pub fn store(&self) -> SqliteStore {
-        SqliteStore::new(self.db_path())
+    /// The URL of the bed's PostgreSQL database; a SQLite bed has none.
+    pub fn postgres_url(&self) -> Option<&str> {
+        #[cfg(feature = "postgres")]
+        if let Some(database) = &self.database {
+            return Some(&database.url);
+        }
+        None
+    }
+
+    /// The bed's store as a command names it, worked out here rather than
+    /// asked of the library. A PostgreSQL URL loses its user and password.
+    pub fn storage_text(&self) -> String {
+        match self.postgres_url() {
+            Some(url) => {
+                let url = url::Url::parse(url).expect("the bed's URL");
+                format!(
+                    "postgres postgres://{}:{}{}",
+                    url.host_str().expect("a host"),
+                    url.port().unwrap_or(5432),
+                    url.path()
+                )
+            }
+            None => format!("sqlite {}", self.db_path().display()),
+        }
+    }
+
+    /// Opens the bed's store for direct state assertions the way the binary
+    /// does, through the factory, so its schema is in place.
+    pub fn store(&self) -> AnyStore {
+        StoreFactory::builtin()
+            .open(&self.selection())
+            .expect("the bed's store")
+    }
+
+    #[cfg(feature = "postgres")]
+    fn selection(&self) -> StorageSettings {
+        match self.postgres_url() {
+            Some(url) => selection(url),
+            None => self.sqlite_selection(),
+        }
+    }
+
+    #[cfg(not(feature = "postgres"))]
+    fn selection(&self) -> StorageSettings {
+        self.sqlite_selection()
+    }
+
+    fn sqlite_selection(&self) -> StorageSettings {
+        let mut request = StorageRequest::default();
+        request.sqlite_path = Some(Supplied::new(self.db_path(), "--db"));
+        StorageSettings::resolve(request, StoreOwner::Command).expect("settings")
+    }
+
+    /// Runs `sql` on the bed's store itself, for a state no command leaves.
+    pub fn execute(&self, sql: &str) {
+        #[cfg(feature = "postgres")]
+        if let Some(url) = self.postgres_url() {
+            query(url, sql);
+            return;
+        }
+        rusqlite::Connection::open(self.db_path())
+            .expect("the bed's file")
+            .execute_batch(sql)
+            .expect("the statement");
+    }
+
+    /// What the bed's directory holds, `serve run`'s segment cache aside.
+    pub fn created(&self) -> Vec<std::ffi::OsString> {
+        std::fs::read_dir(self.dir())
+            .expect("read the bed")
+            .map(|entry| entry.expect("an entry").file_name())
+            .filter(|name| name != SEGMENT_CACHE)
+            .collect()
+    }
+
+    /// Selects the bed's store on `cmd`: by flag, and a URL by its variable,
+    /// where an operator keeps it.
+    fn select_store(&self, cmd: &mut Command) {
+        match self.postgres_url() {
+            Some(url) => cmd
+                .args(["--storage", "postgres"])
+                .env("QF_POSTGRES_URL", url),
+            None => cmd.arg("--db").arg(self.db_path()),
+        };
     }
 }
 
@@ -140,14 +258,12 @@ pub fn unpinned_cmd(bed: &TestBed) -> Command {
     cmd
 }
 
-/// Level 1: an isolated command bound to the bed's database with an
-/// explicit log level. Use `"error"` unless a test asserts log output.
+/// Level 1: an isolated command bound to the bed's store with an explicit
+/// log level. Use `"error"` unless a test asserts log output.
 pub fn cli_cmd(bed: &TestBed, log_level: &str) -> Command {
     let mut cmd = unpinned_cmd(bed);
-    cmd.arg("--db")
-        .arg(bed.db_path())
-        .arg("--log-level")
-        .arg(log_level);
+    bed.select_store(&mut cmd);
+    cmd.arg("--log-level").arg(log_level);
     cmd
 }
 
@@ -276,6 +392,31 @@ macro_rules! skip_unless_testnet {
     };
 }
 pub(crate) use skip_unless_testnet;
+
+/// Runs each scenario named, a `fn(&TestBed)`, on each backend: see the
+/// module docs.
+macro_rules! on_each_backend {
+    ($($scenario:ident),+ $(,)?) => {$(
+        mod $scenario {
+            use crate::harness::TestBed;
+
+            #[test]
+            fn sqlite() {
+                super::$scenario(&TestBed::new());
+            }
+
+            #[cfg(feature = "postgres")]
+            #[test]
+            fn postgres() {
+                if let Some(bed) = TestBed::on_postgres() {
+                    super::$scenario(&bed);
+                    assert_eq!(bed.created(), Vec::<std::ffi::OsString>::new());
+                }
+            }
+        }
+    )+};
+}
+pub(crate) use on_each_backend;
 
 /// Parsed `key: value` stdout lines for value assertions.
 #[derive(Debug)]

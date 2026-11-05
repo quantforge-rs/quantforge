@@ -1,11 +1,12 @@
 //! Offline tier: every command talks HTTP to the local scriptable mock
 //! Binance server ([`crate::mock_binance`]) with canned testnet-shaped
 //! payloads — zero real network, fake credentials, deterministic outcomes.
-//! Always runs.
+//! Always runs. The tests that read or write the store are scenarios, listed
+//! at the end, and run on each backend.
 
 use crate::harness::{
     CliOutput, FAKE_API_KEY, FAKE_API_SECRET, TestBed, cli_cmd, isolated_cmd, mock_cmd,
-    offline_cmd, offline_cmd_with_log,
+    offline_cmd, offline_cmd_with_log, on_each_backend,
 };
 use crate::mock_binance::{
     CannedResponse, MockBinance, RecordedRequest, Scenario, account_response,
@@ -15,8 +16,8 @@ use crate::mock_binance::{
 use assert_cmd::Command;
 use predicates::prelude::*;
 use quantforge::{
-    BotRunState, CandleStore, ExchangeId, ExecutionMode, Interval, KeyFingerprint, MarketId,
-    PositionState, RunIdentity, RunJournalStore, RunStatus, Symbol, VenueAccountId, VenueOrderId,
+    BotRunState, ExchangeId, ExecutionMode, Interval, KeyFingerprint, MarketId, PositionState,
+    RunIdentity, RunJournalStore, RunStatus, Symbol, VenueAccountId, VenueOrderId,
 };
 use rust_decimal::Decimal;
 use std::str::FromStr;
@@ -25,7 +26,7 @@ use std::str::FromStr;
 // closed-bar filter), so kline fixtures anchor to the current minute, far
 // enough in the past that every bar is closed for any test runtime. All
 // offsets are exact step multiples; only the anchor itself is wall-clock.
-fn anchor_ms() -> i64 {
+pub(crate) fn anchor_ms() -> i64 {
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .expect("clock")
@@ -67,8 +68,7 @@ fn trade_run_live(mock: &MockBinance, bed: &TestBed, run_id: &str, log_level: &s
 // Loop 1 delivers a rising close (fast crosses above slow -> market BUY);
 // loop 2 delivers a falling close (cross down -> account lookup + market
 // SELL); the run then stops via --max-loops with a closed trade journaled.
-#[test]
-fn live_trade_run_completes_an_entry_exit_round_trip_fully_offline() {
+fn live_trade_run_completes_an_entry_exit_round_trip_fully_offline(bed: &TestBed) {
     let anchor = anchor_ms();
     let mut scenario = Scenario::new();
     scenario.exchange_info(exchange_info_btcusdt());
@@ -111,9 +111,7 @@ fn live_trade_run_completes_an_entry_exit_round_trip_fully_offline() {
     ));
     let mock = MockBinance::start(scenario);
 
-    let bed = TestBed::new();
-
-    trade_run_live(&mock, &bed, "e2e-live-1", "error")
+    trade_run_live(&mock, bed, "e2e-live-1", "error")
         .assert()
         .success()
         .stdout(predicate::str::contains("run_id: e2e-live-1\n"))
@@ -201,8 +199,7 @@ fn live_trade_run_completes_an_entry_exit_round_trip_fully_offline() {
     assert_eq!(account[0].api_key.as_deref(), Some(FAKE_API_KEY));
 }
 
-#[test]
-fn live_entry_rejected_with_a_binance_error_body_fails_the_run() {
+fn live_entry_rejected_with_a_binance_error_body_fails_the_run(bed: &TestBed) {
     let anchor = anchor_ms();
     let mut scenario = Scenario::new();
     scenario.exchange_info(exchange_info_btcusdt());
@@ -224,9 +221,7 @@ fn live_entry_rejected_with_a_binance_error_body_fails_the_run() {
     );
     let mock = MockBinance::start(scenario);
 
-    let bed = TestBed::new();
-
-    trade_run_live(&mock, &bed, "e2e-reject-1", "error")
+    trade_run_live(&mock, bed, "e2e-reject-1", "error")
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -244,8 +239,7 @@ fn live_entry_rejected_with_a_binance_error_body_fails_the_run() {
     assert_eq!(state.position.qty, Decimal::ZERO);
 }
 
-#[test]
-fn rate_limited_klines_surface_the_http_status_as_an_api_error() {
+fn rate_limited_klines_surface_the_http_status_as_an_api_error(bed: &TestBed) {
     let mut scenario = Scenario::new();
     scenario.exchange_info(exchange_info_btcusdt());
     // A bare 429 without a Binance error body: the client reports the HTTP
@@ -257,9 +251,7 @@ fn rate_limited_klines_surface_the_http_status_as_an_api_error() {
     );
     let mock = MockBinance::start(scenario);
 
-    let bed = TestBed::new();
-
-    trade_run_live(&mock, &bed, "e2e-limited-1", "error")
+    trade_run_live(&mock, bed, "e2e-limited-1", "error")
         .assert()
         .failure()
         .stderr(predicate::str::contains("code=Some(429)"))
@@ -286,8 +278,7 @@ fn teapot_from_an_ip_ban_surfaces_the_binance_error_body() {
         .stderr(predicate::str::contains("IP banned"));
 }
 
-#[test]
-fn ack_only_order_response_aborts_the_entry_loudly() {
+fn ack_only_order_response_aborts_the_entry_loudly(bed: &TestBed) {
     let anchor = anchor_ms();
     let mut scenario = Scenario::new();
     scenario.exchange_info(exchange_info_btcusdt());
@@ -303,9 +294,7 @@ fn ack_only_order_response_aborts_the_entry_loudly() {
     scenario.order_response(order_ack_response("BUY", 2_001));
     let mock = MockBinance::start(scenario);
 
-    let bed = TestBed::new();
-
-    trade_run_live(&mock, &bed, "e2e-ack-1", "error")
+    trade_run_live(&mock, bed, "e2e-ack-1", "error")
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -313,8 +302,7 @@ fn ack_only_order_response_aborts_the_entry_loudly() {
         ));
 }
 
-#[test]
-fn malformed_filters_degrade_loudly_and_the_run_still_completes() {
+fn malformed_filters_degrade_loudly_and_the_run_still_completes(bed: &TestBed) {
     let mut scenario = Scenario::new();
     // Filters the client must skip: one with no filterType, one with
     // numeric values where strings are required. With no usable rules the
@@ -332,9 +320,7 @@ fn malformed_filters_degrade_loudly_and_the_run_still_completes() {
     }));
     let mock = MockBinance::start(scenario);
 
-    let bed = TestBed::new();
-
-    let mut cmd = trade_run_live(&mock, &bed, "e2e-malformed-1", "warn");
+    let mut cmd = trade_run_live(&mock, bed, "e2e-malformed-1", "warn");
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("no lot-size step"))
@@ -376,12 +362,10 @@ fn assert_signed_by(case: &str, requests: &[RecordedRequest], key: &str, secret:
     }
 }
 
-#[test]
-fn monitor_status_reads_account_orders_and_trades_offline() {
+fn monitor_status_reads_account_orders_and_trades_offline(bed: &TestBed) {
     let mock = MockBinance::start(monitor_status_scenario());
-    let bed = TestBed::new();
 
-    let mut cmd = offline_cmd(&bed, &mock);
+    let mut cmd = offline_cmd(bed, &mock);
     cmd.args(["monitor", "status", "--symbol", "BTCUSDT"]);
     cmd.assert()
         .success()
@@ -531,10 +515,8 @@ async fn server_time_reads_the_exchange_clock_through_the_registry() {
 
 // The named trivial offline-tier e2e: TestBed + isolation + parser, no
 // mock, no network.
-#[test]
-fn offline_smoke_data_validate_runs_green_on_an_isolated_fresh_db() {
-    let bed = TestBed::new();
-    let mut cmd = cli_cmd(&bed, "error");
+fn offline_smoke_data_validate_runs_green_on_an_isolated_fresh_db(bed: &TestBed) {
+    let mut cmd = cli_cmd(bed, "error");
     cmd.args([
         "data",
         "validate",
@@ -860,7 +842,6 @@ const CLOSE_RUN_ID: &str = "e2e-close-guard";
 /// the way `trade run` leaves an open position.
 fn seed_open_live_run(bed: &TestBed) -> BotRunState {
     let store = bed.store();
-    CandleStore::init(&store).expect("init store");
     let state = BotRunState {
         run_id: CLOSE_RUN_ID.to_string(),
         market: MarketId::new(
@@ -901,13 +882,11 @@ fn venue_id(number: i64) -> VenueOrderId {
     VenueOrderId::new(number.to_string()).expect("venue order id")
 }
 
-#[test]
-fn trade_close_refuses_a_run_recorded_for_another_symbol_before_any_request() {
+fn trade_close_refuses_a_run_recorded_for_another_symbol_before_any_request(bed: &TestBed) {
     let mock = MockBinance::start(Scenario::new());
-    let bed = TestBed::new();
-    let seeded = seed_open_live_run(&bed);
+    let seeded = seed_open_live_run(bed);
 
-    let mut cmd = offline_cmd(&bed, &mock);
+    let mut cmd = offline_cmd(bed, &mock);
     cmd.args([
         "trade",
         "close",
@@ -937,16 +916,14 @@ fn trade_close_refuses_a_run_recorded_for_another_symbol_before_any_request() {
 // The positive control: the guard compares the normalized symbol and
 // ignores the interval, so the close goes on to its two lookups and, without
 // --yes, previews the sell.
-#[test]
-fn trade_close_by_run_id_accepts_the_runs_symbol_in_any_case_at_any_interval() {
+fn trade_close_by_run_id_accepts_the_runs_symbol_in_any_case_at_any_interval(bed: &TestBed) {
     let mut scenario = Scenario::new();
     scenario.exchange_info(exchange_info_btcusdt());
     scenario.account(account_response("BTC", "0.01000000"));
     let mock = MockBinance::start(scenario);
-    let bed = TestBed::new();
-    seed_open_live_run(&bed);
+    seed_open_live_run(bed);
 
-    let mut cmd = offline_cmd(&bed, &mock);
+    let mut cmd = offline_cmd(bed, &mock);
     cmd.args([
         "trade",
         "close",
@@ -970,6 +947,51 @@ fn trade_close_by_run_id_accepts_the_runs_symbol_in_any_case_at_any_interval() {
         .map(|request| request.path)
         .collect();
     assert_eq!(paths, ["/api/v3/exchangeInfo", "/api/v3/account"]);
+}
+
+// The close itself: the sell is journaled, the position goes flat, and the
+// trade is recorded at the prices the venue reported.
+fn trade_close_with_yes_sells_the_position_and_journals_the_trade(bed: &TestBed) {
+    let mut scenario = Scenario::new();
+    scenario.exchange_info(exchange_info_btcusdt());
+    scenario.account(account_response("BTC", "0.01000000"));
+    scenario.order_response(order_full_response(
+        "SELL",
+        1_002,
+        "0.01000000",
+        "110.00000000",
+        "11000.00000000",
+        "0.11000000",
+    ));
+    let mock = MockBinance::start(scenario);
+    seed_open_live_run(bed);
+
+    let mut cmd = offline_cmd(bed, &mock);
+    cmd.args([
+        "trade",
+        "close",
+        "--symbol",
+        "BTCUSDT",
+        "--run-id",
+        CLOSE_RUN_ID,
+        "--yes",
+    ]);
+    cmd.assert().success();
+
+    let store = bed.store();
+    let state = store
+        .load_run_state(CLOSE_RUN_ID)
+        .expect("load run")
+        .expect("run state");
+    assert_eq!(state.status, RunStatus::Stopped);
+    assert_eq!(state.position.qty, Decimal::ZERO);
+    let events = store.list_order_events(CLOSE_RUN_ID, 10).expect("events");
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].order_id, Some(venue_id(1_002)));
+    let trades = store.list_closed_trades(CLOSE_RUN_ID, 10).expect("trades");
+    assert_eq!(trades.len(), 1);
+    assert_eq!(trades[0].entry_price, Decimal::from(10_000));
+    assert_eq!(trades[0].exit_price, Decimal::from(11_000));
 }
 
 // `--exchange binance` and `QF_EXCHANGE=binance` spell out the default
@@ -1126,8 +1148,7 @@ fn naming_the_default_exchange_changes_no_output_and_no_request() {
 // A day of closed 1m bars and the first minute of the next: data sync packs
 // the day into a segment and leaves the minute as the tip. Syncing the same
 // bars again changes no candle, so it packs nothing.
-#[test]
-fn data_sync_packs_each_closed_day_into_a_segment_once() {
+fn data_sync_packs_each_closed_day_into_a_segment_once(bed: &TestBed) {
     const DAY_START: i64 = 1_704_067_200_000; // 2024-01-01T00:00:00Z
     let bars = || {
         (0..1441)
@@ -1138,9 +1159,8 @@ fn data_sync_packs_each_closed_day_into_a_segment_once() {
     scenario.klines_page(bars());
     scenario.klines_page(bars());
     let mock = MockBinance::start(scenario);
-    let bed = TestBed::new();
     let sync = || {
-        let mut cmd = offline_cmd(&bed, &mock);
+        let mut cmd = offline_cmd(bed, &mock);
         cmd.args([
             "data",
             "sync",
@@ -1165,3 +1185,17 @@ fn data_sync_packs_each_closed_day_into_a_segment_once() {
     assert_eq!(again.get("written"), Some("1441"));
     assert_eq!(again.get("segments_built"), Some("0"));
 }
+
+on_each_backend!(
+    live_trade_run_completes_an_entry_exit_round_trip_fully_offline,
+    live_entry_rejected_with_a_binance_error_body_fails_the_run,
+    rate_limited_klines_surface_the_http_status_as_an_api_error,
+    ack_only_order_response_aborts_the_entry_loudly,
+    malformed_filters_degrade_loudly_and_the_run_still_completes,
+    monitor_status_reads_account_orders_and_trades_offline,
+    offline_smoke_data_validate_runs_green_on_an_isolated_fresh_db,
+    trade_close_refuses_a_run_recorded_for_another_symbol_before_any_request,
+    trade_close_by_run_id_accepts_the_runs_symbol_in_any_case_at_any_interval,
+    trade_close_with_yes_sells_the_position_and_journals_the_trade,
+    data_sync_packs_each_closed_day_into_a_segment_once,
+);

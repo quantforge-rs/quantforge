@@ -57,8 +57,9 @@ pub(crate) fn handle_store_bind(ctx: &AppContext, args: StoreBindArgs) -> Result
         }
         bail!(
             "store {} is bound to {bound}; a store keeps its environment for life, so use \
-             another --db for {environment}",
-            ctx.identity.store_id
+             {} for {environment}",
+            ctx.identity.store_id,
+            ctx.another_store()
         );
     }
     println!("environment: {environment}");

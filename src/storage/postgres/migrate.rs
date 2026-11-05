@@ -17,7 +17,7 @@ use std::pin::Pin;
 use deadpool_postgres::ClientWrapper;
 use tokio_postgres::types::Type;
 use tokio_postgres::{IsolationLevel, Transaction};
-use tracing::info;
+use tracing::{info, warn};
 
 use super::bridge::{Bridge, Effect};
 use super::schema;
@@ -70,9 +70,12 @@ pub(super) fn ensure_current_with(
         })??;
         match pass {
             Pass::Current => return Ok(()),
-            Pass::Created { to } => {
-                info!(schema_version = to, connection = %shown, "postgres store created")
-            }
+            Pass::Created { to } => warn!(
+                schema_version = to,
+                connection = %shown,
+                "database held no QuantForge schema and was created empty; if you expected \
+                 existing data (run state, candles), check the PostgreSQL URL"
+            ),
             Pass::Migrated { from, to } => {
                 info!(from, to, connection = %shown, "postgres schema migrated")
             }

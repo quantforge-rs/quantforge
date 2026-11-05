@@ -12,7 +12,7 @@ use run::{TradeRunArgs, handle_trade_run};
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum TradeCommand {
-    /// Run the polling strategy bot against SQLite-backed live candles.
+    /// Run the polling strategy bot against stored live candles.
     Run(TradeRunArgs),
 
     /// Close the bot-managed position with a market sell.

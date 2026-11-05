@@ -12,6 +12,11 @@
 //! and proves PostgreSQL is never replaced by SQLite and its password never
 //! printed. No network, always runs.
 //!
+//! [`backends`] runs every command that reads or writes the store on each
+//! backend, as [`offline`] does with its own, against the mock exchange: on
+//! SQLite always, and on a real PostgreSQL when
+//! `QUANTFORGE_TEST_POSTGRES_URL` names a server.
+//!
 //! [`serve`] runs `serve run` as a process on a loopback port: its routes,
 //! and how it stops on a signal. Loopback only, always runs; the signal
 //! tests run on unix.
@@ -28,12 +33,17 @@
 //! Run one tier alone: `cargo test --test e2e offline::` or
 //! `cargo test --test e2e testnet::`.
 
+mod backends;
 mod harness;
 mod layout;
 mod mock_binance;
 mod offline;
 mod precedence;
 mod serve;
+#[cfg(feature = "postgres")]
+#[allow(dead_code, reason = "the storage tests use the rest of it")]
+#[path = "../storage/postgres/server.rs"]
+mod server;
 mod snapshot;
 mod storage;
 mod testnet;

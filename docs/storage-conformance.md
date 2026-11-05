@@ -352,6 +352,12 @@ QUANTFORGE_TEST_POSTGRES_URL='postgres://quant:local-pw@127.0.0.1:54329/postgres
 pg_ctl -D pg -w stop
 ```
 
+The same variable takes the commands there too: `cargo test --test e2e`
+runs every command that reads or writes the store on SQLite and on a database
+of its own on the server, and proves that none of them leaves a SQLite file.
+One of those tests creates a role of its own, so its user must be allowed that
+as well.
+
 Each fixture's store, and each one `reopen` opens, has run
 `PostgresStore::init`, so every scenario starts on a new store's schema
 (QUA-125). Every group runs on PostgreSQL: candles (QUA-124), the journal

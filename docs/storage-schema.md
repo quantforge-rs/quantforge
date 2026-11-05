@@ -663,9 +663,10 @@ and opens it through `StoreFactory`, which hands back an `AnyStore` that
 serves every port above; [configuration.md](configuration.md#storage-backends)
 is the operator's side. The factory opens only the backend selected: a
 backend without a registered provider is refused, never replaced by
-another. PostgreSQL's stores all exist (QUA-124, QUA-123, QUA-112), and an
-`AnyStore` can hold one; QUA-116 registers its provider. Until then a
-PostgreSQL selection is checked and refused.
+another. The built-in factory registers SQLite and, in a build with the
+`postgres` feature, PostgreSQL, whose stores are QUA-124, QUA-123 and QUA-112.
+`tests/storage/boundary.rs` keeps it the only way in: nothing else opens a
+store, and only the CLI's context asks it to.
 
 The process that opens a store owns it, its pool and its credentials, for
 its whole life, and no other process receives them (ADR 0001): a CLI

@@ -111,7 +111,7 @@ pub(crate) async fn run(cli: Cli) -> Result<()> {
             )
             .await?
         }
-        Command::Serve { command } => serve::dispatch(command).await?,
+        Command::Serve { command } => serve::dispatch(&ctx, command).await?,
         Command::Store { command } => store::dispatch(&ctx, command)?,
     }
 
@@ -224,7 +224,7 @@ impl fmt::Debug for CredentialArgs {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Command {
-    /// Historical and incremental data ingestion into SQLite.
+    /// Historical and incremental data ingestion into the selected store.
     Data {
         #[command(subcommand)]
         command: DataCommand,

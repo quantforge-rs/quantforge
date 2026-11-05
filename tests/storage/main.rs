@@ -17,9 +17,12 @@
 //!   forward unchanged, and the controls that prove a failed step leaves
 //!   the file where it was;
 //! - [`docs`]: the documents held to the code and the fixtures;
+//! - [`boundary`]: nothing opens a store but the factory, and nothing asks
+//!   the factory but the CLI's context;
 //! - [`measure`]: a 100,000-candle batch on each backend, run on demand.
 
 mod any_store;
+mod boundary;
 mod conformance;
 mod crash;
 mod docs;

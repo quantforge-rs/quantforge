@@ -1,7 +1,7 @@
-//! `quantforge store status` — what the store knows about itself: its ID,
-//! schema, environment and activation, what its commits rely on, the schema
-//! steps it went through, and the legacy runs still waiting for an operator.
-//! Needs no credentials and sends nothing.
+//! `quantforge store status` — where the store is and what it knows about
+//! itself: its ID, schema, environment and activation, what its commits rely
+//! on, the schema steps it went through, and the legacy runs still waiting
+//! for an operator. Needs no credentials and sends nothing.
 
 use crate::cli::context::AppContext;
 use anyhow::Result;
@@ -13,6 +13,7 @@ pub(crate) struct StoreStatusArgs {}
 
 pub(crate) fn handle_store_status(ctx: &AppContext, _args: StoreStatusArgs) -> Result<()> {
     let identity = &ctx.identity;
+    println!("storage: {}", ctx.storage);
     println!("store_id: {}", identity.store_id);
     println!("schema_version: {}", identity.schema_version);
     println!("environment: {}", ctx.environment_text());

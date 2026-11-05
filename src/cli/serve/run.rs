@@ -1,8 +1,10 @@
 //! `quantforge serve run` — answer HTTP requests on `--listen` until SIGINT
 //! or SIGTERM (Ctrl-C on Windows). The server then stops accepting
 //! connections and finishes the requests in progress; a second signal stops
-//! it without waiting for them.
+//! it without waiting for them. It holds the store the settings selected for
+//! as long as it runs, though no route reads it yet.
 
+use crate::cli::context::AppContext;
 use anyhow::{Context, Result, bail};
 use clap::Args;
 use quantforge::server;
@@ -24,7 +26,7 @@ pub(crate) struct ServeRunArgs {
     segment_cache_dir: PathBuf,
 }
 
-pub(crate) async fn handle_serve_run(args: ServeRunArgs) -> Result<()> {
+pub(crate) async fn handle_serve_run(ctx: &AppContext, args: ServeRunArgs) -> Result<()> {
     let cache_dir = &args.segment_cache_dir;
     std::fs::create_dir_all(cache_dir).with_context(|| {
         format!(
@@ -42,6 +44,7 @@ pub(crate) async fn handle_serve_run(args: ServeRunArgs) -> Result<()> {
     let address = listener
         .local_addr()
         .context("failed to read the address the server listens on")?;
+    println!("storage: {}", ctx.storage);
     println!("listening: http://{address}");
 
     let (begin_shutdown, shutdown_begun) = oneshot::channel::<()>();

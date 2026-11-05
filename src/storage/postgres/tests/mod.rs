@@ -18,7 +18,8 @@ use super::bridge::{Bridge, Effect};
 use super::runner::{RunError, Runner};
 use super::*;
 use crate::storage::settings::{
-    ConnectionString, StorageBackend, StorageRequest, StorageSettings, StoreOwner, Supplied,
+    ConnectionString, PostgresTls, StorageBackend, StorageRequest, StorageSettings, StoreOwner,
+    Supplied, TlsMode,
 };
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::Arc;
@@ -169,7 +170,7 @@ fn a_database_that_does_not_answer_is_unavailable_and_never_shown_the_password()
     settings.connect_timeout = Duration::from_millis(500);
     // The system's trust store takes seconds on a busy Mac, once per process:
     // what is timed here is the answer.
-    tls::connector(None).expect("the system's roots");
+    tls::connector(settings.connection.tls()).expect("the system's roots");
     let started = Instant::now();
     let refused = PostgresStore::connect(&settings).expect_err("nothing listens on port 9");
     assert!(
@@ -212,13 +213,36 @@ fn getting_a_connection_spends_the_calls_deadline_and_running_out_is_unavailable
     );
 }
 
+/// A port that accepts and then says nothing, as something other than
+/// PostgreSQL may: only the pool's limit ends the wait, in words of ours.
+#[test]
+fn a_listener_that_never_answers_ends_at_the_connect_timeout_and_says_so() {
+    let silent = std::net::TcpListener::bind("127.0.0.1:0").expect("a listener");
+    let port = silent.local_addr().expect("its address").port();
+    let mut settings = settings(
+        &format!("postgres://quant:{SENTINEL}@127.0.0.1:{port}/none?sslmode=disable"),
+        "silent",
+    );
+    settings.connect_timeout = Duration::from_millis(300);
+    let refused = PostgresStore::connect(&settings).expect_err("nothing ever answers");
+    assert!(
+        matches!(&refused, StorageError::Unavailable(message)
+            if message.contains("the server did not answer in time")),
+        "{refused:?}"
+    );
+}
+
 #[test]
 fn the_tls_connector_takes_the_system_roots_and_refuses_a_ca_file_without_certificates() {
-    tls::connector(None).expect("the system roots");
+    let verified = |ca_file| PostgresTls {
+        mode: TlsMode::Require,
+        ca_file,
+    };
+    tls::connector(&verified(None)).expect("the system roots");
     let dir = tempfile::tempdir().expect("tempdir");
     let empty = dir.path().join("empty.pem");
     std::fs::write(&empty, "no certificate here\n").expect("write");
-    let Err(refused) = tls::connector(Some(&empty)) else {
+    let Err(refused) = tls::connector(&verified(Some(empty))) else {
         panic!("a CA file without certificates was accepted");
     };
     assert!(
@@ -226,5 +250,5 @@ fn the_tls_connector_takes_the_system_roots_and_refuses_a_ca_file_without_certif
         "{refused}"
     );
     let missing = dir.path().join("missing.pem");
-    assert!(tls::connector(Some(&missing)).is_err());
+    assert!(tls::connector(&verified(Some(missing))).is_err());
 }

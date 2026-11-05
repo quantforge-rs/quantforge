@@ -3,8 +3,8 @@
 //! `docs/configuration.md` states. An omitted backend is SQLite at `--db`;
 //! a PostgreSQL setting beside an omitted backend, and a SQLite path beside
 //! PostgreSQL, are refused; PostgreSQL, once selected, is never replaced by
-//! SQLite: until a release registers its stores it is refused, and nothing
-//! is created.
+//! SQLite: a server it cannot reach fails the command, and nothing is
+//! created.
 //!
 //! The URLs carry a sentinel password, and no run may print it: [`run`]
 //! checks every output, failing or not, without showing it.
@@ -17,19 +17,14 @@ const UNROUTABLE_URL: &str = "http://127.0.0.1:9/";
 const DEFAULT_DB: &str = "data/market.sqlite";
 const SENTINEL: &str = "pw-sentinel-417";
 
-/// A PostgreSQL URL with the sentinel password; `query` may make it
-/// unusable.
-fn postgres_url(query: &str) -> String {
-    format!("postgres://quant:{SENTINEL}@db.example.com:5432/market{query}")
-}
-
 /// Refused, whatever the build: plain text to a remote host.
 fn bad_url() -> String {
-    postgres_url("?sslmode=disable")
+    format!("postgres://quant:{SENTINEL}@db.example.com:5432/market?sslmode=disable")
 }
 
+/// Usable, and nothing listens there: a good URL fails only at connecting.
 fn good_url() -> String {
-    postgres_url("")
+    format!("postgres://quant:{SENTINEL}@127.0.0.1:9/market?sslmode=disable")
 }
 
 /// Every setting but the storage ones pinned.
@@ -64,16 +59,12 @@ fn refused(bed: &TestBed, cmd: &mut Command, message: &str) {
 }
 
 fn assert_nothing_created(bed: &TestBed) {
-    let created: Vec<_> = std::fs::read_dir(bed.dir())
-        .expect("read the bed")
-        .map(|entry| entry.expect("an entry").file_name())
-        .collect();
-    assert!(created.is_empty(), "created {created:?}");
+    assert!(bed.created().is_empty(), "created {:?}", bed.created());
 }
 
-/// The refusal of a PostgreSQL selection whose settings are valid.
+/// How a PostgreSQL selection with valid settings and no server fails.
 const POSTGRES_REFUSAL: &str = if cfg!(feature = "postgres") {
-    "postgres storage has no adapter yet"
+    "failed to initialize postgres store at postgres://127.0.0.1:9/market"
 } else {
     "postgres storage is not in this build"
 };
@@ -84,6 +75,10 @@ fn an_omitted_backend_is_sqlite_at_qf_db_or_at_the_default_path() {
     let (code, text) = run(storage_cmd(&bed).args(STORE_STATUS));
     assert_eq!(code, Some(0), "{text}");
     assert!(bed.dir().join(DEFAULT_DB).is_file());
+    assert!(
+        text.contains(&format!("storage: sqlite {DEFAULT_DB}\n")),
+        "{text}"
+    );
 
     let bed = TestBed::new();
     let (code, text) = run(storage_cmd(&bed)
@@ -286,10 +281,29 @@ fn an_exported_but_empty_storage_variable_never_falls_back() {
     assert_nothing_created(&bed);
 }
 
-/// The commands that open a store refuse alike, `serve run` (which owns
-/// a larger pool) included, before it binds.
+/// The driver's own words stop at "error connecting to server": the system's
+/// are what say why.
+#[cfg(feature = "postgres")]
 #[test]
-fn a_valid_postgres_selection_is_refused_and_never_falls_back_to_sqlite() {
+fn a_connection_that_fails_says_what_stopped_it() {
+    let bed = TestBed::new();
+    let mut cmd = storage_cmd(&bed);
+    // Windows takes seconds to refuse: the refusal, not the limit, is the test.
+    cmd.args(["--storage", "postgres"])
+        .args(["--postgres-connect-timeout-secs", "60"])
+        .env("QF_POSTGRES_URL", good_url())
+        .args(STORE_STATUS);
+    let (code, text) = run(&mut cmd);
+    assert_eq!(code, Some(1), "{text}");
+    assert!(text.contains("error connecting to server: "), "{text}");
+    assert!(text.contains("(os error"), "{text}");
+    assert_nothing_created(&bed);
+}
+
+/// The commands that open a store fail alike, `serve run` (which owns a
+/// larger pool) included, before it binds.
+#[test]
+fn a_postgres_selection_that_cannot_connect_fails_and_never_falls_back_to_sqlite() {
     let bed = TestBed::new();
     let commands: [&[&str]; 3] = [
         &STORE_STATUS,

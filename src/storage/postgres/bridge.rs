@@ -7,6 +7,7 @@
 //! inside bridge tasks: every driver then lives on the bridge, never on a
 //! caller's runtime that may sit blocked waiting for an answer.
 
+use std::error::Error;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
@@ -74,7 +75,7 @@ impl Bridge {
     /// Builds the pool on a runtime of its own. Nothing connects yet.
     pub(crate) fn new(settings: &PostgresSettings) -> Result<Self, StorageError> {
         let connection = &settings.connection;
-        let tls = tls::connector(connection.tls().ca_file.as_deref())?;
+        let tls = tls::connector(connection.tls())?;
         let mut config = tokio_postgres::Config::new();
         config
             .host(connection.host())
@@ -195,9 +196,10 @@ impl Bridge {
                     PoolError::Timeout(TimeoutType::Wait) => {
                         StorageError::Unavailable("no free connection in time".to_string())
                     }
-                    PoolError::Backend(error) => {
-                        StorageError::Unavailable(format!("cannot get a connection: {error}"))
-                    }
+                    PoolError::Backend(error) => not_connected(&error),
+                    PoolError::Timeout(_) => StorageError::Unavailable(
+                        "cannot get a connection: the server did not answer in time".to_string(),
+                    ),
                     PoolError::PostCreateHook(HookError::Message(problem)) => {
                         StorageError::DurabilityUnmet(problem.into_owned())
                     }
@@ -300,8 +302,41 @@ pub(super) fn from_driver(effect: Effect, error: tokio_postgres::Error) -> Stora
             lost(effect, format!("the server ended the call: {error}"))
         }
         Some(_) => StorageError::other(error),
-        None => lost(effect, format!("the connection failed: {error}")),
+        None => lost(
+            effect,
+            format!("the connection failed: {}", with_causes(&error)),
+        ),
     }
+}
+
+/// Why a new connection failed. What the server said can name the user, so
+/// a refusal is told in words of ours, by its SQLSTATE.
+fn not_connected(error: &tokio_postgres::Error) -> StorageError {
+    let why = match error.code() {
+        Some(code) if code.code().starts_with("28") => format!(
+            "the server refused the URL's user or password (SQLSTATE {})",
+            code.code()
+        ),
+        Some(code) if *code == SqlState::INVALID_CATALOG_NAME => format!(
+            "the database the URL names does not exist (SQLSTATE {})",
+            code.code()
+        ),
+        Some(code) => format!("the server refused it (SQLSTATE {})", code.code()),
+        None => with_causes(error),
+    };
+    StorageError::Unavailable(format!("cannot get a connection: {why}"))
+}
+
+/// A driver error and what caused it, on one line: its own text stops at
+/// "error connecting to server".
+fn with_causes(error: &tokio_postgres::Error) -> String {
+    let mut text = error.to_string();
+    let mut cause = error.source();
+    while let Some(found) = cause {
+        text.push_str(&format!(": {found}"));
+        cause = found.source();
+    }
+    text
 }
 
 impl fmt::Debug for Bridge {

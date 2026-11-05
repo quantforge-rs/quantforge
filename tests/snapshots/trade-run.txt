@@ -1,4 +1,4 @@
-Run the polling strategy bot against SQLite-backed live candles
+Run the polling strategy bot against stored live candles
 
 Usage: quantforge trade run [OPTIONS] --symbol <SYMBOL>
 
