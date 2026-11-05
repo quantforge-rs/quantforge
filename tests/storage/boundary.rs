@@ -70,17 +70,30 @@ fn sources() -> BTreeMap<String, String> {
     files
 }
 
-/// The trimmed code lines of `text`: no comments, and nothing from an inline
-/// test module on. An out-of-line one is only a declaration.
+/// Whether `line` opens an inline module, the one form of test module
+/// `tests/exchange_boundary.rs` allows beside a declaration.
+fn opens_a_module(line: &str) -> bool {
+    let line = line.trim();
+    line.starts_with("mod ") && line.ends_with(" {")
+}
+
+/// The trimmed code lines of `text`: no comments, and no inline test module,
+/// which rustfmt closes at its own indentation. What follows one is code like
+/// any other, and a module with no such line stops the scan, since it could be
+/// hiding anything. An out-of-line test module is only a declaration.
 fn code(text: &str) -> Vec<&str> {
-    let mut lines = text.lines().map(str::trim).peekable();
+    let mut lines = text.lines().peekable();
     let mut code = Vec::new();
     while let Some(line) = lines.next() {
-        if line == "#[cfg(test)]" && lines.peek().is_some_and(|next| next.ends_with('{')) {
-            break;
+        let trimmed = line.trim();
+        if trimmed == "#[cfg(test)]" && lines.peek().is_some_and(|next| opens_a_module(next)) {
+            let close = line.replace(trimmed, "}");
+            let closed = lines.any(|line| line == close);
+            assert!(closed, "no line closes the test module");
+            continue;
         }
-        if !line.starts_with("//") {
-            code.push(line);
+        if !trimmed.starts_with("//") {
+            code.push(trimmed);
         }
     }
     code
@@ -158,9 +171,47 @@ fn only_the_cli_holds_a_store_and_only_its_context_opens_one() {
 #[test]
 fn the_scans_skip_comments_and_test_modules_and_nothing_else() {
     let text = "use a;\n// use b;\n/// use c;\n#[cfg(test)]\nmod tests;\nuse d;\n\
-                #[cfg(test)]\nmod tests {\nuse e;\n}\n";
+                #[cfg(test)]\nmod tests {\n    use e;\n}\nuse f;\n";
     assert_eq!(
         code(text),
-        ["use a;", "#[cfg(test)]", "mod tests;", "use d;"]
+        ["use a;", "#[cfg(test)]", "mod tests;", "use d;", "use f;"]
     );
+}
+
+/// What opens a store in `text`, as the scans would report it.
+fn stores_opened_in(text: &str) -> Vec<(String, String)> {
+    let files = BTreeMap::from([("src/engine/any.rs".to_string(), text.to_string())]);
+    lines_naming(&files, |_| true, &OPENS_A_STORE)
+}
+
+/// A test module hides all of itself, past the blocks inside it, and nothing
+/// after it.
+#[test]
+fn a_store_opened_after_a_test_module_is_found() {
+    let text = "#[cfg(test)]\nmod tests {\n    fn one() {\n        \
+                SqliteStore::new(inside);\n    }\n\n    fn two() {\n        \
+                SqliteStore::new(inside);\n    }\n}\n\npub fn open() {\n    \
+                SqliteStore::new(after);\n}\n";
+    assert_eq!(
+        stores_opened_in(text),
+        owned(&[("src/engine/any.rs", "SqliteStore::new(after);")])
+    );
+}
+
+/// Only a module is skipped: the mark on anything else is one line of code.
+#[test]
+fn a_store_opened_after_a_test_only_import_is_found() {
+    let text = "#[cfg(test)]\nuse crate::{\n    a,\n};\n\npub fn open() {\n    \
+                SqliteStore::new(after);\n}\n";
+    assert_eq!(
+        stores_opened_in(text),
+        owned(&[("src/engine/any.rs", "SqliteStore::new(after);")])
+    );
+}
+
+/// A module whose end cannot be found could be hiding anything after it.
+#[test]
+#[should_panic(expected = "no line closes the test module")]
+fn a_test_module_with_no_end_to_find_stops_the_scan() {
+    code("#[cfg(test)]\nmod tests {\n    use e;\n");
 }
