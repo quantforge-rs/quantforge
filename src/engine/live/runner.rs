@@ -6,7 +6,8 @@ use super::{LiveTradeConfig, LiveTradeEngine, LiveTradeSummary};
 use crate::EngineError;
 use crate::engine::data_sync::{sleep_or_shutdown, sync_market_range};
 use crate::{
-    BotRunState, Candle, CandleQuery, RunStatus, Strategy, StrategyContext, SymbolRules, now_utc_ms,
+    BotRunState, Candle, CandleQuery, RunStatus, Strategy, StrategyContext, SymbolRules,
+    TimestampMs, now_utc_ms,
 };
 use rust_decimal::Decimal;
 
@@ -24,27 +25,7 @@ impl<'a> LiveTradeEngine<'a> {
         let now = now_utc_ms();
         let bootstrap_start = match run_state.last_processed_open_time_ms {
             Some(value) => Some(value + cfg.market.interval.step_ms()),
-            None => {
-                let bars = i64::try_from(cfg.bootstrap_bars).map_err(|_| {
-                    EngineError::InvalidConfig(format!(
-                        "bootstrap_bars {} does not fit into the timestamp range",
-                        cfg.bootstrap_bars
-                    ))
-                })?;
-                let window_start = cfg
-                    .market
-                    .interval
-                    .step_ms()
-                    .checked_mul(bars)
-                    .and_then(|window_ms| now.checked_sub(window_ms))
-                    .ok_or_else(|| {
-                        EngineError::InvalidConfig(format!(
-                            "bootstrap window overflows: {} bars of {}",
-                            cfg.bootstrap_bars, cfg.market.interval
-                        ))
-                    })?;
-                Some(window_start)
-            }
+            None => Some(bars_before(cfg, now, cfg.bootstrap_bars)?),
         };
 
         if let Some(start_ms) = bootstrap_start {
@@ -71,9 +52,21 @@ impl<'a> LiveTradeEngine<'a> {
         };
         strategy.on_start(&ctx)?;
 
-        let bootstrap_candles = self
-            .candle_store
-            .load_recent_candles(&cfg.market, cfg.bootstrap_bars)?;
+        // Resume warms only through the saved cursor: the poll below delivers later bars once.
+        let bootstrap_candles = match run_state.last_processed_open_time_ms {
+            Some(_) if cfg.bootstrap_bars == 0 => Vec::new(),
+            Some(cursor) => self.candle_store.load_candles(
+                &cfg.market,
+                CandleQuery {
+                    start_time_ms: Some(bars_before(cfg, cursor, cfg.bootstrap_bars - 1)?),
+                    end_time_ms: Some(cursor),
+                    limit: None,
+                },
+            )?,
+            None => self
+                .candle_store
+                .load_recent_candles(&cfg.market, cfg.bootstrap_bars)?,
+        };
         let closed_bootstrap = filter_closed_candles(bootstrap_candles);
 
         let mut last_bootstrap_target = current_target(&run_state.position);
@@ -179,6 +172,31 @@ impl<'a> LiveTradeEngine<'a> {
         strategy.on_finish(&ctx)?;
         Ok(())
     }
+}
+
+/// The open time `bars` intervals before `end_ms`.
+fn bars_before(
+    cfg: &LiveTradeConfig,
+    end_ms: TimestampMs,
+    bars: usize,
+) -> Result<TimestampMs, EngineError> {
+    let bars = i64::try_from(bars).map_err(|_| {
+        EngineError::InvalidConfig(format!(
+            "bootstrap_bars {} does not fit into the timestamp range",
+            cfg.bootstrap_bars
+        ))
+    })?;
+    cfg.market
+        .interval
+        .step_ms()
+        .checked_mul(bars)
+        .and_then(|window_ms| end_ms.checked_sub(window_ms))
+        .ok_or_else(|| {
+            EngineError::InvalidConfig(format!(
+                "bootstrap window overflows: {} bars of {}",
+                cfg.bootstrap_bars, cfg.market.interval
+            ))
+        })
 }
 
 fn filter_closed_candles(candles: Vec<Candle>) -> Vec<Candle> {
