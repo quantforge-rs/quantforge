@@ -25,6 +25,7 @@ pub mod run;
 pub mod segment;
 pub mod store;
 pub mod timestamp;
+pub mod transfer;
 pub mod units;
 
 use thiserror::Error;
@@ -51,6 +52,11 @@ pub use store::{
     StoreIdentity, describe_account, describe_environment,
 };
 pub use timestamp::{TimestampMs, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms};
+pub use transfer::{
+    ColumnKind, KEPT_BY_EACH_STORE, TRANSFER_FORMAT, TRANSFER_SCHEMA, TRANSFER_TABLES,
+    TransferColumn, TransferMarket, TransferRecord, TransferRow, TransferState, TransferTable,
+    TransferValue,
+};
 pub use units::{BaseQty, Contracts, FaceValue, Leverage, PositionSide, Price, Quantity};
 
 #[derive(Error, Debug)]
@@ -150,5 +156,11 @@ pub enum ModelError {
         record: &'static str,
         found: u32,
         expected: u32,
+    },
+
+    #[error("invalid {record}: {reason}")]
+    InvalidRecord {
+        record: &'static str,
+        reason: String,
     },
 }

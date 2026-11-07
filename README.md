@@ -107,6 +107,16 @@ export QF_POSTGRES_URL=postgres://USER:PASSWORD@HOST:5432/DATABASE
 cargo run -- store status
 ```
 
+`data migrate` copies an existing SQLite store into the selected PostgreSQL
+database, read-only on the file, and `--verify` compares every row of the
+copy with it;
+[storage-migration.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/storage-migration.md)
+covers the switch and the way back:
+
+```bash
+cargo run -- data migrate --from data/market.sqlite --verify
+```
+
 The
 [configuration matrix](https://github.com/quantforge-rs/quantforge/blob/main/docs/configuration.md)
 lists every flag with its environment variable, default, and scope, and the

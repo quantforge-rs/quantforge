@@ -1,9 +1,11 @@
 //! Deterministic execution engines: backtest simulation, market-data
-//! ingestion, and the polling live/dry-run trader.
+//! ingestion, the polling live/dry-run trader, and the transfer of one
+//! store into another.
 
 pub mod backtest;
 pub mod data_sync;
 pub mod live;
+pub mod transfer;
 
 use thiserror::Error;
 
@@ -34,4 +36,20 @@ pub enum EngineError {
 
     #[error(transparent)]
     Storage(#[from] StorageError),
+
+    /// A transfer refused before it wrote anything, or a copy that cannot
+    /// be trusted: the reason says what to do.
+    #[error("transfer refused: {0}")]
+    TransferRefused(String),
+
+    /// A copy its store failed in `table`. Every batch stands alone, so the
+    /// rows it wrote stay, and the copy run again finishes it.
+    #[error(
+        "the copy stopped in {table}; the rows it wrote stay, and running it again finishes it"
+    )]
+    CopyStopped {
+        table: &'static str,
+        #[source]
+        source: StorageError,
+    },
 }

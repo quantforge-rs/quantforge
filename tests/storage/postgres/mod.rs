@@ -46,6 +46,7 @@ use tokio::sync::oneshot;
 use crate::conformance::{self, Backend, Bounded, Fixture, Raw};
 pub use server::{
     IsolatedDatabase, VARIABLE, block_on, client, query, selection, server_url, settings,
+    wait_for_a_lock,
 };
 
 /// A `PostgresStore` on a database of its own.

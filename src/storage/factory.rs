@@ -9,15 +9,18 @@
 //! instead: selecting PostgreSQL never ends in a SQLite file. The built-in
 //! factory registers SQLite and, with the `postgres` feature, PostgreSQL.
 //! The execution store (ALG-738) is the next thing a host opens from the
-//! same settings, in the same process, through this factory.
+//! same settings, in the same process, through this factory. The source of
+//! a transfer is opened here too, read-only, beside the selected store.
 
-use crate::ports::{CandleStore, StorageError};
+use crate::ports::{CandleStore, StorageError, TransferSnapshot};
 use crate::storage::SqliteStore;
 use crate::storage::any::AnyStore;
 #[cfg(feature = "postgres")]
 use crate::storage::postgres::PostgresStore;
 use crate::storage::settings::{StorageBackend, StorageConfigError, StorageSettings};
+use crate::storage::sqlite::SqliteSnapshot;
 use std::fmt;
+use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -72,6 +75,14 @@ impl StoreFactory {
             .find(|(registered, _)| *registered == backend)
             .ok_or(StorageConfigError::NoAdapter { backend })?;
         Ok(provider(settings)?)
+    }
+
+    /// Opens the SQLite store at `path` as the source of a transfer: one
+    /// snapshot, read-only, so the file keeps every byte it had
+    /// (`docs/storage-migration.md`). Nothing migrates it: a store at an
+    /// earlier schema is refused.
+    pub fn open_snapshot(&self, path: &Path) -> Result<Box<dyn TransferSnapshot>, StorageError> {
+        Ok(Box::new(SqliteSnapshot::open(path)?))
     }
 }
 

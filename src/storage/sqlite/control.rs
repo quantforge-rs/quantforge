@@ -49,7 +49,7 @@ pub(super) fn create_row(transaction: &Transaction<'_>) -> Result<(), StorageErr
     Ok(())
 }
 
-fn read_identity(connection: &Connection) -> Result<StoreIdentity, StorageError> {
+pub(super) fn read_identity(connection: &Connection) -> Result<StoreIdentity, StorageError> {
     let schema_version = migrate::current_version(connection)?;
     connection
         .query_row(

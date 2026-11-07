@@ -5,17 +5,17 @@
 //! is created once, saved only after it is created, and keeps the identity
 //! it was created with; an order event or a closed trade is appended as a
 //! row of its own, duplicates kept, numbered by an identity column that
-//! never reuses a value. Nothing is retried here: a write whose answer is
-//! lost is `OutcomeUnknown`, for the caller to look at before writing again
-//! (`docs/storage-schema.md`, "Writing the journal"). Run IDs sort by their
-//! bytes (`COLLATE "C"`), as SQLite sorts them, whatever the database's
-//! collation.
+//! never reuses a value; no write is taken while a copy is unfinished
+//! (`copying`). Nothing is retried: a lost answer is `OutcomeUnknown`, for
+//! the caller to look at before writing again ("Writing the journal" in
+//! `docs/storage-schema.md`). Run IDs sort by their bytes (`COLLATE "C"`),
+//! as SQLite sorts them, whatever the database's collation.
 
 use tokio_postgres::error::SqlState;
 use tokio_postgres::types::Type;
 
 use super::bridge::Effect;
-use super::{PostgresStore, limit};
+use super::{PostgresStore, copying, limit};
 use crate::model::RunIdentity;
 use crate::storage::common::read_decimal;
 use crate::storage::runs::{
@@ -27,23 +27,28 @@ use crate::{
     VenueOrderId, now_utc_ms,
 };
 
-const CREATE: &str = r#"
+const CREATE: &str = concat!(
+    r#"
     INSERT INTO bot_runs(
       run_id, exchange, symbol, interval, strategy_name, status,
       state_json, started_at_ms, updated_at_ms, stopped_at_ms, last_error,
       environment, account_kind, account_id, identity_source, identity_at_ms
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-"#;
+    SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+    WHERE "#,
+    copying::not_copying!()
+);
 
 // `state_json` is the single source of truth for run state; `status`,
 // `stopped_at_ms` and `last_error` are copies for SQL and display, never
 // read back. The identity columns never change after `create_run`.
-const SAVE: &str = r#"
+const SAVE: &str = concat!(
+    r#"
     UPDATE bot_runs
     SET status = $2, state_json = $3, updated_at_ms = $4, stopped_at_ms = $5, last_error = $6
-    WHERE run_id = $1
-"#;
+    WHERE run_id = $1 AND "#,
+    copying::not_copying!()
+);
 
 const LOAD: &str = "SELECT state_json FROM bot_runs WHERE run_id = $1";
 
@@ -58,21 +63,27 @@ const LATEST: &str = r#"
     LIMIT 1
 "#;
 
-const APPEND_EVENT: &str = r#"
+const APPEND_EVENT: &str = concat!(
+    r#"
     INSERT INTO order_events(
       run_id, symbol, side, order_type, status, order_id, client_order_id,
       transact_time_ms, raw_json
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-"#;
+    SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
+    WHERE "#,
+    copying::not_copying!()
+);
 
-const APPEND_TRADE: &str = r#"
+const APPEND_TRADE: &str = concat!(
+    r#"
     INSERT INTO closed_trades(
       run_id, symbol, entry_time_ms, exit_time_ms, entry_price, exit_price,
       qty, gross_quote_pnl, entry_order_id, exit_order_id
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-"#;
+    SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    WHERE "#,
+    copying::not_copying!()
+);
 
 const EVENTS: &str =
     "SELECT raw_json FROM order_events WHERE run_id = $1 ORDER BY seq DESC LIMIT $2";
@@ -122,14 +133,13 @@ impl RunJournalStore for PostgresStore {
 
     fn create_run(&self, state: &BotRunState, identity: &RunIdentity) -> Result<(), StorageError> {
         refuse_legacy_creation(state, identity)?;
-        let run_id = state.run_id.clone();
         let state_json = serde_json::to_string(state).map_err(StorageError::other)?;
         let (environment, account_kind, account_id) = identity_columns(identity);
         let account_id = account_id.map(str::to_string);
         let state = state.clone();
         let source = identity.source.as_str();
         let identity_at_ms = now_utc_ms();
-        let created = self.bridge.execute(Effect::Write, move |client| {
+        self.bridge.execute(Effect::Write, move |client| {
             Box::pin(async move {
                 let inserted = client
                     .execute_typed(
@@ -155,25 +165,22 @@ impl RunJournalStore for PostgresStore {
                     )
                     .await;
                 match inserted {
-                    Ok(_) => Ok(true),
-                    Err(error) if error.code() == Some(&SqlState::UNIQUE_VIOLATION) => Ok(false),
+                    Ok(rows) => copying::written(&**client, rows, copying::finished_since).await,
+                    Err(error) if error.code() == Some(&SqlState::UNIQUE_VIOLATION) => {
+                        Ok(Err(already_exists(&state.run_id)))
+                    }
                     Err(error) => Err(error),
                 }
             })
-        })?;
-        if !created {
-            return Err(already_exists(&run_id));
-        }
-        Ok(())
+        })?
     }
 
     fn save_run_state(&self, state: &BotRunState) -> Result<(), StorageError> {
         let state_json = serde_json::to_string(state).map_err(StorageError::other)?;
         let state = state.clone();
-        let run_id = state.run_id.clone();
-        let updated = self.bridge.execute(Effect::Write, move |client| {
+        self.bridge.execute(Effect::Write, move |client| {
             Box::pin(async move {
-                client
+                let updated = client
                     .execute_typed(
                         SAVE,
                         &[
@@ -185,13 +192,10 @@ impl RunJournalStore for PostgresStore {
                             (&state.last_error, Type::TEXT),
                         ],
                     )
-                    .await
+                    .await?;
+                copying::written(&**client, updated, || never_created(&state.run_id)).await
             })
-        })?;
-        if updated == 0 {
-            return Err(never_created(&run_id));
-        }
-        Ok(())
+        })?
     }
 
     fn load_run_state(&self, run_id: &str) -> Result<Option<BotRunState>, StorageError> {
@@ -281,7 +285,7 @@ impl RunJournalStore for PostgresStore {
         let order = order.clone();
         self.bridge.execute(Effect::Write, move |client| {
             Box::pin(async move {
-                client
+                let appended = client
                     .execute_typed(
                         APPEND_EVENT,
                         &[
@@ -299,10 +303,10 @@ impl RunJournalStore for PostgresStore {
                             (&raw_json, Type::TEXT),
                         ],
                     )
-                    .await
-                    .map(|_| ())
+                    .await?;
+                copying::written(&**client, appended, copying::finished_since).await
             })
-        })
+        })?
     }
 
     fn append_closed_trade(&self, run_id: &str, trade: &ClosedTrade) -> Result<(), StorageError> {
@@ -310,7 +314,7 @@ impl RunJournalStore for PostgresStore {
         let trade = trade.clone();
         self.bridge.execute(Effect::Write, move |client| {
             Box::pin(async move {
-                client
+                let appended = client
                     .execute_typed(
                         APPEND_TRADE,
                         &[
@@ -332,10 +336,10 @@ impl RunJournalStore for PostgresStore {
                             ),
                         ],
                     )
-                    .await
-                    .map(|_| ())
+                    .await?;
+                copying::written(&**client, appended, copying::finished_since).await
             })
-        })
+        })?
     }
 
     fn list_order_events(

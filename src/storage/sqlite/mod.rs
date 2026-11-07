@@ -3,9 +3,10 @@
 //! work is split across private sibling modules — `candles` implements
 //! `CandleStore`, `journal` implements `RunJournalStore`, `segments`
 //! implements `SegmentStore`, `control` implements `StoreControl`, and
-//! `migrate` brings every earlier schema to [`SCHEMA_VERSION`]. Only
-//! [`SqliteStore`] and the version leave this namespace; the schema and the
-//! row decoders are not API.
+//! `migrate` brings every earlier schema to [`SCHEMA_VERSION`]; `snapshot`
+//! reads a store read-only as the source of a transfer. Only
+//! [`SqliteStore`], [`SqliteSnapshot`] and the version leave this
+//! namespace; the schema and the row decoders are not API.
 
 mod candles;
 mod control;
@@ -13,7 +14,10 @@ mod errors;
 mod journal;
 mod migrate;
 mod segments;
+mod snapshot;
 mod wait;
+
+pub use snapshot::SqliteSnapshot;
 
 use crate::StorageError;
 use crate::model::{DurabilityReport, DurabilitySetting};

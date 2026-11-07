@@ -3,9 +3,12 @@
 //! store has it, its PostgreSQL DDL naming the same tables and columns, its
 //! indexes differing only as the doc lists, and its ownership table
 //! covering every table; and
-//! `docs/storage-conformance.md`'s lists of every scenario and check. Each
-//! part is found between `<!-- begin: name -->` and `<!-- end: name -->`.
+//! `docs/storage-conformance.md`'s lists of every scenario and check; and
+//! `docs/storage-migration.md`'s tables a transfer copies and keeps, which
+//! cover the schema, its format, and its worked example. Each part is found
+//! between `<!-- begin: name -->` and `<!-- end: name -->`.
 
+use quantforge::model::{ColumnKind, KEPT_BY_EACH_STORE, TRANSFER_FORMAT, TRANSFER_TABLES};
 use quantforge::storage::sqlite::SCHEMA_VERSION;
 use quantforge::{CandleStore, SqliteStore};
 use rusqlite::Connection;
@@ -362,4 +365,126 @@ fn the_conformance_doc_lists_every_scenario_and_check_with_its_statement() {
     for setting in ["count", "range", "skip", "spacing_ms", "close"] {
         assert!(cases.series_rule.contains(setting), "{setting}");
     }
+}
+
+/// The backticked words of each item of a list in
+/// `docs/storage-migration.md`, with the item's text.
+fn migration_list(name: &str) -> Vec<(Vec<String>, String)> {
+    section_in("docs/storage-migration.md", name)
+        .into_iter()
+        .filter(|line| line.starts_with("- "))
+        .map(|line| {
+            let words = line
+                .split('`')
+                .skip(1)
+                .step_by(2)
+                .map(str::to_string)
+                .collect();
+            (words, line)
+        })
+        .collect()
+}
+
+#[test]
+fn the_migration_doc_lists_every_transferred_table_in_copy_order_with_its_key() {
+    let listed: Vec<(String, String, bool, bool)> = migration_list("transfer tables")
+        .into_iter()
+        .map(|(words, line)| {
+            (
+                words.first().cloned().unwrap_or_default(),
+                words.last().cloned().unwrap_or_default(),
+                line.contains("market by market"),
+                line.contains("a number the store gave"),
+            )
+        })
+        .collect();
+    let code: Vec<(String, String, bool, bool)> = TRANSFER_TABLES
+        .iter()
+        .map(|table| {
+            (
+                table.name.to_string(),
+                table.key.to_string(),
+                table.by_market,
+                table.numbered,
+            )
+        })
+        .collect();
+    assert_eq!(listed, code);
+}
+
+#[test]
+fn every_table_of_the_schema_is_transferred_with_its_columns_or_kept_by_each_store() {
+    let kept: Vec<String> = migration_list("kept by each store")
+        .into_iter()
+        .map(|(words, _)| words.concat())
+        .collect();
+    assert_eq!(kept, KEPT_BY_EACH_STORE);
+
+    let (tables, _) = parse(&section("sqlite schema"));
+    let kind = |declared: &str| match declared {
+        "INTEGER" => ColumnKind::Integer,
+        "TEXT" => ColumnKind::Text,
+        "BLOB" => ColumnKind::Blob,
+        other => panic!("no transfer kind for {other}"),
+    };
+    for table in &tables {
+        match TRANSFER_TABLES.iter().find(|t| t.name == table.name) {
+            Some(transferred) => {
+                let doc: Vec<(&str, ColumnKind)> = table
+                    .columns
+                    .iter()
+                    .map(|column| (column.name.as_str(), kind(&column.kind)))
+                    .collect();
+                let code: Vec<(&str, ColumnKind)> = transferred
+                    .columns
+                    .iter()
+                    .map(|column| (column.name, column.kind))
+                    .collect();
+                assert_eq!(code, doc, "{}", table.name);
+            }
+            None => assert!(
+                KEPT_BY_EACH_STORE.contains(&table.name.as_str()),
+                "{} is neither transferred nor kept by each store",
+                table.name
+            ),
+        }
+    }
+    let names: Vec<&str> = tables.iter().map(|table| table.name.as_str()).collect();
+    for name in TRANSFER_TABLES
+        .iter()
+        .map(|table| table.name)
+        .chain(KEPT_BY_EACH_STORE)
+    {
+        assert!(names.contains(&name), "{name} is not a table of the schema");
+    }
+}
+
+#[test]
+fn the_migration_doc_states_the_format_and_the_worked_example_the_oracle_wrote() {
+    let format: Vec<String> = section_in("docs/storage-migration.md", "transfer format")
+        .into_iter()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    assert_eq!(format, [TRANSFER_FORMAT.to_string()]);
+
+    let example = crate::transfer::fixture::cases().example;
+    let lines = section_in("docs/storage-migration.md", "transfer worked example");
+    let fence = |from: usize| {
+        lines[from..]
+            .iter()
+            .position(|line| line.starts_with("```"))
+            .map(|index| index + from)
+            .expect("a fence")
+    };
+    let (open, close) = (fence(0), fence(fence(0) + 1));
+    let text: String = lines[open + 1..close]
+        .iter()
+        .map(|line| format!("{line}\n"))
+        .collect();
+    assert_eq!(text, example.canonical);
+    let checksum: Vec<&String> = lines[close + 1..]
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    assert_eq!(checksum, [&example.checksum]);
 }

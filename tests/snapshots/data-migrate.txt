@@ -1,0 +1,29 @@
+Copy a SQLite store into the selected PostgreSQL store, and verify the copy
+
+Usage: quantforge data migrate [OPTIONS] --from <PATH>
+
+Options:
+      --from <PATH>            SQLite database to copy; opened read-only and never changed
+      --verify                 After copying, compare every row of the copy with the source; any difference exits non-zero
+      --batch-size <ROWS>      Rows read and written at a time [default: 5000]
+      --assume-quiescent       Copy although the source records runs still starting or running, once you have checked that nothing writes to it
+      --exchange <EXCHANGE>    Exchange to connect to [env: QF_EXCHANGE=] [default: binance] [possible values: binance]
+      --base-url <BASE_URL>    Exchange API base URL; omitted, the exchange's production endpoint [env: QF_BASE_URL=]
+      --log-level <LOG_LEVEL>  Log filter (trace, debug, info, warn, error or a full tracing filter expression) [env: QF_LOG=] [default: info]
+  -h, --help                   Print help
+
+Storage:
+      --db <DB>
+          SQLite database path; refused with --storage postgres [env: QF_DB=] [default: data/market.sqlite]
+      --storage <STORAGE>
+          Storage backend [env: QF_STORAGE=] [default: sqlite] [possible values: sqlite, postgres]
+      --postgres-url <POSTGRES_URL>
+          PostgreSQL URL, postgres://USER:PASSWORD@HOST:PORT/DATABASE, optionally with sslmode and sslrootcert; prefer QF_POSTGRES_URL: command-line values can land in shell history and process listings [env: QF_POSTGRES_URL]
+      --postgres-pool-size <POSTGRES_POOL_SIZE>
+          Most PostgreSQL connections this process opens; omitted, 2, or 8 for serve run [env: QF_POSTGRES_POOL_SIZE=]
+      --postgres-connect-timeout-secs <POSTGRES_CONNECT_TIMEOUT_SECS>
+          Seconds opening a PostgreSQL connection, TLS included, may take [env: QF_POSTGRES_CONNECT_TIMEOUT_SECS=] [default: 5]
+
+Exchange credentials:
+      --api-key <API_KEY>        API key for the exchange's signed endpoints (monitor, trade close, trade run --mode live); prefer QF_API_KEY: command-line values can land in shell history and process listings [env: QF_API_KEY]
+      --api-secret <API_SECRET>  API secret paired with --api-key; prefer QF_API_SECRET: command-line values can land in shell history and process listings [env: QF_API_SECRET]

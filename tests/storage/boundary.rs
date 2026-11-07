@@ -3,6 +3,8 @@
 //! ports; the CLI's context alone asks the factory for a store; and only the
 //! factory opens one. A concrete backend named anywhere else could open a
 //! store the operator did not select, such as a SQLite file beside PostgreSQL.
+//! The one file opened beside the selected store is the source of a transfer,
+//! which the operator names, and the factory opens read-only.
 //!
 //! The scans are textual, as in `tests/exchange_boundary.rs`: comments and
 //! test code are skipped, and everything else is checked.
@@ -11,8 +13,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 /// What only `src/storage/` may name: a backend's store and its driver.
-const BACKEND_NAMES: [&str; 6] = [
+const BACKEND_NAMES: [&str; 7] = [
     "SqliteStore",
+    "SqliteSnapshot",
     "PostgresStore",
     "storage::sqlite",
     "storage::postgres",
@@ -25,25 +28,33 @@ const BACKEND_NAMES: [&str; 6] = [
 /// once, so a stale one fails as well as a new line.
 const NAMES_A_BACKEND: [(&str, &str); 1] = [("src/lib.rs", "pub use storage::SqliteStore;")];
 
-/// What opens a store.
-const OPENS_A_STORE: [&str; 3] = [
+/// What opens a store, or a store's file.
+const OPENS_A_STORE: [&str; 4] = [
     "SqliteStore::new(",
     "SqliteStore::with_limits(",
+    "SqliteSnapshot::open(",
     "PostgresStore::connect(",
 ];
 
 /// Where a store is defined, and what may call its own constructors.
 const ADAPTERS: [&str; 2] = ["src/storage/sqlite/", "src/storage/postgres/"];
 
-/// The opening calls the factory makes, one per backend.
+/// The opening calls the factory makes: one per backend, and the source of
+/// a transfer.
 const FACTORY: &str = "src/storage/factory.rs";
 
 /// What a host holds, and how it gets it: nothing below the CLI names them.
 const HOST_NAMES: [&str; 2] = ["AnyStore", "StoreFactory"];
 
-/// The one line that asks the factory for a store.
-const OPENS_THROUGH_THE_FACTORY: (&str, &str) =
-    ("src/cli/context.rs", "let store = StoreFactory::builtin()");
+/// The lines that ask the factory for a store: the selected one, and the
+/// source of a transfer.
+const OPENS_THROUGH_THE_FACTORY: [(&str, &str); 2] = [
+    ("src/cli/context.rs", "let store = StoreFactory::builtin()"),
+    (
+        "src/cli/context.rs",
+        "let snapshot = StoreFactory::builtin().open_snapshot(path);",
+    ),
+];
 
 /// Every `.rs` file of the crate outside a test module's own file, keyed by
 /// its `/`-joined path from the crate root on every platform.
@@ -142,7 +153,7 @@ fn only_the_factory_opens_a_store() {
         &OPENS_A_STORE,
     );
     let opened_by: Vec<&str> = found.iter().map(|(path, _)| path.as_str()).collect();
-    assert_eq!(opened_by, [FACTORY, FACTORY], "{found:?}");
+    assert_eq!(opened_by, [FACTORY, FACTORY, FACTORY], "{found:?}");
 }
 
 #[test]
@@ -164,7 +175,7 @@ fn only_the_cli_holds_a_store_and_only_its_context_opens_one() {
         |path| path.starts_with("src/cli/"),
         &["StoreFactory::"],
     );
-    assert_eq!(opened, owned(&[OPENS_THROUGH_THE_FACTORY]));
+    assert_eq!(opened, owned(&OPENS_THROUGH_THE_FACTORY));
 }
 
 /// The scans would pass on an empty crate: this is what they must see.

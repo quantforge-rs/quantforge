@@ -1,8 +1,10 @@
 //! `quantforge store status` — where the store is and what it knows about
 //! itself: its ID, schema, environment and activation, what its commits rely
-//! on, the schema steps it went through, and the legacy runs still waiting
-//! for an operator. Needs no credentials and sends nothing.
+//! on, the copy of another store it holds, the schema steps it went through,
+//! and the legacy runs still waiting for an operator. Needs no credentials
+//! and sends nothing.
 
+use crate::cli::common::describe_transfer;
 use crate::cli::context::AppContext;
 use anyhow::Result;
 use clap::Args;
@@ -26,6 +28,7 @@ pub(crate) fn handle_store_status(ctx: &AppContext, _args: StoreStatusArgs) -> R
         "weakened"
     };
     println!("durability: {verdict} ({durability})");
+    println!("transfer: {}", describe_transfer(ctx.transfer.as_ref()));
 
     let migrations = ctx.store.migrations()?;
     println!("migrations: {}", migrations.len());

@@ -10,7 +10,7 @@ use tokio_postgres::types::Type;
 use tokio_postgres::{IsolationLevel, Row};
 
 use super::bridge::Effect;
-use super::{PostgresStore, durability};
+use super::{PostgresStore, copying, durability};
 use crate::model::futures::ActivationEpoch;
 use crate::model::{
     DurabilityReport, Environment, ExecutionMode, IdentitySource, LegacyRun, RunIdentity,
@@ -147,6 +147,10 @@ impl StoreControl for PostgresStore {
                     .start()
                     .await?;
                 let row = transaction.query_typed_one(LOCK_BINDING, &[]).await?;
+                // Each refusal rolls the transaction back as it drops.
+                if let Some(refused) = copying::refusal(&*transaction).await? {
+                    return Ok(Err(refused));
+                }
                 let store_id: String = row.try_get(0)?;
                 let bound: Option<String> = row.try_get(1)?;
                 let bound = match bound.map(|text| parse_environment(&text)).transpose() {
@@ -245,6 +249,9 @@ impl StoreControl for PostgresStore {
                     .map(|row| Ok::<_, tokio_postgres::Error>((row.try_get(0)?, row.try_get(1)?)))
                     .transpose()?;
                 // A refusal rolls the transaction back as it drops.
+                if let Some(refused) = copying::refusal(&*transaction).await? {
+                    return Ok(Err(refused));
+                }
                 let state_json = match adopted_state(&run_id, found, execution_mode) {
                     Ok(state_json) => state_json,
                     Err(refused) => return Ok(Err(refused)),

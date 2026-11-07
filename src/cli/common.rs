@@ -140,6 +140,26 @@ pub(crate) fn print_order(order: &quantforge::ExchangeOrder) {
     );
 }
 
+/// A store's copy as a `transfer:` line shows it: `none`, `copying from
+/// <store> since <time>`, or `copied from <store> at <time>`.
+pub(crate) fn describe_transfer(record: Option<&quantforge::TransferRecord>) -> String {
+    match record {
+        None => "none".to_string(),
+        Some(record) => match (record.state, record.copied_at_ms) {
+            (quantforge::TransferState::Copied, Some(copied_at_ms)) => format!(
+                "copied from {} at {}",
+                record.source_store_id,
+                quantforge::ms_to_rfc3339(copied_at_ms)
+            ),
+            (state, _) => format!(
+                "{state} from {} since {}",
+                record.source_store_id,
+                quantforge::ms_to_rfc3339(record.started_at_ms)
+            ),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

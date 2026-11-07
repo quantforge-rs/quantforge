@@ -16,6 +16,7 @@ use crate::model::{
 };
 use crate::ports::{
     CandleQuery, CandleStore, RunJournalStore, SegmentStore, StorageError, StoreControl,
+    TransferTarget,
 };
 use crate::storage::SqliteStore;
 #[cfg(feature = "postgres")]
@@ -38,6 +39,17 @@ impl AnyStore {
             Self::Sqlite(_) => StorageBackend::Sqlite,
             #[cfg(feature = "postgres")]
             Self::Postgres(_) => StorageBackend::Postgres,
+        }
+    }
+
+    /// The store as the target of a transfer (`docs/storage-migration.md`),
+    /// or `None` for a backend that cannot be one yet: SQLite, until ALG-768
+    /// brings the copy back from PostgreSQL.
+    pub fn transfer_target(&self) -> Option<&dyn TransferTarget> {
+        match self {
+            Self::Sqlite(_) => None,
+            #[cfg(feature = "postgres")]
+            Self::Postgres(store) => Some(store),
         }
     }
 

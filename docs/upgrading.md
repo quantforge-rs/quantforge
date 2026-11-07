@@ -156,3 +156,10 @@ steps ran and when.
 **Nothing requires deleting a journal.** A live run's record is kept through
 every upgrade; the only thing that is ever re-synced is candle data, and
 only if you choose to.
+
+## Moving to PostgreSQL
+
+An upgrade keeps a store where it is. To move one to PostgreSQL, bring it to
+this release's schema first, which any command does, then copy it with
+`data migrate`: [storage-migration.md](storage-migration.md) covers the copy,
+the switch and the way back.

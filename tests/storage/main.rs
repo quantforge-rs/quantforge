@@ -19,6 +19,9 @@
 //! - [`docs`]: the documents held to the code and the fixtures;
 //! - [`boundary`]: nothing opens a store but the factory, and nothing asks
 //!   the factory but the CLI's context;
+//! - [`transfer`]: a store copied into another and verified, from a
+//!   read-only snapshot of SQLite into PostgreSQL, held to the checksums an
+//!   independent oracle wrote;
 //! - [`measure`]: a 100,000-candle batch on each backend, run on demand.
 
 mod any_store;
@@ -31,3 +34,4 @@ mod migration;
 #[cfg(feature = "postgres")]
 mod postgres;
 mod sqlite;
+mod transfer;
