@@ -14,7 +14,7 @@ use rust_decimal::Decimal;
 use std::sync::Barrier;
 
 use super::{
-    IsolatedDatabase, Postgres, VARIABLE, block_on, client, fixture_on, server_url, settings,
+    IsolatedDatabase, Postgres, VARIABLE, block_on, client, fixture_on, server_url, settings, skip,
 };
 use crate::conformance::{self, Backend, Fixture};
 
@@ -63,7 +63,7 @@ fn the_journal_and_store_record_keep_byte_order_under_a_linguistic_collation() {
         return;
     };
     if !linguistic_collation(&server) {
-        eprintln!("skipping: the server has no en_US.UTF-8 locale");
+        skip("the server has no en_US.UTF-8 locale");
         return;
     }
     conformance::journal::<Linguistic>();

@@ -96,10 +96,10 @@ fn a_100000_candle_batch_on_each_backend() {
     measure::<Sqlite>();
     #[cfg(feature = "postgres")]
     {
-        if std::env::var("QUANTFORGE_TEST_POSTGRES_URL").is_ok_and(|url| !url.is_empty()) {
+        if crate::postgres::server_url().is_some() {
             measure::<crate::postgres::Postgres>();
         } else {
-            eprintln!("postgres skipped: QUANTFORGE_TEST_POSTGRES_URL is unset");
+            eprintln!("postgres skipped: {} is unset", crate::postgres::VARIABLE);
         }
     }
 }

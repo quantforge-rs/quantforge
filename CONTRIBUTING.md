@@ -12,7 +12,9 @@ Thanks for contributing to QuantForge.
 
 ## Tooling
 
-QuantForge currently targets Rust 1.85 or newer.
+QuantForge currently targets Rust 1.85 or newer. CI checks the crate with
+1.85 itself; `rustup toolchain install 1.85` lets `./scripts/release-check.sh`
+do the same.
 
 ## Before you open a pull request
 
@@ -21,9 +23,24 @@ Run:
 ```bash
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --all-targets --no-default-features -- -D warnings
 cargo test --all-features --locked
+cargo test --no-default-features --locked
 ./scripts/release-check.sh
 ```
+
+The `--no-default-features` lines check the SQLite-only build. CI also runs
+the whole suite against PostgreSQL 16, 17 and 18; to run it against one
+locally, with Docker:
+
+```bash
+eval "$(scripts/postgres-test-servers.sh start 16)"
+cargo test --all-features --locked --no-fail-fast
+scripts/postgres-test-servers.sh stop
+```
+
+[docs/ci.md](docs/ci.md) lists every check CI runs and which ones a merge
+requires.
 
 ## Commit style
 

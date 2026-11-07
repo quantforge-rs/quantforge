@@ -36,6 +36,9 @@ writes without running them.
 The PostgreSQL stores send the same values as parameters of unnamed
 statements (tokio-postgres' `query_typed`), which PostgreSQL plans when
 they are bound, for those values, as it plans the literals.
+CI runs the test on PostgreSQL 16, 17 and 18 ([ci.md](ci.md#postgresql)):
+every query kept the indexes listed here on 17.11 and 18.6 too, on
+2026-11-07.
 
 ## The data
 
