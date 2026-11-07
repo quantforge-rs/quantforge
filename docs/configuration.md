@@ -83,6 +83,10 @@ Explanations belong in the Setting cell.
 | With `--end`, keep polling until the end time is reached instead of stopping after one pass | `--follow` | — | `false` | `data sync` |
 | Seconds to wait between polls; at least 1 | `--poll-secs <seconds>` | — | `5` | `data sync`, `trade run`, `monitor watch` |
 | Stop after this many loop iterations; omitted, no limit | `--max-loops <count>` | — | none | `data sync`, `trade run`, `monitor watch` |
+| SQLite database to copy into the selected PostgreSQL store, opened read-only and never changed; it must be at the schema this build writes | `--from <path>` | — | `required` | `data migrate` |
+| After copying, compare every row of the copy with the source; any difference is listed and exits with status 1 | `--verify` | — | `false` | `data migrate` |
+| Rows read and written at a time, at least 1; a batch holds at most 64 segments | `--batch-size <rows>` | — | `5000` | `data migrate` |
+| Copy although the source records runs still starting or running, once you have checked that nothing writes to it: a process that died leaves its run running | `--assume-quiescent` | — | `false` | `data migrate` |
 | Fast SMA period of the `sma_cross` strategy | `--fast <bars>` | — | `20` | `backtest`, `trade run` |
 | Slow SMA period of the `sma_cross` strategy | `--slow <bars>` | — | `50` | `backtest`, `trade run` |
 | Starting quote cash; a positive decimal | `--cash <decimal>` | — | `10000` | `backtest` |
@@ -153,7 +157,8 @@ createdb --owner=quant market
 
 One database is one store, as one `--db` file is: keep testnet and production
 in separate databases, and bind each with `store bind`. Nothing moves from a
-SQLite file on its own, so a new database starts empty.
+SQLite file on its own, so a new database starts empty; `data migrate --from
+<file>` copies one into it ([storage-migration.md](storage-migration.md)).
 
 `serve run`'s `--segment-cache-dir` stays on the local disk whichever backend
 is selected; it holds no store.

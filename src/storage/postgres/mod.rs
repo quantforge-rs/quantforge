@@ -20,6 +20,8 @@
 //! - `control`: `StoreControl`, the store's record and legacy runs.
 //! - `segments`: `SegmentStore`, each window and plan read in one snapshot
 //!   and written back only over the revision it read.
+//! - `transfer`: the store's rows for a transfer, read in byte order and
+//!   written in batches that skip what it holds, and the record of a copy.
 //!
 //! [`PostgresStore`] connects, answers, creates its schema, and serves
 //! every storage port. A host selects it through `storage::factory`.
@@ -36,6 +38,7 @@ mod segments;
 #[cfg(test)]
 mod tests;
 mod tls;
+mod transfer;
 
 use std::fmt;
 use std::time::Duration;

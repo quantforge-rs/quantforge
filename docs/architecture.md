@@ -51,7 +51,8 @@ src/
 │   ├── data/                   market-data commands
 │   │   ├── mod.rs              quantforge data: subcommand enum and dispatch
 │   │   ├── sync.rs             quantforge data sync: pull klines from the exchange into the store
-│   │   └── validate.rs         quantforge data validate: check stored candles
+│   │   ├── validate.rs         quantforge data validate: check stored candles
+│   │   └── migrate.rs          quantforge data migrate: copy a SQLite store into PostgreSQL, and verify it
 │   ├── backtest/               a leaf command in directory form
 │   │   └── mod.rs              quantforge backtest: simulate the strategy on stored candles
 │   ├── trade/                  strategy-bot commands
@@ -123,6 +124,9 @@ src/
 │   ├── segment.rs              SegmentHash, SegmentRef, SegmentPlan: what the segment store hands out
 │   ├── store.rs                StoreId, StoreActivation, StoreIdentity, RunIdentity, the migration log
 │   ├── timestamp.rs            TimestampMs, now_utc_ms, RFC 3339 conversions
+│   ├── transfer/               what a transfer between two stores carries
+│   │   ├── mod.rs              a row's values, their canonical text, the market, the target's record
+│   │   └── tables.rs           the tables a transfer copies, in copy order, and those each store keeps
 │   ├── units.rs                Price, BaseQty, Contracts, Quantity, FaceValue, Leverage, PositionSide
 │   └── futures/                the futures contract of ADR 0002, used through its module
 │       ├── mod.rs              the contract's two rules, and the re-exports
@@ -144,6 +148,7 @@ src/
 │   ├── mod.rs                  Spot connector traits, their capabilities and errors; re-exports the storage ports
 │   ├── clock.rs                Clock, the injected time source, and SystemClock
 │   ├── storage.rs              CandleStore, SegmentStore, RunJournalStore, StoreControl, StorageError
+│   ├── transfer.rs             TransferSource, TransferSnapshot, TransferTarget: a store's rows for a copy
 │   └── futures.rs              futures ports by capability, FuturesCapabilities, FuturesConnectors
 ├── exchange/                   the connector registry, one adapter per exchange, and the conformance suite
 │   ├── mod.rs                  the registry API: lookup, name, connect, ExchangeConnectors
@@ -196,6 +201,7 @@ src/
 │   │   ├── candles.rs          CandleStore: batches unnested into one upsert that marks changed windows
 │   │   ├── journal.rs          RunJournalStore: one statement per call, run IDs in byte order
 │   │   ├── control.rs          StoreControl: the store's record, its binding and legacy-run adoption
+│   │   ├── transfer.rs         a transfer's reads in byte order, batches that skip what it holds, the record
 │   │   ├── segments/           SegmentStore, by the protocol of docs/storage-schema.md
 │   │   │   ├── mod.rs          a plan in one snapshot, and loading a segment
 │   │   │   └── build.rs        a refresh's reads and writes: a snapshot, a write-back under the mark's lock
@@ -216,6 +222,7 @@ src/
 │       ├── control.rs          store_control and schema_migrations: the StoreControl implementation
 │       ├── errors.rs           SQLite's failures as the categories every backend shares
 │       ├── wait.rs             how a connection waits for another writer's lock, by the clock
+│       ├── snapshot.rs         SqliteSnapshot: a store read-only from one snapshot, the source of a transfer
 │       ├── candles.rs          candle table and the CandleStore implementation; marks changed windows
 │       ├── journal.rs          run table, run identity, and RunJournalStore; the journal DDL of every schema
 │       ├── journal/            the journals beside a run's state, and its identity columns
@@ -238,6 +245,14 @@ src/
 │   ├── data_sync/              DataSyncEngine: historical and incremental ingestion
 │   │   ├── mod.rs              the engine and its pass loop, which keeps the segments packed
 │   │   └── range.rs            fetching one range, settled candles only; live trading shares it
+│   ├── transfer/               TransferEngine: a store copied into another, and the copy verified
+│   │   ├── mod.rs              the copy: batches that stand alone, the record, resuming
+│   │   ├── checks.rs           what a copy refuses before it writes anything
+│   │   ├── verify.rs           both stores read side by side: digests, checksums, differences
+│   │   └── tests/              the engine against stores held in memory
+│   │       ├── mod.rs          Memory: a store keyed as the real ones are, which fails and moves on cue
+│   │       ├── copy.rs         what a copy writes and refuses, cut off and run again
+│   │       └── verify.rs       what a verification reads and reports
 │   └── live/                   LiveTradeEngine: the polling live and dry-run trader
 │       ├── mod.rs              public surface and the run lifecycle
 │       ├── runner.rs           the poll loop: bootstrap, bars, closed-bar detection
@@ -260,7 +275,9 @@ and storage adapters only through the `ports` traits; the binary chooses
 which adapters to pass in, building the connectors of the exchange that
 `--exchange` names through `exchange::connect`, and opening the store that
 `--storage` selects through `storage::factory`; `tests/storage/boundary.rs`
-fails if a store is opened any other way. Nothing outside
+fails if a store is opened any other way. `engine::transfer` copies one
+store into another through the transfer ports, and
+[storage-migration.md](storage-migration.md) is how an operator uses it. Nothing outside
 `src/exchange/` names a concrete exchange adapter, nothing outside the
 Binance adapter hardcodes Binance beyond the registry's entries and the
 `Venue` that names it with its product lines in `ExchangeId`, no venue's
@@ -293,7 +310,8 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   the storage backend that way, `backends.rs` for every command that reads
   or writes the store, on SQLite and, with `QUANTFORGE_TEST_POSTGRES_URL`, on
   PostgreSQL, `serve.rs` for `serve run` as
-  a running process — its routes, and how it stops on a signal — and
+  a running process — its routes, and how it stops on a signal —
+  `migrate.rs` for `data migrate` against its acceptance criteria, and
   `snapshot.rs` and `layout.rs` for the CLI surface and this document
 - `tests/snapshots/`: the committed `--help` output of every command, plus
   `version.txt` for `--version`
@@ -317,7 +335,10 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   [postgres-query-plans.md](postgres-query-plans.md) (`postgres/`);
   acknowledged writes outliving a killed writer and, on demand, a crashed
   server (`crash.rs`); the documents held to the code; the factory as the
-  only way to a store (`boundary.rs`); and, on demand, a 100,000-candle batch
+  only way to a store (`boundary.rs`); a store copied from a read-only
+  SQLite snapshot into PostgreSQL and verified, held to the checksums of
+  `tests/fixtures/storage_transfer_cases.json` (`transfer/`); and, on
+  demand, a 100,000-candle batch
   on each backend (`measure.rs`)
 - `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
   from naming a concrete exchange adapter, the code and `--help` outside

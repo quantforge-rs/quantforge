@@ -16,3 +16,5 @@ docs/segment-spec.md text eol=lf
 # The parity matrix and its generated ledger and view are read and compared
 # byte for byte by tests/parity.
 docs/parity/* text eol=lf
+# The migration doc's worked example is compared with the transfer fixture.
+docs/storage-migration.md text eol=lf

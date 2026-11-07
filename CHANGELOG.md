@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `quantforge data migrate --from <file>` copies a SQLite store into the selected PostgreSQL store: candles, runs, order events, closed trades, segments, the segment index and its dirty marks, every value as stored, decimal text and scale, IDs, sequence numbers, timestamps, JSON and legacy identities included; the source is read from one snapshot, read-only, and never changed, and the target keeps a store ID of its own, stays inactive, and is bound to the source's environment
+- `data migrate --verify` compares every row of the copy with the source and prints, for each table and market, both sides' rows, key bounds and canonical SHA-256 checksum, then each difference; any difference exits with status 1
+- a copy cut off is finished by running the same command again, which writes each row once, and a finished copy writes nothing; until a copy finishes, every command but `data migrate` and `store status` refuses its target, and `store status` prints `transfer:`
+- `data migrate` refuses, before writing anything, a source whose runs are starting or running (pass `--assume-quiescent` once nothing writes to it), a source at an earlier schema, and a target that holds rows of its own or another store's copy; a source that changes while it is read fails the copy, which stays unfinished
+- `docs/storage-migration.md` covers switching to PostgreSQL and going back, why the SQLite file is no rollback once PostgreSQL has accepted writes, and the canonical text the checksums are taken over, which `tests/fixtures/storage_transfer_cases.json`, written by an independent Python oracle, holds both stores to
 - `--storage postgres` keeps everything in PostgreSQL: `data`, `backtest`, `trade`, `monitor`, `store` and `serve run` all open the selected store, with candles, segments, runs and the store's record there, and no SQLite file is created, opened or read; SQLite stays the default, unchanged
 - the first command on an empty PostgreSQL database creates the schema and warns that it did; `docs/configuration.md` says what the database and its role need
 - `store status` and `serve run` print `storage: <backend> <location>`, and every command logs it; a database shows as `postgres://HOST:PORT/DATABASE`, never with its user or password

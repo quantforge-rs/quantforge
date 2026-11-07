@@ -4,16 +4,18 @@
 //! the parsed [`Cli`], and handed to the handlers — plus the
 //! interactive-session and confirmation helpers.
 
+use super::store::StoreCommand;
 use super::{Cli, Command};
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use quantforge::exchange;
 use quantforge::{
     AnyStore, ApiCredentials, ConnectorConfig, Durability, ExchangeConnectors, ExchangeId,
     ExecutionMode, RunIdentity, SignedConnectors, StorageConfigError, StorageSettings,
-    StoreControl, StoreFactory, StoreIdentity, StoreOpenError, StoreOwner, VenueAccountId,
-    describe_environment,
+    StoreControl, StoreFactory, StoreIdentity, StoreOpenError, StoreOwner, TransferRecord,
+    TransferSnapshot, TransferState, VenueAccountId, describe_environment, ms_to_rfc3339,
 };
 use std::io::{self, IsTerminal, Write};
+use std::path::Path;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 use url::Url;
@@ -43,6 +45,9 @@ pub(crate) struct AppContext {
     /// What the store knows about itself after `init` brought it to the
     /// current schema: its ID, environment and activation.
     pub(crate) identity: StoreIdentity,
+    /// The copy of another store this one holds, if it is a transfer's
+    /// target (`data migrate`).
+    pub(crate) transfer: Option<TransferRecord>,
     pub(crate) base_url: Url,
     pub(crate) exchange: ExchangeConnectors,
     credentials: Option<ApiCredentials>,
@@ -74,6 +79,9 @@ impl AppContext {
             _ => Durability::Reported,
         });
         let storage = StorageSettings::resolve(request, owner).map_err(storage_refusal)?;
+        if let Command::Data { command } = &cli.command {
+            command.check_storage(&storage)?;
+        }
 
         // Without a flag or variable, the exchange's own production
         // endpoint, as its registry entry names it.
@@ -107,6 +115,24 @@ impl AppContext {
         let identity = store
             .store_identity()
             .context("failed to read the store's identity")?;
+        let transfer = match store.transfer_target() {
+            Some(target) => target
+                .transfer_record()
+                .context("failed to read the store's transfer record")?,
+            None => None,
+        };
+        if let Some(record) = &transfer {
+            if record.state == TransferState::Copying && !opens_an_unfinished_copy(&cli.command) {
+                bail!(
+                    "store {} holds an unfinished copy of store {}, begun {}; finish it with \
+                     `quantforge data migrate --from <the source>` before using it, or use \
+                     another PostgreSQL database",
+                    identity.store_id,
+                    record.source_store_id,
+                    ms_to_rfc3339(record.started_at_ms)
+                );
+            }
+        }
         let durability = store
             .durability()
             .context("failed to read the store's commit settings")?;
@@ -146,6 +172,7 @@ impl AppContext {
             store,
             storage,
             identity,
+            transfer,
             base_url,
             exchange,
             credentials,
@@ -172,6 +199,13 @@ impl AppContext {
             ));
         }
         Ok(())
+    }
+
+    /// The SQLite store at `path`, opened read-only as the source of a
+    /// transfer, beside the selected store.
+    pub(crate) fn open_snapshot(&self, path: &Path) -> Result<Box<dyn TransferSnapshot>> {
+        let snapshot = StoreFactory::builtin().open_snapshot(path);
+        snapshot.with_context(|| format!("failed to open the source {}", path.display()))
     }
 
     /// What an operator selects instead of this store, for a remedy.
@@ -213,6 +247,16 @@ impl AppContext {
         self.exchange
             .signed()
             .ok_or_else(|| anyhow!("{subject}: {CREDENTIALS_REMEDY}"))
+    }
+}
+
+/// Whether `command` may open a store holding an unfinished copy: the copy
+/// itself, to finish it, and `store status`, to show it.
+fn opens_an_unfinished_copy(command: &Command) -> bool {
+    match command {
+        Command::Data { command } => command.opens_an_unfinished_copy(),
+        Command::Store { command } => matches!(command, StoreCommand::Status(_)),
+        _ => false,
     }
 }
 

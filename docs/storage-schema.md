@@ -104,11 +104,15 @@ matrix's `states.store`):
   store brought to schema 5, and the state of every store a transfer
   creates. Epoch 0 means never activated.
 - Activation is an operator's action on one store; it is never a row that
-  a copy or a transfer carries over. A transfer (ALG-407) creates the
-  target's own `store_control` row and never copies the source's. A byte
-  copy of a file does carry the row, which is why the epoch is in every
-  client order ID: orders with the right owner tag but another epoch
-  reveal a second writer, and ALG-767's arming guard halts entries.
+  a copy or a transfer carries over. A transfer (`data migrate`, QUA-122,
+  the matrix's ALG-407) creates the target's own `store_control` row and
+  never copies the source's: the target keeps its own ID, `inactive`, epoch
+  0. It carries only the source's environment, a fact the operator
+  declared: a target bound to none is bound to it, and one bound to
+  another is refused. A byte copy of a file does carry the row, which is
+  why the epoch is in every client order ID: orders with the right owner
+  tag but another epoch reveal a second writer, and ALG-767's arming guard
+  halts entries.
 - Copying records or leases never confers execution authority: only the
   transition to `active`, on that store, does.
 - Exactly one store per account is `active` at a time. Deactivate the
@@ -117,6 +121,14 @@ matrix's `states.store`):
 - `store status` shows the row. ALG-738 persists the transitions, ALG-767
   enforces them before arming, and ALG-768 verifies a transfer end to end.
   Nothing in this release moves a store between these states.
+
+**A transfer's record.** A store a transfer copied into holds, as the
+`meta` row `transfer`, the record of that copy: its format, the source's
+store ID and schema, `copying` or `copied`, and when it began and finished.
+A store holds at most one, and takes no other copy. While it is `copying`,
+the store holds part of its source, and every command but `data migrate`,
+which finishes it, and `store status` refuses it.
+[storage-migration.md](storage-migration.md) is the operator's side.
 
 ## Versioning and ownership
 
@@ -666,7 +678,9 @@ backend without a registered provider is refused, never replaced by
 another. The built-in factory registers SQLite and, in a build with the
 `postgres` feature, PostgreSQL, whose stores are QUA-124, QUA-123 and QUA-112.
 `tests/storage/boundary.rs` keeps it the only way in: nothing else opens a
-store, and only the CLI's context asks it to.
+store, and only the CLI's context asks it to. The one file opened beside
+the selected store is the source of a transfer, which the operator names
+with `data migrate --from`, and the factory opens read-only.
 
 The process that opens a store owns it, its pool and its credentials, for
 its whole life, and no other process receives them (ADR 0001): a CLI

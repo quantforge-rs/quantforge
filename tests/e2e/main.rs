@@ -21,6 +21,12 @@
 //! and how it stops on a signal. Loopback only, always runs; the signal
 //! tests run on unix.
 //!
+//! [`migrate`] copies a SQLite store into PostgreSQL with `data migrate`,
+//! held to the acceptance criteria and to the transfer fixture
+//! ([`transfer_fixture`], shared with the storage tests): its refusals
+//! always, everything else on a real PostgreSQL when
+//! `QUANTFORGE_TEST_POSTGRES_URL` names a server.
+//!
 //! [`snapshot`] locks the CLI surface itself: committed `--help`
 //! snapshots plus a check that the module tree mirrors the command tree.
 //! [`layout`] keeps the annotated source tree in `docs/architecture.md` in
@@ -36,6 +42,7 @@
 mod backends;
 mod harness;
 mod layout;
+mod migrate;
 mod mock_binance;
 mod offline;
 mod precedence;
@@ -47,3 +54,6 @@ mod server;
 mod snapshot;
 mod storage;
 mod testnet;
+#[allow(dead_code, reason = "the storage tests use the rest of it")]
+#[path = "../storage/transfer/fixture.rs"]
+mod transfer_fixture;

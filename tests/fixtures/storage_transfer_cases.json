@@ -1,0 +1,646 @@
+{
+  "format": 1,
+  "doc": "A store's tables as rows: integers, text and blobs ({\"hex\": ...}), with null for NULL; and, for every table and every market of a market table, in the order a verification reports them, the rows it reads, the first and last value of an integer key, and the checksum of the canonical text of docs/storage-migration.md. Written by spikes/storage-contract/transfer_cases.py, never by the Rust code under test.",
+  "environment": "testnet",
+  "tables": {
+    "candles": {
+      "columns": [
+        "exchange",
+        "symbol",
+        "interval",
+        "open_time_ms",
+        "close_time_ms",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "trades"
+      ],
+      "rows": [
+        [
+          "binance_spot",
+          "BTCUSDT",
+          "1m",
+          1792454400000,
+          1792454459999,
+          "67000.00",
+          "67020.50",
+          "66990.00",
+          "67012.10",
+          "1.25000000",
+          42
+        ],
+        [
+          "binance_spot",
+          "BTCUSDT",
+          "1m",
+          1792454460000,
+          1792454519999,
+          "67015.00",
+          "67015.00",
+          "67015.00",
+          "67015.00",
+          "1.25000000",
+          0
+        ],
+        [
+          "binance_spot",
+          "BTCUSDT",
+          "1m",
+          1792454520000,
+          1792454579999,
+          "67013.5",
+          "67013.5",
+          "67013.5",
+          "67013.5",
+          "0.5",
+          null
+        ],
+        [
+          "binance_spot",
+          "BTCUSDT",
+          "1m",
+          1792540800000,
+          1792540859999,
+          "67100.10",
+          "67100.10",
+          "67100.10",
+          "67100.10",
+          "1.25000000",
+          7
+        ],
+        [
+          "binance_spot",
+          "BTCUSDT",
+          "1m",
+          1792540860000,
+          1792540919999,
+          "67101.00",
+          "67101.00",
+          "67101.00",
+          "67101.00",
+          "1.25000000",
+          8
+        ],
+        [
+          "bybit_linear",
+          "BTCUSDT",
+          "1m",
+          1792454400000,
+          1792454459999,
+          "67010.0",
+          "67010.0",
+          "67010.0",
+          "67010.0",
+          "1.25000000",
+          3
+        ],
+        [
+          "bybit_linear",
+          "BTCUSDT",
+          "1m",
+          1792454460000,
+          1792454519999,
+          "67011.25",
+          "67011.25",
+          "67011.25",
+          "67011.25",
+          "1.25000000",
+          4
+        ],
+        [
+          "binance_inverse",
+          "BTCUSD",
+          "5m",
+          1792454400000,
+          1792454699999,
+          "1.1000000000000000000000000000",
+          "1.1000000000000000000000000000",
+          "1.1000000000000000000000000000",
+          "1.1000000000000000000000000000",
+          "0.0000000000000000000000000001",
+          -1
+        ],
+        [
+          "binance_inverse",
+          "BTCUSD",
+          "5m",
+          1792454700000,
+          1792454999999,
+          "1.10",
+          "1.10",
+          "1.10",
+          "1.10",
+          "1.25000000",
+          -9223372036854775808
+        ],
+        [
+          "binance_spot",
+          "币安人生USDT",
+          "1m",
+          1792454400000,
+          1792454459999,
+          "0.1234",
+          "0.1234",
+          "0.1234",
+          "0.1234",
+          "1.25000000",
+          1
+        ],
+        [
+          "binance_spot",
+          "ETHUSDT",
+          "1m",
+          -60000,
+          -1,
+          "3933.07",
+          "3933.07",
+          "3933.07",
+          "3933.07",
+          "1.25000000",
+          5
+        ],
+        [
+          "binance_spot",
+          "ETHUSDT",
+          "1m",
+          1792454400000,
+          1792454459999,
+          "3940.00",
+          "3941.00",
+          "3939.00",
+          "1.00000000000000000000000000001",
+          "1.25000000",
+          6
+        ]
+      ]
+    },
+    "bot_runs": {
+      "columns": [
+        "run_id",
+        "exchange",
+        "symbol",
+        "interval",
+        "strategy_name",
+        "status",
+        "state_json",
+        "started_at_ms",
+        "updated_at_ms",
+        "stopped_at_ms",
+        "last_error",
+        "environment",
+        "account_kind",
+        "account_id",
+        "identity_source",
+        "identity_at_ms",
+        "legacy_state_json"
+      ],
+      "rows": [
+        [
+          "run-B",
+          "bybit_linear",
+          "BTCUSDT",
+          "1m",
+          "sma_cross",
+          "stopped",
+          "{\"run_id\":\"run-B\",\"market\":{\"exchange\":\"BybitLinear\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"DryRun\",\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454520000,\"started_at_ms\":1792454401000,\"updated_at_ms\":1792454461000,\"stopped_at_ms\":1792454461000,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}",
+          1792454401000,
+          1792454461000,
+          1792454461000,
+          null,
+          "testnet",
+          null,
+          null,
+          "recorded",
+          1792454401000,
+          null
+        ],
+        [
+          "run-a",
+          "binance_spot",
+          "BTCUSDT",
+          "1m",
+          "sma_cross",
+          "stopped",
+          "{\"run_id\":\"run-a\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"Live\",\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454520000,\"started_at_ms\":1792454402000,\"updated_at_ms\":1792454520000,\"stopped_at_ms\":1792454520000,\"last_error\":null,\"position\":{\"qty\":\"0.00150\",\"entry_price\":\"67012.34000000\",\"entry_time_ms\":1792454460000,\"entry_order_id\":\"1321003749386327552\"}}",
+          1792454402000,
+          1792454520000,
+          1792454520000,
+          null,
+          "testnet",
+          "key_fingerprint",
+          "0123456789abcdef",
+          "recorded",
+          1792454402000,
+          null
+        ],
+        [
+          "run-adopted",
+          "binance_spot",
+          "BTCUSDT",
+          "1m",
+          "sma_cross",
+          "stopped",
+          "{\"run_id\":\"run-adopted\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"Live\",\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454520000,\"started_at_ms\":1792454403000,\"updated_at_ms\":1792454490000,\"stopped_at_ms\":1792454490000,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}",
+          1792454403000,
+          1792454490000,
+          1792454490000,
+          null,
+          "testnet",
+          "key_fingerprint",
+          "fedcba9876543210",
+          "adopted",
+          1792454500000,
+          "{\"run_id\":\"run-adopted\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"BTCUSDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454520000,\"started_at_ms\":1792454403000,\"updated_at_ms\":1792454490000,\"stopped_at_ms\":1792454490000,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}"
+        ],
+        [
+          "run-legacy",
+          "binance_inverse",
+          "BTCUSD",
+          "5m",
+          "sma_cross",
+          "stopped",
+          "{\"run_id\":\"run-legacy\",\"market\":{\"exchange\":\"BinanceInverse\",\"symbol\":\"BTCUSD\",\"interval\":\"M5\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454520000,\"started_at_ms\":1792454404000,\"updated_at_ms\":1792454495000,\"stopped_at_ms\":1792454495000,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}",
+          1792454404000,
+          1792454495000,
+          1792454495000,
+          null,
+          null,
+          null,
+          null,
+          "legacy",
+          null,
+          "{\"run_id\":\"run-legacy\",\"market\":{\"exchange\":\"BinanceInverse\",\"symbol\":\"BTCUSD\",\"interval\":\"M5\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"status\":\"Stopped\",\"last_processed_open_time_ms\":1792454520000,\"started_at_ms\":1792454404000,\"updated_at_ms\":1792454495000,\"stopped_at_ms\":1792454495000,\"last_error\":null,\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}"
+        ],
+        [
+          "run-ü",
+          "binance_spot",
+          "币安人生USDT",
+          "1m",
+          "sma_cross",
+          "failed",
+          "{\"run_id\":\"run-ü\",\"market\":{\"exchange\":\"BinanceSpot\",\"symbol\":\"币安人生USDT\",\"interval\":\"M1\"},\"strategy_name\":\"sma_cross\",\"strategy_config\":{\"kind\":\"sma_cross\",\"fast\":20,\"slow\":50},\"execution_mode\":\"DryRun\",\"status\":\"Failed\",\"last_processed_open_time_ms\":1792454520000,\"started_at_ms\":1792454405000,\"updated_at_ms\":1792454465000,\"stopped_at_ms\":1792454465000,\"last_error\":\"the exchange refused: ü\",\"position\":{\"qty\":\"0\",\"entry_price\":null,\"entry_time_ms\":null,\"entry_order_id\":null}}",
+          1792454405000,
+          1792454465000,
+          1792454465000,
+          "the exchange refused: ü",
+          null,
+          null,
+          null,
+          "recorded",
+          1792454405000,
+          null
+        ]
+      ]
+    },
+    "order_events": {
+      "columns": [
+        "seq",
+        "run_id",
+        "symbol",
+        "side",
+        "order_type",
+        "status",
+        "order_id",
+        "client_order_id",
+        "transact_time_ms",
+        "raw_json",
+        "legacy_raw_json"
+      ],
+      "rows": [
+        [
+          1,
+          "run-a",
+          "BTCUSDT",
+          "BUY",
+          "MARKET",
+          "FILLED",
+          "1321003749386327552",
+          "qf-b-run-a-1",
+          1792454460001,
+          "{\"symbol\":\"BTCUSDT\",\"side\":\"Buy\",\"order_type\":\"MARKET\",\"status\":\"Filled\",\"order_id\":\"1321003749386327552\",\"client_order_id\":\"qf-b-run-a-1\",\"requested_qty\":null,\"requested_quote_qty\":\"100.00\",\"executed_qty\":\"0.00150\",\"cumulative_quote_qty\":\"100.5180000\",\"avg_price\":null,\"transact_time_ms\":1792454460001,\"fills\":[{\"price\":\"67012.00\",\"qty\":\"0.00150\",\"commission\":\"0.00000150\",\"commission_asset\":\"BTC\",\"trade_id\":\"88001\"}],\"raw\":{\"orderId\":1321003749386327552}}",
+          null
+        ],
+        [
+          2,
+          "run-a",
+          "BTCUSDT",
+          "SELL",
+          "MARKET",
+          "FILLED",
+          "1321003749386327600",
+          "qf-s-run-a-2",
+          1792454520001,
+          "{\"symbol\":\"BTCUSDT\",\"side\":\"Sell\",\"order_type\":\"MARKET\",\"status\":\"Filled\",\"order_id\":\"1321003749386327600\",\"client_order_id\":\"qf-s-run-a-2\",\"requested_qty\":null,\"requested_quote_qty\":\"100.00\",\"executed_qty\":\"0.00150\",\"cumulative_quote_qty\":\"100.6500000\",\"avg_price\":null,\"transact_time_ms\":1792454520001,\"fills\":null,\"raw\":{}}",
+          null
+        ],
+        [
+          5,
+          "run-legacy",
+          "BTCUSD",
+          "BUY",
+          "MARKET",
+          "FILLED",
+          "7",
+          null,
+          1792454404100,
+          "{\"symbol\":\"BTCUSD\",\"side\":\"Buy\",\"order_type\":\"MARKET\",\"status\":\"Filled\",\"order_id\":\"7\",\"client_order_id\":null,\"requested_qty\":null,\"requested_quote_qty\":\"100.00\",\"executed_qty\":\"0.010\",\"cumulative_quote_qty\":\"11.00\",\"avg_price\":null,\"transact_time_ms\":1792454404100,\"fills\":[{\"price\":\"1100.0\",\"qty\":\"0.010\",\"commission\":\"0.00000150\",\"commission_asset\":\"BTC\",\"trade_id\":\"70\"}],\"raw\":{}}",
+          "{\"symbol\":\"BTCUSD\",\"side\":\"Buy\",\"order_type\":\"MARKET\",\"status\":\"Filled\",\"order_id\":7,\"client_order_id\":null,\"requested_qty\":null,\"requested_quote_qty\":\"100.00\",\"executed_qty\":\"0.010\",\"cumulative_quote_qty\":\"11.00\",\"avg_price\":null,\"transact_time_ms\":1792454404100,\"fills\":[{\"price\":\"1100.0\",\"qty\":\"0.010\",\"commission\":\"0.00000150\",\"commission_asset\":\"BTC\",\"trade_id\":70}],\"raw\":{}}"
+        ],
+        [
+          9,
+          "run-adopted",
+          "BTCUSDT",
+          "BUY",
+          "MARKET",
+          "PARTIALLY_FILLED",
+          "a1b2c3-d4",
+          "qf-b-adopt",
+          1792454403100,
+          "{\"symbol\":\"BTCUSDT\",\"side\":\"Buy\",\"order_type\":\"MARKET\",\"status\":\"PartiallyFilled\",\"order_id\":\"a1b2c3-d4\",\"client_order_id\":\"qf-b-adopt\",\"requested_qty\":null,\"requested_quote_qty\":\"100.00\",\"executed_qty\":\"0.0005\",\"cumulative_quote_qty\":\"33.50\",\"avg_price\":null,\"transact_time_ms\":1792454403100,\"fills\":[],\"raw\":{\"note\":\"\\u00fcn\\u00efcode\"}}",
+          null
+        ],
+        [
+          10,
+          "run-B",
+          "BTCUSDT",
+          "BUY",
+          "MARKET",
+          "NEW",
+          null,
+          null,
+          null,
+          "{\"symbol\":\"BTCUSDT\",\"side\":\"Buy\",\"order_type\":\"MARKET\",\"status\":\"New\",\"order_id\":null,\"client_order_id\":null,\"requested_qty\":null,\"requested_quote_qty\":\"100.00\",\"executed_qty\":null,\"cumulative_quote_qty\":null,\"avg_price\":null,\"transact_time_ms\":null,\"fills\":null,\"raw\":{}}",
+          null
+        ]
+      ]
+    },
+    "closed_trades": {
+      "columns": [
+        "seq",
+        "run_id",
+        "symbol",
+        "entry_time_ms",
+        "exit_time_ms",
+        "entry_price",
+        "exit_price",
+        "qty",
+        "gross_quote_pnl",
+        "entry_order_id",
+        "exit_order_id"
+      ],
+      "rows": [
+        [
+          1,
+          "run-a",
+          "BTCUSDT",
+          1792454460000,
+          1792454520000,
+          "67012.34000000",
+          "67100.10",
+          "0.00150",
+          "0.131640000000",
+          "1321003749386327552",
+          "1321003749386327600"
+        ],
+        [
+          4,
+          "run-legacy",
+          "BTCUSD",
+          1792454404000,
+          1792454464000,
+          "1100.0",
+          "1050.0",
+          "0.010",
+          "-0.5",
+          null,
+          null
+        ]
+      ]
+    },
+    "segments": {
+      "columns": [
+        "hash",
+        "format",
+        "payload_len",
+        "data"
+      ],
+      "rows": [
+        [
+          "sha256:72cfe0e9bd0a747ce5e70476e03e4b3d4ce24e32bab2aa6bca1eb906238f7f9a",
+          1,
+          221,
+          {
+            "hex": "28b52ffda0dd000000e9060051465345474d4e54010000000300000000989b56a101000060829c56a1010000c06c9d56a10100005f829c56a1010000bf6c9d56a10100001f579e56a10100002a000000000000000000000000000000000000000000000001010008080736373030302e303036373031352e303036373031332e3508080736373032302e353036373031352e303036373031332e3508080736363939302e303036373031352e303036373031332e3508080736373031322e313036373031352e303036373031332e350a0a03312e3235303030303030312e3235303030303030302e35"
+          }
+        ],
+        [
+          "sha256:45d3494cc8c8bf7c81cbfe7c1ad13f51e79ad90c4d834997d3aed26f4bd6add5",
+          1,
+          160,
+          {
+            "hex": "28b52ffda0a000000001050051465345474d4e54010000000200000000989b56a101000060829c56a10100005f829c56a1010000bf6c9d56a10100002a0000000000000000000000000000000101080836373030302e303036373031352e3030080836373032302e353036373031352e3030080836363939302e303036373031352e3030080836373031322e313036373031352e30300a0a312e3235303030303030312e3235303030303030"
+          }
+        ]
+      ]
+    },
+    "segment_index": {
+      "columns": [
+        "exchange",
+        "symbol",
+        "interval",
+        "window_start_ms",
+        "first_open_ms",
+        "last_open_ms",
+        "bar_count",
+        "hash"
+      ],
+      "rows": [
+        [
+          "binance_spot",
+          "BTCUSDT",
+          "1m",
+          1792454400000,
+          1792454400000,
+          1792454520000,
+          3,
+          "sha256:72cfe0e9bd0a747ce5e70476e03e4b3d4ce24e32bab2aa6bca1eb906238f7f9a"
+        ]
+      ]
+    },
+    "segment_dirty": {
+      "columns": [
+        "id",
+        "exchange",
+        "symbol",
+        "interval",
+        "window_start_ms"
+      ],
+      "rows": [
+        [
+          3,
+          "binance_inverse",
+          "BTCUSD",
+          "5m",
+          1792368000000
+        ],
+        [
+          7,
+          "bybit_linear",
+          "BTCUSDT",
+          "1m",
+          1792454400000
+        ],
+        [
+          12,
+          "binance_spot",
+          "BTCUSDT",
+          "1m",
+          1792540800000
+        ],
+        [
+          13,
+          "binance_spot",
+          "ETHUSDT",
+          "1m",
+          -86400000
+        ]
+      ]
+    }
+  },
+  "scopes": [
+    {
+      "table": "candles",
+      "market": [
+        "binance_inverse",
+        "BTCUSD",
+        "5m"
+      ],
+      "rows": 2,
+      "first": 1792454400000,
+      "last": 1792454700000,
+      "checksum": "sha256:24281780f352804a39741cefcc6a2a868b370398bb233ebebc81dd35bc036043"
+    },
+    {
+      "table": "candles",
+      "market": [
+        "binance_spot",
+        "BTCUSDT",
+        "1m"
+      ],
+      "rows": 5,
+      "first": 1792454400000,
+      "last": 1792540860000,
+      "checksum": "sha256:3f5218bf0a57f0fc2e39bc966f7504320b991a2eacdcdb3cd22a1411f216b8d9"
+    },
+    {
+      "table": "candles",
+      "market": [
+        "binance_spot",
+        "ETHUSDT",
+        "1m"
+      ],
+      "rows": 2,
+      "first": -60000,
+      "last": 1792454400000,
+      "checksum": "sha256:32ed52da52a18ca067926a8f5435832cd349451beb24955d810f595d313394e8"
+    },
+    {
+      "table": "candles",
+      "market": [
+        "binance_spot",
+        "币安人生USDT",
+        "1m"
+      ],
+      "rows": 1,
+      "first": 1792454400000,
+      "last": 1792454400000,
+      "checksum": "sha256:71938abeea69457724a22c4c2fcf5d0723fdaac4c628f75c87737b937d92f310"
+    },
+    {
+      "table": "candles",
+      "market": [
+        "bybit_linear",
+        "BTCUSDT",
+        "1m"
+      ],
+      "rows": 2,
+      "first": 1792454400000,
+      "last": 1792454460000,
+      "checksum": "sha256:8a731832ced9e9dea342fe467f71f22a79532e17e85d60c2ddb2d1620ab6b980"
+    },
+    {
+      "table": "bot_runs",
+      "market": null,
+      "rows": 5,
+      "first": null,
+      "last": null,
+      "checksum": "sha256:5ffb1da2b96a9d61e6777cb89a719b452e54882d741ab892286d9a2554cffe91"
+    },
+    {
+      "table": "order_events",
+      "market": null,
+      "rows": 5,
+      "first": 1,
+      "last": 10,
+      "checksum": "sha256:71417ceba37e88ea1fcdfd3a81b9eaa9f9c53bc5fd4d6906d40b607c0a50ea7c"
+    },
+    {
+      "table": "closed_trades",
+      "market": null,
+      "rows": 2,
+      "first": 1,
+      "last": 4,
+      "checksum": "sha256:839617c5557102b66a7a54104efa92a8143cae88b498fa784e00a5afc487bf17"
+    },
+    {
+      "table": "segments",
+      "market": null,
+      "rows": 2,
+      "first": null,
+      "last": null,
+      "checksum": "sha256:f85d67557df2d40f07e13e3172042040c80efe3c3d8e9d03bcd2b6084e9990c6"
+    },
+    {
+      "table": "segment_index",
+      "market": [
+        "binance_spot",
+        "BTCUSDT",
+        "1m"
+      ],
+      "rows": 1,
+      "first": 1792454400000,
+      "last": 1792454400000,
+      "checksum": "sha256:f780fb1deb91e62329ffabc17163c597de12ece913680766cfba5effa20c0e5d"
+    },
+    {
+      "table": "segment_dirty",
+      "market": null,
+      "rows": 4,
+      "first": 3,
+      "last": 13,
+      "checksum": "sha256:201cdde2992edd0cc3621034a6aca18c265b65e1ff602987b43164d88149bbc0"
+    }
+  ],
+  "worked_example": {
+    "table": "closed_trades",
+    "rows": [
+      [
+        4,
+        "run-legacy",
+        "BTCUSD",
+        1792454404000,
+        1792454464000,
+        "1100.0",
+        "1050.0",
+        "0.010",
+        "-0.5",
+        null,
+        null
+      ]
+    ],
+    "canonical": "quantforge transfer 1\nclosed_trades\nseq,run_id,symbol,entry_time_ms,exit_time_ms,entry_price,exit_price,qty,gross_quote_pnl,entry_order_id,exit_order_id\ni1:4t10:run-legacyt6:BTCUSDi13:1792454404000i13:1792454464000t6:1100.0t6:1050.0t5:0.010t4:-0.5nn\n",
+    "checksum": "sha256:f334507638bb188f7f323a1895d78aa292eeef987789beaa64d7e0ac4ebf4f79"
+  }
+}

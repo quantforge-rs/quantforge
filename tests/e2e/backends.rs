@@ -361,7 +361,7 @@ on_each_backend!(
 );
 
 #[cfg(feature = "postgres")]
-mod real_server {
+pub(crate) mod real_server {
     use quantforge::storage::segments;
     use quantforge::{Candle, SegmentPlan, SegmentStore};
     use url::Url;
@@ -370,7 +370,7 @@ mod real_server {
     use crate::harness::{offline_cmd_with_log, unpinned_cmd};
     use crate::server::{query, server_url};
 
-    const SENTINEL: &str = "pw-sentinel-417";
+    pub(crate) const SENTINEL: &str = "pw-sentinel-417";
     const NO_SUCH_ROLE: &str = "qf_no_such_role";
     const WEAK_SERVER: &str = "QUANTFORGE_TEST_POSTGRES_WEAK_URL";
 
@@ -560,13 +560,13 @@ mod real_server {
 
     /// A login role of its own on a server, dropped with it, so declare it
     /// before the bed whose database it owns.
-    struct Role {
+    pub(crate) struct Role {
         server: String,
-        name: String,
+        pub(crate) name: String,
     }
 
     impl Role {
-        fn create(server: &str) -> Self {
+        pub(crate) fn create(server: &str) -> Self {
             let name = format!("qf_e2e_owner_{}", std::process::id());
             query(
                 server,

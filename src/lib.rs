@@ -148,10 +148,10 @@ pub use model::{
     KlineRequest, LegacyRun, MarketId, MarketOrderRequest, ModelError, OrderQueryRequest,
     OrderStatus, PositionState, RunIdentity, RunStatus, SchemaMigration, SegmentHash, SegmentPlan,
     SegmentRef, SegmentRefresh, SegmentTip, Side, StoreActivation, StoreId, StoreIdentity, Symbol,
-    SymbolRules, TargetPosition, TimestampMs, ValidationIssue, ValidationReport, Venue,
-    VenueAccountId, VenueOrderId, VenueTradeId, decimal_from_f64, decimal_to_f64, describe_account,
-    describe_environment, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms, round_down_to_step,
-    validate_candles,
+    SymbolRules, TargetPosition, TimestampMs, TransferRecord, TransferState, ValidationIssue,
+    ValidationReport, Venue, VenueAccountId, VenueOrderId, VenueTradeId, decimal_from_f64,
+    decimal_to_f64, describe_account, describe_environment, ms_to_rfc3339, now_utc_ms,
+    parse_rfc3339_to_ms, round_down_to_step, validate_candles,
 };
 
 /// The seams. An out-of-tree exchange or storage backend implements these
@@ -167,7 +167,8 @@ pub use ports::{
     AccountConnector, CandleQuery, CandleStore, ExchangeCapabilities, ExchangeConnector,
     ExchangeError, ExchangeErrorKind, MarketDataCapabilities, MarketDataConnector,
     OrderCapabilities, RunJournalStore, SegmentStore, SignedConnectors, StorageError,
-    StorageErrorKind, StoreControl, StreamCapabilities, TradingConnector,
+    StorageErrorKind, StoreControl, StreamCapabilities, TradingConnector, TransferSnapshot,
+    TransferSource, TransferTarget,
 };
 
 /// What building an exchange's connectors takes and returns. The registry
@@ -207,3 +208,7 @@ pub use engine::EngineError;
 pub use engine::backtest::{BacktestConfig, BacktestEngine, BacktestResult};
 pub use engine::data_sync::{DataSyncConfig, DataSyncEngine, DataSyncSummary};
 pub use engine::live::{LiveTradeConfig, LiveTradeEngine, LiveTradeSummary};
+pub use engine::transfer::{
+    CopyStart, DEFAULT_BATCH_ROWS, Difference, DifferenceKind, Digest, ScopeReport, TableCopy,
+    TransferConfig, TransferEngine, TransferSummary, VerifyReport,
+};
