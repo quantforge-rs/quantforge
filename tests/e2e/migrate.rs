@@ -4,10 +4,11 @@
 //! reached. On the server `QUANTFORGE_TEST_POSTGRES_URL` names: the fixture
 //! migrates and verifies with the oracle's checksums while the source keeps
 //! every byte; a copy cut off, by a refused row or a killed process,
-//! converges when run again, and a repeat writes nothing; a planted
-//! mismatch exits non-zero with a report naming it; open runs stop a copy
-//! until the operator says the source is quiescent; a trace log shows no
-//! credential; and every command reads the target afterwards.
+//! converges when run again, and a repeat writes nothing; a copy resumed
+//! after the source changed a row it copied is refused before it writes; a
+//! planted mismatch exits non-zero with a report naming it; open runs stop
+//! a copy until the operator says the source is quiescent; a trace log
+//! shows no credential; and every command reads the target afterwards.
 
 use predicates::prelude::*;
 
@@ -107,6 +108,12 @@ mod on_a_server {
         (source, cases)
     }
 
+    /// A trigger failing the copy of the closed trade numbered 4.
+    const REFUSE_TRADE_4: &str = "CREATE FUNCTION refuse() RETURNS trigger LANGUAGE plpgsql AS $$ \
+         BEGIN IF NEW.seq = 4 THEN RAISE EXCEPTION 'planted failure'; END IF; RETURN NEW; END $$; \
+         CREATE TRIGGER refuse BEFORE INSERT ON closed_trades FOR EACH ROW EXECUTE FUNCTION \
+         refuse();";
+
     fn migrate(bed: &TestBed, source: &Path) -> assert_cmd::Command {
         let mut cmd = cli_cmd(bed, "error");
         cmd.args(["data", "migrate", "--from"]).arg(source);
@@ -163,12 +170,7 @@ mod on_a_server {
             .args(["store", "status"])
             .assert()
             .success();
-        bed.execute(
-            "CREATE FUNCTION refuse() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.seq \
-             = 4 THEN RAISE EXCEPTION 'planted failure'; END IF; RETURN NEW; END $$; CREATE \
-             TRIGGER refuse BEFORE INSERT ON closed_trades FOR EACH ROW EXECUTE FUNCTION \
-             refuse();",
-        );
+        bed.execute(REFUSE_TRADE_4);
 
         migrate(&bed, &source)
             .args(["--batch-size", "1"])
@@ -211,6 +213,57 @@ mod on_a_server {
         assert_eq!(again.get("copy"), Some("already copied"));
         assert_eq!(again.get_all("copied"), Vec::<&str>::new());
         assert_eq!(again.get_all("verified"), verified_lines(&cases));
+    }
+
+    #[test]
+    fn a_copy_resumed_after_the_source_changed_a_copied_row_is_refused_before_it_writes() {
+        let Some(bed) = TestBed::on_postgres() else {
+            return;
+        };
+        let (source, _) = seeded(&bed);
+        cli_cmd(&bed, "error")
+            .args(["store", "status"])
+            .assert()
+            .success();
+        bed.execute(REFUSE_TRADE_4);
+        migrate(&bed, &source)
+            .args(["--batch-size", "1"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "the copy stopped in closed_trades",
+            ));
+        bed.execute("DROP TRIGGER refuse ON closed_trades");
+        // Between the attempts, a candle the first one copied is corrected.
+        rusqlite::Connection::open(&source)
+            .expect("open the source")
+            .execute(
+                "UPDATE candles SET close = '67013.50' WHERE close = '67013.5'",
+                [],
+            )
+            .expect("correct a candle");
+        let url = bed.postgres_url().expect("a URL").to_string();
+        let trades = || query(&url, "SELECT count(*) FROM closed_trades")[0][0].clone();
+        let before = trades();
+
+        migrate(&bed, &source)
+            .args(["--batch-size", "1"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "transfer refused: the source changed since this copy began: the target holds \
+                 1 row(s) the source has since changed or deleted (first: candles binance_spot \
+                 BTCUSDT 1m open_time_ms=1792454520000: close differs: source \"67013.50\", \
+                 target \"67013.5\"); a copy never rewrites a row it holds, so this one cannot \
+                 be finished, but the source is untouched: give the copy a new, empty database \
+                 and run the command again",
+            ));
+        assert_eq!(trades(), before);
+        cli_cmd(&bed, "error")
+            .args(["store", "status"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("transfer: copying from "));
     }
 
     #[cfg(unix)]

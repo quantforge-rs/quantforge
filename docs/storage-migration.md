@@ -134,9 +134,20 @@ refuses it, and `store status` shows `transfer: copying from …`. A finished
 copy is final: running `data migrate` again writes nothing, and with
 `--verify` only verifies.
 
-Keep the source unchanged between attempts. A copy resumed from a source
-that gained rows takes them, but a row the source changed in the meantime
-keeps the value the first attempt copied, and verification reports it.
+Keep the source unchanged between attempts. An earlier attempt read an
+earlier snapshot, and a copy never rewrites a row the target holds, so a
+copy that resumes first compares every row the target holds with the
+source, as a verification does. A source that only gained rows passes, and
+the copy takes them. A row the source has changed or deleted since fails
+the command before anything is written, naming the first:
+
+```text
+Error: transfer refused: the source changed since this copy began: the target holds 1 row(s) the source has since changed or deleted (first: …); a copy never rewrites a row it holds, so this one cannot be finished, but the source is untouched: give the copy a new, empty database and run the command again
+```
+
+That copy stays unfinished, and running the command again refuses it
+again. Give the copy a new, empty database, by dropping this one and
+creating it again or by creating another, and copy into it.
 
 ## Verification
 
@@ -167,12 +178,13 @@ Every table is read through an index except where text keys must come in
 byte order on PostgreSQL: no index of the schema serves `COLLATE "C"`, so
 each batch of `segments` and `bot_runs` sorts the table's keys. On
 PostgreSQL 16, verifying 100,000 segments took 11 seconds that way, and the
-time grows with the square of their number. The copy itself reads only the
-SQLite source, in its own order. A difference means the target is not
-a copy of the source as it is now: the source was written after the copy
-began, the target was written after it finished, or one of them was changed
-behind QuantForge's back. The source is untouched, so a new copy into an
-empty database starts over cleanly.
+time grows with the square of their number. A copy reads only the SQLite
+source, in its own order, except when it resumes: then it reads the rows
+the target holds as a verification does. A difference means the target is
+not a copy of the source as it is now: the source was written after the
+copy began, the target was written after it finished, or one of them was
+changed behind QuantForge's back. The source is untouched, so a new copy
+into an empty database starts over cleanly.
 
 ## Switching over
 
@@ -252,12 +264,12 @@ under test, and both stores read every checksum from it.
 
 ## Extending a transfer
 
-The transfer is versioned twice. `TRANSFER_SCHEMA`, in `src/model/transfer.rs`,
-is the schema whose tables it copies, and a source and a target are both at
-it; `TRANSFER_FORMAT` is the format of the canonical text and of the
-target's record, and a copy begun under another format is refused. A story
-that adds or changes tables, such as ALG-735's policies or ALG-738's signal
-inbox, execution ledger and outbox:
+The transfer is versioned twice. `TRANSFER_SCHEMA`, in
+`src/model/transfer/mod.rs`, is the schema whose tables it copies, and a
+source and a target are both at it; `TRANSFER_FORMAT` is the format of the
+canonical text and of the target's record, and a copy begun under another
+format is refused. A story that adds or changes tables, such as ALG-735's
+policies or ALG-738's signal inbox, execution ledger and outbox:
 
 - lists each new table in `TRANSFER_TABLES`, in copy order with its key, or
   among the tables each store keeps for itself, and here in the lists

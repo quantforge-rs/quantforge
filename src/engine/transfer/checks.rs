@@ -1,9 +1,11 @@
 //! What a transfer refuses before it writes anything: a store at another
 //! schema, a target holding another store's copy or rows of its own, an
-//! active target, a target bound to another environment, and a source
-//! whose runs may still be writing to it.
+//! active target, a target bound to another environment, a source whose
+//! runs may still be writing to it, and a resumed copy holding rows the
+//! source has since changed or deleted.
 
-use super::{RUNS_NAMED, TransferEngine, key_of};
+use super::verify::{self, Coverage};
+use super::{RUNS_NAMED, TransferEngine, VerifyReport, key_of};
 use crate::engine::EngineError;
 use crate::model::transfer::BOT_RUNS;
 use crate::model::{
@@ -69,6 +71,33 @@ impl TransferEngine<'_> {
                 _ => return Ok(found),
             }
         }
+    }
+
+    /// Refuses to resume a copy over rows the source has changed or deleted
+    /// since the copy began: an earlier attempt wrote them from an earlier
+    /// snapshot, and a copy never rewrites a row the target holds.
+    pub(super) fn refuse_stale_rows(&self) -> Result<(), EngineError> {
+        let mut report = VerifyReport::default();
+        for table in &TRANSFER_TABLES {
+            verify::table(
+                self.source,
+                self.target,
+                table,
+                self.config.batch_rows,
+                Coverage::Held,
+                &mut report,
+            )?;
+        }
+        let Some(first) = report.differences.first() else {
+            return Ok(());
+        };
+        Err(refused(format!(
+            "the source changed since this copy began: the target holds {} row(s) the source \
+             has since changed or deleted (first: {first}); a copy never rewrites a row it \
+             holds, so this one cannot be finished, but the source is untouched: give the copy \
+             a new, empty database and run the command again",
+            report.difference_count
+        )))
     }
 
     /// Refuses a target that holds rows of any transferred table.

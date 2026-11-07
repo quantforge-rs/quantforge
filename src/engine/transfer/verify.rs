@@ -175,12 +175,23 @@ impl VerifyReport {
     }
 }
 
+/// Which rows a comparison counts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Coverage {
+    /// Every row: one that either side lacks is a difference.
+    Whole,
+    /// The rows the target holds, as a copy resumes over them: a row only
+    /// the source holds is one still to copy, and no digest is taken.
+    Held,
+}
+
 /// Compares `table` on both sides into `report`.
 pub(super) fn table<A, B>(
     source: &A,
     target: &B,
     table: &TransferTable,
     batch_rows: usize,
+    coverage: Coverage,
     report: &mut VerifyReport,
 ) -> Result<(), StorageError>
 where
@@ -196,6 +207,8 @@ where
         loop {
             let order = match (ours.peek()?, theirs.peek()?) {
                 (None, None) => break,
+                // What is left of the source is still to copy.
+                (Some(_), None) if coverage == Coverage::Held => break,
                 (Some(_), None) => Ordering::Less,
                 (None, Some(_)) => Ordering::Greater,
                 (Some(left), Some(right)) => left.get(key).cmp(&right.get(key)),
@@ -210,10 +223,12 @@ where
             match order {
                 Ordering::Less => {
                     let row = ours.take();
-                    report.add(difference(
-                        value_at(&row, key),
-                        DifferenceKind::OnlyInSource,
-                    ));
+                    if coverage == Coverage::Whole {
+                        report.add(difference(
+                            value_at(&row, key),
+                            DifferenceKind::OnlyInSource,
+                        ));
+                    }
                 }
                 Ordering::Greater => {
                     let row = theirs.take();
@@ -229,6 +244,9 @@ where
                     }
                 }
             }
+        }
+        if coverage == Coverage::Held {
+            continue;
         }
         let (source, target) = (ours.digest(), theirs.digest());
         report.scopes.push(ScopeReport {

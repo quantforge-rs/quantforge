@@ -9,8 +9,11 @@
 //! Before a row is written the engine refuses a target that holds anything
 //! else, or the copy of another store, and a source that may still be
 //! written to: one with runs not yet stopped, unless the operator says they
-//! are not running. A source that moved while it was read fails the copy,
-//! which then stays unfinished.
+//! are not running. A copy that resumes first compares every row the target
+//! holds with the source: an earlier attempt read an earlier snapshot, and a
+//! row the source has since changed or deleted, which no batch rewrites,
+//! refuses it. A source that moved while it was read fails the copy, which
+//! then stays unfinished.
 //!
 //! A verification reads both stores side by side in key order and compares
 //! every row; for each table, and each market of a market table, it reports
@@ -37,6 +40,7 @@ use crate::model::{
 };
 use crate::ports::{TransferSnapshot, TransferSource, TransferTarget};
 use checks::{binding, refuse_another_source, refuse_other_schemas, refused};
+use verify::Coverage;
 
 /// The rows a batch holds unless its table holds larger ones.
 pub const DEFAULT_BATCH_ROWS: usize = 5000;
@@ -164,7 +168,11 @@ impl<'a> TransferEngine<'a> {
         }
         let binding = binding(&source, &target)?;
         let (record, start) = match earlier {
-            Some(record) => (record, CopyStart::Resumed),
+            Some(record) => {
+                info!(source = %source.store_id, "checking the rows copied so far");
+                self.refuse_stale_rows()?;
+                (record, CopyStart::Resumed)
+            }
             None => {
                 self.refuse_rows_of_its_own()?;
                 let record = TransferRecord::begin(source.store_id.clone(), now_utc_ms());
@@ -184,7 +192,8 @@ impl<'a> TransferEngine<'a> {
         if self.source.moved()? {
             return Err(refused(
                 "the source changed while it was copied, so the copy may lack what was written \
-                 to it; stop whatever writes to the source, then run the same command again"
+                 to it; stop whatever writes to the source, then run the same command again, \
+                 which checks the rows copied so far against the source before it goes on"
                     .to_string(),
             ));
         }
@@ -224,6 +233,7 @@ impl<'a> TransferEngine<'a> {
                 self.target,
                 table,
                 self.config.batch_rows,
+                Coverage::Whole,
                 &mut report,
             )?;
         }

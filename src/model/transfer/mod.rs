@@ -119,7 +119,7 @@ impl fmt::Display for TransferMarket {
 pub enum TransferState {
     /// Begun and not finished: what the target holds is part of its source.
     Copying,
-    /// Every row was copied from one snapshot of the source.
+    /// The target holds one snapshot of the source, row for row.
     Copied,
 }
 

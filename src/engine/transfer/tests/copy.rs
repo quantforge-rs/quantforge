@@ -63,6 +63,79 @@ fn a_copy_cut_off_and_run_again_converges_on_the_same_target_without_duplicates(
     }
 }
 
+/// Cuts a copy off once the candles and the runs are copied, lets `change`
+/// write to the source, and expects the copy run again to be refused before
+/// it writes, naming `first` as the first row the source no longer holds
+/// alike.
+fn refused_on_resume(change: impl Fn(&Memory), first: &str) {
+    let (source, target) = (Memory::source(), Memory::new(TARGET_ID));
+    target.writes_left.store(3, Ordering::SeqCst);
+    engine(&source, &target, 7).copy().expect_err("cut off");
+    change(&source);
+    source.put(&ORDER_EVENTS, row_of(&ORDER_EVENTS, 8, 0));
+    target.writes_left.store(usize::MAX, Ordering::SeqCst);
+    let (writes, held) = (target.writes.load(Ordering::SeqCst), target.all());
+
+    let reason = refusal(engine(&source, &target, 7).copy());
+    assert_eq!(
+        reason,
+        format!(
+            "the source changed since this copy began: the target holds 1 row(s) the source \
+             has since changed or deleted (first: {first}); a copy never rewrites a row it \
+             holds, so this one cannot be finished, but the source is untouched: give the copy \
+             a new, empty database and run the command again"
+        )
+    );
+    assert_eq!(target.writes.load(Ordering::SeqCst), writes);
+    assert_eq!(target.all(), held);
+    let record = target.transfer_record().expect("record").expect("begun");
+    assert_eq!(record.state, TransferState::Copying);
+    assert!(!target.numbering_moved.load(Ordering::SeqCst));
+}
+
+#[test]
+fn a_copy_resumed_over_rows_the_source_changed_or_deleted_is_refused_before_it_writes() {
+    let state = BOT_RUNS.column_index("state_json").expect("state");
+    refused_on_resume(
+        |source| {
+            let mut row = row_of(&BOT_RUNS, 3, 0);
+            row[state] = text("state_json.31");
+            source.put(&BOT_RUNS, row);
+        },
+        "bot_runs run_id=\"key-003\": state_json differs: source \"state_json.31\", target \
+         \"state_json.30\"",
+    );
+    let (exchange, symbol, interval) = MARKETS[0];
+    refused_on_resume(
+        |source| source.remove(&CANDLES, &row_of(&CANDLES, 2, 0)),
+        &format!("candles {exchange} {symbol} {interval} open_time_ms=6: only in the target"),
+    );
+}
+
+#[test]
+fn a_copy_resumed_from_a_source_that_only_gained_rows_takes_them() {
+    let (source, target) = (Memory::source(), Memory::new(TARGET_ID));
+    target.writes_left.store(3, Ordering::SeqCst);
+    engine(&source, &target, 7).copy().expect_err("cut off");
+    // New rows among those copied and among those still to copy.
+    source.put(&CANDLES, row_of(&CANDLES, 0, 1));
+    source.put(&BOT_RUNS, row_of(&BOT_RUNS, 8, 0));
+    source.put(&ORDER_EVENTS, row_of(&ORDER_EVENTS, 8, 0));
+    target.writes_left.store(usize::MAX, Ordering::SeqCst);
+
+    let summary = engine(&source, &target, 7).copy().expect("resumed");
+    assert_eq!(summary.start, CopyStart::Resumed);
+    assert_eq!(target.all(), source.all());
+    let record = target.transfer_record().expect("record").expect("a record");
+    assert_eq!(record.state, TransferState::Copied);
+    assert!(
+        engine(&source, &target, 7)
+            .verify()
+            .expect("verify")
+            .is_ok()
+    );
+}
+
 #[test]
 fn a_finished_copy_is_left_as_it_is_and_writes_nothing() {
     let (source, target) = (Memory::source(), Memory::new(TARGET_ID));
