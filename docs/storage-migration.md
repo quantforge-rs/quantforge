@@ -136,9 +136,12 @@ copy is final: running `data migrate` again writes nothing, and with
 
 Keep the source unchanged between attempts. An earlier attempt read an
 earlier snapshot, and a copy never rewrites a row the target holds, so a
-copy that resumes first compares every row the target holds with the
-source, as a verification does. A source that only gained rows passes, and
-the copy takes them. A row the source has changed or deleted since fails
+copy that resumes first compares the rows the target holds, those already
+copied, with the source, as a verification does. Only those are checked:
+a row not copied yet may have been changed or deleted since without the
+command noticing, and needs no check, because the copy takes the source as
+it is now. A source that only gained rows passes, and the copy takes them.
+A row already copied that the source has since changed or deleted fails
 the command before anything is written, naming the first:
 
 ```text

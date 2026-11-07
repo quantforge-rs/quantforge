@@ -174,6 +174,10 @@ and ALG-516:
   table;
 - never edits an earlier step, deletes nothing, and keeps a row it rewrites
   beside the original;
+- if it is the first step after schema 5, also declares `segments.hash` and
+  `bot_runs.run_id` `COLLATE "C"` on PostgreSQL, so that their primary keys
+  serve the byte order a transfer reads them in, which no index of schema 5
+  does ([storage-migration.md](storage-migration.md#verification));
 - proves on both backends what the chain promises: a fresh store, a repeat
   that changes nothing, stores starting together that apply it once, a
   failure that rolls back whole, and an upgrade that keeps every row it
