@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use quantforge::model::{TransferMarket, TransferRow, TransferTable, TransferValue};
 use quantforge::storage::sqlite::SqliteSnapshot;
 use quantforge::{
-    Environment, StorageError, StoreIdentity, TransferConfig, TransferEngine, TransferRecord,
-    TransferSnapshot, TransferSource, TransferTarget,
+    Environment, StorageError, StoreIdentity, TransferBegun, TransferConfig, TransferEngine,
+    TransferRecord, TransferSnapshot, TransferSource, TransferTarget,
 };
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -64,7 +64,7 @@ impl TransferTarget for Itself<'_> {
         &self,
         _: &TransferRecord,
         _: Option<Environment>,
-    ) -> Result<(), StorageError> {
+    ) -> Result<TransferBegun, StorageError> {
         Err(StorageError::InvalidArgument("read only".to_string()))
     }
 

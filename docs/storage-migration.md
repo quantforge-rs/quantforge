@@ -88,7 +88,8 @@ one more row, `transfer`, the record of the copy it holds.
 3. **Create an empty database** that the role owns
    ([The PostgreSQL database](configuration.md#the-postgresql-database)).
    `data migrate` refuses a target that holds rows of its own, or the copy
-   of another store.
+   of another store; it looks as the copy begins, with every writer held
+   off, so that nothing slips in between.
 
 The source is opened read-only. Its database file keeps every byte, and so
 does its `-wal` file. SQLite may leave an empty `-wal` file and a `-shm`
@@ -130,7 +131,8 @@ Error: the copy stopped in closed_trades; the rows it wrote stay, and running it
 ```
 
 Until a copy finishes, the target is part of a store: every other command
-refuses it, and `store status` shows `transfer: copying from …`. A finished
+refuses it, a process that had it open before the copy began has every
+write refused, and `store status` shows `transfer: copying from …`. A finished
 copy is final: running `data migrate` again writes nothing, and with
 `--verify` only verifies.
 

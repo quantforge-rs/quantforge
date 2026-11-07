@@ -9,6 +9,7 @@ use quantforge::{
 };
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 use tokio_postgres::{Client, NoTls, SimpleQueryMessage};
 
 /// The server the isolated databases are created on, or `None` to skip.
@@ -68,6 +69,24 @@ pub fn query(url: &str, sql: &str) -> Vec<Vec<Option<String>>> {
     .join()
     .expect("the query's thread");
     answer.unwrap_or_else(|error| panic!("{error}"))
+}
+
+/// Waits until a session of this database waits on a lock, at most ten
+/// seconds.
+pub fn wait_for_a_lock(url: &str) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let waiting = query(
+            url,
+            "SELECT CAST(COUNT(*) AS TEXT) FROM pg_stat_activity \
+             WHERE datname = current_database() AND wait_event_type = 'Lock'",
+        );
+        if waiting != [[Some("0".to_string())]] {
+            return;
+        }
+        assert!(Instant::now() < deadline, "no session waited on the lock");
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 /// A database of its own on the server, dropped with it.

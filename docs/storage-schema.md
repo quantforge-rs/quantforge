@@ -127,7 +127,12 @@ matrix's `states.store`):
 store ID and schema, `copying` or `copied`, and when it began and finished.
 A store holds at most one, and takes no other copy. While it is `copying`,
 the store holds part of its source, and every command but `data migrate`,
-which finishes it, and `store status` refuses it.
+which finishes it, and `store status` refuses it. Every write but the
+copy's own is refused too, from any process, by a guard each write reads
+once it holds the tables it writes: a copy begins only after finding every
+transferred table empty with those tables locked against writers, so a
+write either commits before the copy looks, and the copy refuses the
+store, or waits for the record and is refused.
 [storage-migration.md](storage-migration.md) is the operator's side.
 
 ## Versioning and ownership

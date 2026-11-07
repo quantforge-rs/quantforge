@@ -559,7 +559,9 @@ pub(crate) mod real_server {
     }
 
     /// A login role of its own on a server, dropped with it, so declare it
-    /// before the bed whose database it owns.
+    /// before the bed whose database it owns. A role belongs to the server,
+    /// not to a database, so each takes a name of its own: the process's ID
+    /// and a count.
     pub(crate) struct Role {
         server: String,
         pub(crate) name: String,
@@ -567,7 +569,9 @@ pub(crate) mod real_server {
 
     impl Role {
         pub(crate) fn create(server: &str) -> Self {
-            let name = format!("qf_e2e_owner_{}", std::process::id());
+            static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let name = format!("qf_e2e_owner_{}_{n}", std::process::id());
             query(
                 server,
                 &format!("CREATE ROLE {name} LOGIN PASSWORD '{SENTINEL}'"),

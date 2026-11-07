@@ -17,7 +17,7 @@ use tokio_postgres::types::Type;
 use tokio_postgres::{IsolationLevel, Row};
 
 use super::bridge::Effect;
-use super::{PostgresStore, limit};
+use super::{PostgresStore, copying, limit};
 use crate::storage::common::{self, read_decimal};
 use crate::{Candle, CandleQuery, CandleStore, MarketId, StorageError, TimestampMs};
 
@@ -281,13 +281,21 @@ impl CandleStore for PostgresStore {
                         ],
                     )
                     .await?;
+                // Each refusal rolls the transaction back as it drops.
+                if let Some(refused) = copying::refusal(&*transaction).await? {
+                    return Ok(Err(refused));
+                }
                 let mut windows = batch.forced.clone();
                 for row in &written {
                     let open_time_ms: TimestampMs = row.try_get(0)?;
                     match batch.window_of(open_time_ms) {
                         Some(window) => windows.insert(window),
-                        // Rolled back as the transaction drops.
-                        None => return Ok(Err(open_time_ms)),
+                        None => {
+                            return Ok(Err(StorageError::InvalidArgument(format!(
+                                "the database wrote a candle at {open_time_ms}, which the batch \
+                                 does not hold"
+                            ))));
+                        }
                     };
                 }
                 if !windows.is_empty() {
@@ -308,11 +316,7 @@ impl CandleStore for PostgresStore {
                 Ok(Ok(()))
             })
         })?;
-        marked.map_err(|open_time_ms| {
-            StorageError::InvalidArgument(format!(
-                "the database wrote a candle at {open_time_ms}, which the batch does not hold"
-            ))
-        })?;
+        marked?;
         Ok(candles.len())
     }
 

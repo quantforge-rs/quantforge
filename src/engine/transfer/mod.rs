@@ -38,8 +38,8 @@ use crate::model::{
     StoreActivation, StoreIdentity, TRANSFER_TABLES, TransferMarket, TransferRecord, TransferRow,
     TransferState, TransferTable, TransferValue, now_utc_ms,
 };
-use crate::ports::{TransferSnapshot, TransferSource, TransferTarget};
-use checks::{binding, refuse_another_source, refuse_other_schemas, refused};
+use crate::ports::{TransferBegun, TransferSnapshot, TransferSource, TransferTarget};
+use checks::{binding, refuse_another_source, refuse_other_schemas, refused, rows_of_its_own};
 use verify::Coverage;
 
 /// The rows a batch holds unless its table holds larger ones.
@@ -174,9 +174,12 @@ impl<'a> TransferEngine<'a> {
                 (record, CopyStart::Resumed)
             }
             None => {
-                self.refuse_rows_of_its_own()?;
                 let record = TransferRecord::begin(source.store_id.clone(), now_utc_ms());
-                self.target.begin_transfer(&record, binding)?;
+                if let TransferBegun::HoldingRows(tables) =
+                    self.target.begin_transfer(&record, binding)?
+                {
+                    return Err(rows_of_its_own(&tables));
+                }
                 (record, CopyStart::Started)
             }
         };

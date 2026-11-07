@@ -12,11 +12,10 @@
 use quantforge::storage::postgres::PostgresStore;
 use quantforge::{Candle, CandleStore, ExchangeId, Interval, MarketId, Symbol};
 use rust_decimal::Decimal;
-use std::time::{Duration, Instant};
 use tokio_postgres::Client;
 use tokio_postgres::types::Type;
 
-use super::{IsolatedDatabase, Postgres, VARIABLE, client, query, server_url};
+use super::{IsolatedDatabase, Postgres, VARIABLE, client, query, server_url, wait_for_a_lock};
 use crate::conformance::{Backend, Fixture};
 
 /// 2026-10-20T00:00:00Z: the start of a `1m` window.
@@ -111,24 +110,6 @@ async fn publish(client: &Client, revision: i64) {
         .await
         .expect("the mark removed");
     assert_eq!(removed, 1, "the write-back removes the revision it read");
-}
-
-/// Waits until a session of this database waits on a lock, at most ten
-/// seconds.
-fn wait_for_a_lock(url: &str) {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        let waiting = query(
-            url,
-            "SELECT CAST(COUNT(*) AS TEXT) FROM pg_stat_activity \
-             WHERE datname = current_database() AND wait_event_type = 'Lock'",
-        );
-        if waiting != [[Some("0".to_string())]] {
-            return;
-        }
-        assert!(Instant::now() < deadline, "no session waited on the lock");
-        std::thread::sleep(Duration::from_millis(20));
-    }
 }
 
 #[test]

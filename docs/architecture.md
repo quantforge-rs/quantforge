@@ -202,6 +202,7 @@ src/
 │   │   ├── journal.rs          RunJournalStore: one statement per call, run IDs in byte order
 │   │   ├── control.rs          StoreControl: the store's record, its binding and legacy-run adoption
 │   │   ├── transfer.rs         a transfer's reads in byte order, batches that skip what it holds, the record
+│   │   ├── copying.rs          the guard that refuses every other write while a copy is unfinished
 │   │   ├── segments/           SegmentStore, by the protocol of docs/storage-schema.md
 │   │   │   ├── mod.rs          a plan in one snapshot, and loading a segment
 │   │   │   └── build.rs        a refresh's reads and writes: a snapshot, a write-back under the mark's lock

@@ -12,6 +12,7 @@ use crate::storage::common;
 use crate::storage::postgres::PostgresStore;
 use crate::storage::postgres::bridge::Effect;
 use crate::storage::postgres::candles::Key;
+use crate::storage::postgres::copying;
 use crate::storage::refresh::{DirtyWindows, Packed, Snapshot, Written};
 use crate::storage::segments::{self as format, TextCandle};
 use crate::{CandleStore, MarketId, StorageError, TimestampMs};
@@ -198,9 +199,12 @@ impl DirtyWindows for &PostgresStore {
                     .transpose()?;
                 // Anything but the revision read ends here, and the
                 // transaction rolls back as it drops.
+                if let Some(refused) = copying::refusal(&*transaction).await? {
+                    return Ok(Err(refused));
+                }
                 match current {
-                    None => return Ok(Written::Elsewhere),
-                    Some(current) if current != id => return Ok(Written::Marked),
+                    None => return Ok(Ok(Written::Elsewhere)),
+                    Some(current) if current != id => return Ok(Ok(Written::Marked)),
                     Some(_) => {}
                 }
                 match &packed {
@@ -249,8 +253,8 @@ impl DirtyWindows for &PostgresStore {
                     .execute_typed(UNMARK, &[(&id, Type::INT8)])
                     .await?;
                 transaction.commit().await?;
-                Ok(Written::Done)
+                Ok(Ok(Written::Done))
             })
-        })
+        })?
     }
 }

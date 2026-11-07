@@ -7,18 +7,20 @@
 //! batch written twice is written once; a numbered column takes the
 //! source's numbers (`OVERRIDING SYSTEM VALUE`), and finishing the copy
 //! moves each identity past the largest. The record of the copy is the
-//! `meta` row `transfer`, written with the binding in one transaction.
+//! `meta` row `transfer`, written with the binding in one transaction that
+//! first finds every transferred table empty, with writers held off; from
+//! then until the copy finishes, `copying` refuses every other write.
 
 use tokio_postgres::types::{ToSql, Type};
 use tokio_postgres::{IsolationLevel, Row};
 
-use super::PostgresStore;
 use super::bridge::Effect;
+use super::{PostgresStore, copying};
 use crate::model::{
-    ColumnKind, Environment, StoreIdentity, TransferMarket, TransferRecord, TransferRow,
-    TransferTable, TransferValue, now_utc_ms,
+    ColumnKind, Environment, StoreIdentity, TRANSFER_TABLES, TransferMarket, TransferRecord,
+    TransferRow, TransferTable, TransferValue, now_utc_ms,
 };
-use crate::ports::{StorageError, StoreControl, TransferSource, TransferTarget};
+use crate::ports::{StorageError, StoreControl, TransferBegun, TransferSource, TransferTarget};
 use crate::storage::postgres::limit;
 
 const READ_RECORD: &str = "SELECT value FROM meta WHERE key = 'transfer'";
@@ -308,7 +310,7 @@ impl TransferTarget for PostgresStore {
         &self,
         record: &TransferRecord,
         environment: Option<Environment>,
-    ) -> Result<(), StorageError> {
+    ) -> Result<TransferBegun, StorageError> {
         let json = record.to_json();
         let binding = environment.map(|environment| environment.as_str().to_string());
         self.bridge.execute(Effect::Write, move |client| {
@@ -318,6 +320,11 @@ impl TransferTarget for PostgresStore {
                     .isolation_level(IsolationLevel::ReadCommitted)
                     .start()
                     .await?;
+                let holding = copying::hold_off_writers(&*transaction).await?;
+                if !holding.is_empty() {
+                    // Rolled back as the transaction drops.
+                    return Ok(TransferBegun::HoldingRows(holding));
+                }
                 transaction
                     .execute_typed(BEGIN_RECORD, &[(&json, Type::TEXT)])
                     .await?;
@@ -326,7 +333,8 @@ impl TransferTarget for PostgresStore {
                         .execute_typed(BIND, &[(binding, Type::TEXT), (&now_utc_ms(), Type::INT8)])
                         .await?;
                 }
-                transaction.commit().await
+                transaction.commit().await?;
+                Ok(TransferBegun::Recorded)
             })
         })
     }
@@ -347,16 +355,17 @@ impl TransferTarget for PostgresStore {
 
     fn finish_transfer(&self, record: &TransferRecord) -> Result<(), StorageError> {
         let json = record.to_json();
-        // Each identity past the largest number its table holds; a table
-        // with none keeps its own.
-        let numbering: String = crate::model::TRANSFER_TABLES
+        // Each identity past the largest number its table holds. A table
+        // with none above zero keeps its own, which starts above them, and
+        // `setval` refuses a number below where an identity starts.
+        let numbering: String = TRANSFER_TABLES
             .iter()
             .filter(|table| table.numbered)
             .map(|table| {
                 format!(
                     "SELECT setval(pg_get_serial_sequence('{name}', '{key}'), top) \
                      FROM (SELECT max({key}) AS top FROM {name}) AS largest \
-                     WHERE top IS NOT NULL;",
+                     WHERE top > 0;",
                     name = table.name,
                     key = table.key
                 )

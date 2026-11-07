@@ -4,23 +4,31 @@
 //! and on a linguistic collation, reads back through every port as the
 //! source does, numbers new rows past the copied ones, converges when it
 //! is cut off and run again, and refuses a target that holds rows of its
-//! own.
+//! own. While a copy is unfinished every other write is refused; a write
+//! racing the copy's beginning either commits first, and the copy refuses
+//! its rows, or waits and is refused; and a numbered table whose keys are
+//! all at or below zero keeps its numbering.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use quantforge::model::{TransferMarket, TransferRow, TransferTable, TransferValue};
+use quantforge::model::{
+    IdentitySource, RunIdentity, TRANSFER_TABLES, TransferMarket, TransferRow, TransferTable,
+    TransferValue,
+};
 use quantforge::storage::sqlite::SqliteSnapshot;
 use quantforge::{
     AnyStore, CandleQuery, CandleStore, ClosedTrade, CopyStart, EngineError, Environment,
     ExchangeOrder, MarketId, RunJournalStore, SegmentStore, SqliteStore, StorageError,
-    StoreActivation, StoreControl, StoreFactory, StoreIdentity, TransferConfig, TransferEngine,
-    TransferRecord, TransferSource, TransferState, TransferTarget,
+    StoreActivation, StoreControl, StoreFactory, StoreId, StoreIdentity, TransferBegun,
+    TransferConfig, TransferEngine, TransferRecord, TransferSource, TransferState, TransferTarget,
 };
 use tempfile::TempDir;
 
 use super::fixture::{self, Cases, Side, scopes_of};
-use crate::postgres::{IsolatedDatabase, VARIABLE, query, selection, server_url};
+use crate::postgres::{
+    IsolatedDatabase, VARIABLE, client, query, selection, server_url, wait_for_a_lock,
+};
 
 const LINGUISTIC: &str = "TEMPLATE template0 LC_COLLATE 'en_US.UTF-8' LC_CTYPE 'en_US.UTF-8'";
 
@@ -325,7 +333,7 @@ impl TransferTarget for Cut<'_> {
         &self,
         record: &TransferRecord,
         environment: Option<Environment>,
-    ) -> Result<(), StorageError> {
+    ) -> Result<TransferBegun, StorageError> {
         self.inner.begin_transfer(record, environment)
     }
 
@@ -448,4 +456,232 @@ fn a_mismatch_planted_in_the_copy_is_found_and_named() {
             "segment_dirty id=7: only in the source",
         ]
     );
+}
+
+/// Each transferred table's row count, in copy order.
+fn counts(bed: &Bed) -> Vec<String> {
+    TRANSFER_TABLES
+        .iter()
+        .map(|table| bed.count(&format!("SELECT count(*) FROM {}", table.name)))
+        .collect()
+}
+
+/// Asserts that `result` is the refusal of a write to a store holding an
+/// unfinished copy of store `source`.
+fn assert_refused<T: std::fmt::Debug>(write: &str, result: Result<T, StorageError>, source: &str) {
+    match result {
+        Err(StorageError::InvalidArgument(reason)) => assert!(
+            reason.contains(&format!("holds an unfinished copy of store {source}")),
+            "{write}: {reason}"
+        ),
+        other => panic!("{write}: {other:?}"),
+    }
+}
+
+#[test]
+fn every_write_to_a_target_whose_copy_is_unfinished_is_refused_until_it_finishes() {
+    let Some(bed) = Bed::new("") else {
+        return;
+    };
+    // Every row but the last two marks: the target holds runs, journals and
+    // segments, and its copy is unfinished.
+    let snapshot = bed.snapshot();
+    let cut = Cut {
+        inner: bed.target(),
+        writes_left: AtomicUsize::new(29),
+    };
+    bed.engine(&snapshot, &cut, 1).copy().expect_err("cut off");
+    let source = snapshot.transfer_identity().expect("identity").store_id;
+    let source = source.as_str();
+    let store = &bed.target;
+    let spot = market("binance_spot", "BTCUSDT", "1m");
+    let mut candle = store
+        .load_candles(&spot, CandleQuery::default())
+        .expect("candles")
+        .remove(0);
+    candle.open_time_ms += 3 * 86_400_000;
+    candle.close_time_ms += 3 * 86_400_000;
+    let state = store.load_run_state("run-a").expect("load").expect("run-a");
+    let mut another = state.clone();
+    another.run_id = "run-new".to_string();
+    let identity = store.run_identity("run-a").expect("read").expect("run-a's");
+    let adopted = RunIdentity {
+        environment: Some(Environment::Testnet),
+        account: None,
+        source: IdentitySource::Adopted,
+    };
+    let order = store
+        .list_order_events("run-a", 1)
+        .expect("events")
+        .remove(0);
+    let trade = store
+        .list_closed_trades("run-a", 1)
+        .expect("trades")
+        .remove(0);
+    // A mark below the tip, written behind the store's back, gives a refresh
+    // a window to write back.
+    let window = "exchange = 'binance_spot' AND symbol = 'BTCUSDT' AND interval = '1m' \
+                  AND window_start_ms = 1792454400000";
+    query(
+        &bed.database.url,
+        "INSERT INTO segment_dirty (exchange, symbol, interval, window_start_ms) \
+         VALUES ('binance_spot', 'BTCUSDT', '1m', 1792454400000)",
+    );
+    let before = counts(&bed);
+
+    let upserted = store.upsert_candles(&spot, std::slice::from_ref(&candle));
+    assert_refused("upsert_candles", upserted, source);
+    assert_refused("create_run", store.create_run(&another, &identity), source);
+    assert_refused("save_run_state", store.save_run_state(&state), source);
+    let appended = store.append_order_event("run-a", &order);
+    assert_refused("append_order_event", appended, source);
+    let appended = store.append_closed_trade("run-a", &trade);
+    assert_refused("append_closed_trade", appended, source);
+    let bound = store.bind_environment(Environment::Testnet);
+    assert_refused("bind_environment", bound, source);
+    let adoption = store.adopt_run("run-legacy", &adopted, None);
+    assert_refused("adopt_run", adoption, source);
+    assert_refused("refresh_segments", store.refresh_segments(&spot), source);
+    assert_eq!(counts(&bed), before);
+
+    query(
+        &bed.database.url,
+        &format!("DELETE FROM segment_dirty WHERE {window}"),
+    );
+    assert_eq!(bed.copy(1).start, CopyStart::Resumed);
+    store
+        .append_order_event("run-a", &order)
+        .expect("an event, once the copy is finished");
+    store
+        .upsert_candles(&spot, &[candle])
+        .expect("a candle, once the copy is finished");
+}
+
+#[test]
+fn a_copy_beginning_waits_for_a_writer_holding_a_table_and_then_refuses_its_rows() {
+    let Some(bed) = Bed::new("") else {
+        return;
+    };
+    let runtime = tokio::runtime::Runtime::new().expect("a runtime");
+    let writer = runtime.block_on(client(&bed.database.url));
+    runtime.block_on(async {
+        writer
+            .batch_execute(
+                "BEGIN; INSERT INTO candles VALUES ('binance_spot', 'BTCUSDT', '1m', 0, 59999, \
+                 '1.0', '1.0', '1.0', '1.0', '1.0', 1)",
+            )
+            .await
+            .expect("a candle written and not committed");
+    });
+    std::thread::scope(|scope| {
+        let copy = scope.spawn(|| {
+            let snapshot = bed.snapshot();
+            bed.engine(&snapshot, bed.target(), 5000).copy()
+        });
+        wait_for_a_lock(&bed.database.url);
+        runtime.block_on(async { writer.batch_execute("COMMIT").await.expect("commit") });
+        match copy.join().expect("the copy's thread") {
+            Err(EngineError::TransferRefused(reason)) => {
+                assert!(reason.contains("rows of its own (candles)"), "{reason}")
+            }
+            other => panic!("{other:?}"),
+        }
+    });
+    assert!(bed.target().transfer_record().expect("record").is_none());
+    assert_eq!(bed.count("SELECT count(*) FROM candles"), "1");
+}
+
+/// Begins a copy in raw SQL, as `begin_transfer` does, holds it open while
+/// `write` runs on another thread until the write waits on its locks, then
+/// commits: the write must find the copy's record and write nothing.
+fn refused_behind_a_beginning_copy<W>(bed: &Bed, write: W)
+where
+    W: FnOnce() -> Result<(), StorageError> + Send,
+{
+    const SOURCE: &str = "0123456789abcdef0123456789abcdef";
+    let record = TransferRecord::begin(StoreId::new(SOURCE).expect("an ID"), 1).to_json();
+    let tables: Vec<&str> = TRANSFER_TABLES.iter().map(|table| table.name).collect();
+    let runtime = tokio::runtime::Runtime::new().expect("a runtime");
+    let copy = runtime.block_on(client(&bed.database.url));
+    runtime.block_on(async {
+        copy.batch_execute(&format!(
+            "BEGIN; DELETE FROM meta WHERE key = 'transfer'; LOCK TABLE {} IN SHARE MODE",
+            tables.join(", ")
+        ))
+        .await
+        .expect("the copy begun");
+        copy.execute(
+            "INSERT INTO meta (key, value) VALUES ('transfer', $1)",
+            &[&record],
+        )
+        .await
+        .expect("the copy's record");
+    });
+    let before = counts(bed);
+    std::thread::scope(|scope| {
+        let waiting = scope.spawn(write);
+        wait_for_a_lock(&bed.database.url);
+        runtime.block_on(async { copy.batch_execute("COMMIT").await.expect("commit") });
+        assert_refused(
+            "the waiting write",
+            waiting.join().expect("its thread"),
+            SOURCE,
+        );
+    });
+    assert_eq!(counts(bed), before);
+}
+
+#[test]
+fn a_write_waiting_on_a_copy_beginning_is_refused_once_the_copy_is_recorded() {
+    let Some(bed) = Bed::new("") else {
+        return;
+    };
+    let source = SqliteStore::new(&bed.path);
+    let spot = market("binance_spot", "BTCUSDT", "1m");
+    let candles = source
+        .load_candles(&spot, CandleQuery::default())
+        .expect("candles");
+    let order = source
+        .list_order_events("run-a", 1)
+        .expect("events")
+        .remove(0);
+    // A transaction that asks after its first statement, then a statement
+    // that carries the guard in its own condition.
+    refused_behind_a_beginning_copy(&bed, || {
+        bed.target.upsert_candles(&spot, &candles).map(|_| ())
+    });
+    refused_behind_a_beginning_copy(&bed, || bed.target.append_order_event("run-a", &order));
+}
+
+#[test]
+fn numbered_tables_whose_keys_are_all_at_or_below_zero_keep_their_numbering() {
+    let Some(bed) = Bed::new("") else {
+        return;
+    };
+    rusqlite::Connection::open(&bed.path)
+        .expect("the source")
+        .execute_batch(
+            "UPDATE order_events SET seq = seq - 100; UPDATE closed_trades SET seq = seq - 100; \
+             UPDATE segment_dirty SET id = id - 100;",
+        )
+        .expect("every number moved below zero");
+    assert_eq!(bed.copy(5000).record.state, TransferState::Copied);
+
+    let source = SqliteStore::new(&bed.path);
+    let order = source
+        .list_order_events("run-a", 1)
+        .expect("events")
+        .remove(0);
+    let trade = source
+        .list_closed_trades("run-a", 1)
+        .expect("trades")
+        .remove(0);
+    bed.target
+        .append_order_event("run-a", &order)
+        .expect("an event");
+    bed.target
+        .append_closed_trade("run-a", &trade)
+        .expect("a trade");
+    assert_eq!(bed.count("SELECT max(seq) FROM order_events"), "1");
+    assert_eq!(bed.count("SELECT max(seq) FROM closed_trades"), "1");
 }

@@ -99,29 +99,16 @@ impl TransferEngine<'_> {
             report.difference_count
         )))
     }
+}
 
-    /// Refuses a target that holds rows of any transferred table.
-    pub(super) fn refuse_rows_of_its_own(&self) -> Result<(), EngineError> {
-        let mut holding = Vec::new();
-        for table in &TRANSFER_TABLES {
-            let holds = if table.by_market {
-                !self.target.markets(table)?.is_empty()
-            } else {
-                !self.target.read_rows(table, None, None, 1)?.is_empty()
-            };
-            if holds {
-                holding.push(table.name);
-            }
-        }
-        if holding.is_empty() {
-            return Ok(());
-        }
-        Err(refused(format!(
-            "the target already holds rows of its own ({}), so it cannot become a copy of the \
-             source; give the copy an empty database",
-            holding.join(", ")
-        )))
-    }
+/// The refusal of a target whose `tables` hold rows, which the target found
+/// as the copy began.
+pub(super) fn rows_of_its_own(tables: &[&str]) -> EngineError {
+    refused(format!(
+        "the target already holds rows of its own ({}), so it cannot become a copy of the \
+         source; give the copy an empty database",
+        tables.join(", ")
+    ))
 }
 
 pub(super) fn refused(reason: String) -> EngineError {

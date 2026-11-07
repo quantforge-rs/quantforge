@@ -40,18 +40,29 @@ pub trait TransferSnapshot: TransferSource {
     fn moved(&self) -> Result<bool, StorageError>;
 }
 
-/// The target of a copy, which records what it holds.
+/// What [`TransferTarget::begin_transfer`] did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TransferBegun {
+    /// The copy is recorded, and the store bound when asked.
+    Recorded,
+    /// Nothing was recorded: these tables, in copy order, hold rows.
+    HoldingRows(Vec<&'static str>),
+}
+
+/// The target of a copy, which records what it holds. While a copy is
+/// unfinished, the store takes no other write.
 pub trait TransferTarget: TransferSource {
     /// The copy the store holds, if any.
     fn transfer_record(&self) -> Result<Option<TransferRecord>, StorageError>;
 
     /// Records the copy begun, and binds the store to `environment` when one
-    /// is given, in one transaction.
+    /// is given, in one transaction that first finds every transferred table
+    /// empty, with writers held off, so that no write slips in between.
     fn begin_transfer(
         &self,
         record: &TransferRecord,
         environment: Option<Environment>,
-    ) -> Result<(), StorageError>;
+    ) -> Result<TransferBegun, StorageError>;
 
     /// Writes the rows whose keys it does not hold, keys and numbers as
     /// given, and answers how many it wrote. A row whose key it holds stays

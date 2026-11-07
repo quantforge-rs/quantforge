@@ -29,7 +29,7 @@ pub use storage::{
     CandleQuery, CandleStore, RunJournalStore, SegmentStore, StorageError, StorageErrorKind,
     StoreControl,
 };
-pub use transfer::{TransferSnapshot, TransferSource, TransferTarget};
+pub use transfer::{TransferBegun, TransferSnapshot, TransferSource, TransferTarget};
 
 use async_trait::async_trait;
 use std::error::Error as StdError;

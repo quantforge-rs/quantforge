@@ -171,12 +171,20 @@ impl TransferTarget for Memory {
         &self,
         record: &TransferRecord,
         environment: Option<Environment>,
-    ) -> Result<(), StorageError> {
+    ) -> Result<TransferBegun, StorageError> {
+        let holding: Vec<&'static str> = TRANSFER_TABLES
+            .iter()
+            .filter(|table| !self.rows(table).is_empty())
+            .map(|table| table.name)
+            .collect();
+        if !holding.is_empty() {
+            return Ok(TransferBegun::HoldingRows(holding));
+        }
         *self.record.lock().expect("record") = Some(record.clone());
         if let Some(environment) = environment {
             self.identity.lock().expect("identity").environment = Some(environment);
         }
-        Ok(())
+        Ok(TransferBegun::Recorded)
     }
 
     fn write_rows(&self, table: &TransferTable, rows: &[TransferRow]) -> Result<u64, StorageError> {

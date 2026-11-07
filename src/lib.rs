@@ -167,8 +167,8 @@ pub use ports::{
     AccountConnector, CandleQuery, CandleStore, ExchangeCapabilities, ExchangeConnector,
     ExchangeError, ExchangeErrorKind, MarketDataCapabilities, MarketDataConnector,
     OrderCapabilities, RunJournalStore, SegmentStore, SignedConnectors, StorageError,
-    StorageErrorKind, StoreControl, StreamCapabilities, TradingConnector, TransferSnapshot,
-    TransferSource, TransferTarget,
+    StorageErrorKind, StoreControl, StreamCapabilities, TradingConnector, TransferBegun,
+    TransferSnapshot, TransferSource, TransferTarget,
 };
 
 /// What building an exchange's connectors takes and returns. The registry
