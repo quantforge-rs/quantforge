@@ -46,6 +46,7 @@ pub(crate) async fn handle_serve_run(ctx: &AppContext, args: ServeRunArgs) -> Re
             max_span_bars: args.max_span_bars,
             concurrency: usize::try_from(concurrency).unwrap_or(usize::MAX),
             wait: budget,
+            ..HistoryLimits::default()
         },
     );
     // Installed before the address is printed: a signal sent as soon as it

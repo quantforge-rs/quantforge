@@ -32,6 +32,13 @@ use crate::protocol::stream::Bar;
 /// leap year of `1m` bars, 366 segments.
 pub const DEFAULT_MAX_SPAN_BARS: u64 = 527_040;
 
+/// The most bars one `/v1/candles` answer sends inline, in its tip, when
+/// nothing sets it: 31 windows of 1,440 bars, a month of `1m` bars. A
+/// healthy store's tip is its newest window; the rest is room for windows
+/// waiting for a refresh, and the bound keeps a store that cannot pack them
+/// from turning one answer into a hundred megabytes.
+pub const DEFAULT_MAX_TIP_BARS: u64 = 44_640;
+
 /// The storage ports the history routes read, as one trait object: MSRV
 /// 1.85 cannot turn one trait object into another, so this trait stands for
 /// both. Every store implements it.
@@ -44,6 +51,10 @@ impl<S: CandleStore + SegmentStore> HistoryStore for S {}
 pub struct HistoryLimits {
     /// The most bars one `/v1/candles` answer may span.
     pub max_span_bars: u64,
+    /// The most bars one `/v1/candles` answer sends in its tip, the bars not
+    /// packed into segments yet. A range whose tip holds more is refused,
+    /// never cut short.
+    pub max_tip_bars: u64,
     /// How many requests use the store at once: as many as its pool has
     /// connections.
     pub concurrency: usize,
@@ -55,6 +66,7 @@ impl Default for HistoryLimits {
     fn default() -> Self {
         Self {
             max_span_bars: DEFAULT_MAX_SPAN_BARS,
+            max_tip_bars: DEFAULT_MAX_TIP_BARS,
             concurrency: 8,
             wait: Duration::from_secs(2),
         }
@@ -171,14 +183,20 @@ pub(super) async fn candles(
         ))
     })?;
     let selection = Selection::read(query, history.limits.max_span_bars)?;
+    let max_tip_bars = history.limits.max_tip_bars;
     let answer = history
-        .with_store(move |store| answer(store, &selection))
+        .with_store(move |store| answer(store, &selection, max_tip_bars))
         .await?;
     Ok(fresh(Json(answer)))
 }
 
-/// The range's segments and tip, as the store holds them.
-fn answer(store: &dyn HistoryStore, selection: &Selection) -> Result<CandleRange, Refusal> {
+/// The range's segments and tip, as the store holds them, or a refusal of a
+/// tip longer than `max_tip_bars`.
+fn answer(
+    store: &dyn HistoryStore,
+    selection: &Selection,
+    max_tip_bars: u64,
+) -> Result<CandleRange, Refusal> {
     let category = match selection.category {
         Some(category) => category,
         None => legacy_category(store, selection)?,
@@ -193,16 +211,30 @@ fn answer(store: &dyn HistoryStore, selection: &Selection) -> Result<CandleRange
         .resolve_segments(&market, start, end)
         .map_err(|failure| Refusal::storage("planning a range", failure))?;
     let tip = match plan.tip {
-        Some(tip) => store
-            .load_candles(
-                &market,
-                CandleQuery {
-                    start_time_ms: Some(tip.first_open_ms),
-                    end_time_ms: Some(tip.last_open_ms),
-                    limit: None,
-                },
-            )
-            .map_err(|failure| Refusal::storage("reading a range's tip", failure))?,
+        Some(tip) => {
+            // One bar more than the limit tells a tip that fits from one
+            // that does not; both stay within every backend's signed LIMIT.
+            let limit = max_tip_bars.min(i64::MAX as u64 - 1);
+            let candles = store
+                .load_candles(
+                    &market,
+                    CandleQuery {
+                        start_time_ms: Some(tip.first_open_ms),
+                        end_time_ms: Some(tip.last_open_ms),
+                        limit: Some(usize::try_from(limit + 1).unwrap_or(usize::MAX)),
+                    },
+                )
+                .map_err(|failure| Refusal::storage("reading a range's tip", failure))?;
+            if candles.len() as u64 > limit {
+                return Err(Refusal::invalid(format!(
+                    "the range holds more than {max_tip_bars} bars from {} on that are not packed \
+                     into segments yet, more than this server sends in one answer; ask for a \
+                     shorter range",
+                    ms_to_rfc3339(tip.first_open_ms)
+                )));
+            }
+            candles
+        }
         None => Vec::new(),
     };
     let message = if plan.segments.is_empty() && tip.is_empty() {

@@ -86,7 +86,9 @@ pub struct CandleRange {
     /// drops.
     pub segments: Vec<SegmentEntry>,
     /// The range's bars after the last segment's, in open-time order: bars
-    /// not packed into a segment yet, such as the newest window's.
+    /// not packed into a segment yet, such as the newest window's. Always
+    /// whole: a server refuses a range whose tip holds more bars than it
+    /// sends in one answer rather than cut it short.
     pub tip: Vec<Bar>,
     /// Why the answer lists neither segments nor a tip: the server stores
     /// no bars of the market, or none in the range. Absent otherwise.

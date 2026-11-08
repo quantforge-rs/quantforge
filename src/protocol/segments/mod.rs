@@ -25,7 +25,7 @@
 //!
 //! | Status and code | When |
 //! | --- | --- |
-//! | 400 `invalid_request` | A parameter is missing, repeated, or not in its canonical form; a range starts after it ends, or spans more bars than the server serves in one answer, which the message names; an integer is 2^53 or more in magnitude; a market without `category` is ambiguous; a hash is not in its written form |
+//! | 400 `invalid_request` | A parameter is missing, repeated, or not in its canonical form; a range starts after it ends, or spans more bars than the server serves in one answer, which the message names; a range's tip holds more bars than the server sends in one answer, which a shorter range avoids; an integer is 2^53 or more in magnitude; a market without `category` is ambiguous; a hash is not in its written form |
 //! | 404 `not_found` | The server holds no segment of that hash |
 //! | 405 `method_not_allowed` | A method other than `GET` or `HEAD`; `Allow` lists those two |
 //! | 503 `unavailable` | The server's store could not answer in time; `Retry-After` says how many seconds to wait |

@@ -54,7 +54,9 @@ use tokio::net::TcpListener;
 
 use crate::protocol::{MIN_SUPPORTED, PROTO_VERSION, ProtoVersion, ServerVersion};
 
-pub use history::{DEFAULT_MAX_SPAN_BARS, History, HistoryLimits, HistoryStore};
+pub use history::{
+    DEFAULT_MAX_SPAN_BARS, DEFAULT_MAX_TIP_BARS, History, HistoryLimits, HistoryStore,
+};
 
 /// Answers every route on `listener` until `shutdown` resolves, the history
 /// routes from `history`. Then it stops accepting connections at once,

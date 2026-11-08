@@ -326,3 +326,41 @@ async fn a_query_without_category_reads_spot_only_while_no_other_family_holds_th
         "{message}"
     );
 }
+
+#[tokio::test]
+async fn a_tip_longer_than_the_server_sends_in_one_answer_is_refused_never_cut_short() {
+    // Two packed windows, then three bars in the tip.
+    let bed = seeded();
+    let spot = |end_ms| query(VENUE, Some(Category::Spot), "BTCUSDT", T - DAY, end_ms);
+    let with_tip = |max_tip_bars| {
+        bed.history_with(HistoryLimits {
+            max_tip_bars,
+            ..HistoryLimits::default()
+        })
+    };
+
+    // Only the tip counts: the thousands of packed bars do not.
+    let three = start(with_tip(3)).await;
+    let whole = range(three, &spot(T + 3 * DAY)).await;
+    assert_eq!((whole.segments.len(), whole.tip.len()), (2, 3));
+
+    let two = start(with_tip(2)).await;
+    let (status, code, message) = refusal(get_candles(two, &spot(T + 3 * DAY)).await).await;
+    assert_eq!((status, code.as_str()), (400, "invalid_request"));
+    assert_eq!(
+        message,
+        format!(
+            "the range holds more than 2 bars from {} on that are not packed into segments yet, \
+             more than this server sends in one answer; ask for a shorter range",
+            ms_to_rfc3339(T + 2 * DAY)
+        )
+    );
+    // A range that ends sooner fits, whole.
+    let shorter = range(two, &spot(T + 2 * DAY + MINUTE)).await;
+    assert_eq!((shorter.segments.len(), shorter.tip.len()), (2, 2));
+
+    // No limit the server can be given overflows a backend's.
+    let unbounded = start(with_tip(u64::MAX)).await;
+    let all = range(unbounded, &spot(T + 3 * DAY)).await;
+    assert_eq!(all.tip.len(), 3);
+}
