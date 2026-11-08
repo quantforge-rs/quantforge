@@ -3,16 +3,17 @@
 use serde::{Deserialize, Serialize};
 
 use super::super::{ContentHash, ErrorBody};
-use super::JobId;
+use super::{JobId, JobSubmission};
 
-/// A job and where it stands.
+/// A job, what it runs, and where it stands.
 ///
 /// ```
 /// use quantforge::protocol::jobs::{JobState, JobStatus};
 ///
-/// let json = r#"{"job_id":"j-7f3a","submitted_at_ms":1792454400000,"state":{"kind":"running","started_at_ms":1792454401500}}"#;
+/// let json = r#"{"job_id":"j-7f3a","submitted_at_ms":1792454400000,"submission":{"bundle":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","data":{"exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m","start_open_ms":1792454400000,"end_open_ms":1792540740000},"backtest":{"initial_cash":"10000","fee_bps":"10","close_out_at_end":true}},"state":{"kind":"running","started_at_ms":1792454401500}}"#;
 /// let status: JobStatus = serde_json::from_str(json)?;
 /// assert_eq!(status.state, JobState::Running { started_at_ms: 1792454401500 });
+/// assert_eq!(status.submission.data.category.as_deref(), Some("spot"));
 /// assert_eq!(serde_json::to_string(&status)?, json);
 /// # Ok::<(), serde_json::Error>(())
 /// ```
@@ -22,8 +23,27 @@ pub struct JobStatus {
     pub job_id: JobId,
     /// When the server accepted the submission.
     pub submitted_at_ms: i64,
+    /// What the job runs: the submission as the server accepted it, its
+    /// market's category always named.
+    pub submission: JobSubmission,
     /// Where it stands now.
     pub state: JobState,
+}
+
+/// What `GET /v1/backtests` answers: jobs, the last submitted first.
+///
+/// ```
+/// use quantforge::protocol::jobs::JobList;
+///
+/// let list: JobList = serde_json::from_str(r#"{"jobs":[]}"#)?;
+/// assert!(list.jobs.is_empty());
+/// assert_eq!(serde_json::to_string(&list)?, r#"{"jobs":[]}"#);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JobList {
+    /// One status per job, newest first.
+    pub jobs: Vec<JobStatus>,
 }
 
 /// Where a job stands, named by `kind`. A job is queued, then running, and
@@ -96,10 +116,14 @@ mod tests {
 
     const EMPTY: &str = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
+    /// A submission's exact JSON.
+    const SUBMISSION: &str = r#"{"bundle":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","data":{"exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m","start_open_ms":0,"end_open_ms":60000},"backtest":{"initial_cash":"100","fee_bps":"0","close_out_at_end":true}}"#;
+
     fn status(state: JobState) -> JobStatus {
         JobStatus {
             job_id: JobId::new("j-1").expect("job id"),
             submitted_at_ms: 100,
+            submission: serde_json::from_str(SUBMISSION).expect("submission"),
             state,
         }
     }
@@ -179,7 +203,9 @@ mod tests {
                 | JobState::Unrecognized => {}
             }
             let status = status(state);
-            let full = format!(r#"{{"job_id":"j-1","submitted_at_ms":100,"state":{json}}}"#);
+            let full = format!(
+                r#"{{"job_id":"j-1","submitted_at_ms":100,"submission":{SUBMISSION},"state":{json}}}"#
+            );
             assert_eq!(serde_json::to_string(&status).expect("serialize"), full);
             assert_eq!(
                 serde_json::from_str::<JobStatus>(&full).expect("status"),
@@ -202,8 +228,10 @@ mod tests {
 
     #[test]
     fn a_state_this_build_does_not_know_is_unrecognized_and_keeps_the_job() {
-        let json =
-            r#"{"job_id":"j-1","submitted_at_ms":100,"state":{"kind":"paused","since_ms":5}}"#;
+        let json = format!(
+            r#"{{"job_id":"j-1","submitted_at_ms":100,"submission":{SUBMISSION},"state":{{"kind":"paused","since_ms":5}}}}"#
+        );
+        let json = json.as_str();
         assert_eq!(
             serde_json::from_str::<JobStatus>(json).expect("status"),
             status(JobState::Unrecognized)
@@ -214,8 +242,9 @@ mod tests {
     #[test]
     fn a_state_named_by_a_number_is_refused() {
         for kind in ["0", "1", "null"] {
-            let json =
-                format!(r#"{{"job_id":"j-1","submitted_at_ms":100,"state":{{"kind":{kind}}}}}"#);
+            let json = format!(
+                r#"{{"job_id":"j-1","submitted_at_ms":100,"submission":{SUBMISSION},"state":{{"kind":{kind}}}}}"#
+            );
             assert!(
                 serde_json::from_str::<JobStatus>(&json).is_err(),
                 "kind {kind} must be refused"
@@ -226,5 +255,19 @@ mod tests {
     #[test]
     fn an_unrecognized_state_is_never_sent() {
         assert!(serde_json::to_string(&status(JobState::Unrecognized)).is_err());
+    }
+
+    #[test]
+    fn a_list_holds_each_status_newest_first_as_given() {
+        let list = JobList {
+            jobs: vec![
+                status(JobState::Queued),
+                status(JobState::Running { started_at_ms: 200 }),
+            ],
+        };
+        let json = serde_json::to_string(&list).expect("serialize");
+        assert!(json.starts_with(r#"{"jobs":[{"job_id":"j-1""#), "{json}");
+        assert_eq!(serde_json::from_str::<JobList>(&json).expect("list"), list);
+        assert!(serde_json::from_str::<JobList>("[]").is_err());
     }
 }

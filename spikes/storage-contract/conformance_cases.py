@@ -33,7 +33,7 @@ T = 1_792_454_400_000
 # 29 decimal places: more than a Decimal holds.
 INEXACT = "1.00000000000000000000000000001"
 # The schema every backend creates; a new store logs one step to it from 0.
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 WINDOW_BARS = 1440
 STEP_MS = {
     "1s": 1_000,
@@ -239,6 +239,8 @@ class Model:
         self.journal = []  # (kind, run_id, name), in append order
         self.edits = {}  # (run_id, trade name) -> columns written behind the store's back
         self.environment = None  # the store's binding
+        self.bundles = {}  # name -> bytes
+        self.jobs = []  # records, in submission order
 
     # Candles.
 
@@ -298,6 +300,71 @@ class Model:
                 )
         # Code point order, which is UTF-8's byte order.
         return sorted(out, key=lambda m: (m["exchange"], m["symbol"], m["interval"]))
+
+    # Jobs.
+
+    def store_bundle(self, name, data):
+        if name in self.bundles:
+            return False
+        self.bundles[name] = data
+        return True
+
+    def load_bundle(self, name):
+        data = self.bundles.get(name)
+        return None if data is None else data.hex()
+
+    def find_job(self, job_id):
+        return next((job for job in self.jobs if job["job_id"] == job_id), None)
+
+    def submit_job(self, job):
+        if self.find_job(job["job_id"]) is not None:
+            return refusal(f"job {job['job_id']} is already recorded")
+        if job["bundle"] not in self.bundles:
+            return refusal(f"the store holds no bundle {job['bundle']}")
+        self.jobs.append(dict(job, phase="queued", started_at_ms=None, finished_at_ms=None,
+                              results_json=None, failure_json=None))
+        return None
+
+    def job(self, job_id):
+        found = self.find_job(job_id)
+        return None if found is None else dict(found)
+
+    def listed_jobs(self, limit):
+        return [dict(job) for job in reversed(self.jobs)][:limit]
+
+    def claim_job(self, at):
+        for job in self.jobs:
+            if job["phase"] == "queued":
+                job["phase"], job["started_at_ms"] = "running", at
+                return dict(job)
+        return None
+
+    def finish_job(self, job_id, outcome, at):
+        job = self.find_job(job_id)
+        if job is None or job["phase"] != "running":
+            return False
+        if "succeeded" in outcome:
+            job["phase"], job["results_json"] = "succeeded", outcome["succeeded"]
+        else:
+            job["phase"], job["failure_json"] = "failed", outcome["failed"]
+        job["finished_at_ms"] = at
+        return True
+
+    def cancel_job(self, job_id, at):
+        job = self.find_job(job_id)
+        if job is None:
+            return None
+        if job["phase"] in ("queued", "running"):
+            job["phase"], job["finished_at_ms"] = "cancelled", at
+        return dict(job)
+
+    def fail_running_jobs(self, failure, at):
+        failed = 0
+        for job in self.jobs:
+            if job["phase"] == "running":
+                job["phase"], job["finished_at_ms"], job["failure_json"] = "failed", at, failure
+                failed += 1
+        return failed
 
     # Segments.
 
@@ -543,6 +610,40 @@ class Scenario:
 
     def refresh(self, market):
         self.step("refresh", market=market, expect=self.model.refresh(market))
+
+    def store_bundle(self, data):
+        name = bundle_name(data)
+        self.step("store_bundle", hash=name, data=data.hex(),
+                  expect=self.model.store_bundle(name, data))
+        return name
+
+    def load_bundle(self, name):
+        self.step("load_bundle", hash=name, expect=self.model.load_bundle(name))
+
+    def submit_job(self, job):
+        refused = self.model.submit_job(job)
+        extra = {"refused": refused} if refused else {}
+        self.step("submit_job", job=job, **extra)
+
+    def job(self, job_id):
+        self.step("job", job_id=job_id, expect=self.model.job(job_id))
+
+    def jobs(self, limit):
+        self.step("jobs", limit=limit, expect=self.model.listed_jobs(limit))
+
+    def claim_job(self, at):
+        self.step("claim_job", at=at, expect=self.model.claim_job(at))
+
+    def finish_job(self, job_id, outcome, at):
+        self.step("finish_job", job_id=job_id, outcome=outcome, at=at,
+                  expect=self.model.finish_job(job_id, outcome, at))
+
+    def cancel_job(self, job_id, at):
+        self.step("cancel_job", job_id=job_id, at=at, expect=self.model.cancel_job(job_id, at))
+
+    def fail_running_jobs(self, failure, at):
+        self.step("fail_running_jobs", failure=failure, at=at,
+                  expect=self.model.fail_running_jobs(failure, at))
 
     def resolve(self, market, first, last):
         plan, refused = self.model.resolve(market, first, last)
@@ -1302,6 +1403,147 @@ def journal_scenarios():
     return out
 
 
+# --- The job store's scenarios ------------------------------------------------
+
+
+def bundle_name(data):
+    return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
+# Every byte value, and a manifest's start with a NUL after it: a bundle's
+# bytes are kept exactly.
+BUNDLE_A = bytes(range(256))
+BUNDLE_B = b"quantforge.toml\x00" + bytes(16) + "SmaCross ✓".encode("utf-8")
+
+
+def job_id(n):
+    return f"{n:032x}"
+
+
+def new_job(n, bundle, request=None):
+    return {"job_id": job_id(n), "bundle": bundle_name(bundle),
+            "request_json": request or f'{{"job":{n}}}', "submitted_at_ms": T + n * MINUTE}
+
+
+SUCCEEDED = {"succeeded": '[{"name":"metrics","media_type":"application/json"}]'}
+FAILED = {"failed": '{"code":"invalid_request","message":"the strategy raised ValueError"}'}
+RESTARTED = '{"code":"internal","message":"the server stopped while the job ran"}'
+
+
+def jobs_scenarios():
+    out = []
+
+    s = Scenario("jobs.bundle_stored_once", "a bundle is stored once under its name, every byte kept, and loaded back; an unknown name loads nothing")
+    s.load_bundle(bundle_name(BUNDLE_A))
+    name = s.store_bundle(BUNDLE_A)
+    s.store_bundle(BUNDLE_A)
+    s.load_bundle(name)
+    s.store_bundle(BUNDLE_B)
+    s.load_bundle(bundle_name(BUNDLE_B))
+    s.reopen()
+    s.load_bundle(name)
+    out.append(s)
+
+    s = Scenario("jobs.submitted_queued", "a job is recorded queued with nothing else yet; a job ID twice and a bundle the store does not hold are refused")
+    s.store_bundle(BUNDLE_A)
+    s.submit_job(new_job(1, BUNDLE_A))
+    s.job(job_id(1))
+    s.submit_job(dict(new_job(1, BUNDLE_A), request_json='{"again":true}'))
+    s.submit_job(new_job(2, BUNDLE_B))
+    s.job(job_id(2))
+    s.job(job_id(1))
+    out.append(s)
+
+    s = Scenario("jobs.listed_newest_first", "jobs are listed the last submitted first, at most as many as asked for")
+    s.store_bundle(BUNDLE_A)
+    s.jobs(10)
+    for n in (1, 2, 3):
+        s.submit_job(new_job(n, BUNDLE_A))
+    s.jobs(10)
+    s.jobs(2)
+    s.jobs(0)
+    out.append(s)
+
+    s = Scenario("jobs.claimed_in_submission_order", "a claim takes the job submitted first of those queued and starts it; with none queued it takes nothing")
+    s.store_bundle(BUNDLE_A)
+    s.claim_job(T)
+    for n in (1, 2, 3):
+        s.submit_job(new_job(n, BUNDLE_A))
+    s.claim_job(T + 100)
+    s.claim_job(T + 200)
+    s.cancel_job(job_id(3), T + 300)
+    s.claim_job(T + 400)
+    s.jobs(10)
+    out.append(s)
+
+    s = Scenario("jobs.finished_only_from_running", "a running job ends once, succeeded with its results or failed with why; a queued or ended job is left as it is")
+    s.store_bundle(BUNDLE_A)
+    for n in (1, 2, 3):
+        s.submit_job(new_job(n, BUNDLE_A))
+    s.claim_job(T + 100)
+    s.finish_job(job_id(1), SUCCEEDED, T + 200)
+    s.finish_job(job_id(1), FAILED, T + 300)
+    s.finish_job(job_id(3), SUCCEEDED, T + 300)
+    s.claim_job(T + 400)
+    s.finish_job(job_id(2), FAILED, T + 500)
+    s.finish_job(job_id(9), SUCCEEDED, T + 600)
+    s.jobs(10)
+    out.append(s)
+
+    s = Scenario("jobs.cancelled_queued_or_running", "a queued or running job is cancelled, keeping when it started; an ended job stays as it is and an unknown one is not found")
+    s.store_bundle(BUNDLE_A)
+    for n in (1, 2, 3):
+        s.submit_job(new_job(n, BUNDLE_A))
+    s.cancel_job(job_id(1), T + 100)
+    s.claim_job(T + 200)
+    s.cancel_job(job_id(2), T + 300)
+    s.finish_job(job_id(2), SUCCEEDED, T + 400)
+    s.cancel_job(job_id(2), T + 500)
+    s.claim_job(T + 600)
+    s.finish_job(job_id(3), SUCCEEDED, T + 700)
+    s.cancel_job(job_id(3), T + 800)
+    s.cancel_job(job_id(9), T + 900)
+    out.append(s)
+
+    s = Scenario("jobs.running_failed_on_restart", "every running job, and nothing else, is failed with the reason given, as a server does as it starts")
+    s.store_bundle(BUNDLE_A)
+    for n in (1, 2, 3, 4):
+        s.submit_job(new_job(n, BUNDLE_A))
+    s.claim_job(T + 100)
+    s.claim_job(T + 200)
+    s.claim_job(T + 300)
+    s.finish_job(job_id(3), SUCCEEDED, T + 400)
+    s.fail_running_jobs(RESTARTED, T + 500)
+    s.fail_running_jobs(RESTARTED, T + 600)
+    s.jobs(10)
+    s.claim_job(T + 700)
+    out.append(s)
+
+    s = Scenario("jobs.json_kept_verbatim", "a job's request, results and failure are kept as the text given, whatever it holds")
+    s.store_bundle(BUNDLE_B)
+    request = '{"symbol":"币安人生USDT","note":"tab\\tquote\\"","n":1.10}'
+    s.submit_job(new_job(1, BUNDLE_B, request))
+    s.submit_job(new_job(2, BUNDLE_B, "{}"))
+    s.claim_job(T + 100)
+    s.finish_job(job_id(1), {"succeeded": '[{"name":"ünïcode","size_bytes":0}]'}, T + 200)
+    s.claim_job(T + 300)
+    s.finish_job(job_id(2), {"failed": '{"message":"a\\nb"}'}, T + 400)
+    s.jobs(10)
+    out.append(s)
+
+    s = Scenario("jobs.reopened", "a store opened again keeps every job as it stood, and claims on in order")
+    s.store_bundle(BUNDLE_A)
+    for n in (1, 2):
+        s.submit_job(new_job(n, BUNDLE_A))
+    s.claim_job(T + 100)
+    s.reopen()
+    s.jobs(10)
+    s.claim_job(T + 200)
+    s.claim_job(T + 300)
+    out.append(s)
+    return out
+
+
 # --- The store record's scenarios --------------------------------------------
 
 
@@ -1772,7 +2014,8 @@ def main() -> int:
     cases["segments"] = [s.out() for s in segment_scenarios()]
     cases["races"] = races()
     cases["control"] = [s.out() for s in control_scenarios()]
-    groups = ("candles", "journal", "segments", "races", "control")
+    cases["jobs"] = [s.out() for s in jobs_scenarios()]
+    groups = ("candles", "journal", "segments", "races", "control", "jobs")
     ids = [s["id"] for group in groups for s in cases[group]]
     if len(ids) != len(set(ids)):
         raise SystemExit("scenario ids repeat")

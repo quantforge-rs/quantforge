@@ -46,7 +46,7 @@ The public surface is layered as Rust modules, innermost first:
 - `sdk` - the strategy trait and its context, indicator math, and built-in strategies
 - `engine` - the drivers: `engine::backtest`, `engine::data_sync`, and `engine::live`
 - `protocol` - stands apart from the layers above: the versioned wire types between QuantForge instances, for remote backtest jobs, candle segments, and the live bar stream, and the [strategy bundle](https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md) a remote backtest runs; its rustdoc is the wire specification
-- `server` - the HTTP server `serve run` hosts for other QuantForge instances, speaking `protocol`: its routes, the history they serve from the selected store, and a shutdown that finishes the requests in progress
+- `server` - the HTTP server `serve run` hosts for other QuantForge instances, speaking `protocol`: its routes, the history they serve from the selected store, the backtest job queue it keeps there, and a shutdown that finishes the requests in progress
 
 The `quantforge` binary adds `cli`, a module tree that mirrors the command
 tree: `quantforge monitor cancel-order` lives in
@@ -93,8 +93,8 @@ Every setting is a command-line flag. The global ones — `--db`,
 `--exchange`, `--base-url`, `--log-level`, `--api-key`, and `--api-secret` —
 fall back to `QF_DB`, `QF_EXCHANGE`, `QF_BASE_URL`, `QF_LOG`, `QF_API_KEY`,
 and `QF_API_SECRET`, and a flag always wins over its variable. So do
-`serve run`'s `--listen` and `--max-span-bars`, with `QF_LISTEN` and
-`QF_MAX_SPAN_BARS`. `--exchange` names the exchange (`binance`, the
+`serve run`'s `--listen`, `--max-span-bars` and `--job-concurrency`, with
+`QF_LISTEN`, `QF_MAX_SPAN_BARS` and `QF_JOB_CONCURRENCY`. `--exchange` names the exchange (`binance`, the
 default and so far the only one), and an omitted `--base-url` is that
 exchange's production endpoint. `--storage` (`QF_STORAGE`) selects the
 storage backend: `sqlite`, the default, at `--db`, or `postgres`, the
@@ -325,10 +325,19 @@ segments that hold a range and sends its newest candles inline, and
 `GET /v1/segments/{hash}` sends a segment, which never changes, so any cache
 may keep it for a year; the
 [protocol docs](https://github.com/quantforge-rs/quantforge/blob/main/src/protocol/segments/mod.rs)
-say how to read them. The history routes need no credentials yet, and the
-default address takes connections from this machine only. On a signal the
-server stops accepting connections and finishes the requests in progress,
-unless a second signal tells it not to wait:
+say how to read them. It also queues backtests of Python strategy bundles
+in the selected store: `PUT /v1/bundles/{code_hash}` uploads a bundle's
+canonical tar, `POST /v1/backtests` submits a job on candles the store
+holds, `GET /v1/backtests` and `GET /v1/backtests/{job_id}` say where jobs
+stand, and `POST /v1/backtests/{job_id}/cancel` cancels one (see the
+[job protocol](https://github.com/quantforge-rs/quantforge/blob/main/src/protocol/jobs/mod.rs)).
+Jobs run `--job-concurrency` at a time, half the CPU cores unless set; this
+release has no worker runtime yet, so each job fails as it starts, saying
+so. The routes need no credentials yet, and the default address takes
+connections from this machine only. On a signal the server stops accepting
+connections, finishes the requests in progress, and stops the jobs that
+run, failing them so that their clients submit them again, unless a second
+signal tells it not to wait:
 
 ```bash
 cargo run -- \

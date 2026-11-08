@@ -15,6 +15,7 @@ pub mod durability;
 pub mod futures;
 pub mod identity;
 pub mod interval;
+pub mod job;
 pub mod market;
 pub mod money;
 pub mod order;
@@ -39,6 +40,7 @@ pub use identity::{
     Environment, InstrumentId, OperationId, VenueAlgoId, VenueOrderId, VenueTradeId,
 };
 pub use interval::Interval;
+pub use job::{BundleHash, JobId, JobOutcome, JobPhase, JobRecord, NewJob};
 pub use market::{Category, ExchangeId, MarketId, Symbol, Venue};
 pub use money::{Asset, Money};
 pub use order::{AccountTrade, ExchangeOrder, Fill, OrderStatus, Side};
@@ -72,6 +74,9 @@ pub enum ModelError {
 
     #[error("invalid segment hash {0:?}: expected sha256: and 64 lowercase hex digits")]
     InvalidSegmentHash(String),
+
+    #[error("invalid bundle hash {0:?}: expected sha256: and 64 lowercase hex digits")]
+    InvalidBundleHash(String),
 
     #[error("invalid rfc3339 timestamp: {0}")]
     InvalidTimestamp(String),

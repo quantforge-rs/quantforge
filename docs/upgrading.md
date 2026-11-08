@@ -59,6 +59,7 @@ Each step runs in one transaction with its version stamp, and
 | 2 → 3 | Nothing. A run 0.2.0 wrote recorded no execution mode; it stays as it is and is never given one by guesswork (see below). |
 | 3 → 4 | Creates the segment tables, and marks every window that holds candles, so the next `data sync` packs the candles the older release stored into segments. |
 | 4 → 5 | Turns the venue's order and trade IDs into text, in the journal columns and inside `state_json` and `raw_json`, keeping each row's original JSON in `legacy_state_json` and `legacy_raw_json`; gives every run its identity columns, with every existing run marked `legacy`; and creates the store's own record: a fresh store ID, no environment, `inactive`. |
+| 5 → 6 | Creates the tables `serve run` keeps remote backtests in: the bundles clients upload, and the jobs that run them. On PostgreSQL it also collates segment hashes and run IDs byte by byte, which rebuilds those two primary keys and leaves every value as it was. |
 
 Candles are not rewritten. The journal tables are copied row by row, so the
 upgrade takes seconds for any journal and leaves the sequence numbers as

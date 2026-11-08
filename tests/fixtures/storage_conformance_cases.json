@@ -5989,7 +5989,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 5,
+      "schema_version": 6,
       "environment": null,
       "activation": "inactive",
       "activation_epoch": 0
@@ -5999,7 +5999,7 @@
      "op": "migrations",
      "expect": [
       {
-       "to_version": 5,
+       "to_version": 6,
        "from_version": 0
       }
      ]
@@ -6010,7 +6010,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 5,
+      "schema_version": 6,
       "environment": null,
       "activation": "inactive",
       "activation_epoch": 0
@@ -6044,7 +6044,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 5,
+      "schema_version": 6,
       "environment": "testnet",
       "activation": "inactive",
       "activation_epoch": 0
@@ -6388,6 +6388,1078 @@
        "started_at_ms": 1792454400000
       }
      ]
+    }
+   ]
+  }
+ ],
+ "jobs": [
+  {
+   "id": "jobs.bundle_stored_once",
+   "doc": "a bundle is stored once under its name, every byte kept, and loaded back; an unknown name loads nothing",
+   "steps": [
+    {
+     "op": "load_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "expect": null
+    },
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": false
+    },
+    {
+     "op": "load_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "expect": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
+    },
+    {
+     "op": "store_bundle",
+     "hash": "sha256:d7853f10c1f17a188d601a33431043f913c2f71c2b843ac560bf6a4fbcab85f0",
+     "data": "7175616e74666f7267652e746f6d6c0000000000000000000000000000000000536d6143726f737320e29c93",
+     "expect": true
+    },
+    {
+     "op": "load_bundle",
+     "hash": "sha256:d7853f10c1f17a188d601a33431043f913c2f71c2b843ac560bf6a4fbcab85f0",
+     "expect": "7175616e74666f7267652e746f6d6c0000000000000000000000000000000000536d6143726f737320e29c93"
+    },
+    {
+     "op": "reopen"
+    },
+    {
+     "op": "load_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "expect": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
+    }
+   ]
+  },
+  {
+   "id": "jobs.submitted_queued",
+   "doc": "a job is recorded queued with nothing else yet; a job ID twice and a bundle the store does not hold are refused",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "job",
+     "job_id": "00000000000000000000000000000001",
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "queued",
+      "started_at_ms": null,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"again\":true}",
+      "submitted_at_ms": 1792454460000
+     },
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "job 00000000000000000000000000000001 is already recorded"
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:d7853f10c1f17a188d601a33431043f913c2f71c2b843ac560bf6a4fbcab85f0",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000
+     },
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the store holds no bundle sha256:d7853f10c1f17a188d601a33431043f913c2f71c2b843ac560bf6a4fbcab85f0"
+     }
+    },
+    {
+     "op": "job",
+     "job_id": "00000000000000000000000000000002",
+     "expect": null
+    },
+    {
+     "op": "job",
+     "job_id": "00000000000000000000000000000001",
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "queued",
+      "started_at_ms": null,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "jobs.listed_newest_first",
+   "doc": "jobs are listed the last submitted first, at most as many as asked for",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "jobs",
+     "limit": 10,
+     "expect": []
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000003",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":3}",
+      "submitted_at_ms": 1792454580000
+     }
+    },
+    {
+     "op": "jobs",
+     "limit": 10,
+     "expect": [
+      {
+       "job_id": "00000000000000000000000000000003",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":3}",
+       "submitted_at_ms": 1792454580000,
+       "phase": "queued",
+       "started_at_ms": null,
+       "finished_at_ms": null,
+       "results_json": null,
+       "failure_json": null
+      },
+      {
+       "job_id": "00000000000000000000000000000002",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":2}",
+       "submitted_at_ms": 1792454520000,
+       "phase": "queued",
+       "started_at_ms": null,
+       "finished_at_ms": null,
+       "results_json": null,
+       "failure_json": null
+      },
+      {
+       "job_id": "00000000000000000000000000000001",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":1}",
+       "submitted_at_ms": 1792454460000,
+       "phase": "queued",
+       "started_at_ms": null,
+       "finished_at_ms": null,
+       "results_json": null,
+       "failure_json": null
+      }
+     ]
+    },
+    {
+     "op": "jobs",
+     "limit": 2,
+     "expect": [
+      {
+       "job_id": "00000000000000000000000000000003",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":3}",
+       "submitted_at_ms": 1792454580000,
+       "phase": "queued",
+       "started_at_ms": null,
+       "finished_at_ms": null,
+       "results_json": null,
+       "failure_json": null
+      },
+      {
+       "job_id": "00000000000000000000000000000002",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":2}",
+       "submitted_at_ms": 1792454520000,
+       "phase": "queued",
+       "started_at_ms": null,
+       "finished_at_ms": null,
+       "results_json": null,
+       "failure_json": null
+      }
+     ]
+    },
+    {
+     "op": "jobs",
+     "limit": 0,
+     "expect": []
+    }
+   ]
+  },
+  {
+   "id": "jobs.claimed_in_submission_order",
+   "doc": "a claim takes the job submitted first of those queued and starts it; with none queued it takes nothing",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400000,
+     "expect": null
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000003",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":3}",
+      "submitted_at_ms": 1792454580000
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400100,
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "running",
+      "started_at_ms": 1792454400100,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400200,
+     "expect": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000,
+      "phase": "running",
+      "started_at_ms": 1792454400200,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "cancel_job",
+     "job_id": "00000000000000000000000000000003",
+     "at": 1792454400300,
+     "expect": {
+      "job_id": "00000000000000000000000000000003",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":3}",
+      "submitted_at_ms": 1792454580000,
+      "phase": "cancelled",
+      "started_at_ms": null,
+      "finished_at_ms": 1792454400300,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400400,
+     "expect": null
+    },
+    {
+     "op": "jobs",
+     "limit": 10,
+     "expect": [
+      {
+       "job_id": "00000000000000000000000000000003",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":3}",
+       "submitted_at_ms": 1792454580000,
+       "phase": "cancelled",
+       "started_at_ms": null,
+       "finished_at_ms": 1792454400300,
+       "results_json": null,
+       "failure_json": null
+      },
+      {
+       "job_id": "00000000000000000000000000000002",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":2}",
+       "submitted_at_ms": 1792454520000,
+       "phase": "running",
+       "started_at_ms": 1792454400200,
+       "finished_at_ms": null,
+       "results_json": null,
+       "failure_json": null
+      },
+      {
+       "job_id": "00000000000000000000000000000001",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":1}",
+       "submitted_at_ms": 1792454460000,
+       "phase": "running",
+       "started_at_ms": 1792454400100,
+       "finished_at_ms": null,
+       "results_json": null,
+       "failure_json": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "jobs.finished_only_from_running",
+   "doc": "a running job ends once, succeeded with its results or failed with why; a queued or ended job is left as it is",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000003",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":3}",
+      "submitted_at_ms": 1792454580000
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400100,
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "running",
+      "started_at_ms": 1792454400100,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000001",
+     "outcome": {
+      "succeeded": "[{\"name\":\"metrics\",\"media_type\":\"application/json\"}]"
+     },
+     "at": 1792454400200,
+     "expect": true
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000001",
+     "outcome": {
+      "failed": "{\"code\":\"invalid_request\",\"message\":\"the strategy raised ValueError\"}"
+     },
+     "at": 1792454400300,
+     "expect": false
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000003",
+     "outcome": {
+      "succeeded": "[{\"name\":\"metrics\",\"media_type\":\"application/json\"}]"
+     },
+     "at": 1792454400300,
+     "expect": false
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400400,
+     "expect": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000,
+      "phase": "running",
+      "started_at_ms": 1792454400400,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000002",
+     "outcome": {
+      "failed": "{\"code\":\"invalid_request\",\"message\":\"the strategy raised ValueError\"}"
+     },
+     "at": 1792454400500,
+     "expect": true
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000009",
+     "outcome": {
+      "succeeded": "[{\"name\":\"metrics\",\"media_type\":\"application/json\"}]"
+     },
+     "at": 1792454400600,
+     "expect": false
+    },
+    {
+     "op": "jobs",
+     "limit": 10,
+     "expect": [
+      {
+       "job_id": "00000000000000000000000000000003",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":3}",
+       "submitted_at_ms": 1792454580000,
+       "phase": "queued",
+       "started_at_ms": null,
+       "finished_at_ms": null,
+       "results_json": null,
+       "failure_json": null
+      },
+      {
+       "job_id": "00000000000000000000000000000002",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":2}",
+       "submitted_at_ms": 1792454520000,
+       "phase": "failed",
+       "started_at_ms": 1792454400400,
+       "finished_at_ms": 1792454400500,
+       "results_json": null,
+       "failure_json": "{\"code\":\"invalid_request\",\"message\":\"the strategy raised ValueError\"}"
+      },
+      {
+       "job_id": "00000000000000000000000000000001",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":1}",
+       "submitted_at_ms": 1792454460000,
+       "phase": "succeeded",
+       "started_at_ms": 1792454400100,
+       "finished_at_ms": 1792454400200,
+       "results_json": "[{\"name\":\"metrics\",\"media_type\":\"application/json\"}]",
+       "failure_json": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "jobs.cancelled_queued_or_running",
+   "doc": "a queued or running job is cancelled, keeping when it started; an ended job stays as it is and an unknown one is not found",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000003",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":3}",
+      "submitted_at_ms": 1792454580000
+     }
+    },
+    {
+     "op": "cancel_job",
+     "job_id": "00000000000000000000000000000001",
+     "at": 1792454400100,
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "cancelled",
+      "started_at_ms": null,
+      "finished_at_ms": 1792454400100,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400200,
+     "expect": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000,
+      "phase": "running",
+      "started_at_ms": 1792454400200,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "cancel_job",
+     "job_id": "00000000000000000000000000000002",
+     "at": 1792454400300,
+     "expect": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000,
+      "phase": "cancelled",
+      "started_at_ms": 1792454400200,
+      "finished_at_ms": 1792454400300,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000002",
+     "outcome": {
+      "succeeded": "[{\"name\":\"metrics\",\"media_type\":\"application/json\"}]"
+     },
+     "at": 1792454400400,
+     "expect": false
+    },
+    {
+     "op": "cancel_job",
+     "job_id": "00000000000000000000000000000002",
+     "at": 1792454400500,
+     "expect": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000,
+      "phase": "cancelled",
+      "started_at_ms": 1792454400200,
+      "finished_at_ms": 1792454400300,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400600,
+     "expect": {
+      "job_id": "00000000000000000000000000000003",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":3}",
+      "submitted_at_ms": 1792454580000,
+      "phase": "running",
+      "started_at_ms": 1792454400600,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000003",
+     "outcome": {
+      "succeeded": "[{\"name\":\"metrics\",\"media_type\":\"application/json\"}]"
+     },
+     "at": 1792454400700,
+     "expect": true
+    },
+    {
+     "op": "cancel_job",
+     "job_id": "00000000000000000000000000000003",
+     "at": 1792454400800,
+     "expect": {
+      "job_id": "00000000000000000000000000000003",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":3}",
+      "submitted_at_ms": 1792454580000,
+      "phase": "succeeded",
+      "started_at_ms": 1792454400600,
+      "finished_at_ms": 1792454400700,
+      "results_json": "[{\"name\":\"metrics\",\"media_type\":\"application/json\"}]",
+      "failure_json": null
+     }
+    },
+    {
+     "op": "cancel_job",
+     "job_id": "00000000000000000000000000000009",
+     "at": 1792454400900,
+     "expect": null
+    }
+   ]
+  },
+  {
+   "id": "jobs.running_failed_on_restart",
+   "doc": "every running job, and nothing else, is failed with the reason given, as a server does as it starts",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000003",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":3}",
+      "submitted_at_ms": 1792454580000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000004",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":4}",
+      "submitted_at_ms": 1792454640000
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400100,
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "running",
+      "started_at_ms": 1792454400100,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400200,
+     "expect": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000,
+      "phase": "running",
+      "started_at_ms": 1792454400200,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400300,
+     "expect": {
+      "job_id": "00000000000000000000000000000003",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":3}",
+      "submitted_at_ms": 1792454580000,
+      "phase": "running",
+      "started_at_ms": 1792454400300,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000003",
+     "outcome": {
+      "succeeded": "[{\"name\":\"metrics\",\"media_type\":\"application/json\"}]"
+     },
+     "at": 1792454400400,
+     "expect": true
+    },
+    {
+     "op": "fail_running_jobs",
+     "failure": "{\"code\":\"internal\",\"message\":\"the server stopped while the job ran\"}",
+     "at": 1792454400500,
+     "expect": 2
+    },
+    {
+     "op": "fail_running_jobs",
+     "failure": "{\"code\":\"internal\",\"message\":\"the server stopped while the job ran\"}",
+     "at": 1792454400600,
+     "expect": 0
+    },
+    {
+     "op": "jobs",
+     "limit": 10,
+     "expect": [
+      {
+       "job_id": "00000000000000000000000000000004",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":4}",
+       "submitted_at_ms": 1792454640000,
+       "phase": "queued",
+       "started_at_ms": null,
+       "finished_at_ms": null,
+       "results_json": null,
+       "failure_json": null
+      },
+      {
+       "job_id": "00000000000000000000000000000003",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":3}",
+       "submitted_at_ms": 1792454580000,
+       "phase": "succeeded",
+       "started_at_ms": 1792454400300,
+       "finished_at_ms": 1792454400400,
+       "results_json": "[{\"name\":\"metrics\",\"media_type\":\"application/json\"}]",
+       "failure_json": null
+      },
+      {
+       "job_id": "00000000000000000000000000000002",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":2}",
+       "submitted_at_ms": 1792454520000,
+       "phase": "failed",
+       "started_at_ms": 1792454400200,
+       "finished_at_ms": 1792454400500,
+       "results_json": null,
+       "failure_json": "{\"code\":\"internal\",\"message\":\"the server stopped while the job ran\"}"
+      },
+      {
+       "job_id": "00000000000000000000000000000001",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":1}",
+       "submitted_at_ms": 1792454460000,
+       "phase": "failed",
+       "started_at_ms": 1792454400100,
+       "finished_at_ms": 1792454400500,
+       "results_json": null,
+       "failure_json": "{\"code\":\"internal\",\"message\":\"the server stopped while the job ran\"}"
+      }
+     ]
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400700,
+     "expect": {
+      "job_id": "00000000000000000000000000000004",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":4}",
+      "submitted_at_ms": 1792454640000,
+      "phase": "running",
+      "started_at_ms": 1792454400700,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    }
+   ]
+  },
+  {
+   "id": "jobs.json_kept_verbatim",
+   "doc": "a job's request, results and failure are kept as the text given, whatever it holds",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:d7853f10c1f17a188d601a33431043f913c2f71c2b843ac560bf6a4fbcab85f0",
+     "data": "7175616e74666f7267652e746f6d6c0000000000000000000000000000000000536d6143726f737320e29c93",
+     "expect": true
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:d7853f10c1f17a188d601a33431043f913c2f71c2b843ac560bf6a4fbcab85f0",
+      "request_json": "{\"symbol\":\"币安人生USDT\",\"note\":\"tab\\tquote\\\"\",\"n\":1.10}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:d7853f10c1f17a188d601a33431043f913c2f71c2b843ac560bf6a4fbcab85f0",
+      "request_json": "{}",
+      "submitted_at_ms": 1792454520000
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400100,
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:d7853f10c1f17a188d601a33431043f913c2f71c2b843ac560bf6a4fbcab85f0",
+      "request_json": "{\"symbol\":\"币安人生USDT\",\"note\":\"tab\\tquote\\\"\",\"n\":1.10}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "running",
+      "started_at_ms": 1792454400100,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000001",
+     "outcome": {
+      "succeeded": "[{\"name\":\"ünïcode\",\"size_bytes\":0}]"
+     },
+     "at": 1792454400200,
+     "expect": true
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400300,
+     "expect": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:d7853f10c1f17a188d601a33431043f913c2f71c2b843ac560bf6a4fbcab85f0",
+      "request_json": "{}",
+      "submitted_at_ms": 1792454520000,
+      "phase": "running",
+      "started_at_ms": 1792454400300,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000002",
+     "outcome": {
+      "failed": "{\"message\":\"a\\nb\"}"
+     },
+     "at": 1792454400400,
+     "expect": true
+    },
+    {
+     "op": "jobs",
+     "limit": 10,
+     "expect": [
+      {
+       "job_id": "00000000000000000000000000000002",
+       "bundle": "sha256:d7853f10c1f17a188d601a33431043f913c2f71c2b843ac560bf6a4fbcab85f0",
+       "request_json": "{}",
+       "submitted_at_ms": 1792454520000,
+       "phase": "failed",
+       "started_at_ms": 1792454400300,
+       "finished_at_ms": 1792454400400,
+       "results_json": null,
+       "failure_json": "{\"message\":\"a\\nb\"}"
+      },
+      {
+       "job_id": "00000000000000000000000000000001",
+       "bundle": "sha256:d7853f10c1f17a188d601a33431043f913c2f71c2b843ac560bf6a4fbcab85f0",
+       "request_json": "{\"symbol\":\"币安人生USDT\",\"note\":\"tab\\tquote\\\"\",\"n\":1.10}",
+       "submitted_at_ms": 1792454460000,
+       "phase": "succeeded",
+       "started_at_ms": 1792454400100,
+       "finished_at_ms": 1792454400200,
+       "results_json": "[{\"name\":\"ünïcode\",\"size_bytes\":0}]",
+       "failure_json": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "jobs.reopened",
+   "doc": "a store opened again keeps every job as it stood, and claims on in order",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400100,
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "running",
+      "started_at_ms": 1792454400100,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "reopen"
+    },
+    {
+     "op": "jobs",
+     "limit": 10,
+     "expect": [
+      {
+       "job_id": "00000000000000000000000000000002",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":2}",
+       "submitted_at_ms": 1792454520000,
+       "phase": "queued",
+       "started_at_ms": null,
+       "finished_at_ms": null,
+       "results_json": null,
+       "failure_json": null
+      },
+      {
+       "job_id": "00000000000000000000000000000001",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":1}",
+       "submitted_at_ms": 1792454460000,
+       "phase": "running",
+       "started_at_ms": 1792454400100,
+       "finished_at_ms": null,
+       "results_json": null,
+       "failure_json": null
+      }
+     ]
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400200,
+     "expect": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000,
+      "phase": "running",
+      "started_at_ms": 1792454400200,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400300,
+     "expect": null
     }
    ]
   }

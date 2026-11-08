@@ -26,6 +26,8 @@ pub(crate) struct Served {
     lines: Receiver<String>,
     stderr: Option<JoinHandle<String>>,
     storage: String,
+    /// How many jobs the server says it runs at once.
+    pub(crate) job_concurrency: String,
     pub(crate) address: SocketAddr,
 }
 
@@ -75,9 +77,11 @@ impl Served {
             lines,
             stderr: Some(stderr),
             storage: String::new(),
+            job_concurrency: String::new(),
             address: SocketAddr::from(([127, 0, 0, 1], 0)),
         };
         served.storage = served.next("storage");
+        served.job_concurrency = served.next("job_concurrency");
         let url = served.next("listening");
         served.address = url
             .strip_prefix("http://")

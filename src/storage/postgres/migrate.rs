@@ -37,10 +37,16 @@ pub(super) struct Step {
 }
 
 /// The chain, in order. A step's DDL never changes once a build ran it.
-pub(super) const STEPS: [Step; 1] = [Step {
-    to: 5,
-    apply: step_5_schema,
-}];
+pub(super) const STEPS: [Step; 2] = [
+    Step {
+        to: 5,
+        apply: step_5_schema,
+    },
+    Step {
+        to: 6,
+        apply: step_6_jobs,
+    },
+];
 
 /// What one pass found and did.
 enum Pass {
@@ -242,4 +248,9 @@ fn step_5_schema<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
         transaction.batch_execute(schema::SCHEMA_5).await?;
         schema::create_control_row(transaction).await
     })
+}
+
+/// Schema 6 (QUA-358): bundles and jobs, and the byte-ordered keys.
+fn step_6_jobs<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
+    Box::pin(async move { transaction.batch_execute(schema::SCHEMA_6).await })
 }

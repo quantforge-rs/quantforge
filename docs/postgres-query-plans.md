@@ -33,7 +33,9 @@ buffers), on 2026-11-01; the segment store's queries were measured again
 on 2026-11-04, when QUA-112 gave them the store's own shape, and the two
 steps of the candle store's walk over its markets on 2026-11-08, when
 QUA-359 added it, against PostgreSQL 16.15 in Docker
-([ci.md](ci.md#postgresql)'s local servers). Each query was
+([ci.md](ci.md#postgresql)'s local servers), as were the job store's
+statements and a transfer's keyset reads later that day, when QUA-358 added
+schema 6. Each query was
 explained with literal values, reads with `EXPLAIN (ANALYZE, BUFFERS)` and
 writes without running them.
 The PostgreSQL stores send the same values as parameters of unnamed
@@ -56,7 +58,9 @@ A store some years in:
   them;
 - 3 years of daily segments for each `1m` market before its candles: 8,760
   segments and index entries, and a dirty mark on every window, as a deep
-  backfill leaves them before its refresh.
+  backfill leaves them before its refresh;
+- 5,000 bundles and 20,000 jobs over them: 19,800 succeeded, 100 running
+  and 100 queued, as a server some years in holds them.
 
 The data is written twice, each time to a database of its own: market by
 market, as a backfill writes candles, and minute by minute across the
@@ -92,6 +96,18 @@ it, with the indexes its plan uses:
 - `segments.index`: `segment_index_pkey`
 - `segments.unindex`: `segment_index_pkey`
 - `segments.unmark`: `segment_dirty_pkey`
+- `bundles.store`: `bundles_pkey`
+- `bundles.load`: `bundles_pkey`
+- `jobs.submit`: `bundles_pkey`
+- `jobs.by_id`: `jobs_job_id_key`
+- `jobs.list`: `jobs_pkey`
+- `jobs.claim`: `idx_jobs_state`, `jobs_pkey`
+- `jobs.finish`: `jobs_job_id_key`
+- `jobs.cancel`: `jobs_job_id_key`
+- `jobs.fail_running`: `idx_jobs_state`
+- `transfer.segments`: `segments_pkey`
+- `transfer.runs`: `bot_runs_pkey`
+- `transfer.bundles`: `bundles_pkey`
 <!-- end: queries -->
 
 Both orders gave the same plans. The figures are from the data written
@@ -122,8 +138,20 @@ market by market; where the other order differs, it is in brackets.
 | `segments.index` | a write-back writing its index entry | One row, conflicts checked on `segment_index_pkey` | | | |
 | `segments.unindex` | a write-back for a window with no candles left | Index Scan on `segment_index_pkey` | | | |
 | `segments.unmark` | a write-back ending the mark by its revision | Index Scan on `segment_dirty_pkey` | | | |
+| `bundles.store` | `store_bundle` | One row, conflicts checked on `bundles_pkey`, behind the copy guard | | | |
+| `bundles.load` | `load_bundle` | Index Scan on `bundles_pkey` | 1 | 3 | 0.02 ms |
+| `jobs.submit` | `submit_job` | One row, its bundle found by an Index Only Scan on `bundles_pkey` | | | |
+| `jobs.by_id` | `job` | Index Scan on `jobs_job_id_key` | 1 | 3 | 0.05 ms (0.04) |
+| `jobs.list` | `jobs` | Index Scan Backward on `jobs_pkey`, under the limit | 100 | 5 | 0.05 ms (0.04) |
+| `jobs.claim` | `claim_job` | The oldest queued job by an Index Scan on `idx_jobs_state` under `LockRows`, skipping locked rows, then updated by `jobs_pkey` | | | |
+| `jobs.finish` | `finish_job` | Index Scan on `jobs_job_id_key`, the phase filtered | | | |
+| `jobs.cancel` | `cancel_job` | Index Scan on `jobs_job_id_key`, the phase filtered | | | |
+| `jobs.fail_running` | `fail_running_jobs` | Index Scan on `idx_jobs_state` | | | |
+| `transfer.segments` | a transfer's batch of segments, after the last key it read | Index Scan on `segments_pkey` from that key, under the limit | 64 | 6 | 0.03 ms |
+| `transfer.runs` | a transfer's batch of runs | Index Scan on `bot_runs_pkey` from the last key | 500 | 108 | 0.13 ms (0.11) |
+| `transfer.bundles` | a transfer's batch of bundles | Index Scan on `bundles_pkey` from the last key | 2 | 3 | 0.02 ms (0.06) |
 
-Two plans are worth knowing:
+Three plans are worth knowing:
 
 - `runs.legacy` is the one query no index serves. `store status` lists the
   legacy runs once per command by reading every run; a store holds
@@ -133,6 +161,11 @@ Two plans are worth knowing:
   range's first open time, so the bound changes no answer, and the key reads
   only the 30 entries in range. Without it the query read the market's 1,095
   entries below the tip and kept those 30, at 154 buffers and 0.28 ms.
+- The `transfer.*` reads compare their keys `COLLATE "C"`, byte by byte as
+  SQLite does. Under schema 5 no index served that order, and every batch
+  sorted the table's keys; schema 6 collates `segments.hash` and
+  `bot_runs.run_id` `"C"`, and `bundles.code_hash` from the start, so each
+  batch is a range of the primary key.
 
 ## The candles key and its copy
 

@@ -6,7 +6,8 @@
 //!
 //! A backend joins by implementing [`Backend`] and [`Raw`], then calling
 //! the group of each port it implements: [`candles`], [`journal`],
-//! [`segments`], [`control`], and, with all of them, [`durability`]. Every
+//! [`segments`], [`control`], [`jobs`], and, with all of them,
+//! [`durability`]. Every
 //! scenario and check runs on a fresh, empty store, and a group fails
 //! listing every one that failed.
 
@@ -14,6 +15,7 @@ pub mod candles;
 pub mod cases;
 pub mod control;
 pub mod durability;
+pub mod jobs;
 pub mod journal;
 pub mod segments;
 
@@ -21,7 +23,9 @@ use std::any::Any;
 use std::panic::{self, AssertUnwindSafe};
 use std::time::Duration;
 
-use quantforge::{CandleStore, RunJournalStore, SegmentStore, StorageError, StoreControl};
+use quantforge::{
+    CandleStore, JobStore, RunJournalStore, SegmentStore, StorageError, StoreControl,
+};
 
 pub use cases::{Cases, Refusal, Scenario, Step};
 
@@ -153,6 +157,24 @@ where
             shared_step(raw, reopen, store, step)
                 || candles::step(cases, store, step)
                 || segments::step(cases, store, step)
+        },
+    );
+}
+
+/// The job store's scenarios and checks.
+pub fn jobs<B: Backend>()
+where
+    B::Store: JobStore + Send,
+{
+    let cases = cases::load();
+    run_group::<B, _>(
+        "jobs",
+        &cases,
+        &cases.jobs,
+        jobs::CHECKS,
+        jobs::check,
+        |_cases, raw, reopen, store, step| {
+            shared_step(raw, reopen, store, step) || jobs::step(store, step)
         },
     );
 }

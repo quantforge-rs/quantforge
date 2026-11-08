@@ -507,6 +507,108 @@
           -86400000
         ]
       ]
+    },
+    "bundles": {
+      "columns": [
+        "code_hash",
+        "size_bytes",
+        "data",
+        "stored_at_ms"
+      ],
+      "rows": [
+        [
+          "sha256:f180432600770243d80a1b77b8ad4a4df0908f33f3e51247311f9f2b0df5c6f1",
+          772,
+          {
+            "hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00656e64"
+          },
+          1792454410000
+        ],
+        [
+          "sha256:71ec8e5f71157367a5f14b59d062c4f8bbc66cf129becc91a6db5d4cb05cf987",
+          528,
+          {
+            "hex": "7175616e74666f7267652e746f6d6c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000078"
+          },
+          1792454420000
+        ]
+      ]
+    },
+    "jobs": {
+      "columns": [
+        "seq",
+        "job_id",
+        "state",
+        "bundle_hash",
+        "request_json",
+        "submitted_at_ms",
+        "started_at_ms",
+        "finished_at_ms",
+        "results_json",
+        "failure_json"
+      ],
+      "rows": [
+        [
+          1,
+          "00000000000000000000000000000001",
+          "succeeded",
+          "sha256:f180432600770243d80a1b77b8ad4a4df0908f33f3e51247311f9f2b0df5c6f1",
+          "{\"bundle\":\"sha256:f180432600770243d80a1b77b8ad4a4df0908f33f3e51247311f9f2b0df5c6f1\",\"data\":{\"exchange\":\"binance\",\"category\":\"spot\",\"symbol\":\"BTCUSDT\",\"interval\":\"1m\",\"start_open_ms\":1792454400000,\"end_open_ms\":1792454520000},\"backtest\":{\"initial_cash\":\"10000\",\"fee_bps\":\"10\",\"close_out_at_end\":true}}",
+          1792454430000,
+          1792454431000,
+          1792454432000,
+          "[]",
+          null
+        ],
+        [
+          2,
+          "ffffffffffffffffffffffffffffffff",
+          "failed",
+          "sha256:71ec8e5f71157367a5f14b59d062c4f8bbc66cf129becc91a6db5d4cb05cf987",
+          "{\"bundle\":\"sha256:71ec8e5f71157367a5f14b59d062c4f8bbc66cf129becc91a6db5d4cb05cf987\",\"data\":{\"exchange\":\"binance\",\"category\":\"spot\",\"symbol\":\"BTCUSDT\",\"interval\":\"1m\",\"start_open_ms\":1792454400000,\"end_open_ms\":1792454520000},\"backtest\":{\"initial_cash\":\"10000\",\"fee_bps\":\"10\",\"close_out_at_end\":true}}",
+          1792454440000,
+          null,
+          1792454440500,
+          null,
+          "{\"code\":\"unavailable\",\"message\":\"this server cannot run Python bundles yet\"}"
+        ],
+        [
+          5,
+          "0123456789abcdef0123456789abcdef",
+          "cancelled",
+          "sha256:f180432600770243d80a1b77b8ad4a4df0908f33f3e51247311f9f2b0df5c6f1",
+          "{\"bundle\":\"sha256:f180432600770243d80a1b77b8ad4a4df0908f33f3e51247311f9f2b0df5c6f1\",\"data\":{\"exchange\":\"binance\",\"category\":\"spot\",\"symbol\":\"BTCUSDT\",\"interval\":\"1m\",\"start_open_ms\":1792454400000,\"end_open_ms\":1792454520000},\"backtest\":{\"initial_cash\":\"10000\",\"fee_bps\":\"10\",\"close_out_at_end\":true}}",
+          1792454450000,
+          1792454451000,
+          1792454452000,
+          null,
+          null
+        ],
+        [
+          9,
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "running",
+          "sha256:f180432600770243d80a1b77b8ad4a4df0908f33f3e51247311f9f2b0df5c6f1",
+          "{\"bundle\":\"sha256:f180432600770243d80a1b77b8ad4a4df0908f33f3e51247311f9f2b0df5c6f1\",\"data\":{\"exchange\":\"binance\",\"category\":\"spot\",\"symbol\":\"币安人生USDT\",\"interval\":\"1m\",\"start_open_ms\":1792454400000,\"end_open_ms\":1792454520000},\"backtest\":{\"initial_cash\":\"10000\",\"fee_bps\":\"10\",\"close_out_at_end\":true}}",
+          1792454460000,
+          1792454461000,
+          null,
+          null,
+          null
+        ],
+        [
+          10,
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "queued",
+          "sha256:71ec8e5f71157367a5f14b59d062c4f8bbc66cf129becc91a6db5d4cb05cf987",
+          "{\"bundle\":\"sha256:71ec8e5f71157367a5f14b59d062c4f8bbc66cf129becc91a6db5d4cb05cf987\",\"data\":{\"exchange\":\"binance\",\"category\":\"spot\",\"symbol\":\"BTCUSDT\",\"interval\":\"1m\",\"start_open_ms\":1792454400000,\"end_open_ms\":1792454520000},\"backtest\":{\"initial_cash\":\"10000\",\"fee_bps\":\"10\",\"close_out_at_end\":true}}",
+          1792454470000,
+          null,
+          null,
+          null,
+          null
+        ]
+      ]
     }
   },
   "scopes": [
@@ -621,6 +723,22 @@
       "first": 3,
       "last": 13,
       "checksum": "sha256:201cdde2992edd0cc3621034a6aca18c265b65e1ff602987b43164d88149bbc0"
+    },
+    {
+      "table": "bundles",
+      "market": null,
+      "rows": 2,
+      "first": null,
+      "last": null,
+      "checksum": "sha256:4436acfb543eeb0426e5a9e89c750a7ee2ed99c894344c326beaa0b5b8efe505"
+    },
+    {
+      "table": "jobs",
+      "market": null,
+      "rows": 5,
+      "first": 1,
+      "last": 10,
+      "checksum": "sha256:d26e1bb526c7dae115d02921c87f192327242547899797ae4c0f70a1903d1d87"
     }
   ],
   "worked_example": {

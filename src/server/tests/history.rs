@@ -285,7 +285,7 @@ async fn a_query_without_category_reads_spot_only_while_no_other_family_holds_th
     assert_eq!(
         message,
         format!(
-            "{} stores BTCUSDT 1m as spot and linear; a query without category reads spot only \
+            "{} stores BTCUSDT 1m as spot and linear; a market without category reads spot only \
              when no other family holds the symbol and interval, so name the category",
             VENUE.as_str()
         )

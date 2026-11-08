@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use quantforge::model::{TransferMarket, TransferRow, TransferTable, TransferValue};
-use quantforge::storage::sqlite::SqliteSnapshot;
+use quantforge::storage::sqlite::{SCHEMA_VERSION, SqliteSnapshot};
 use quantforge::{
     Environment, StorageError, StoreIdentity, TransferBegun, TransferConfig, TransferEngine,
     TransferRecord, TransferSnapshot, TransferSource, TransferTarget,
@@ -229,7 +229,9 @@ fn a_store_at_an_earlier_schema_is_refused_and_left_as_it_was() {
 
     let reason = refusal(&path);
     assert!(
-        reason.contains("is at schema 4, and this build copies schema 5"),
+        reason.contains(&format!(
+            "is at schema 4, and this build copies schema {SCHEMA_VERSION}"
+        )),
         "{reason}"
     );
     assert!(reason.contains("store status"), "{reason}");
@@ -251,16 +253,14 @@ fn a_store_from_a_newer_build_is_refused() {
     rusqlite::Connection::open(&path)
         .expect("open")
         .execute(
-            "UPDATE meta SET value = '6' WHERE key = 'schema_version'",
-            [],
+            "UPDATE meta SET value = ?1 WHERE key = 'schema_version'",
+            [(SCHEMA_VERSION + 1).to_string()],
         )
         .expect("a newer version");
     assert!(matches!(
         SqliteSnapshot::open(&path),
-        Err(StorageError::SchemaUnsupported {
-            found: 6,
-            supported: 5
-        })
+        Err(StorageError::SchemaUnsupported { found, supported })
+            if found == SCHEMA_VERSION + 1 && supported == SCHEMA_VERSION
     ));
 }
 

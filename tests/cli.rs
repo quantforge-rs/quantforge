@@ -18,6 +18,7 @@ fn quantforge() -> Command {
         "QF_API_SECRET",
         "QF_LISTEN",
         "QF_MAX_SPAN_BARS",
+        "QF_JOB_CONCURRENCY",
         "QF_STORAGE",
         "QF_POSTGRES_URL",
         "QF_POSTGRES_POOL_SIZE",
@@ -582,12 +583,18 @@ fn store_status_reports_a_fresh_store_as_unbound_and_inactive() {
         .args(["store", "status"]);
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("schema_version: 5"))
+        .stdout(predicate::str::contains(format!(
+            "schema_version: {}",
+            quantforge::storage::sqlite::SCHEMA_VERSION
+        )))
         .stdout(predicate::str::contains("environment: undeclared"))
         .stdout(predicate::str::contains("activation: inactive"))
         .stdout(predicate::str::contains("activation_epoch: 0"))
         .stdout(predicate::str::contains("migrations: 1"))
-        .stdout(predicate::str::contains("  0 -> 5 at "))
+        .stdout(predicate::str::contains(format!(
+            "  0 -> {} at ",
+            quantforge::storage::sqlite::SCHEMA_VERSION
+        )))
         .stdout(predicate::str::contains("legacy_runs: 0"));
 }
 

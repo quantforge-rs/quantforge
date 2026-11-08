@@ -20,7 +20,8 @@
 //! [`serve`] runs `serve run` as a process on a loopback port: its routes,
 //! and how it stops on a signal. Loopback only, always runs; the signal
 //! tests run on unix. [`history`] reads its history routes back against
-//! the store, on each backend as [`backends`] does.
+//! the store, and [`jobs`] submits jobs to it, each on each backend as
+//! [`backends`] does.
 //!
 //! [`migrate`] copies a SQLite store into PostgreSQL with `data migrate`,
 //! held to the acceptance criteria and to the transfer fixture
@@ -43,6 +44,7 @@
 mod backends;
 mod harness;
 mod history;
+mod jobs;
 mod layout;
 mod migrate;
 mod mock_binance;

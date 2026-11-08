@@ -1,6 +1,6 @@
 # The storage schema
 
-**Schema 5.** Every QuantForge store holds the same tables under one schema
+**Schema 6.** Every QuantForge store holds the same tables under one schema
 version, on SQLite and on PostgreSQL. This page is the contract between
 them: the identities their rows carry, the record a store keeps
 about itself and the activation contract behind it, who owns which tables
@@ -11,7 +11,7 @@ hold every backend to the identities. [upgrading.md](upgrading.md) is the
 operator's side of the same contract.
 
 <!-- begin: schema version -->
-5
+6
 <!-- end: schema version -->
 
 ## Contents
@@ -27,6 +27,7 @@ operator's side of the same contract.
 - [PostgreSQL DDL](#postgresql-ddl)
 - [Segments on PostgreSQL](#segments-on-postgresql)
 - [Keeping segments](#keeping-segments)
+- [Keeping jobs](#keeping-jobs)
 - [The shared cases](#the-shared-cases)
 - [Backends and ownership](#backends-and-ownership)
 
@@ -156,10 +157,11 @@ story exist yet.
 | `bot_runs`, `order_events`, `closed_trades` | QuantForge 0.2.0; the identity columns and text IDs by QUA-37 | schema 2, 5 |
 | `segments`, `segment_index`, `segment_dirty` | ALG-506 | schema 4 |
 | `store_control`, `schema_migrations` | QUA-37 | schema 5 |
+| `bundles`, `jobs` | QUA-358 (ALG-509) | schema 6 |
 | Asset defaults, risk capital and per-asset policies | ALG-735 | a later schema |
 | The signal inbox, intents, protection and the event outbox | ALG-738 | a later schema |
 | Notifications | ALG-749 | a later schema |
-| Jobs and their provenance: the server's job records and the reproducibility ledger | ALG-509, ALG-516 | a later schema |
+| Jobs' provenance: the reproducibility ledger | ALG-516 | a later schema |
 <!-- end: table owners -->
 
 **PostgreSQL** starts at schema 5 with the same version numbers and the
@@ -179,10 +181,11 @@ and ALG-516:
   table;
 - never edits an earlier step, deletes nothing, and keeps a row it rewrites
   beside the original;
-- if it is the first step after schema 5, also declares `segments.hash` and
-  `bot_runs.run_id` `COLLATE "C"` on PostgreSQL, so that their primary keys
-  serve the byte order a transfer reads them in, which no index of schema 5
-  does ([storage-migration.md](storage-migration.md#verification));
+- leaves the keys a transfer reads in byte order collated `"C"` on
+  PostgreSQL. Schema 6, the first step after schema 5, collated
+  `segments.hash` and `bot_runs.run_id` so, and created `bundles.code_hash`
+  so, since no index of schema 5 served that order
+  ([storage-migration.md](storage-migration.md#verification));
 - proves on both backends what the chain promises: a fresh store, a repeat
   that changes nothing, stores starting together that apply it once, a
   failure that rolls back whole, and an upgrade that keeps every row it
@@ -209,6 +212,7 @@ untouched (`StorageError::SchemaUnsupported`).
 | 2 → 3 | development | Nothing: `state_json` gained a required `execution_mode`, which a run 0.2.0 wrote does not have and is never given by guesswork. |
 | 3 → 4 | development | The segment tables, and one dirty mark per window that holds candles, so the next refresh packs the candles the earlier build stored. |
 | 4 → 5 | QUA-37 | The identity columns of `bot_runs` (every existing run `legacy`, its `state_json` copied to `legacy_state_json`); `order_events` and `closed_trades` rebuilt with text IDs, every row and its `seq` copied, `raw_json` copied to `legacy_raw_json`; the numeric IDs inside `state_json` and `raw_json` rewritten as strings; `store_control` with a fresh ID, no environment, `inactive`, epoch 0; `schema_migrations`. |
+| 5 → 6 | QUA-358 | `bundles` and `jobs`: the bundles a server was sent, and its jobs. |
 
 ## The chain on PostgreSQL
 
@@ -229,7 +233,8 @@ committed, and the waiting process would apply the step again.
 
 | Step | Build | What it does |
 | --- | --- | --- |
-| 0 → 5 | QUA-125 | Every table of schema 5, as [below](#postgresql-ddl), and the store's control record: a fresh ID, no environment, `inactive`, epoch 0. Logged as one step from 0. |
+| 0 → 5 | QUA-125 | Every table of schema 5, as [below](#postgresql-ddl), and the store's control record: a fresh ID, no environment, `inactive`, epoch 0. A database without a schema runs the whole chain in one pass, logged as one step from 0. |
+| 5 → 6 | QUA-358 | `bundles` and `jobs`, as [below](#schema-6-on-postgresql); `segments.hash` and `bot_runs.run_id` collated `"C"`. |
 
 Refused untouched, before anything is created:
 
@@ -434,6 +439,28 @@ CREATE TABLE schema_migrations (
   applied_at_ms INTEGER NOT NULL,
   quantforge_version TEXT NOT NULL
 );
+
+CREATE TABLE bundles (
+  code_hash TEXT PRIMARY KEY,
+  size_bytes INTEGER NOT NULL,
+  data BLOB NOT NULL,
+  stored_at_ms INTEGER NOT NULL
+);
+
+CREATE TABLE jobs (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id TEXT NOT NULL UNIQUE,
+  state TEXT NOT NULL,
+  bundle_hash TEXT NOT NULL,
+  request_json TEXT NOT NULL,
+  submitted_at_ms INTEGER NOT NULL,
+  started_at_ms INTEGER,
+  finished_at_ms INTEGER,
+  results_json TEXT,
+  failure_json TEXT
+);
+CREATE INDEX idx_jobs_state
+  ON jobs(state, seq);
 ```
 <!-- end: sqlite schema -->
 
@@ -596,6 +623,42 @@ A BRIN index on `candles(open_time_ms)` was evaluated and is not built: no
 query the stores run picks it, since every candle query names its market
 ([the evaluation](postgres-query-plans.md#brin)).
 
+### Schema 6 on PostgreSQL
+
+The step after schema 5, `SCHEMA_6` in `src/storage/postgres/schema.rs`,
+held equal to this text by the same unit test. A database without a schema
+runs it after the block above, in the same pass, so a fresh store and an
+upgraded one end the same:
+
+<!-- begin: postgres step 6 -->
+```sql
+ALTER TABLE segments ALTER COLUMN hash TYPE TEXT COLLATE "C";
+ALTER TABLE bot_runs ALTER COLUMN run_id TYPE TEXT COLLATE "C";
+
+CREATE TABLE bundles (
+  code_hash TEXT COLLATE "C" PRIMARY KEY,
+  size_bytes BIGINT NOT NULL,
+  data BYTEA NOT NULL,
+  stored_at_ms BIGINT NOT NULL
+);
+
+CREATE TABLE jobs (
+  seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  job_id TEXT NOT NULL UNIQUE,
+  state TEXT NOT NULL,
+  bundle_hash TEXT NOT NULL,
+  request_json TEXT NOT NULL,
+  submitted_at_ms BIGINT NOT NULL,
+  started_at_ms BIGINT,
+  finished_at_ms BIGINT,
+  results_json TEXT,
+  failure_json TEXT
+);
+CREATE INDEX idx_jobs_state
+  ON jobs(state, seq);
+```
+<!-- end: postgres step 6 -->
+
 ## Segments on PostgreSQL
 
 The segment tables are SQLite's, and so is the protocol over them, which
@@ -662,6 +725,40 @@ and the rules below need no schema change:
 - **An operator runs it, nothing else.** A plan handed out before it ran can
   name a segment it removed: `load_segment` answers `None`, and the reader
   plans the range again.
+
+## Keeping jobs
+
+`serve run` keeps the bundles it was sent and the backtest jobs that run
+them through the `JobStore` port, in the store the operator selected; the
+shared suite's `jobs` group holds both backends to the same answers
+([storage-conformance.md](storage-conformance.md#the-job-store)).
+
+- **A bundle is stored once and never changed.** Its row is named by the
+  SHA-256 of its canonical tar (`sha256:` and 64 lowercase hex digits), and
+  storing it again changes nothing. No release deletes a bundle: a job's
+  submission names it, and a job is never deleted either.
+- **A job moves only forward.** `state` is `queued`, then `running`, then
+  `succeeded` or `failed`; a queued or running job can be `cancelled`
+  instead. Each move is one guarded statement or transaction that changes a
+  row only from the state it expects, so a job never leaves a final state:
+  ending a job that a cancel already ended changes nothing, and the cancel
+  stands.
+- **A claim takes the job submitted first.** `seq` orders submissions, and
+  a claim moves the lowest queued `seq` to `running` in one statement:
+  on PostgreSQL its subquery locks that row `FOR UPDATE SKIP LOCKED`, so
+  claims at once each take a job of their own, and SQLite's single writer
+  does the same. `idx_jobs_state` serves the claim and the startup scan.
+- **What a row holds.** `request_json` is the submission as the server
+  accepted it, its market's category named, and the job's input is read
+  from the store's candles as it starts; `results_json` is the results'
+  JSON list and `failure_json` the protocol's error body. `started_at_ms`
+  is empty until a claim, and stays empty for a job cancelled while
+  queued.
+- **One server runs a store's queue.** A server that starts fails every job
+  its store holds as `running`, as a server that was killed leaves them,
+  with `internal` and the reason; a server that stops fails the jobs it
+  runs the same way. A cancel stops a job's worker only in the server that
+  claimed it.
 
 ## The shared cases
 

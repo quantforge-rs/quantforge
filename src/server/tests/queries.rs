@@ -17,7 +17,7 @@ async fn a_query_is_refused_before_the_store_is_asked_unless_every_value_is_cano
         max_span_bars: 10,
         ..HistoryLimits::default()
     };
-    let address = start(History::new(store, limits)).await;
+    let address = start(History::new(served(store), limits)).await;
     let good = query(VENUE, Some(Category::Spot), "BTCUSDT", T, T + 9 * MINUTE);
     let with = |name: &str, value: &str| -> Vec<(&'static str, String)> {
         good.iter()

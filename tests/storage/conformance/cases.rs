@@ -9,9 +9,10 @@
 //! from its exact text and compared as text, never through a float.
 
 use quantforge::{
-    BotRunState, Candle, ClosedTrade, Environment, ExchangeId, ExchangeOrder, ExecutionMode, Fill,
-    Interval, KeyFingerprint, MarketId, OrderStatus, PositionState, RunIdentity, RunStatus, Side,
-    Symbol, VenueAccountId, VenueOrderId, VenueTradeId,
+    BotRunState, BundleHash, Candle, ClosedTrade, Environment, ExchangeId, ExchangeOrder,
+    ExecutionMode, Fill, Interval, JobId, JobOutcome, JobRecord, KeyFingerprint, MarketId, NewJob,
+    OrderStatus, PositionState, RunIdentity, RunStatus, Side, Symbol, VenueAccountId, VenueOrderId,
+    VenueTradeId,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -50,6 +51,7 @@ pub struct Cases {
     pub segments: Vec<Scenario>,
     pub races: Vec<serde_json::Value>,
     pub control: Vec<Scenario>,
+    pub jobs: Vec<Scenario>,
 }
 
 pub fn load() -> Cases {
@@ -141,6 +143,48 @@ pub enum Step {
         expect: Vec<String>,
     },
     Reopen,
+    StoreBundle {
+        hash: String,
+        data: String,
+        expect: bool,
+    },
+    LoadBundle {
+        hash: String,
+        expect: Option<String>,
+    },
+    SubmitJob {
+        job: NewJobText,
+        #[serde(default)]
+        refused: Option<Refusal>,
+    },
+    Job {
+        job_id: String,
+        expect: Option<JobText>,
+    },
+    Jobs {
+        limit: usize,
+        expect: Vec<JobText>,
+    },
+    ClaimJob {
+        at: i64,
+        expect: Option<JobText>,
+    },
+    FinishJob {
+        job_id: String,
+        outcome: OutcomeText,
+        at: i64,
+        expect: bool,
+    },
+    CancelJob {
+        job_id: String,
+        at: i64,
+        expect: Option<JobText>,
+    },
+    FailRunningJobs {
+        failure: String,
+        at: i64,
+        expect: usize,
+    },
     CreateRun {
         run: String,
         identity: IdentityText,
@@ -290,6 +334,79 @@ impl Cases {
 }
 
 // --- Candles -----------------------------------------------------------------
+
+/// A job as the cases submit it.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NewJobText {
+    pub job_id: String,
+    pub bundle: String,
+    pub request_json: String,
+    pub submitted_at_ms: i64,
+}
+
+impl NewJobText {
+    pub fn new_job(&self) -> NewJob {
+        NewJob {
+            job_id: JobId::new(self.job_id.as_str()).expect("a job id"),
+            bundle: BundleHash::from_str(&self.bundle).expect("a bundle hash"),
+            request_json: self.request_json.clone(),
+            submitted_at_ms: self.submitted_at_ms,
+        }
+    }
+}
+
+/// A job's record as text: what a store must answer.
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct JobText {
+    pub job_id: String,
+    pub phase: String,
+    pub bundle: String,
+    pub request_json: String,
+    pub submitted_at_ms: i64,
+    pub started_at_ms: Option<i64>,
+    pub finished_at_ms: Option<i64>,
+    pub results_json: Option<String>,
+    pub failure_json: Option<String>,
+}
+
+impl JobText {
+    pub fn of(record: &JobRecord) -> Self {
+        Self {
+            job_id: record.job_id.as_str().to_string(),
+            phase: record.phase.as_str().to_string(),
+            bundle: record.bundle.to_string(),
+            request_json: record.request_json.clone(),
+            submitted_at_ms: record.submitted_at_ms,
+            started_at_ms: record.started_at_ms,
+            finished_at_ms: record.finished_at_ms,
+            results_json: record.results_json.clone(),
+            failure_json: record.failure_json.clone(),
+        }
+    }
+}
+
+/// How the cases end a run.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+pub enum OutcomeText {
+    Succeeded(String),
+    Failed(String),
+}
+
+impl OutcomeText {
+    pub fn outcome(&self) -> JobOutcome {
+        match self {
+            Self::Succeeded(results_json) => JobOutcome::Succeeded {
+                results_json: results_json.clone(),
+            },
+            Self::Failed(failure_json) => JobOutcome::Failed {
+                failure_json: failure_json.clone(),
+            },
+        }
+    }
+}
 
 /// A candle as text: what was written, and what must come back.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]

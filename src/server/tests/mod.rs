@@ -1,18 +1,24 @@
 //! The server's routes in process, over a real SQLite store in a directory
-//! of its own: health and version, every refusal of a path or method, and a
-//! shutdown that finishes a request in progress here; a range in
-//! `history`, the market list in `markets`, the queries refused in
-//! `queries`, the segment route in `segments`, and storage failures and the
-//! turns at the store in `store`, over the store of `faulty`. Literal venue
-//! names live in this file only: `tests/exchange_boundary.rs` reads the
-//! others as code.
+//! of its own: health and version, and every refusal of a path or method,
+//! here; a shutdown that finishes a request in progress in `shutdown`; a
+//! range in `history`, the market list in `markets`, the queries refused in
+//! `queries`, the segment route in `segments`, uploads in `jobs`, the other
+//! job routes in `submissions`, a busy store at a job's start in `queue`,
+//! and storage failures and the turns at the store in `store`, over the
+//! store of `faulty`. Literal venue names live
+//! in this file only: `tests/exchange_boundary.rs` reads the others as
+//! code.
 
 mod faulty;
 mod history;
+mod jobs;
 mod markets;
 mod queries;
+mod queue;
 mod segments;
+mod shutdown;
 mod store;
+mod submissions;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -22,12 +28,11 @@ use reqwest::header::{ALLOW, CACHE_CONTROL, CONTENT_TYPE};
 use rust_decimal::Decimal;
 use serde_json::Value;
 use tempfile::TempDir;
-use tokio::net::TcpStream;
-use tokio::sync::{Notify, oneshot};
 
 use super::*;
 use crate::model::{
     Candle, Category, ExchangeId, Interval, MarketId, SegmentHash, Symbol, TimestampMs, Venue,
+    ms_to_rfc3339,
 };
 use crate::ports::{CandleQuery, CandleStore, SegmentStore, StorageError};
 use crate::storage::SqliteStore;
@@ -52,12 +57,38 @@ fn client() -> reqwest::Client {
         .expect("an HTTP client")
 }
 
-/// Serves `history` on a free loopback port for the rest of the test.
+/// Serves `history`, and job routes whose queue never starts, on a free
+/// loopback port for the rest of the test.
 async fn start(history: History) -> SocketAddr {
+    let jobs = idle(&history);
+    start_with(history, jobs).await
+}
+
+/// Serves `history` and `jobs` on a free loopback port for the rest of the
+/// test.
+async fn start_with(history: History, jobs: Jobs) -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("a listener");
     let address = listener.local_addr().expect("its address");
-    tokio::spawn(serve(listener, history, std::future::pending()));
+    tokio::spawn(serve(listener, history, jobs, std::future::pending()));
     address
+}
+
+/// Job routes over `history`'s store whose queue is never started, so that
+/// they make no store call of their own.
+fn idle(history: &History) -> Jobs {
+    Jobs::new(
+        history.store().clone(),
+        NoRuntime,
+        JobLimits {
+            concurrency: 1,
+            max_span_bars: DEFAULT_MAX_SPAN_BARS,
+        },
+    )
+}
+
+/// `store` behind the server's default turns.
+fn served<S: ServedStore + 'static>(store: S) -> ServerStore {
+    ServerStore::new(store, StoreLimits::default())
 }
 
 /// `future`'s output, or a failed test after ten seconds, so that a server
@@ -121,7 +152,12 @@ impl Bed {
     }
 
     fn history_with(&self, limits: HistoryLimits) -> History {
-        History::new(self.store.within(Duration::from_secs(2)), limits)
+        History::new(self.server_store(), limits)
+    }
+
+    /// The bed's store as the server holds it.
+    fn server_store(&self) -> ServerStore {
+        served(self.store.within(Duration::from_secs(2)))
     }
 
     /// The bed's database file, for a state no port leaves.
@@ -293,89 +329,4 @@ async fn a_path_under_a_version_the_server_does_not_speak_names_the_ones_it_does
             serde_json::json!({"min_supported": MIN_SUPPORTED.0, "proto_version": PROTO_VERSION.0})
         );
     }
-}
-
-/// A listener that reports when the server lets go of it, which is when it
-/// stops accepting connections.
-struct Watched {
-    inner: TcpListener,
-    dropped: Option<oneshot::Sender<()>>,
-}
-
-impl Listener for Watched {
-    type Io = TcpStream;
-    type Addr = SocketAddr;
-
-    async fn accept(&mut self) -> (TcpStream, SocketAddr) {
-        Listener::accept(&mut self.inner).await
-    }
-
-    fn local_addr(&self) -> io::Result<SocketAddr> {
-        Listener::local_addr(&self.inner)
-    }
-}
-
-impl Drop for Watched {
-    fn drop(&mut self) {
-        if let Some(dropped) = self.dropped.take() {
-            let _ = dropped.send(());
-        }
-    }
-}
-
-#[tokio::test]
-async fn a_request_in_progress_is_answered_before_the_server_returns() {
-    // The slow route says when it has the request, then answers once
-    // released, so the shutdown starts while the request is in progress.
-    let entered = Arc::new(Notify::new());
-    let release = Arc::new(Notify::new());
-    let slow = {
-        let (entered, release) = (entered.clone(), release.clone());
-        move || {
-            let (entered, release) = (entered.clone(), release.clone());
-            async move {
-                entered.notify_one();
-                release.notified().await;
-                "done"
-            }
-        }
-    };
-    let inner = TcpListener::bind("127.0.0.1:0").await.expect("a listener");
-    let address = inner.local_addr().expect("its address");
-    let (dropped, listener_dropped) = oneshot::channel();
-    let listener = Watched {
-        inner,
-        dropped: Some(dropped),
-    };
-    let (stop, stopping) = oneshot::channel::<()>();
-    let server = tokio::spawn(serve_on(
-        listener,
-        router(Bed::new().history()).route("/slow", get(slow)),
-        async move {
-            let _ = stopping.await;
-        },
-    ));
-
-    let request = tokio::spawn(client().get(format!("http://{address}/slow")).send());
-    within("request", entered.notified()).await;
-    stop.send(()).expect("the server waits for the signal");
-    within("end of accepting", listener_dropped)
-        .await
-        .expect("the listener is dropped, not leaked");
-    assert!(
-        !server.is_finished(),
-        "the server returned with a request in progress"
-    );
-
-    release.notify_one();
-    let response = within("response", request)
-        .await
-        .expect("the request task")
-        .expect("a response");
-    assert_eq!(response.status(), 200);
-    assert_eq!(response.text().await.expect("a body"), "done");
-    let served = within("return once the request is answered", server)
-        .await
-        .expect("the server task");
-    assert!(served.is_ok(), "{served:?}");
 }

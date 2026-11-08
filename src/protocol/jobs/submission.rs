@@ -4,6 +4,25 @@ use serde::{Deserialize, Serialize};
 
 use super::super::{ContentHash, ExactDecimal};
 
+/// What `PUT /v1/bundles/{code_hash}` answers: the bundle the server holds.
+///
+/// ```
+/// use quantforge::protocol::jobs::BundleReceipt;
+///
+/// let json = r#"{"code_hash":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","size_bytes":3072}"#;
+/// let receipt: BundleReceipt = serde_json::from_str(json)?;
+/// assert_eq!(receipt.size_bytes, 3072);
+/// assert_eq!(serde_json::to_string(&receipt)?, json);
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BundleReceipt {
+    /// The bundle's code hash, which a [`JobSubmission`] names it by.
+    pub code_hash: ContentHash,
+    /// The size of its canonical tar.
+    pub size_bytes: u64,
+}
+
 /// A backtest to run: the bundle, the candles it runs on, and how fills are
 /// simulated. Strategy parameters belong to the bundle, so the bundle's hash
 /// and these fields together say everything the client asks for. A bundle
@@ -16,7 +35,7 @@ use super::super::{ContentHash, ExactDecimal};
 /// let json = r#"{"bundle":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","data":{"exchange":"binance","category":"spot","symbol":"BTCUSDT","interval":"1m","start_open_ms":1792454400000,"end_open_ms":1792540740000},"backtest":{"initial_cash":"10000","fee_bps":"10","close_out_at_end":true}}"#;
 /// let submission: JobSubmission = serde_json::from_str(json)?;
 /// assert_eq!(submission.data.exchange, "binance");
-/// assert_eq!(submission.data.category, "spot");
+/// assert_eq!(submission.data.category.as_deref(), Some("spot"));
 /// assert_eq!(submission.backtest.fee_bps.to_string(), "10");
 /// assert_eq!(serde_json::to_string(&submission)?, json);
 /// # Ok::<(), serde_json::Error>(())
@@ -40,8 +59,11 @@ pub struct DataSelection {
     /// The exchange, by the name QuantForge registers it under.
     pub exchange: String,
     /// The product family: `spot`, `linear` or `inverse`. With `exchange` it
-    /// names the product line.
-    pub category: String,
+    /// names the product line. Left out only in the form a selection took
+    /// before markets carried one, which a server reads as `spot` only while
+    /// that is unambiguous (see the [module docs](super)).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
     /// The exchange's symbol, in uppercase.
     pub symbol: String,
     /// The bar interval, such as `1m`.
@@ -97,10 +119,9 @@ mod tests {
     }
 
     #[test]
-    fn every_field_is_required() {
+    fn every_field_is_required_but_category() {
         for field in [
             r#""bundle":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","#,
-            r#""category":"spot","#,
             r#""start_open_ms":1792454400000,"#,
             r#","close_out_at_end":false"#,
         ] {
@@ -111,5 +132,32 @@ mod tests {
                 "a submission without {field} must be refused"
             );
         }
+    }
+
+    #[test]
+    fn a_selection_without_category_is_read_and_sent_without_one() {
+        let legacy = JSON.replace(r#""category":"spot","#, "");
+        let submission: JobSubmission = serde_json::from_str(&legacy).expect("submission");
+        assert_eq!(submission.data.category, None);
+        assert_eq!(
+            serde_json::to_string(&submission).expect("serialize"),
+            legacy
+        );
+    }
+
+    #[test]
+    fn a_receipt_has_its_exact_json() {
+        let receipt = BundleReceipt {
+            code_hash: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                .parse()
+                .expect("hash"),
+            size_bytes: 1024,
+        };
+        let json = r#"{"code_hash":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","size_bytes":1024}"#;
+        assert_eq!(serde_json::to_string(&receipt).expect("serialize"), json);
+        assert_eq!(
+            serde_json::from_str::<BundleReceipt>(json).expect("receipt"),
+            receipt
+        );
     }
 }

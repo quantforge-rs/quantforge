@@ -76,7 +76,7 @@ async fn markets_lists_every_stored_market_in_order_with_the_span_of_its_bars() 
 
     // In that order whatever order the store lists them in.
     let backwards = Faulty::backwards(bed.store.within(Duration::from_secs(2)));
-    let address = start(History::new(backwards, HistoryLimits::default())).await;
+    let address = start(History::new(served(backwards), HistoryLimits::default())).await;
     let response = client()
         .get(format!("http://{address}/v1/markets"))
         .send()

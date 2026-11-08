@@ -10,8 +10,8 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use tracing::error;
 
-use super::history::History;
 use super::refusal::Refusal;
+use super::store::ServerStore;
 use crate::model::SegmentHash;
 use crate::protocol::ContentHash;
 use crate::protocol::segments::{SEGMENT_CACHE_CONTROL, SEGMENT_MEDIA_TYPE};
@@ -19,7 +19,7 @@ use crate::storage::segments;
 
 /// `GET /v1/segments/{hash}`.
 pub(super) async fn segment(
-    State(history): State<History>,
+    State(store): State<ServerStore>,
     hash: Result<Path<String>, PathRejection>,
     headers: HeaderMap,
 ) -> Result<Response, Refusal> {
@@ -30,8 +30,8 @@ pub(super) async fn segment(
     let tag = format!("\"{hash}\"");
     let cached = names_tag(&headers, &tag);
     let name = SegmentHash::from_digest(*hash.digest());
-    let found = history
-        .with_store(move |store| {
+    let found = store
+        .call(move |store| {
             let Some(bytes) = store
                 .load_segment(&name)
                 .map_err(|failure| Refusal::storage("loading a segment", failure))?

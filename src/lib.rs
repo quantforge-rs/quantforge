@@ -143,21 +143,23 @@ pub mod storage;
 /// `CandleColumns`, `decimal_to_f64` and `decimal_from_f64` are the Python
 /// interchange, which no command uses yet.
 pub use model::{
-    AccountTrade, AssetBalance, BotRunState, CancelOrderRequest, Candle, CandleBatch,
+    AccountTrade, AssetBalance, BotRunState, BundleHash, CancelOrderRequest, Candle, CandleBatch,
     CandleColumns, Category, ClosedTrade, DurabilityReport, DurabilitySetting, Environment,
-    ExchangeId, ExchangeOrder, ExecutionMode, Fill, IdentitySource, Interval, KeyFingerprint,
-    KlineRequest, LegacyRun, MarketCoverage, MarketId, MarketOrderRequest, ModelError,
-    OrderQueryRequest, OrderStatus, PositionState, RunIdentity, RunStatus, SchemaMigration,
-    SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh, SegmentTip, Side, StoreActivation,
-    StoreId, StoreIdentity, Symbol, SymbolRules, TargetPosition, TimestampMs, TransferRecord,
-    TransferState, ValidationIssue, ValidationReport, Venue, VenueAccountId, VenueOrderId,
-    VenueTradeId, decimal_from_f64, decimal_to_f64, describe_account, describe_environment,
-    ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms, round_down_to_step, validate_candles,
+    ExchangeId, ExchangeOrder, ExecutionMode, Fill, IdentitySource, Interval, JobId, JobOutcome,
+    JobPhase, JobRecord, KeyFingerprint, KlineRequest, LegacyRun, MarketCoverage, MarketId,
+    MarketOrderRequest, ModelError, NewJob, OrderQueryRequest, OrderStatus, PositionState,
+    RunIdentity, RunStatus, SchemaMigration, SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh,
+    SegmentTip, Side, StoreActivation, StoreId, StoreIdentity, Symbol, SymbolRules, TargetPosition,
+    TimestampMs, TransferRecord, TransferState, ValidationIssue, ValidationReport, Venue,
+    VenueAccountId, VenueOrderId, VenueTradeId, decimal_from_f64, decimal_to_f64, describe_account,
+    describe_environment, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms, round_down_to_step,
+    validate_candles,
 };
 
-/// The seams. An out-of-tree exchange or storage backend implements these
-/// seven traits; the engines are written against them and never against an
-/// adapter. `ExchangeCapabilities` describes what an exchange supports,
+/// The seams. An out-of-tree exchange or storage backend implements the
+/// traits here: an exchange its connectors, a store its storage ports, the
+/// job store's among them, and a transfer's when it copies; the engines and
+/// the server are written against them and never against an adapter. `ExchangeCapabilities` describes what an exchange supports,
 /// `SignedConnectors` pairs the two connectors that need credentials, and
 /// `ExchangeError` and `StorageError` are the two failure channels they
 /// report through, with `ExchangeErrorKind` classifying an exchange's
@@ -166,7 +168,7 @@ pub use model::{
 /// `ExchangeError`.
 pub use ports::{
     AccountConnector, CandleQuery, CandleStore, ExchangeCapabilities, ExchangeConnector,
-    ExchangeError, ExchangeErrorKind, MarketDataCapabilities, MarketDataConnector,
+    ExchangeError, ExchangeErrorKind, JobStore, MarketDataCapabilities, MarketDataConnector,
     OrderCapabilities, RunJournalStore, SegmentStore, SignedConnectors, StorageError,
     StorageErrorKind, StoreControl, StreamCapabilities, TradingConnector, TransferBegun,
     TransferSnapshot, TransferSource, TransferTarget,

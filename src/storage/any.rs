@@ -10,12 +10,13 @@
 use std::time::Duration;
 
 use crate::model::{
-    BotRunState, Candle, ClosedTrade, DurabilityReport, Environment, ExchangeOrder, ExecutionMode,
-    LegacyRun, MarketCoverage, MarketId, RunIdentity, SchemaMigration, SegmentHash, SegmentPlan,
-    SegmentRefresh, StoreIdentity, TimestampMs,
+    BotRunState, BundleHash, Candle, ClosedTrade, DurabilityReport, Environment, ExchangeOrder,
+    ExecutionMode, JobId, JobOutcome, JobRecord, LegacyRun, MarketCoverage, MarketId, NewJob,
+    RunIdentity, SchemaMigration, SegmentHash, SegmentPlan, SegmentRefresh, StoreIdentity,
+    TimestampMs,
 };
 use crate::ports::{
-    CandleQuery, CandleStore, RunJournalStore, SegmentStore, StorageError, StoreControl,
+    CandleQuery, CandleStore, JobStore, RunJournalStore, SegmentStore, StorageError, StoreControl,
     TransferTarget,
 };
 use crate::storage::SqliteStore;
@@ -214,5 +215,61 @@ impl StoreControl for AnyStore {
 
     fn durability(&self) -> Result<DurabilityReport, StorageError> {
         delegate!(self, store => store.durability())
+    }
+}
+
+impl JobStore for AnyStore {
+    fn store_bundle(
+        &self,
+        hash: &BundleHash,
+        tar: &[u8],
+        stored_at_ms: TimestampMs,
+    ) -> Result<bool, StorageError> {
+        delegate!(self, store => store.store_bundle(hash, tar, stored_at_ms))
+    }
+
+    fn load_bundle(&self, hash: &BundleHash) -> Result<Option<Vec<u8>>, StorageError> {
+        delegate!(self, store => store.load_bundle(hash))
+    }
+
+    fn submit_job(&self, job: &NewJob) -> Result<(), StorageError> {
+        delegate!(self, store => store.submit_job(job))
+    }
+
+    fn job(&self, job_id: &JobId) -> Result<Option<JobRecord>, StorageError> {
+        delegate!(self, store => store.job(job_id))
+    }
+
+    fn jobs(&self, limit: usize) -> Result<Vec<JobRecord>, StorageError> {
+        delegate!(self, store => store.jobs(limit))
+    }
+
+    fn claim_job(&self, started_at_ms: TimestampMs) -> Result<Option<JobRecord>, StorageError> {
+        delegate!(self, store => store.claim_job(started_at_ms))
+    }
+
+    fn finish_job(
+        &self,
+        job_id: &JobId,
+        outcome: &JobOutcome,
+        finished_at_ms: TimestampMs,
+    ) -> Result<bool, StorageError> {
+        delegate!(self, store => store.finish_job(job_id, outcome, finished_at_ms))
+    }
+
+    fn cancel_job(
+        &self,
+        job_id: &JobId,
+        finished_at_ms: TimestampMs,
+    ) -> Result<Option<JobRecord>, StorageError> {
+        delegate!(self, store => store.cancel_job(job_id, finished_at_ms))
+    }
+
+    fn fail_running_jobs(
+        &self,
+        failure_json: &str,
+        finished_at_ms: TimestampMs,
+    ) -> Result<usize, StorageError> {
+        delegate!(self, store => store.fail_running_jobs(failure_json, finished_at_ms))
     }
 }

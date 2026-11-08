@@ -267,6 +267,121 @@ const QUERIES: &[Query] = &[
         write: true,
         sql: "DELETE FROM segment_dirty WHERE id = 4000",
     },
+    Query {
+        id: "bundles.store",
+        indexes: &["bundles_pkey"],
+        never_scanned: &["bundles"],
+        write: true,
+        sql: "INSERT INTO bundles(code_hash, size_bytes, data, stored_at_ms) \
+              SELECT 'sha256:' || repeat('c', 64), 3, CAST('\\\\x000102' AS bytea), 1 \
+              WHERE NOT EXISTS (SELECT 1 FROM meta WHERE key = 'transfer' AND value::jsonb ->> 'state' = 'Copying') \
+              ON CONFLICT (code_hash) DO NOTHING",
+    },
+    Query {
+        id: "bundles.load",
+        indexes: &["bundles_pkey"],
+        never_scanned: &["bundles"],
+        write: false,
+        sql: "SELECT data FROM bundles \
+              WHERE code_hash = 'sha256:' || lpad(to_hex(50), 64, '0')",
+    },
+    Query {
+        id: "jobs.submit",
+        indexes: &["bundles_pkey"],
+        never_scanned: &["bundles"],
+        write: true,
+        sql: "INSERT INTO jobs(job_id, state, bundle_hash, request_json, submitted_at_ms) \
+              SELECT repeat('f', 32), 'queued', 'sha256:' || lpad(to_hex(50), 64, '0'), '{}', 1 \
+              WHERE EXISTS (SELECT 1 FROM bundles \
+                            WHERE code_hash = 'sha256:' || lpad(to_hex(50), 64, '0')) \
+                AND NOT EXISTS (SELECT 1 FROM meta WHERE key = 'transfer' AND value::jsonb ->> 'state' = 'Copying')",
+    },
+    Query {
+        id: "jobs.by_id",
+        indexes: &["jobs_job_id_key"],
+        never_scanned: &["jobs"],
+        write: false,
+        sql: "SELECT job_id, state, bundle_hash, request_json, submitted_at_ms, started_at_ms, \
+                     finished_at_ms, results_json, failure_json \
+              FROM jobs WHERE job_id = lpad(to_hex(12345), 32, '0')",
+    },
+    Query {
+        id: "jobs.list",
+        indexes: &["jobs_pkey"],
+        never_scanned: &["jobs"],
+        write: false,
+        sql: "SELECT job_id, state, bundle_hash, request_json, submitted_at_ms, started_at_ms, \
+                     finished_at_ms, results_json, failure_json \
+              FROM jobs ORDER BY seq DESC LIMIT 100",
+    },
+    Query {
+        id: "jobs.claim",
+        indexes: &["idx_jobs_state", "jobs_pkey"],
+        never_scanned: &["jobs"],
+        write: true,
+        sql: "UPDATE jobs SET state = 'running', started_at_ms = 1 \
+              WHERE seq = (SELECT seq FROM jobs WHERE state = 'queued' ORDER BY seq LIMIT 1 \
+                           FOR UPDATE SKIP LOCKED) \
+                AND NOT EXISTS (SELECT 1 FROM meta WHERE key = 'transfer' AND value::jsonb ->> 'state' = 'Copying') \
+              RETURNING job_id",
+    },
+    Query {
+        id: "jobs.finish",
+        indexes: &["jobs_job_id_key"],
+        never_scanned: &["jobs"],
+        write: true,
+        sql: "UPDATE jobs SET state = 'succeeded', finished_at_ms = 2, results_json = '[]', \
+                              failure_json = NULL \
+              WHERE job_id = lpad(to_hex(19850), 32, '0') AND state = 'running' AND NOT EXISTS (SELECT 1 FROM meta WHERE key = 'transfer' AND value::jsonb ->> 'state' = 'Copying')",
+    },
+    Query {
+        id: "jobs.cancel",
+        indexes: &["jobs_job_id_key"],
+        never_scanned: &["jobs"],
+        write: true,
+        sql: "UPDATE jobs SET state = 'cancelled', finished_at_ms = 2 \
+              WHERE job_id = lpad(to_hex(19950), 32, '0') AND state IN ('queued', 'running') \
+                AND NOT EXISTS (SELECT 1 FROM meta WHERE key = 'transfer' AND value::jsonb ->> 'state' = 'Copying') \
+              RETURNING job_id",
+    },
+    Query {
+        id: "jobs.fail_running",
+        indexes: &["idx_jobs_state"],
+        never_scanned: &["jobs"],
+        write: true,
+        sql: "UPDATE jobs SET state = 'failed', finished_at_ms = 2, failure_json = '{}' \
+              WHERE state = 'running' AND NOT EXISTS (SELECT 1 FROM meta WHERE key = 'transfer' AND value::jsonb ->> 'state' = 'Copying')",
+    },
+    Query {
+        id: "transfer.segments",
+        indexes: &["segments_pkey"],
+        never_scanned: &["segments"],
+        write: false,
+        sql: "SELECT t.hash, CAST(t.format AS BIGINT), CAST(t.payload_len AS BIGINT), t.data \
+              FROM segments t \
+              WHERE t.hash COLLATE \"C\" > 'sha256:' || lpad(to_hex(4000), 64, '0') \
+              ORDER BY t.hash COLLATE \"C\" LIMIT 64",
+    },
+    Query {
+        id: "transfer.runs",
+        indexes: &["bot_runs_pkey"],
+        never_scanned: &["bot_runs"],
+        write: false,
+        sql: "SELECT t.run_id, t.state_json FROM bot_runs t \
+              WHERE t.run_id COLLATE \"C\" > 'run-1000' \
+              ORDER BY t.run_id COLLATE \"C\" LIMIT 500",
+    },
+    Query {
+        id: "transfer.bundles",
+        indexes: &["bundles_pkey"],
+        never_scanned: &["bundles"],
+        write: false,
+        sql: "SELECT t.code_hash, CAST(t.size_bytes AS BIGINT), t.data, \
+                     CAST(t.stored_at_ms AS BIGINT) \
+              FROM bundles t \
+              WHERE t.code_hash COLLATE \"C\" > 'sha256:' || lpad(to_hex(100), 64, '0') \
+              ORDER BY t.code_hash COLLATE \"C\" LIMIT 2",
+    },
 ];
 
 /// The order rows reach the heap: market by market, as a backfill writes
@@ -293,7 +408,9 @@ const MARKETS: &str = "(VALUES ('binance_spot', 'BTCUSDT', 0), ('binance_linear'
 ///   them;
 /// - 3 years of daily segments for each `1m` market before the candles:
 ///   8,760 segments and index entries, and a dirty mark on each window, as a
-///   deep backfill leaves them before its refresh.
+///   deep backfill leaves them before its refresh;
+/// - 5,000 bundles and 20,000 jobs over them: 19,800 succeeded, 100 running
+///   and 100 queued.
 fn seed(url: &str, order: Order) {
     let (minutes, hours) = match order {
         Order::MarketByMarket => ("m.n, t", "m.n, t"),
@@ -350,6 +467,21 @@ fn seed(url: &str, order: Order) {
              INSERT INTO segment_dirty(exchange, symbol, interval, window_start_ms) \
              SELECT exchange, symbol, interval, window_start_ms FROM segment_index \
              ORDER BY exchange, symbol, window_start_ms; \
+             INSERT INTO bundles(code_hash, size_bytes, data, stored_at_ms) \
+             SELECT 'sha256:' || lpad(to_hex(i), 64, '0'), 4096, \
+                    decode(repeat('ab', 4096), 'hex'), 1790208000000 + i \
+             FROM generate_series(1, 5000) AS i; \
+             INSERT INTO jobs(job_id, state, bundle_hash, request_json, submitted_at_ms, \
+                              started_at_ms, finished_at_ms, results_json) \
+             SELECT lpad(to_hex(i), 32, '0'), \
+                    CASE WHEN i <= 19800 THEN 'succeeded' WHEN i <= 19900 THEN 'running' \
+                         ELSE 'queued' END, \
+                    'sha256:' || lpad(to_hex(1 + i % 5000), 64, '0'), '{{\"job\":' || i || '}}', \
+                    1790208000000 + i * 1000, \
+                    CASE WHEN i <= 19900 THEN 1790208000000 + i * 1000 + 500 END, \
+                    CASE WHEN i <= 19800 THEN 1790208000000 + i * 1000 + 900 END, \
+                    CASE WHEN i <= 19800 THEN '[]' END \
+             FROM generate_series(1, 20000) AS i; \
              ANALYZE;"
         ),
     );

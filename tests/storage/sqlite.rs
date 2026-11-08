@@ -143,6 +143,11 @@ fn segments() {
 }
 
 #[test]
+fn jobs() {
+    conformance::jobs::<Sqlite>();
+}
+
+#[test]
 fn durability() {
     conformance::durability::<Sqlite>();
 }

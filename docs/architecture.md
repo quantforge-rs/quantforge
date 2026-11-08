@@ -117,6 +117,7 @@ src/
 │   ├── durability.rs           DurabilityReport: the settings a store's commits rely on, read back
 │   ├── identity.rs             Environment, InstrumentId, venue ids as text, OperationId, the text_id! macro
 │   ├── interval.rs             Interval: wire form, step duration, parsing
+│   ├── job.rs                  JobId, BundleHash, JobPhase, JobRecord: a remote backtest as a store keeps it
 │   ├── market.rs               Symbol, Venue, Category, ExchangeId (the product lines), MarketId
 │   ├── money.rs                Asset and Money: amounts that never mix assets
 │   ├── order.rs                Side, OrderStatus, Fill, ExchangeOrder, AccountTrade
@@ -151,6 +152,7 @@ src/
 │   ├── mod.rs                  Spot connector traits, their capabilities and errors; re-exports the storage ports
 │   ├── clock.rs                Clock, the injected time source, and SystemClock
 │   ├── storage.rs              CandleStore, SegmentStore, RunJournalStore, StoreControl, StorageError
+│   ├── jobs.rs                 JobStore: a server's bundles and jobs, each move of a job one guarded change
 │   ├── transfer.rs             TransferSource, TransferSnapshot, TransferTarget: a store's rows for a copy
 │   └── futures.rs              futures ports by capability, FuturesCapabilities, FuturesConnectors
 ├── exchange/                   the connector registry, one adapter per exchange, and the conformance suite
@@ -187,6 +189,7 @@ src/
 │   ├── any.rs                  AnyStore: every storage port, handed to the backend it holds
 │   ├── common.rs               what both backends share: exact decimal reads, a candle's window
 │   ├── runs.rs                 what both backends' journals share: identity columns, state, adoption
+│   ├── jobs.rs                 what both backends' job stores share: a job's columns, outcomes, refusals
 │   ├── refresh.rs              what both backends' segment stores share: the refresh loop, packing, a plan
 │   ├── races.rs                the shared cases' races, stepped through any backend's read and write-back
 │   ├── retry.rs                retry_conflicts: running a transaction again, within the caller's budget
@@ -203,6 +206,7 @@ src/
 │   │   ├── migrate.rs          the schema chain: created at init, one transaction per step under the lock
 │   │   ├── candles.rs          CandleStore: batches unnested into one upsert that marks changed windows
 │   │   ├── coverage.rs         the markets the candle table holds, each found in two indexed steps
+│   │   ├── jobs.rs             JobStore: guarded statements, a claim skipping what another holds locked
 │   │   ├── journal.rs          RunJournalStore: one statement per call, run IDs in byte order
 │   │   ├── control.rs          StoreControl: the store's record, its binding and legacy-run adoption
 │   │   ├── transfer.rs         a transfer's reads in byte order, batches that skip what it holds, the record
@@ -229,6 +233,7 @@ src/
 │       ├── wait.rs             how a connection waits for another writer's lock, by the clock
 │       ├── snapshot.rs         SqliteSnapshot: a store read-only from one snapshot, the source of a transfer
 │       ├── candles.rs          candle table and the CandleStore implementation; marks changed windows
+│       ├── jobs.rs             bundles and jobs: their DDL and JobStore, each move one statement
 │       ├── journal.rs          run table, run identity, and RunJournalStore; the journal DDL of every schema
 │       ├── journal/            the journals beside a run's state, and its identity columns
 │       │   ├── identity.rs     a RunIdentity written to and read from its four columns
@@ -267,18 +272,30 @@ src/
 │       └── state.rs            run identity: create, resume, and resume checks
 └── server/                     the HTTP server other instances connect to
     ├── mod.rs                  serve: the routes, and the shutdown that finishes requests in progress
-    ├── history.rs              History: the markets and candles routes, and the turns at the store
-    ├── selection.rs            a candles query read into a market and a range, every value canonical
+    ├── store.rs                ServerStore: the store the routes and the queue share, and the turns at it
+    ├── history.rs              History: the markets and candles routes
+    ├── selection.rs            a candles query or a job's data read into a market and a range, every value canonical
     ├── segment.rs              the segment route: stored bytes, cached for a year, checked before they go
+    ├── jobs/                   Jobs: the backtest job routes and the queue behind them
+    │   ├── mod.rs              the queue's state, its start after a restart, and its stop
+    │   ├── routes.rs           the upload, submission, status, list and cancel routes
+    │   ├── submission.rs       what an upload and a submission must pass before anything is stored
+    │   ├── queue.rs            the dispatcher, a job's input read from the store, and its end written
+    │   ├── status.rs           a job's record as the protocol shows it
+    │   └── worker.rs           JobWorker: what runs a job, its cancel, and the worker with no runtime
     ├── refusal.rs              every failed answer as an error envelope, and what a storage failure may say
     └── tests/                  the routes in process, over a real SQLite store
-        ├── mod.rs              the fixtures, health, version, unknown paths and methods, the shutdown
-        ├── faulty.rs           a store that fails or stalls on demand
+        ├── mod.rs              the fixtures, health, version, unknown paths and methods
+        ├── shutdown.rs         the shutdown that finishes a request in progress
+        ├── faulty.rs           a store that fails, stalls or runs out of time on demand
         ├── history.rs          ranges read back exactly, empty answers, queries without category
         ├── markets.rs          every stored market, in order, with its span
         ├── queries.rs          the queries refused before the store is asked anything
+        ├── queue.rs            a job that waits out a busy store as it starts
         ├── segments.rs         stored bytes, 304s, unknown hashes, and damaged copies never sent
-        └── store.rs            storage failures named to no client, and the turns at the store
+        ├── store.rs            storage failures named to no client, and the turns at the store
+        ├── jobs.rs             uploads stored once, and every upload refused before it is stored
+        └── submissions.rs      submissions queued or refused, and statuses, the list and cancels
 ```
 
 After `cli/` come the eight library modules: `protocol` first, which stands
@@ -286,9 +303,10 @@ apart and uses no other module, then the six layers innermost first, as in
 the `src/lib.rs` docs, then `server`. `model` uses no other module, `ports`
 uses `model`, `exchange` and `storage` use `model` and `ports`, `sdk` uses
 `model`, and `engine` uses `model`, `ports`, and `sdk`. `server` uses
-`protocol`, `model`, the `ports` it reads the store through, and the
-segment codec of `storage::segments` to check what it sends; `serve run`
-opens the store, binds the address, and hands it both. The engines reach the exchange
+`protocol`, `model`, the `ports` it reads and writes the store through, and
+the segment codec of `storage::segments` to check what it sends; `serve run`
+opens the store, binds the address, and hands it both, with the worker that
+runs jobs. The engines reach the exchange
 and storage adapters only through the `ports` traits; the binary chooses
 which adapters to pass in, building the connectors of the exchange that
 `--exchange` names through `exchange::connect`, and opening the store that
@@ -329,14 +347,16 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   or writes the store, on SQLite and, with `QUANTFORGE_TEST_POSTGRES_URL`, on
   PostgreSQL, `serve.rs` for `serve run` as
   a running process — its routes, and how it stops on a signal —
-  `migrate.rs` for `data migrate` against its acceptance criteria, and
+  `history.rs` and `jobs.rs` for its history and job routes on each
+  backend, `migrate.rs` for `data migrate` against its acceptance criteria, and
   `snapshot.rs` and `layout.rs` for the CLI surface and this document
 - `tests/snapshots/`: the committed `--help` output of every command, plus
   `version.txt` for `--version`
 - `tests/backtest_engine.rs`, `tests/candle_validation.rs`,
-  `tests/candle_batch.rs`, `tests/decimal_float.rs`, and
-  `tests/live_engine.rs`: library integration tests; the live engine's dry
-  runs and resume checks run on SQLite and, with
+  `tests/candle_batch.rs`, `tests/decimal_float.rs`,
+  `tests/live_engine.rs`, and `tests/backtest_jobs.rs`: library
+  integration tests; the live engine's dry runs and resume checks, and the
+  job queue's lifecycle with a scripted worker, run on SQLite and, with
   `QUANTFORGE_TEST_POSTGRES_URL`, on PostgreSQL
 - `tests/storage/`: the storage contract of
   [storage-schema.md](storage-schema.md) and

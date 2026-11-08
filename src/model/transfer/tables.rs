@@ -241,10 +241,49 @@ pub const SEGMENT_DIRTY: TransferTable = TransferTable {
     max_batch: None,
 };
 
+/// The bundles a server was sent, by their names. A batch holds at most
+/// two: a bundle's canonical tar can take 8 MiB.
+pub const BUNDLES: TransferTable = TransferTable {
+    name: "bundles",
+    columns: &[
+        text("code_hash"),
+        integer("size_bytes"),
+        blob("data"),
+        integer("stored_at_ms"),
+    ],
+    key: "code_hash",
+    by_market: false,
+    numbered: false,
+    max_batch: Some(2),
+};
+
+/// The jobs, by the sequence number the store gave each, which keeps their
+/// order: the queue runs them in it, and lists them newest first.
+pub const JOBS: TransferTable = TransferTable {
+    name: "jobs",
+    columns: &[
+        integer("seq"),
+        text("job_id"),
+        text("state"),
+        text("bundle_hash"),
+        text("request_json"),
+        integer("submitted_at_ms"),
+        integer("started_at_ms"),
+        integer("finished_at_ms"),
+        text("results_json"),
+        text("failure_json"),
+    ],
+    key: "seq",
+    by_market: false,
+    numbered: true,
+    max_batch: None,
+};
+
 /// The tables a transfer copies, in the order it copies them: a run before
 /// its journals, a segment before the index entry naming it, candles before
-/// the marks on their windows. Each part of a target is whole when read.
-pub const TRANSFER_TABLES: [TransferTable; 7] = [
+/// the marks on their windows, a bundle before the jobs that run it. Each
+/// part of a target is whole when read.
+pub const TRANSFER_TABLES: [TransferTable; 9] = [
     CANDLES,
     BOT_RUNS,
     ORDER_EVENTS,
@@ -252,6 +291,8 @@ pub const TRANSFER_TABLES: [TransferTable; 7] = [
     SEGMENTS,
     SEGMENT_INDEX,
     SEGMENT_DIRTY,
+    BUNDLES,
+    JOBS,
 ];
 
 /// The tables every store keeps for itself, which a transfer never copies:
@@ -291,6 +332,7 @@ mod tests {
     fn a_batch_of_large_rows_is_capped_and_never_empty() {
         assert_eq!(SEGMENTS.batch_rows(5000), 64);
         assert_eq!(SEGMENTS.batch_rows(10), 10);
+        assert_eq!(BUNDLES.batch_rows(5000), 2);
         assert_eq!(CANDLES.batch_rows(5000), 5000);
         assert_eq!(CANDLES.batch_rows(0), 1);
     }

@@ -19,7 +19,7 @@ pub(super) const LOCK_KEY: i64 = 0x5146_5343_4845_4D41;
 
 /// The tables of the current schema. A database holding any of them but no
 /// recorded version is not a QuantForge store, and `init` refuses it.
-pub(super) const TABLES: [&str; 10] = [
+pub(super) const TABLES: [&str; 12] = [
     "meta",
     "candles",
     "bot_runs",
@@ -30,6 +30,8 @@ pub(super) const TABLES: [&str; 10] = [
     "segment_dirty",
     "store_control",
     "schema_migrations",
+    "bundles",
+    "jobs",
 ];
 
 /// Schema 5, where PostgreSQL starts: the tables of SQLite's schema 5,
@@ -153,6 +155,37 @@ CREATE TABLE schema_migrations (
   applied_at_ms BIGINT NOT NULL,
   quantforge_version TEXT NOT NULL
 );
+"#;
+
+/// Schema 6 (QUA-358): the bundles a server was sent and its jobs; and, as
+/// the first step after schema 5, segment hashes and run IDs collated
+/// `"C"`, so that their primary keys serve the byte order a transfer reads
+/// them in. A bundle's name is collated so from the start.
+pub(super) const SCHEMA_6: &str = r#"
+ALTER TABLE segments ALTER COLUMN hash TYPE TEXT COLLATE "C";
+ALTER TABLE bot_runs ALTER COLUMN run_id TYPE TEXT COLLATE "C";
+
+CREATE TABLE bundles (
+  code_hash TEXT COLLATE "C" PRIMARY KEY,
+  size_bytes BIGINT NOT NULL,
+  data BYTEA NOT NULL,
+  stored_at_ms BIGINT NOT NULL
+);
+
+CREATE TABLE jobs (
+  seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  job_id TEXT NOT NULL UNIQUE,
+  state TEXT NOT NULL,
+  bundle_hash TEXT NOT NULL,
+  request_json TEXT NOT NULL,
+  submitted_at_ms BIGINT NOT NULL,
+  started_at_ms BIGINT,
+  finished_at_ms BIGINT,
+  results_json TEXT,
+  failure_json TEXT
+);
+CREATE INDEX idx_jobs_state
+  ON jobs(state, seq);
 "#;
 
 /// The store's control record as schema 5 creates it: a fresh ID, no
