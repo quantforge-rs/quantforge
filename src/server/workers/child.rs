@@ -16,9 +16,21 @@ use crate::protocol::stream::Bar;
 use crate::protocol::{ErrorBody, ErrorCode};
 use crate::server::jobs::NO_RUNTIME;
 
+/// The first argument a worker runs itself again under, once it has marked
+/// what it was given to close: a worker that sees it never runs itself
+/// again.
+#[cfg(unix)]
+const SHED: &str = "quantforge-worker";
+
 /// Why a worker stopped without running a job to its end.
 #[derive(Debug, thiserror::Error)]
 pub enum WorkerError {
+    /// Descriptors it was given stayed open after it ran itself again.
+    #[error("the worker still holds descriptors {open:?} after closing every one but its pipes")]
+    Descriptors {
+        /// The descriptors still open.
+        open: Vec<u64>,
+    },
     /// The frames to or from the server failed.
     #[error("the server's frames failed: {0}")]
     Frames(#[from] io::Error),
@@ -51,6 +63,8 @@ where
     R: Read + Send + 'static,
     W: Write,
 {
+    #[cfg(unix)]
+    shed_descriptors()?;
     let mut input = BufReader::new(input);
     let mut output = BufWriter::new(output);
     let Some(setup) = frames::read::<_, ToWorker>(&mut input, MOST_TO_WORKER)? else {
@@ -112,6 +126,35 @@ where
     };
     frames::write(&mut output, &FromWorker::Finished { outcome })?;
     Ok(())
+}
+
+/// Leaves the worker no descriptor but its three pipes, before it reads or
+/// runs anything: one its server held without close-on-exec as it started
+/// the worker, whether given to the server or still being opened by another
+/// of its threads, would reach the job past its sandbox. The worker marks
+/// every such descriptor to close on exec and runs itself again, in place,
+/// as the same worker; the kernel closes them.
+#[cfg(unix)]
+fn shed_descriptors() -> Result<(), WorkerError> {
+    use std::os::unix::process::CommandExt;
+
+    let again = std::env::args_os()
+        .next()
+        .is_some_and(|first| first == SHED);
+    let given = isolation::descriptors()
+        .map(|open| open.into_iter().filter(|&fd| fd > 2).collect::<Vec<_>>());
+    match given {
+        Some(open) if open.is_empty() => return Ok(()),
+        Some(open) if again => return Err(WorkerError::Descriptors { open }),
+        None if again => return Ok(()),
+        _ => {}
+    }
+    close_fds::set_fds_cloexec(3, &[]);
+    let failed = std::process::Command::new(std::env::current_exe()?)
+        .args(std::env::args_os().skip(1))
+        .arg0(SHED)
+        .exec();
+    Err(failed.into())
 }
 
 /// The job's candles, from the `candles` frames that follow it.

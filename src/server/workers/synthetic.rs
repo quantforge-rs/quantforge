@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::frames::{Finished, JobFrame, ResultText};
-use super::isolation::Posture;
+use super::isolation::{self, Posture};
 use crate::model::Candle;
 use crate::protocol::{ErrorBody, ErrorCode};
 
@@ -51,42 +51,9 @@ impl Seen {
             pid: std::process::id(),
             cwd: scratch.to_path_buf(),
             env,
-            descriptors: descriptors(),
+            descriptors: isolation::descriptors(),
         }
     }
-}
-
-/// The descriptors open in this process, but the one that lists them, which
-/// is the listed directory itself.
-#[cfg(unix)]
-fn descriptors() -> Option<Vec<u64>> {
-    use std::os::unix::fs::MetadataExt;
-
-    let listed = if cfg!(target_os = "linux") {
-        Path::new("/proc/self/fd")
-    } else {
-        Path::new("/dev/fd")
-    };
-    let itself = std::fs::metadata(listed).ok()?;
-    let mut open = Vec::new();
-    for entry in std::fs::read_dir(listed).ok()? {
-        let entry = entry.ok()?;
-        let Ok(number) = entry.file_name().to_string_lossy().parse::<u64>() else {
-            continue;
-        };
-        let lister = std::fs::metadata(entry.path())
-            .is_ok_and(|seen| seen.dev() == itself.dev() && seen.ino() == itself.ino());
-        if !lister {
-            open.push(number);
-        }
-    }
-    open.sort_unstable();
-    Some(open)
-}
-
-#[cfg(not(unix))]
-fn descriptors() -> Option<Vec<u64>> {
-    None
 }
 
 /// Runs the workload the job's bundle names.

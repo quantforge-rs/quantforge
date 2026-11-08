@@ -44,7 +44,11 @@ Only what its job needs:
   more as the worker starts, holding the user's text encoding.
 - **Three pipes**: its standard input, output and error, and no other
   descriptor. Every file and socket the server opens, its SQLite database
-  and its PostgreSQL connections included, is closed on exec.
+  and its PostgreSQL connections included, is closed on exec. On Linux and
+  macOS a worker also closes, before it reads or runs anything, any other
+  descriptor it finds open: one its server was given without close-on-exec,
+  or one another of the server's threads was still opening as the worker
+  started. It marks them to close on exec and runs itself again in place.
 
 A worker never sees the store, its URL or its credentials. The server reads
 everything a job runs on and writes how the job ended; a worker only answers

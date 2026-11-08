@@ -68,8 +68,10 @@ uuid = { version = "1", features = ["v4", "serde"] }
 # Without the defaults: no decoders for zstd's pre-1.0 formats.
 zstd = { version = "0.14", default-features = false }
 
-# A job worker's limits, and the process group it runs in.
+# A job worker's limits, the process group it runs in, and closing every
+# descriptor it was given but its three pipes.
 [target.'cfg(unix)'.dependencies]
+close_fds = "0.3"
 rustix = { version = "1", features = ["process"] }
 
 # A job worker's sandbox on Linux: files confined to its scratch directory

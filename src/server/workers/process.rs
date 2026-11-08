@@ -21,6 +21,7 @@ use crate::protocol::bundle::Runtime;
 const STDERR_KEPT: usize = 64 << 10;
 
 /// What a Rust process prints as it aborts for want of memory.
+#[cfg(unix)]
 const ALLOCATION_FAILED: &str = "memory allocation of ";
 
 /// A worker that is ready for its job.
@@ -276,8 +277,10 @@ impl Drop for Process {
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Stop {
     /// Its CPU time ran out.
+    #[cfg_attr(not(unix), allow(dead_code))]
     Cpu,
     /// An allocation failed at its memory limit.
+    #[cfg_attr(not(unix), allow(dead_code))]
     Memory,
     /// Anything else, said as a clause.
     Crash(String),

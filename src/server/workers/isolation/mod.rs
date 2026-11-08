@@ -45,6 +45,7 @@ pub enum Guard {
 }
 
 impl Guard {
+    #[cfg_attr(not(unix), allow(dead_code))]
     fn by(mechanism: &str) -> Self {
         Self::Enforced {
             by: mechanism.to_string(),
@@ -145,6 +146,39 @@ pub(super) fn isolate(_limits: Limits, _scratch: &Path) -> Posture {
         network: not("network guard"),
         files: not("file guard"),
     }
+}
+
+/// The descriptors open in this process, but the one that lists them, which
+/// is the listed directory itself.
+#[cfg(unix)]
+pub(super) fn descriptors() -> Option<Vec<u64>> {
+    use std::os::unix::fs::MetadataExt;
+
+    let listed = if cfg!(target_os = "linux") {
+        Path::new("/proc/self/fd")
+    } else {
+        Path::new("/dev/fd")
+    };
+    let itself = std::fs::metadata(listed).ok()?;
+    let mut open = Vec::new();
+    for entry in std::fs::read_dir(listed).ok()? {
+        let entry = entry.ok()?;
+        let Ok(number) = entry.file_name().to_string_lossy().parse::<u64>() else {
+            continue;
+        };
+        let lister = std::fs::metadata(entry.path())
+            .is_ok_and(|seen| seen.dev() == itself.dev() && seen.ino() == itself.ino());
+        if !lister {
+            open.push(number);
+        }
+    }
+    open.sort_unstable();
+    Some(open)
+}
+
+#[cfg(not(unix))]
+pub(super) fn descriptors() -> Option<Vec<u64>> {
+    None
 }
 
 /// Closes this process to the other processes of its user on Linux: none

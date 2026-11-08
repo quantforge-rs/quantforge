@@ -35,18 +35,28 @@ fn a_job_sees_its_bundle_alone_in_a_scratch_directory_that_goes_with_it() {
         json!(["bundle/quantforge.toml", "bundle/strategy.py"])
     );
     let cwd = PathBuf::from(seen["cwd"].as_str().expect("a working directory"));
-    let root = std::fs::canonicalize(pool.pool.scratch_root()).expect("the scratch root");
-    assert!(
-        cwd.starts_with(&root),
+    // By name: the system may spell the same directory two ways.
+    assert_eq!(
+        cwd.parent().and_then(Path::file_name),
+        pool.pool.scratch_root().file_name(),
         "{} is not in {}",
         cwd.display(),
-        root.display()
+        pool.pool.scratch_root().display()
     );
     assert!(!cwd.exists(), "{} outlived its worker", cwd.display());
 }
 
 #[test]
 fn a_worker_gets_no_environment_and_no_descriptor_of_the_server() {
+    // A descriptor the server holds without close-on-exec, as whatever
+    // started it may hand it one.
+    #[cfg(unix)]
+    let _given = {
+        let dir = tempfile::tempdir().expect("a directory");
+        let file = std::fs::File::create(dir.path().join("given")).expect("a file");
+        rustix::io::fcntl_setfd(&file, rustix::io::FdFlags::empty()).expect("an inheritable file");
+        (file, dir)
+    };
     let pool = Pool::start(1, roomy());
     let seen = report(&pool.run(input(r#"workload = "inspect""#, candles(5))));
     assert_eq!(given_env(&seen), worker_env());
@@ -248,6 +258,49 @@ fn a_worker_refuses_a_server_of_another_build() {
         output.stdout.is_empty(),
         "a refusing worker said it was ready"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_worker_given_a_descriptor_closes_it_before_it_runs_anything() {
+    // Inheritable, as a descriptor still being opened by another thread is
+    // as its server starts a worker: nothing marked it close-on-exec.
+    let dir = tempfile::tempdir().expect("a directory");
+    let given = std::fs::File::create(dir.path().join("given")).expect("a file");
+    rustix::io::fcntl_setfd(&given, rustix::io::FdFlags::empty()).expect("an inheritable file");
+    let mut child = worker().current_dir(dir.path()).spawn().expect("a worker");
+    let mut stdin = child.stdin.take().expect("its input");
+    let mut stdout = child.stdout.take().expect("its output");
+    stdin
+        .write_all(&frame(&json!({
+            "type": "setup",
+            "build": format!("quantforge {} frames 1", env!("CARGO_PKG_VERSION")),
+            "mode": {"kind": "synthetic", "runtime": {"engine": "0.3.0", "python": "3.12", "packages": {}}},
+            "cpu_secs": 60,
+            "memory_bytes": 1_u64 << 31,
+        })))
+        .expect("the setup");
+    let ready = read_frame(&mut stdout);
+    assert_eq!(ready["type"], "ready", "{ready}");
+    let job = input(r#"workload = "inspect""#, candles(1));
+    stdin
+        .write_all(&frame(&json!({
+            "type": "job",
+            "job_id": job.job_id.to_string(),
+            "submission": job.submission,
+            "entry": "strategy.py:Hold",
+            "params": {"workload": "inspect"},
+            "bars": 0,
+        })))
+        .expect("the job");
+    let finished = read_frame(&mut stdout);
+    let text = finished["outcome"]["results"][0]["text"]
+        .as_str()
+        .expect("a report");
+    let seen: Value = serde_json::from_str(text).expect("a JSON report");
+    assert_eq!(seen["descriptors"], json!([0, 1, 2]), "{seen}");
+    drop(stdin);
+    assert!(exited(&mut child).success());
 }
 
 #[test]
