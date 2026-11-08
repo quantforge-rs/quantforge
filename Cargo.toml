@@ -40,7 +40,7 @@ postgres = [
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
 clap = { version = "4", features = ["derive", "env"] }
 deadpool-postgres = { version = "0.14", optional = true }
 hex = "0.4"

@@ -190,6 +190,7 @@ fn wire_errors_are_the_protocol_error_codes() {
         ErrorCode::InvalidRequest,
         ErrorCode::Unauthorized,
         ErrorCode::NotFound,
+        ErrorCode::MethodNotAllowed,
         ErrorCode::Conflict,
         ErrorCode::UnsupportedVersion,
         ErrorCode::LimitExceeded,

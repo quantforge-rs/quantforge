@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `serve run` serves the history its store holds: `GET /v1/markets` lists every market with the open times of its first and last candle, `GET /v1/candles` answers one market's range as the segments that hold it and its newest candles inline, and `GET /v1/segments/{hash}` sends a segment's stored bytes; `protocol::segments` specifies the three routes, with `MarketIndex`, `CandleRangeQuery` and `CandleRange`
+- reading a range's segments and tip as the protocol describes gives back exactly the candles the store holds, on SQLite and on PostgreSQL, every decimal with its scale and every bar where the store has one
+- a segment is sent with `Cache-Control: public, max-age=31536000, immutable` and the entity tag `"<hash>"`, a request whose `If-None-Match` names that tag is answered `304 Not Modified`, and a stored segment that no longer matches its hash is never sent
+- a market the store holds nothing of, or a range holding no candles, is an empty answer whose `message` says which, never an error
+- a `/v1/candles` query without `category`, the form markets took before they carried one, reads Spot, and is refused as ambiguous once the exchange holds the symbol and interval in another family too; every answer names its category
+- `--max-span-bars` (`QF_MAX_SPAN_BARS`, default 527,040, a leap year of `1m` bars) bounds the bars one `/v1/candles` answer may span; a longer range is refused as `invalid_request`, and like `--listen` the flag reads its variable only when it is absent
+- the history routes call the store on blocking threads, each call bounded by the storage route budget, behind as many turns as the store's pool has connections: a request that gets no turn in time, or whose store runs out of time, is answered `503 unavailable` with `Retry-After`, a store failure `500 internal`, and neither answer names the store's host, database or messages, which go to the log
+- the server answers every refusal with the protocol's error envelope: `404 not_found` for a path it does not answer, `400 unsupported_version` with the versions it speaks for a path under another version, and `405 method_not_allowed`, a new `ErrorCode`, with `Allow`
+- `CandleStore::market_coverage` lists the markets a store holds candles of and the open times each spans, in two indexed steps per market, and leaves out, with a warning, a market stored under a name the build cannot read back
 - ci runs the whole test suite against PostgreSQL 16, 17 and 18, the official images as service containers, one serving TLS and one with `fsync` off; `QUANTFORGE_TEST_POSTGRES_REQUIRED=1` turns a test that would skip for want of a server into a failure, a leg that leaves a database or role behind fails, and the `storage` check passes only when every leg passed (`docs/ci.md`)
 - ci checks the SQLite-only build (`--no-default-features`) with clippy and the tests on every platform, and checks the crate with Rust 1.85, its declared minimum, in the `package` check
 - `scripts/postgres-test-servers.sh` runs ci's two PostgreSQL servers locally with Docker and prints the variables the tests read
@@ -67,7 +76,6 @@ All notable changes to this project will be documented in this file.
 - `serve run` starts the server other QuantForge instances connect to: it listens on `--listen` (`QF_LISTEN`, default `127.0.0.1:9600`, an IP address and a port; port 0 picks a free one) and prints the address it listens on as `listening: http://…`
 - the server answers `GET /healthz` with `ok` while it runs, and `GET /version` with a `protocol::ServerVersion`: its release and the protocol versions it speaks, in a shape that is the same in every protocol version, so that a client can choose its version before its first versioned request
 - `serve run` stops on SIGINT or SIGTERM (Ctrl-C on Windows): it stops accepting connections, finishes the requests in progress, prints `shutdown:` and `stopped:` lines, and exits 0; a second signal stops it without waiting for them, and it exits 1
-- `--segment-cache-dir` (`QF_SEGMENT_CACHE_DIR`, default `data/segments`) names the directory `serve run` caches candle segments in, and is created at startup; like `--listen`, it reads its variable only when the flag is absent, and every other per-command option is still a flag only
 
 - `protocol` defines the wire format between QuantForge instances as serde types: a backtest job's submission (a Python bundle named by its content hash, the candles it runs on, and the backtest settings), its status and result references, the error envelope, candle segment index entries, and the live stream's frames; its rustdoc is the wire specification, and every JSON example in it is a doctest
 - the protocol is versioned: `protocol::PROTO_VERSION` and `protocol::MIN_SUPPORTED` bound the versions a build speaks, an HTTP request names its version in its path (`/v1/…`), and `VersionRange::negotiate` picks the newest version two peers share or says which side is too old; `stream::HelloVersions` reads the versions out of a hello of any version, so that a server can refuse a client whose version it does not speak with its own range
@@ -117,6 +125,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- `CandleStore` has a new required method, `market_coverage`, which a store implemented outside QuantForge must add
 - `scripts/release-check.sh` also runs clippy and the tests of the SQLite-only build and checks the crate with Rust 1.85, as ci does, and gives the publish dry run a target directory of its own, so later test runs no longer run the packaged copy's binary
 - every SQLite connection now runs `synchronous=FULL` with `fullfsync`, so a commit is flushed before the store answers: on macOS that costs about 5 ms per commit, and on Linux what the disk's flush costs; every PostgreSQL connection raises `synchronous_commit = off` to `local`, and gives up on a lock after 5 s
 - a SQLite connection now waits for another writer's lock by the clock, sleeping at most 10 ms between tries, instead of through SQLite's busy timeout, which counts the sleeps it meant to take and so overran a caller's budget wherever timers run late

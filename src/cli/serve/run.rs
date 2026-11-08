@@ -1,15 +1,16 @@
 //! `quantforge serve run` — answer HTTP requests on `--listen` until SIGINT
 //! or SIGTERM (Ctrl-C on Windows). The server then stops accepting
 //! connections and finishes the requests in progress; a second signal stops
-//! it without waiting for them. It holds the store the settings selected for
-//! as long as it runs, though no route reads it yet.
+//! it without waiting for them. Its history routes read the store the
+//! settings selected, each call bounded by the storage route budget, with
+//! as many requests at the store at once as its pool has connections.
 
 use crate::cli::context::AppContext;
 use anyhow::{Context, Result, bail};
 use clap::Args;
-use quantforge::server;
+use quantforge::server::{self, History, HistoryLimits};
+use quantforge::{StorageSettings, StoreOwner};
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::pin::pin;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -21,19 +22,32 @@ pub(crate) struct ServeRunArgs {
     #[arg(long, env = "QF_LISTEN", default_value = "127.0.0.1:9600")]
     listen: SocketAddr,
 
-    /// Directory for cached candle segments; created if missing
-    #[arg(long, env = "QF_SEGMENT_CACHE_DIR", default_value = "data/segments")]
-    segment_cache_dir: PathBuf,
+    /// Most bars one /v1/candles answer may span; a longer range is refused
+    #[arg(
+        long,
+        env = "QF_MAX_SPAN_BARS",
+        default_value_t = server::DEFAULT_MAX_SPAN_BARS,
+        value_parser = clap::value_parser!(u64).range(1..)
+    )]
+    max_span_bars: u64,
 }
 
 pub(crate) async fn handle_serve_run(ctx: &AppContext, args: ServeRunArgs) -> Result<()> {
-    let cache_dir = &args.segment_cache_dir;
-    std::fs::create_dir_all(cache_dir).with_context(|| {
-        format!(
-            "failed to create the segment cache directory {}",
-            cache_dir.display()
-        )
-    })?;
+    // The pool holds as many connections as there are turns at the store;
+    // SQLite opens one per call, and takes the server's default.
+    let concurrency = match &ctx.storage {
+        StorageSettings::Postgres(settings) => settings.pool_size,
+        _ => StoreOwner::Server.default_pool_size(),
+    };
+    let budget = ctx.storage.limits().route_budget;
+    let history = History::new(
+        ctx.store.within(budget),
+        HistoryLimits {
+            max_span_bars: args.max_span_bars,
+            concurrency: usize::try_from(concurrency).unwrap_or(usize::MAX),
+            wait: budget,
+        },
+    );
     // Installed before the address is printed: a signal sent as soon as it
     // appears must reach this handler, not the default action, which ends
     // the process on the spot.
@@ -48,7 +62,7 @@ pub(crate) async fn handle_serve_run(ctx: &AppContext, args: ServeRunArgs) -> Re
     println!("listening: http://{address}");
 
     let (begin_shutdown, shutdown_begun) = oneshot::channel::<()>();
-    let mut serving = pin!(server::serve(listener, async move {
+    let mut serving = pin!(server::serve(listener, history, async move {
         // A dropped sender begins the shutdown as well.
         let _ = shutdown_begun.await;
     }));

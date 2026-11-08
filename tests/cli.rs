@@ -17,7 +17,7 @@ fn quantforge() -> Command {
         "QF_API_KEY",
         "QF_API_SECRET",
         "QF_LISTEN",
-        "QF_SEGMENT_CACHE_DIR",
+        "QF_MAX_SPAN_BARS",
         "QF_STORAGE",
         "QF_POSTGRES_URL",
         "QF_POSTGRES_POOL_SIZE",

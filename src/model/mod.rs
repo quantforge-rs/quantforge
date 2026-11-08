@@ -31,7 +31,7 @@ pub mod units;
 use thiserror::Error;
 
 pub use account::{AccountRef, IssuedAccountId, KeyFingerprint, VenueAccountId};
-pub use candle::{Candle, ValidationIssue, ValidationReport, validate_candles};
+pub use candle::{Candle, MarketCoverage, ValidationIssue, ValidationReport, validate_candles};
 pub use candle_batch::{CandleBatch, CandleColumns};
 pub use decimal::{decimal_from_f64, decimal_to_f64, round_down_to_step};
 pub use durability::{DurabilityReport, DurabilitySetting};

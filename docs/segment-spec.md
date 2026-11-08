@@ -168,6 +168,14 @@ compressed and by whichever build.
 
 ## Reading a segment
 
+A QuantForge server sends a segment's stored bytes, as they are, from
+`GET /v1/segments/{hash}`, as `application/zstd` with the entity tag
+`"<hash>"` and a `Cache-Control` that lets any cache keep them for a year;
+`GET /v1/candles` names the segments that hold a range. The
+[protocol](../src/protocol/segments/mod.rs)
+specifies both routes. The server checks the bytes against their name
+before it sends them, and a reader checks them again.
+
 A reader that fetched a segment by its name:
 
 1. Refuses anything that is not exactly one zstd frame, and a frame whose
@@ -337,3 +345,4 @@ which pyarrow and polars read directly. Format 1 is its own instead:
 - QUA-37 wrote down the identity of an index entry, and added `category`
   to it on the wire. The payload, the hash and the stored names are
   unchanged.
+- QUA-359 serves segments over HTTP. The format is unchanged.

@@ -104,6 +104,9 @@ pub enum Step {
         market: String,
         expect: Option<i64>,
     },
+    Coverage {
+        expect: Vec<CoverageText>,
+    },
     Refresh {
         market: String,
         expect: RefreshText,
@@ -381,6 +384,17 @@ impl Series {
 }
 
 // --- Segments ----------------------------------------------------------------
+
+/// A market a store holds candles of, by its stored key, and its span.
+#[derive(Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(deny_unknown_fields)]
+pub struct CoverageText {
+    pub exchange: String,
+    pub symbol: String,
+    pub interval: String,
+    pub first_open_ms: i64,
+    pub last_open_ms: i64,
+}
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]

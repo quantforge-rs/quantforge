@@ -25,6 +25,7 @@
 //! `missing_credentials_name_both_the_flags_and_the_env_vars`.
 
 use crate::harness::{TestBed, unpinned_cmd};
+use crate::serve::{Served, get};
 use assert_cmd::Command;
 use predicates::prelude::*;
 use quantforge::exchange;
@@ -427,13 +428,10 @@ fn rust_log_never_sets_the_log_filter() {
     );
 }
 
-// serve run: the address a failed bind names, and the cache directory a
-// run creates before it binds, show which source won.
+// serve run: the address a failed bind names, and the limit a refused range
+// names, show which source won.
 
 const SERVE_RUN: [&str; 2] = ["serve", "run"];
-const FLAG_SEGMENTS: &str = "from-flag-segments";
-const ENV_SEGMENTS: &str = "from-env-segments";
-const DEFAULT_SEGMENTS: &str = "data/segments";
 
 /// A loopback port held for the rest of the test, so that `serve run`
 /// fails to bind it.
@@ -492,29 +490,40 @@ fn listen_flag_beats_qf_listen_and_qf_listen_is_read_without_it() {
 }
 
 #[test]
-fn segment_cache_dir_flag_beats_its_variable_and_the_variable_beats_the_default() {
-    let held = held_port();
-    let listen = address_of(&held);
+fn max_span_bars_flag_beats_its_variable_and_the_variable_beats_the_default() {
     for (flag, env, expected) in [
-        (Some(FLAG_SEGMENTS), Some(ENV_SEGMENTS), FLAG_SEGMENTS),
-        (None, Some(ENV_SEGMENTS), ENV_SEGMENTS),
-        (None, None, DEFAULT_SEGMENTS),
+        (Some("5"), Some("7"), 5_i64),
+        (None, Some("7"), 7),
+        (None, None, 527_040),
+        // Unlike a global's, the variable is not even read beside the flag.
+        (Some("5"), Some("nonsense"), 5),
     ] {
         let bed = TestBed::new();
-        let mut cmd = serve_cmd(&bed);
-        if let Some(env) = env {
-            cmd.env("QF_SEGMENT_CACHE_DIR", bed.dir().join(env));
-        }
-        cmd.args(SERVE_RUN).args(["--listen", &listen]);
-        if let Some(flag) = flag {
-            cmd.arg("--segment-cache-dir").arg(bed.dir().join(flag));
-        }
-        cmd.assert().code(1);
-        let created: Vec<&str> = [FLAG_SEGMENTS, ENV_SEGMENTS, DEFAULT_SEGMENTS]
-            .into_iter()
-            .filter(|dir| bed.dir().join(dir).is_dir())
-            .collect();
-        assert_eq!(created, [expected], "flag {flag:?}, variable {env:?}");
+        let served = Served::start_with(&bed, |cmd| {
+            if let Some(env) = env {
+                cmd.env("QF_MAX_SPAN_BARS", env);
+            }
+            if let Some(flag) = flag {
+                cmd.args(["--max-span-bars", flag]);
+            }
+        });
+        // One bar more than the limit, which the refusal names.
+        let end = expected * 60_000;
+        let (status, body) = get(
+            served.address,
+            &format!(
+                "/v1/candles?exchange=binance&category=spot&symbol=BTCUSDT&interval=1m\
+                 &start_open_ms=0&end_open_ms={end}"
+            ),
+        );
+        assert_eq!(status, 400, "flag {flag:?}, variable {env:?}: {body}");
+        assert!(
+            body.contains(&format!(
+                "the range spans {} bars of 1m, more than the {expected} this server serves",
+                expected + 1
+            )),
+            "flag {flag:?}, variable {env:?}: {body}"
+        );
     }
 }
 
@@ -570,7 +579,7 @@ fn an_exported_but_empty_variable_never_falls_back_to_the_default() {
         "an empty QF_LOG fell back to the default info level"
     );
 
-    // An empty address is no address, and an empty path no path: clap
+    // An empty address is no address, and an empty limit no limit: clap
     // refuses both before anything is opened or bound.
     let bed = TestBed::new();
     let mut cmd = serve_cmd(&bed);
@@ -586,14 +595,14 @@ fn an_exported_but_empty_variable_never_falls_back_to_the_default() {
     let bed = TestBed::new();
     let held = held_port();
     let mut cmd = serve_cmd(&bed);
-    cmd.env("QF_SEGMENT_CACHE_DIR", "")
+    cmd.env("QF_MAX_SPAN_BARS", "")
         .args(SERVE_RUN)
         .args(["--listen", &address_of(&held)]);
     cmd.assert().code(2).stderr(predicate::str::contains(
-        "a value is required for '--segment-cache-dir <SEGMENT_CACHE_DIR>'",
+        "invalid value '' for '--max-span-bars <MAX_SPAN_BARS>'",
     ));
     assert!(
         !bed.db_path().exists(),
-        "an empty QF_SEGMENT_CACHE_DIR created a database"
+        "an empty QF_MAX_SPAN_BARS created a database"
     );
 }

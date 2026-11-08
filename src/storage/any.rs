@@ -11,8 +11,8 @@ use std::time::Duration;
 
 use crate::model::{
     BotRunState, Candle, ClosedTrade, DurabilityReport, Environment, ExchangeOrder, ExecutionMode,
-    LegacyRun, MarketId, RunIdentity, SchemaMigration, SegmentHash, SegmentPlan, SegmentRefresh,
-    StoreIdentity, TimestampMs,
+    LegacyRun, MarketCoverage, MarketId, RunIdentity, SchemaMigration, SegmentHash, SegmentPlan,
+    SegmentRefresh, StoreIdentity, TimestampMs,
 };
 use crate::ports::{
     CandleQuery, CandleStore, RunJournalStore, SegmentStore, StorageError, StoreControl,
@@ -106,6 +106,10 @@ impl CandleStore for AnyStore {
 
     fn max_open_time_ms(&self, market: &MarketId) -> Result<Option<TimestampMs>, StorageError> {
         delegate!(self, store => store.max_open_time_ms(market))
+    }
+
+    fn market_coverage(&self) -> Result<Vec<MarketCoverage>, StorageError> {
+        delegate!(self, store => store.market_coverage())
     }
 }
 

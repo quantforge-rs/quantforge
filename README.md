@@ -46,7 +46,7 @@ The public surface is layered as Rust modules, innermost first:
 - `sdk` - the strategy trait and its context, indicator math, and built-in strategies
 - `engine` - the drivers: `engine::backtest`, `engine::data_sync`, and `engine::live`
 - `protocol` - stands apart from the layers above: the versioned wire types between QuantForge instances, for remote backtest jobs, candle segments, and the live bar stream, and the [strategy bundle](https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md) a remote backtest runs; its rustdoc is the wire specification
-- `server` - the HTTP server `serve run` hosts for other QuantForge instances, speaking `protocol`: its routes, and a shutdown that finishes the requests in progress
+- `server` - the HTTP server `serve run` hosts for other QuantForge instances, speaking `protocol`: its routes, the history they serve from the selected store, and a shutdown that finishes the requests in progress
 
 The `quantforge` binary adds `cli`, a module tree that mirrors the command
 tree: `quantforge monitor cancel-order` lives in
@@ -93,8 +93,8 @@ Every setting is a command-line flag. The global ones — `--db`,
 `--exchange`, `--base-url`, `--log-level`, `--api-key`, and `--api-secret` —
 fall back to `QF_DB`, `QF_EXCHANGE`, `QF_BASE_URL`, `QF_LOG`, `QF_API_KEY`,
 and `QF_API_SECRET`, and a flag always wins over its variable. So do
-`serve run`'s `--listen` and `--segment-cache-dir`, with `QF_LISTEN` and
-`QF_SEGMENT_CACHE_DIR`. `--exchange` names the exchange (`binance`, the
+`serve run`'s `--listen` and `--max-span-bars`, with `QF_LISTEN` and
+`QF_MAX_SPAN_BARS`. `--exchange` names the exchange (`binance`, the
 default and so far the only one), and an omitted `--base-url` is that
 exchange's production endpoint. `--storage` (`QF_STORAGE`) selects the
 storage backend: `sqlite`, the default, at `--db`, or `postgres`, the
@@ -318,16 +318,25 @@ cargo run -- \
 ```
 
 Run the server other QuantForge instances connect to. It prints the address
-it listens on and answers `GET /healthz` and `GET /version` there until
-Ctrl-C or SIGTERM; then it stops accepting connections and finishes the
-requests in progress, unless a second signal tells it not to wait:
+it listens on and answers there until Ctrl-C or SIGTERM: `GET /healthz`,
+`GET /version`, and the history the selected store holds. `GET /v1/markets`
+lists the markets and the span of their candles, `GET /v1/candles` names the
+segments that hold a range and sends its newest candles inline, and
+`GET /v1/segments/{hash}` sends a segment, which never changes, so any cache
+may keep it for a year; the
+[protocol docs](https://github.com/quantforge-rs/quantforge/blob/main/src/protocol/segments/mod.rs)
+say how to read them. The history routes need no credentials yet, and the
+default address takes connections from this machine only. On a signal the
+server stops accepting connections and finishes the requests in progress,
+unless a second signal tells it not to wait:
 
 ```bash
 cargo run -- \
   --db data/market.sqlite \
   serve run \
   --listen 127.0.0.1:9600
-curl http://127.0.0.1:9600/version
+curl http://127.0.0.1:9600/v1/markets
+curl 'http://127.0.0.1:9600/v1/candles?exchange=binance&category=spot&symbol=BTCUSDT&interval=1m&start_open_ms=1792454400000&end_open_ms=1792540740000'
 ```
 
 ## Upgrading

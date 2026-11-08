@@ -82,7 +82,6 @@ src/
 │   ├── decimal.rs              ExactDecimal: exact decimals as JSON strings, never numbers
 │   ├── hash.rs                 ContentHash: the sha256: names of stored content
 │   ├── errors.rs               the error envelope every surface answers with, and its HTTP statuses
-│   ├── segments.rs             candle segment index entries and their range metadata
 │   ├── bundle/                 Python strategy bundles: the files, the manifest, the canonical tar
 │   │   ├── mod.rs              Bundle: build, read back, hash, and admit a bundle; the spec's constants
 │   │   ├── path.rs             BundlePath and BundleFile: the path rules that extract anywhere
@@ -101,6 +100,10 @@ src/
 │   │   ├── mod.rs              the job surface and JobId
 │   │   ├── submission.rs       JobSubmission: the bundle's hash, the candles, the backtest settings
 │   │   └── status.rs           JobStatus, JobState, and the references to a job's results
+│   ├── segments/               stored candles over HTTP: the markets, a range, each segment
+│   │   ├── mod.rs              the history routes and their rules; SegmentEntry, the media type, the cache header
+│   │   ├── markets.rs          MarketIndex and MarketEntry: what GET /v1/markets answers
+│   │   └── candles.rs          CandleRangeQuery and CandleRange: what GET /v1/candles asks and answers
 │   └── stream/                 bars as they close, over a WebSocket
 │       ├── mod.rs              the session flow, ClientFrame and ServerFrame, Ping and Pong
 │       ├── handshake.rs        Hello and HelloVersions, Welcome, AuthToken, SessionId, SessionLimits
@@ -199,6 +202,7 @@ src/
 │   │   ├── schema.rs           the DDL of every schema version, the advisory lock, the control row
 │   │   ├── migrate.rs          the schema chain: created at init, one transaction per step under the lock
 │   │   ├── candles.rs          CandleStore: batches unnested into one upsert that marks changed windows
+│   │   ├── coverage.rs         the markets the candle table holds, each found in two indexed steps
 │   │   ├── journal.rs          RunJournalStore: one statement per call, run IDs in byte order
 │   │   ├── control.rs          StoreControl: the store's record, its binding and legacy-run adoption
 │   │   ├── transfer.rs         a transfer's reads in byte order, batches that skip what it holds, the record
@@ -262,7 +266,19 @@ src/
 │       │   └── tests.rs        dry-run fills, rounding, notional and dust rules
 │       └── state.rs            run identity: create, resume, and resume checks
 └── server/                     the HTTP server other instances connect to
-    └── mod.rs                  serve: the routes, and the shutdown that finishes requests in progress
+    ├── mod.rs                  serve: the routes, and the shutdown that finishes requests in progress
+    ├── history.rs              History: the markets and candles routes, and the turns at the store
+    ├── selection.rs            a candles query read into a market and a range, every value canonical
+    ├── segment.rs              the segment route: stored bytes, cached for a year, checked before they go
+    ├── refusal.rs              every failed answer as an error envelope, and what a storage failure may say
+    └── tests/                  the routes in process, over a real SQLite store
+        ├── mod.rs              the fixtures, health, version, unknown paths and methods, the shutdown
+        ├── faulty.rs           a store that fails or stalls on demand
+        ├── history.rs          ranges read back exactly, empty answers, queries without category
+        ├── markets.rs          every stored market, in order, with its span
+        ├── queries.rs          the queries refused before the store is asked anything
+        ├── segments.rs         stored bytes, 304s, unknown hashes, and damaged copies never sent
+        └── store.rs            storage failures named to no client, and the turns at the store
 ```
 
 After `cli/` come the eight library modules: `protocol` first, which stands
@@ -270,8 +286,9 @@ apart and uses no other module, then the six layers innermost first, as in
 the `src/lib.rs` docs, then `server`. `model` uses no other module, `ports`
 uses `model`, `exchange` and `storage` use `model` and `ports`, `sdk` uses
 `model`, and `engine` uses `model`, `ports`, and `sdk`. `server` uses
-`protocol` and, so far, nothing else; `serve run` binds the address and
-hands it the listener. The engines reach the exchange
+`protocol`, `model`, the `ports` it reads the store through, and the
+segment codec of `storage::segments` to check what it sends; `serve run`
+opens the store, binds the address, and hands it both. The engines reach the exchange
 and storage adapters only through the `ports` traits; the binary chooses
 which adapters to pass in, building the connectors of the exchange that
 `--exchange` names through `exchange::connect`, and opening the store that

@@ -14,8 +14,10 @@
 //! - [`jobs`]: remote backtests of a Python strategy bundle, over HTTP.
 //! - [`bundle`]: the strategy bundle a job runs, uploaded as its canonical
 //!   tar and named by its code hash; its rules are the [bundle spec].
-//! - [`segments`]: stored candles, as immutable segments named by their
-//!   content hash, over HTTP; a segment's bytes are the [segment spec].
+//! - [`segments`]: stored candles over HTTP: the markets a server stores,
+//!   one market's bars in a range, and the immutable segments that hold
+//!   them, named by their content hash; a segment's bytes are the
+//!   [segment spec].
 //! - [`stream`]: bars as they close, over a WebSocket.
 //!
 //! [bundle spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md>
@@ -25,9 +27,10 @@
 //!
 //! - Every message is one JSON object in UTF-8: an HTTP body, or a WebSocket
 //!   text frame. A list is never sent bare but inside an object, such as
-//!   [`segments::SegmentIndex`], so that fields can join it later. Two
+//!   [`segments::MarketIndex`], so that fields can join it later. Three
 //!   bodies are not JSON: a bundle upload, which is its canonical tar, as
-//!   [`bundle::BUNDLE_MEDIA_TYPE`], and the plain-text `ok` of
+//!   [`bundle::BUNDLE_MEDIA_TYPE`]; a segment, which is one zstd frame, as
+//!   [`segments::SEGMENT_MEDIA_TYPE`]; and the plain-text `ok` of
 //!   `GET /healthz`.
 //! - Field names and enum values are `snake_case`. In Rust, the serde name
 //!   of each field and variant here is its wire name.

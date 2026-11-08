@@ -128,7 +128,10 @@ a delivery after 3 s, and the other second is for TLS, authentication and
 the answer. A host sets another in `StorageRequest.route_budget` and reads it
 from `StorageSettings::limits`; ALG-743 passes it to `within` and decides
 whether an operator may change it. A budget only ever tightens a store's
-limits.
+limits. `serve run`'s history routes already use it: each store call they
+make is bounded by `route_budget`, on a blocking thread, behind as many
+turns at the store as its pool has connections, and a request that finds no
+turn within `route_budget` is answered `503` with `Retry-After`.
 
 What is left of a call's budget divides so that the backend's own answer
 arrives first: a lock wait may take three quarters of it and a statement
@@ -190,7 +193,9 @@ twice. The closure holds storage calls and nothing else: an exchange request
 inside it would be sent again.
 
 An HTTP route answers `unavailable`, `contention` and `conflict` with a 503
-and `outcome_unknown` with a 500, in the terms of ADR 0001. None of them is
+and `outcome_unknown` with a 500, in the terms of ADR 0001, and every other
+kind with a 500 as well. Its message never carries the store's own words,
+which can name its host and database; the server logs them. None of them is
 a 2xx: a delivery that was not committed is not acknowledged, and the sender
 tries again.
 

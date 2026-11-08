@@ -1,6 +1,7 @@
 //! The run journal and the store's record on PostgreSQL beyond what the
 //! shared groups show: a database whose collation orders text as people
-//! read it, where only `COLLATE "C"` keeps run IDs in SQLite's byte order;
+//! read it, where only `COLLATE "C"` keeps run IDs in SQLite's byte order
+//! and the candle store's walk over its markets must still find each one;
 //! and two processes appending to one run at once, whose events all land
 //! in the order each wrote them. Without `QUANTFORGE_TEST_POSTGRES_URL`
 //! every test skips.
@@ -12,6 +13,7 @@ use quantforge::{
 };
 use rust_decimal::Decimal;
 use std::sync::Barrier;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::{
     IsolatedDatabase, Postgres, VARIABLE, block_on, client, fixture_on, server_url, settings, skip,
@@ -36,21 +38,22 @@ impl Backend for Linguistic {
 }
 
 /// Whether the server can create a database with the linguistic collation.
+/// Each probe takes a name of its own, as the tests here probe at once.
 fn linguistic_collation(server: &str) -> bool {
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let probe = format!(
+        "qf_collation_probe_{}_{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::SeqCst)
+    );
     block_on(async {
         let client = client(server).await;
-        let probe = "qf_collation_probe";
         let created = client
-            .simple_query(&format!(
-                "CREATE DATABASE {probe}_{} {LINGUISTIC}",
-                std::process::id()
-            ))
+            .simple_query(&format!("CREATE DATABASE {probe} {LINGUISTIC}"))
             .await
             .is_ok();
         if created {
-            let _ = client
-                .simple_query(&format!("DROP DATABASE {probe}_{}", std::process::id()))
-                .await;
+            let _ = client.simple_query(&format!("DROP DATABASE {probe}")).await;
         }
         created
     })
@@ -68,6 +71,22 @@ fn the_journal_and_store_record_keep_byte_order_under_a_linguistic_collation() {
     }
     conformance::journal::<Linguistic>();
     conformance::control::<Linguistic>();
+}
+
+/// The walk over the markets steps through the key in the database's own
+/// order, which a linguistic collation changes: it must still find every
+/// market once.
+#[test]
+fn the_candle_store_finds_every_market_under_a_linguistic_collation() {
+    let Some(server) = server_url() else {
+        eprintln!("skipping: {VARIABLE} is unset");
+        return;
+    };
+    if !linguistic_collation(&server) {
+        skip("the server has no en_US.UTF-8 locale");
+        return;
+    }
+    conformance::candles::<Linguistic>();
 }
 
 fn order(order_id: String) -> ExchangeOrder {
