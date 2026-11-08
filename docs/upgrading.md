@@ -10,12 +10,14 @@ contract behind it.
 
 ## Supported upgrades
 
+<!-- begin: supported upgrades -->
 | Written by | Schema | Upgrades to |
 | --- | --- | --- |
-| QuantForge 0.1.0 | 1 | 5 |
-| QuantForge 0.2.0 | 2 | 5 |
-| A development build after 0.2.0 | 3 or 4 | 5 |
-| This release | 5 | — |
+| QuantForge 0.1.0 | 1 | 6 |
+| QuantForge 0.2.0 | 2 | 6 |
+| A development build after 0.2.0 | 3, 4 or 5 | 6 |
+| This release | 6 | — |
+<!-- end: supported upgrades -->
 
 Every step of the chain runs forward only. A file a newer release has
 already upgraded is refused by an older one, untouched:

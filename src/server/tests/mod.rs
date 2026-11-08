@@ -3,10 +3,10 @@
 //! here; a shutdown that finishes a request in progress in `shutdown`; a
 //! range in `history`, the market list in `markets`, the queries refused in
 //! `queries`, the segment route in `segments`, uploads in `jobs`, the other
-//! job routes in `submissions`, a busy store at a job's start in `queue`,
-//! and storage failures and the turns at the store in `store`, over the
-//! store of `faulty`. Literal venue names live
-//! in this file only: `tests/exchange_boundary.rs` reads the others as
+//! job routes in `submissions`, a busy store at a job's start and a stop
+//! racing the dispatcher in `queue`, and storage failures and the turns at
+//! the store in `store`, over the store of `faulty`. Literal venue names
+//! live in this file only: `tests/exchange_boundary.rs` reads the others as
 //! code.
 
 mod faulty;

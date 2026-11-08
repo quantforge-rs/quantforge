@@ -6,8 +6,10 @@
 //! covering every table; and
 //! `docs/storage-conformance.md`'s lists of every scenario and check; and
 //! `docs/storage-migration.md`'s tables a transfer copies and keeps, which
-//! cover the schema, its format, and its worked example. Each part is found
-//! between `<!-- begin: name -->` and `<!-- end: name -->`.
+//! cover the schema, its format, and its worked example; and
+//! `docs/upgrading.md`'s supported upgrades, which take every earlier
+//! schema to the one the code writes. Each part is found between
+//! `<!-- begin: name -->` and `<!-- end: name -->`.
 
 use quantforge::model::{ColumnKind, KEPT_BY_EACH_STORE, TRANSFER_FORMAT, TRANSFER_TABLES};
 use quantforge::storage::sqlite::SCHEMA_VERSION;
@@ -153,6 +155,35 @@ fn the_schema_version_in_the_doc_is_the_one_the_code_writes() {
         .filter(|line| !line.is_empty())
         .collect();
     assert_eq!(lines, [SCHEMA_VERSION.to_string()]);
+}
+
+#[test]
+fn the_upgrade_guide_takes_every_earlier_schema_to_the_one_the_code_writes() {
+    let rows: Vec<Vec<String>> = section_in("docs/upgrading.md", "supported upgrades")
+        .iter()
+        .filter(|line| line.starts_with('|'))
+        .skip(2)
+        .map(|line| {
+            line.trim_matches('|')
+                .split('|')
+                .map(|cell| cell.trim().to_string())
+                .collect()
+        })
+        .collect();
+    let current = SCHEMA_VERSION.to_string();
+    let (this_release, earlier) = rows.split_last().expect("the table's rows");
+    assert_eq!(*this_release, ["This release", current.as_str(), "—"]);
+    let mut sources = Vec::new();
+    for row in earlier {
+        assert_eq!(row[2], current, "{row:?} upgrades to the current schema");
+        sources.extend(
+            row[1]
+                .split(|c: char| !c.is_ascii_digit())
+                .filter(|number| !number.is_empty())
+                .map(|number| number.parse::<u32>().expect("a schema number")),
+        );
+    }
+    assert_eq!(sources, (1..SCHEMA_VERSION).collect::<Vec<_>>());
 }
 
 #[test]

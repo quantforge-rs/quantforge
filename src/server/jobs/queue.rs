@@ -47,17 +47,27 @@ const CHUNK: usize = 50_000;
 pub(super) async fn dispatch(jobs: Jobs) {
     let mut stopping = jobs.inner.stopping.subscribe();
     loop {
+        // A stop comes first: a stopping server takes no slot, even a free
+        // one.
         let slot = tokio::select! {
+            biased;
+            _ = stopping.wait_for(|stopping| *stopping) => return,
             slot = Arc::clone(&jobs.inner.slots).acquire_owned() => match slot {
                 Ok(slot) => slot,
                 Err(_) => return,
             },
-            _ = stopping.wait_for(|stopping| *stopping) => return,
         };
+        let claimer = jobs.clone();
         let claimed = jobs
             .inner
             .store
-            .call(|store| {
+            .call(move |store| {
+                // A stop that began while the claim waited for its turn
+                // claims nothing; the job a claim in progress takes is
+                // stopped like any running one.
+                if *claimer.inner.stopping.borrow() {
+                    return Ok(None);
+                }
                 store
                     .claim_job(now_utc_ms())
                     .map_err(|failure| Refusal::storage("claiming a job", failure))
