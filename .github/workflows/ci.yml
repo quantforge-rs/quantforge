@@ -31,14 +31,104 @@ jobs:
         run: cargo fmt --all -- --check
       - name: clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
+      # the sqlite-only build, which holds no postgresql code (adr 0001)
+      - name: clippy (sqlite only)
+        run: cargo clippy --all-targets --no-default-features -- -D warnings
       - name: test
         run: cargo test --all-features --locked
+      - name: test (sqlite only)
+        run: cargo test --no-default-features --locked
 
   package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # the oldest rust the crate declares (`rust-version`), with and without
+      # the default features: adr 0001's msrv check, in a job already required
+      - uses: dtolnay/rust-toolchain@1.85
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: msrv
+        run: cargo +1.85 check --locked --all-targets
+      - name: msrv (sqlite only)
+        run: cargo +1.85 check --locked --all-targets --no-default-features
       - name: package
         run: cargo publish --dry-run --locked
+
+  # the whole suite against each postgresql major adr 0001 supports, on the
+  # official images as service containers (docs/ci.md). the required variable
+  # turns a test that would skip for want of a server into a failure
+  postgres:
+    name: postgres ${{ matrix.version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["16", "17", "18"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      # tls is turned on once it runs, under a ca made for the run
+      postgres:
+        image: postgres:${{ matrix.version }}
+        env:
+          POSTGRES_USER: quant
+          POSTGRES_PASSWORD: test-pw
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        # over tcp: on its first start the image runs a server on its socket
+        # alone, and stops it before starting the real one
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U quant"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+      # fsync off, for the refusal of a server that cannot keep its commits
+      weak:
+        image: postgres:${{ matrix.version }}
+        env:
+          POSTGRES_USER: quant
+          POSTGRES_PASSWORD: test-pw
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U quant"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: servers
+        run: ./scripts/postgres-test-servers.sh configure "$SERVER" "$WEAK" "$RUNNER_TEMP/postgres-tls"
+        env:
+          SERVER: ${{ job.services.postgres.id }}
+          WEAK: ${{ job.services.weak.id }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: test
+        run: cargo test --all-features --locked --no-fail-fast
+        env:
+          QUANTFORGE_TEST_POSTGRES_REQUIRED: "1"
+          QUANTFORGE_TEST_POSTGRES_URL: postgres://quant:test-pw@127.0.0.1:5432/postgres?sslmode=disable
+          QUANTFORGE_TEST_POSTGRES_TLS_URL: postgres://quant:test-pw@localhost:5432/postgres?sslmode=verify-full&sslrootcert=${{ runner.temp }}/postgres-tls/ca.crt
+          QUANTFORGE_TEST_POSTGRES_WEAK_URL: postgres://quant:test-pw@127.0.0.1:5433/postgres?sslmode=disable
+      - name: nothing left behind
+        run: ./scripts/postgres-test-servers.sh leftovers "$SERVER" "$WEAK"
+        env:
+          SERVER: ${{ job.services.postgres.id }}
+          WEAK: ${{ job.services.weak.id }}
+
+  # the one required check for the postgres legs, so a major added to or
+  # dropped from the matrix needs no branch protection change. it runs even
+  # when a leg failed or was cancelled: a required check that is skipped
+  # counts as passed
+  storage:
+    needs: postgres
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: every postgres leg passed
+        run: test "$RESULT" = success
+        env:
+          RESULT: ${{ needs.postgres.result }}

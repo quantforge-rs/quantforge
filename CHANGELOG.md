@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- ci runs the whole test suite against PostgreSQL 16, 17 and 18, the official images as service containers, one serving TLS and one with `fsync` off; `QUANTFORGE_TEST_POSTGRES_REQUIRED=1` turns a test that would skip for want of a server into a failure, a leg that leaves a database or role behind fails, and the `storage` check passes only when every leg passed (`docs/ci.md`)
+- ci checks the SQLite-only build (`--no-default-features`) with clippy and the tests on every platform, and checks the crate with Rust 1.85, its declared minimum, in the `package` check
+- `scripts/postgres-test-servers.sh` runs ci's two PostgreSQL servers locally with Docker and prints the variables the tests read
 - `quantforge data migrate --from <file>` copies a SQLite store into the selected PostgreSQL store: candles, runs, order events, closed trades, segments, the segment index and its dirty marks, every value as stored, decimal text and scale, IDs, sequence numbers, timestamps, JSON and legacy identities included; the source is read from one snapshot, read-only, and never changed, and the target keeps a store ID of its own, stays inactive, and is bound to the source's environment
 - `data migrate --verify` compares every row of the copy with the source and prints, for each table and market, both sides' rows, key bounds and canonical SHA-256 checksum, then each difference; any difference exits with status 1
 - a copy cut off is finished by running the same command again, which writes each row once, and a finished copy writes nothing; until a copy finishes, every command but `data migrate` and `store status` refuses its target, and `store status` prints `transfer:`
@@ -114,6 +117,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- `scripts/release-check.sh` also runs clippy and the tests of the SQLite-only build and checks the crate with Rust 1.85, as ci does, and gives the publish dry run a target directory of its own, so later test runs no longer run the packaged copy's binary
 - every SQLite connection now runs `synchronous=FULL` with `fullfsync`, so a commit is flushed before the store answers: on macOS that costs about 5 ms per commit, and on Linux what the disk's flush costs; every PostgreSQL connection raises `synchronous_commit = off` to `local`, and gives up on a lock after 5 s
 - a SQLite connection now waits for another writer's lock by the clock, sleeping at most 10 ms between tries, instead of through SQLite's busy timeout, which counts the sleeps it meant to take and so overran a caller's budget wherever timers run late
 - of two runs of one market and strategy last updated in the same millisecond, `trade close` and `monitor status` without `--run-id` take the one started later, then the one with the greater run ID, instead of whichever the database listed first

@@ -220,6 +220,8 @@ performance threshold pretends otherwise.
 ## What was exercised
 
 On PostgreSQL 16.15 and SQLite 3.46 on macOS 26.4.1 (arm64), on 2026-11-04.
+CI runs the tests behind each row but the database crash on every pull
+request, PostgreSQL's on 16, 17 and 18 ([ci.md](ci.md#postgresql)).
 
 | Case | How | Result |
 | --- | --- | --- |

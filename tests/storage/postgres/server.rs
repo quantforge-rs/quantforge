@@ -14,10 +14,39 @@ use tokio_postgres::{Client, NoTls, SimpleQueryMessage};
 
 /// The server the isolated databases are created on, or `None` to skip.
 pub fn server_url() -> Option<String> {
-    std::env::var(VARIABLE).ok().filter(|url| !url.is_empty())
+    url(VARIABLE)
 }
 
 pub const VARIABLE: &str = "QUANTFORGE_TEST_POSTGRES_URL";
+
+/// Set to `1` where PostgreSQL must be tested, as in CI (`docs/ci.md`):
+/// a test that would skip for want of a server, or of something a server
+/// lacks, fails instead.
+pub const REQUIRED: &str = "QUANTFORGE_TEST_POSTGRES_REQUIRED";
+
+/// Whether PostgreSQL must be tested here.
+pub fn required() -> bool {
+    std::env::var(REQUIRED).ok().as_deref() == Some("1")
+}
+
+/// The URL `variable` names, or `None` to skip; a failure where PostgreSQL
+/// must be tested.
+pub fn url(variable: &str) -> Option<String> {
+    let url = std::env::var(variable).ok().filter(|url| !url.is_empty());
+    if url.is_none() && required() {
+        panic!("{variable} is unset, and {REQUIRED} says PostgreSQL must be tested");
+    }
+    url
+}
+
+/// Notes why a test skips, or fails it where PostgreSQL must be tested.
+pub fn skip(reason: &str) {
+    assert!(
+        !required(),
+        "{reason}, and {REQUIRED} says PostgreSQL must be tested"
+    );
+    eprintln!("skipping: {reason}");
+}
 
 /// Runs one piece of async work on a runtime of its own: the raw view is
 /// synchronous, like the ports.

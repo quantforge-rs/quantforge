@@ -631,10 +631,7 @@ pub(crate) mod real_server {
     /// any request, and any other runs and warns.
     #[test]
     fn a_live_command_refuses_a_server_that_cannot_keep_its_commits() {
-        let Some(server) = std::env::var(WEAK_SERVER)
-            .ok()
-            .filter(|url| !url.is_empty())
-        else {
+        let Some(server) = crate::server::url(WEAK_SERVER) else {
             eprintln!("skipping: {WEAK_SERVER} is unset");
             return;
         };

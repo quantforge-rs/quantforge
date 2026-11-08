@@ -38,6 +38,7 @@ pub mod server;
 
 use quantforge::storage::postgres::PostgresStore;
 use std::any::Any;
+use std::process::Command;
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -45,8 +46,8 @@ use tokio::sync::oneshot;
 
 use crate::conformance::{self, Backend, Bounded, Fixture, Raw};
 pub use server::{
-    IsolatedDatabase, VARIABLE, block_on, client, query, selection, server_url, settings,
-    wait_for_a_lock,
+    IsolatedDatabase, REQUIRED, VARIABLE, block_on, client, query, selection, server_url, settings,
+    skip, wait_for_a_lock,
 };
 
 /// A `PostgresStore` on a database of its own.
@@ -224,6 +225,43 @@ fn each_fixture_gets_a_database_of_its_own_and_drops_it() {
         ),
     );
     assert!(left.is_empty(), "left behind: {left:?}");
+}
+
+/// Where PostgreSQL must be tested, a test with no server to run on fails,
+/// and anywhere else it skips: the test binary runs one of its tests again,
+/// as a child, with the server's variable taken away.
+#[test]
+fn a_test_without_its_server_fails_only_where_postgresql_must_be_tested() {
+    let run = |required: bool| {
+        let mut child = Command::new(std::env::current_exe().expect("the test binary"));
+        child
+            .args(["postgres::candles", "--exact", "--nocapture"])
+            .env_remove(VARIABLE)
+            .env_remove(REQUIRED);
+        if required {
+            child.env(REQUIRED, "1");
+        }
+        let output = child.output().expect("the test binary runs");
+        let text = String::from_utf8_lossy(&output.stdout).into_owned()
+            + &String::from_utf8_lossy(&output.stderr);
+        (output.status.success(), text)
+    };
+
+    let (passed, text) = run(false);
+    assert!(passed && text.contains("1 passed"), "{text}");
+    assert!(
+        text.contains(&format!("skipping: {VARIABLE} is unset")),
+        "{text}"
+    );
+
+    let (passed, text) = run(true);
+    assert!(!passed && text.contains("1 failed"), "{text}");
+    assert!(
+        text.contains(&format!(
+            "{VARIABLE} is unset, and {REQUIRED} says PostgreSQL must be tested"
+        )),
+        "{text}"
+    );
 }
 
 #[test]

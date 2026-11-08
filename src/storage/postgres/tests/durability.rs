@@ -6,7 +6,7 @@
 //! variable. A server with `fsync` off, named by
 //! `QUANTFORGE_TEST_POSTGRES_WEAK_URL`, shows the refusal of a weak one.
 
-use super::database::{DATABASE, database_url, sleep, unique};
+use super::database::{DATABASE, SCHEDULING, WEAK_DATABASE, database_url, sleep, unique};
 use super::scratch::{Scratch, rows};
 use super::segments::{Held, wait_for_a_lock};
 use super::*;
@@ -18,12 +18,6 @@ use crate::{
 };
 use rust_decimal::Decimal;
 use std::sync::atomic::{AtomicUsize, Ordering};
-
-const WEAK_DATABASE: &str = "QUANTFORGE_TEST_POSTGRES_WEAK_URL";
-
-/// What a loaded machine may add to a budget before a call is seen to end.
-/// A call that ignored its budget overruns it by seconds.
-const SCHEDULING: Duration = Duration::from_secs(1);
 
 /// 2026-10-20T00:00:00Z.
 const OPEN: i64 = 1_792_454_400_000;
@@ -128,11 +122,16 @@ fn a_real_deadlock_is_a_conflict_and_running_the_transaction_again_goes_through(
     scratch.set_for_new_connections("deadlock_timeout", "'3s'");
 
     // The other session holds the mark, and takes the candle only once the
-    // store holds it and waits for the mark. The store waited first, so the
-    // server settles the deadlock against it.
+    // store holds it and waits for the mark. The session that looks for the
+    // deadlock first is the one the server rolls back, so the other looks
+    // only after a minute: waiting first is not enough, since a store held
+    // up for a moment on a loaded machine would look second.
     let other = Held::start(
         &scratch,
-        format!("SELECT id FROM segment_dirty WHERE {THE_MARK} FOR UPDATE"),
+        format!(
+            "SET LOCAL deadlock_timeout = '1min'; \
+             SELECT id FROM segment_dirty WHERE {THE_MARK} FOR UPDATE"
+        ),
         format!("UPDATE candles SET close = '8' WHERE {THE_CANDLE}"),
     );
     let attempts = AtomicUsize::new(0);

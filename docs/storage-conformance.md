@@ -334,13 +334,17 @@ database of its own, `qf_conformance_<pid>_<n>`, on the server
 `QUANTFORGE_TEST_POSTGRES_URL` names, opens it through `PostgresStore`, and
 drops it with `DROP DATABASE … WITH (FORCE)` (PostgreSQL 13 or later) when
 the fixture goes, so scenarios never share rows and a run leaves nothing
-behind. Without the variable its test skips.
+behind. Without the variable its test skips, unless
+`QUANTFORGE_TEST_POSTGRES_REQUIRED` is `1`, as in CI: then every test that
+would skip fails instead ([ci.md](ci.md#postgresql)).
 
 The URL connects as a user allowed to create databases, over plain TCP; the
 store connects to each isolated database through the checks of
 [configuration.md](configuration.md#storage-backends), which allow plain
-text only to a loopback host. CI's service container and a local cluster
-both serve that; a local one, with Homebrew:
+text only to a loopback host. CI's service containers and a local cluster
+both serve that. `scripts/postgres-test-servers.sh start` runs CI's two
+servers with Docker ([ci.md](ci.md#running-them-locally)); a local cluster,
+with Homebrew:
 
 ```bash
 PATH="$(brew --prefix postgresql@16)/bin:$PATH"
@@ -367,7 +371,8 @@ store-record groups run once more
 on a database whose collation is `en_US.UTF-8`, where only byte order keeps
 a tie on run IDs SQLite's, but only when the server can create one: a server
 without that locale skips the run, saying so, so byte order is not proven on
-every setup. QUA-118 runs them in CI against a PostgreSQL service container.
+every setup. CI's servers have the locale, and CI runs every group on
+PostgreSQL 16, 17 and 18 ([ci.md](ci.md#postgresql)).
 The same command also runs the schema's own tests, the candle store's
 writes raced against a refresh's write-back, writers appending to one run
 at once, and the query plans of
@@ -379,10 +384,12 @@ cannot show: a write-back that waits on a correction's lock finds its
 revision, a window and a plan stay one snapshot while a commit lands, and
 each failure the server reports falls in its category.
 
-Two checks need more than one server, so they run on demand.
-`QUANTFORGE_TEST_POSTGRES_WEAK_URL` names a server with `fsync = off`, whose
-refusal `cargo test --lib postgres` then shows; without it that test skips.
-`QUANTFORGE_TEST_POSTGRES_DATA_DIR` names the data directory of the server
+Two checks need more than one server. `QUANTFORGE_TEST_POSTGRES_WEAK_URL`
+names a server with `fsync = off` in its configuration file, whose refusal
+`cargo test --lib postgres` and `cargo test --test e2e` then show; CI and
+`scripts/postgres-test-servers.sh` give one, and without it those tests
+skip. The other runs on demand: `QUANTFORGE_TEST_POSTGRES_DATA_DIR` names the
+data directory of the server
 `QUANTFORGE_TEST_POSTGRES_URL` reaches, for the test that crashes it, with
 `pg_ctl` on the `PATH`:
 
@@ -391,7 +398,8 @@ cargo test --test storage crash::postgres::acknowledged_writes_survive_the_serve
   -- --ignored --exact
 ```
 
-Every group, race and check passed on PostgreSQL 16.15 on 2026-11-04.
+Every group, race and check passed on PostgreSQL 16.15 on 2026-11-04, and
+the whole suite on 16.15, 17.11 and 18.6 on 2026-11-07.
 
 ## The races
 

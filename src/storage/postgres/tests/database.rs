@@ -3,7 +3,9 @@
 //! wrong password, and TLS. They run against the database
 //! `QUANTFORGE_TEST_POSTGRES_URL` names (and, for TLS,
 //! `QUANTFORGE_TEST_POSTGRES_TLS_URL`: host `localhost`,
-//! `sslmode=verify-full`, `sslrootcert`), and skip when it is unset.
+//! `sslmode=verify-full`, `sslrootcert`), and skip when it is unset, unless
+//! `QUANTFORGE_TEST_POSTGRES_REQUIRED` is `1`, as in CI: then a test that
+//! would skip fails.
 
 use super::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -13,13 +15,35 @@ use tokio_postgres::types::Type;
 pub(super) fn database_url(variable: &str) -> Option<String> {
     let url = std::env::var(variable).ok().filter(|url| !url.is_empty());
     if url.is_none() {
-        eprintln!("skipping: {variable} is unset");
+        skip(&format!("{variable} is unset"));
     }
     url
 }
 
+/// Notes why a test skips, or fails it where PostgreSQL must be tested.
+pub(super) fn skip(reason: &str) {
+    assert!(
+        std::env::var(REQUIRED).ok().as_deref() != Some("1"),
+        "{reason}, and {REQUIRED} says PostgreSQL must be tested"
+    );
+    eprintln!("skipping: {reason}");
+}
+
+/// What a loaded machine may add to a budget before a call is seen to end.
+/// A call that ignored its budget overruns it by seconds.
+pub(super) const SCHEDULING: Duration = Duration::from_secs(1);
+
+/// The deadline of the calls below that run past theirs. It covers each
+/// call's first login too: at 300 ms a login on a loaded machine outlasted
+/// it, and both tests failed every time with the library's tests at
+/// background priority. The sleeps they run last ten times as long.
+const DEADLINE: Duration = Duration::from_secs(3);
+
 pub(super) const DATABASE: &str = "QUANTFORGE_TEST_POSTGRES_URL";
 const TLS_DATABASE: &str = "QUANTFORGE_TEST_POSTGRES_TLS_URL";
+pub(super) const WEAK_DATABASE: &str = "QUANTFORGE_TEST_POSTGRES_WEAK_URL";
+/// Set to `1` where PostgreSQL must be tested, as in CI (`docs/ci.md`).
+const REQUIRED: &str = "QUANTFORGE_TEST_POSTGRES_REQUIRED";
 
 /// An `application_name` no other test in this run uses.
 pub(super) fn unique(prefix: &str) -> String {
@@ -169,6 +193,48 @@ fn a_full_pool_refuses_a_call_in_time_and_never_opens_another_connection() {
     held.join().expect("the holder").expect("its sleep");
 }
 
+/// Where PostgreSQL must be tested, a test with no server to run on fails,
+/// and anywhere else it skips: the test binary runs one of its tests again,
+/// as a child, with the server's variable taken away.
+#[test]
+fn a_test_without_its_server_fails_only_where_postgresql_must_be_tested() {
+    let run = |required: bool| {
+        let mut child =
+            std::process::Command::new(std::env::current_exe().expect("the test binary"));
+        child
+            .args([
+                "storage::postgres::tests::database::a_blocking_thread_reaches_the_database",
+                "--exact",
+                "--nocapture",
+            ])
+            .env_remove(DATABASE)
+            .env_remove(REQUIRED);
+        if required {
+            child.env(REQUIRED, "1");
+        }
+        let output = child.output().expect("the test binary runs");
+        let text = String::from_utf8_lossy(&output.stdout).into_owned()
+            + &String::from_utf8_lossy(&output.stderr);
+        (output.status.success(), text)
+    };
+
+    let (passed, text) = run(false);
+    assert!(passed && text.contains("1 passed"), "{text}");
+    assert!(
+        text.contains(&format!("skipping: {DATABASE} is unset")),
+        "{text}"
+    );
+
+    let (passed, text) = run(true);
+    assert!(!passed && text.contains("1 failed"), "{text}");
+    assert!(
+        text.contains(&format!(
+            "{DATABASE} is unset, and {REQUIRED} says PostgreSQL must be tested"
+        )),
+        "{text}"
+    );
+}
+
 #[test]
 fn a_read_past_its_deadline_is_cancelled_and_its_connection_discarded() {
     let Some(url) = database_url(DATABASE) else {
@@ -178,7 +244,7 @@ fn a_read_past_its_deadline_is_cancelled_and_its_connection_discarded() {
     let name = unique("deadline");
     let mut settings = settings(&url, &name);
     settings.pool_size = 1;
-    settings.call_deadline = Duration::from_millis(300);
+    settings.call_deadline = DEADLINE;
     let store = PostgresStore::connect(&settings).expect("a store");
 
     // Far longer than the observer waits below: without the cancel the
@@ -187,7 +253,7 @@ fn a_read_past_its_deadline_is_cancelled_and_its_connection_discarded() {
     let lost = sleep(&store, Effect::Read, 30.0).expect_err("past its deadline");
     assert!(matches!(lost, StorageError::Unavailable(_)), "{lost:?}");
     assert!(
-        started.elapsed() < Duration::from_secs(2),
+        started.elapsed() < DEADLINE + SCHEDULING,
         "{:?}",
         started.elapsed()
     );
@@ -196,7 +262,7 @@ fn a_read_past_its_deadline_is_cancelled_and_its_connection_discarded() {
     let started = Instant::now();
     store.ping().expect("a fresh connection");
     assert!(
-        started.elapsed() < Duration::from_secs(2),
+        started.elapsed() < DEADLINE + SCHEDULING,
         "{:?}",
         started.elapsed()
     );
@@ -211,9 +277,9 @@ fn a_write_past_its_deadline_has_an_unknown_outcome() {
         return;
     };
     let mut settings = settings(&url, &unique("deadline_write"));
-    settings.call_deadline = Duration::from_millis(300);
+    settings.call_deadline = DEADLINE;
     let store = PostgresStore::connect(&settings).expect("a store");
-    let lost = sleep(&store, Effect::Write, 5.0).expect_err("past its deadline");
+    let lost = sleep(&store, Effect::Write, 30.0).expect_err("past its deadline");
     assert!(matches!(lost, StorageError::OutcomeUnknown(_)), "{lost:?}");
 }
 
@@ -253,7 +319,7 @@ fn a_wrong_password_is_refused_without_being_shown() {
     };
     let mut wrong = url::Url::parse(&url).expect("a URL");
     if wrong.password().is_none() {
-        eprintln!("skipping: {DATABASE} carries no password to get wrong");
+        skip(&format!("{DATABASE} carries no password to get wrong"));
         return;
     }
     wrong.set_password(Some(SENTINEL)).expect("a password");
