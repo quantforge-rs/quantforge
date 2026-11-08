@@ -93,8 +93,10 @@ Every setting is a command-line flag. The global ones — `--db`,
 `--exchange`, `--base-url`, `--log-level`, `--api-key`, and `--api-secret` —
 fall back to `QF_DB`, `QF_EXCHANGE`, `QF_BASE_URL`, `QF_LOG`, `QF_API_KEY`,
 and `QF_API_SECRET`, and a flag always wins over its variable. So do
-`serve run`'s `--listen`, `--max-span-bars` and `--job-concurrency`, with
-`QF_LISTEN`, `QF_MAX_SPAN_BARS` and `QF_JOB_CONCURRENCY`. `--exchange` names the exchange (`binance`, the
+`serve run`'s `--listen`, `--max-span-bars`, `--job-concurrency`,
+`--job-cpu-secs`, `--job-memory-mib` and `--job-wall-secs`, with
+`QF_LISTEN`, `QF_MAX_SPAN_BARS`, `QF_JOB_CONCURRENCY`, `QF_JOB_CPU_SECS`,
+`QF_JOB_MEMORY_MIB` and `QF_JOB_WALL_SECS`. `--exchange` names the exchange (`binance`, the
 default and so far the only one), and an omitted `--base-url` is that
 exchange's production endpoint. `--storage` (`QF_STORAGE`) selects the
 storage backend: `sqlite`, the default, at `--db`, or `postgres`, the
@@ -331,9 +333,15 @@ canonical tar, `POST /v1/backtests` submits a job on candles the store
 holds, `GET /v1/backtests` and `GET /v1/backtests/{job_id}` say where jobs
 stand, and `POST /v1/backtests/{job_id}/cancel` cancels one (see the
 [job protocol](https://github.com/quantforge-rs/quantforge/blob/main/src/protocol/jobs/mod.rs)).
-Jobs run `--job-concurrency` at a time, half the CPU cores unless set; this
-release has no worker runtime yet, so each job fails as it starts, saying
-so. The routes need no credentials yet, and the default address takes
+Jobs run `--job-concurrency` at a time, half the CPU cores unless set, each
+in a worker process of its own: started ahead of the job, held to
+`--job-cpu-secs`, `--job-memory-mib` and `--job-wall-secs`, given nothing
+of the store, and killed once the job ends. On Linux a worker reaches no
+network and no file outside its scratch directory; `serve run` prints what
+its workers enforce, and
+[worker isolation](https://github.com/quantforge-rs/quantforge/blob/main/docs/worker-isolation.md)
+says what that covers on each system. This release's workers have no
+runtime yet, so each job fails as it starts, saying so. The routes need no credentials yet, and the default address takes
 connections from this machine only. On a signal the server stops accepting
 connections, finishes the requests in progress, and stops the jobs that
 run, failing them so that their clients submit them again, unless a second

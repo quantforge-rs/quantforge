@@ -566,6 +566,70 @@ fn job_concurrency_flag_beats_its_variable_and_the_variable_beats_the_default() 
     );
 }
 
+/// The flags of the per-job limits, each with its variable.
+const JOB_LIMITS: [(&str, &str); 3] = [
+    ("--job-cpu-secs", "QF_JOB_CPU_SECS"),
+    ("--job-memory-mib", "QF_JOB_MEMORY_MIB"),
+    ("--job-wall-secs", "QF_JOB_WALL_SECS"),
+];
+
+#[test]
+fn job_limit_flags_beat_their_variables_and_the_variables_beat_the_defaults() {
+    for (flags, variables, expected) in [
+        (
+            Some(["7", "3000", "9"]),
+            Some(["70", "3500", "90"]),
+            "cpu 7 s, memory 3000 MiB, wall clock 9 s",
+        ),
+        (
+            None,
+            Some(["70", "3500", "90"]),
+            "cpu 70 s, memory 3500 MiB, wall clock 90 s",
+        ),
+        (None, None, "cpu 600 s, memory 4096 MiB, wall clock 1800 s"),
+        // Unlike a global's, a variable is not even read beside its flag.
+        (
+            Some(["7", "3000", "9"]),
+            Some(["nonsense"; 3]),
+            "cpu 7 s, memory 3000 MiB, wall clock 9 s",
+        ),
+    ] {
+        let bed = TestBed::new();
+        let served = Served::start_with(&bed, |cmd| {
+            for (index, (flag, variable)) in JOB_LIMITS.iter().enumerate() {
+                if let Some(values) = variables {
+                    cmd.env(variable, values[index]);
+                }
+                if let Some(values) = flags {
+                    cmd.args([flag, values[index]]);
+                }
+            }
+        });
+        assert_eq!(
+            served.job_limits, expected,
+            "flags {flags:?}, variables {variables:?}"
+        );
+    }
+
+    // A limit of nothing is no limit.
+    for (flag, _) in JOB_LIMITS {
+        let bed = TestBed::new();
+        let mut cmd = serve_cmd(&bed);
+        cmd.args(SERVE_RUN).args([flag, "0"]);
+        let placeholder = if flag == "--job-memory-mib" {
+            "MIB"
+        } else {
+            "SECS"
+        };
+        cmd.assert()
+            .code(2)
+            .stderr(predicate::str::contains(format!(
+                "invalid value '0' for '{flag} <{placeholder}>'"
+            )));
+        assert!(!bed.db_path().exists(), "{flag} 0 created a database");
+    }
+}
+
 #[test]
 fn an_exported_but_empty_variable_never_falls_back_to_the_default() {
     // clap rejects the empty path before anything is opened or created.
@@ -658,4 +722,27 @@ fn an_exported_but_empty_variable_never_falls_back_to_the_default() {
         !bed.db_path().exists(),
         "an empty QF_JOB_CONCURRENCY created a database"
     );
+
+    for (flag, variable) in JOB_LIMITS {
+        let bed = TestBed::new();
+        let held = held_port();
+        let mut cmd = serve_cmd(&bed);
+        cmd.env(variable, "")
+            .args(SERVE_RUN)
+            .args(["--listen", &address_of(&held)]);
+        let placeholder = if flag == "--job-memory-mib" {
+            "MIB"
+        } else {
+            "SECS"
+        };
+        cmd.assert()
+            .code(2)
+            .stderr(predicate::str::contains(format!(
+                "invalid value '' for '{flag} <{placeholder}>'"
+            )));
+        assert!(
+            !bed.db_path().exists(),
+            "an empty {variable} created a database"
+        );
+    }
 }

@@ -13,7 +13,7 @@ use crate::protocol::jobs::{JobId, JobSubmission, ResultRef};
 use crate::protocol::{ErrorBody, ErrorCode};
 
 /// Why a server with no worker runtime fails each job as it starts.
-pub(super) const NO_RUNTIME: &str = "this server cannot run Python bundles yet; a later \
+pub(in crate::server) const NO_RUNTIME: &str = "this server cannot run Python bundles yet; a later \
      QuantForge release brings the worker runtime";
 
 /// Everything one job runs on, read for it by the server as it started.

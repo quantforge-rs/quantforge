@@ -23,11 +23,19 @@ const PATIENCE: Duration = Duration::from_secs(30);
 /// process: declare it after its bed, whose directory outlives it.
 pub(crate) struct Served {
     child: Child,
+    /// Its temporary directory, which holds its job workers' scratch
+    /// directories and goes once the process is killed: never the bed's,
+    /// which must hold nothing a PostgreSQL server leaves.
+    _temp: tempfile::TempDir,
     lines: Receiver<String>,
     stderr: Option<JoinHandle<String>>,
     storage: String,
     /// How many jobs the server says it runs at once.
     pub(crate) job_concurrency: String,
+    /// The limits it says each job runs within.
+    pub(crate) job_limits: String,
+    /// What it says its job workers enforce.
+    pub(crate) worker_isolation: String,
     pub(crate) address: SocketAddr,
 }
 
@@ -51,6 +59,10 @@ impl Served {
         };
         cmd.args(["--log-level", "error", "serve", "run"])
             .args(["--listen", "127.0.0.1:0"]);
+        let temp = tempfile::tempdir().expect("a temporary directory");
+        for variable in ["TMPDIR", "TMP", "TEMP"] {
+            cmd.env(variable, temp.path());
+        }
         configure(&mut cmd);
         cmd.stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -74,14 +86,19 @@ impl Served {
         });
         let mut served = Self {
             child,
+            _temp: temp,
             lines,
             stderr: Some(stderr),
             storage: String::new(),
             job_concurrency: String::new(),
+            job_limits: String::new(),
+            worker_isolation: String::new(),
             address: SocketAddr::from(([127, 0, 0, 1], 0)),
         };
         served.storage = served.next("storage");
         served.job_concurrency = served.next("job_concurrency");
+        served.job_limits = served.next("job_limits");
+        served.worker_isolation = served.next("worker_isolation");
         let url = served.next("listening");
         served.address = url
             .strip_prefix("http://")

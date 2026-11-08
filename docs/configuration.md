@@ -1,7 +1,7 @@
 # Configuration
 
 Every QuantForge setting is a command-line flag. The ten global settings and
-the three settings of `serve run` also read a `QF_*` environment variable as a
+the six settings of `serve run` also read a `QF_*` environment variable as a
 fallback; every other per-command option is a flag only. QuantForge reads no
 other environment variable itself — the few its dependencies honor are listed
 at the end.
@@ -42,9 +42,9 @@ the default:
   is created, so a missing testnet URL can never quietly become production;
 - `QF_LOG=` is an empty filter, which turns log output off, warnings included;
 - without its flag, `QF_LISTEN=` is a usage error (exit status 2, reported
-  against `--listen`), and so are `QF_MAX_SPAN_BARS=` and
-  `QF_JOB_CONCURRENCY=` (reported against `--max-span-bars` and
-  `--job-concurrency`);
+  against `--listen`), and so are `QF_MAX_SPAN_BARS=`,
+  `QF_JOB_CONCURRENCY=`, `QF_JOB_CPU_SECS=`, `QF_JOB_MEMORY_MIB=` and
+  `QF_JOB_WALL_SECS=` (each reported against its flag);
 - an empty or whitespace-only API key or secret counts as missing, so commands
   that need credentials fail with the missing-credentials error.
 
@@ -109,7 +109,10 @@ Explanations belong in the Setting cell.
 | Client order id of the order to cancel; pass it or `--order-id` | `--client-order-id <id>` | — | none | `monitor cancel-order` |
 | Address to listen on: an IP address and a port, such as `0.0.0.0:9600` for every interface; a host name is refused; the default accepts connections from this machine only, and port 0 picks a free port, which the `listening:` line shows | `--listen <addr>` | `QF_LISTEN` | `127.0.0.1:9600` | `serve run` |
 | Most bars one `/v1/candles` answer or one backtest job may span, counted at the range's interval; at least 1, and a longer range is refused as `invalid_request`. The default is a leap year of `1m` bars | `--max-span-bars <count>` | `QF_MAX_SPAN_BARS` | `527040` | `serve run` |
-| Backtest jobs that run at once; the others wait in the queue, the first submitted first. At least 1; omitted, half the machine's CPU cores, at least 1, which the `job_concurrency:` line shows | `--job-concurrency <count>` | `QF_JOB_CONCURRENCY` | none | `serve run` |
+| Backtest jobs that run at once; the others wait in the queue, the first submitted first. At least 1; omitted, half the machine's CPU cores, at least 1, which the `job_concurrency:` line shows. The server keeps a worker process started for each | `--job-concurrency <count>` | `QF_JOB_CONCURRENCY` | none | `serve run` |
+| CPU time one backtest job may use, in seconds, at least 1; a job that uses it all is stopped and fails as `invalid_request`, saying so. Enforced on Linux and macOS; see [worker-isolation.md](worker-isolation.md) | `--job-cpu-secs <secs>` | `QF_JOB_CPU_SECS` | `600` | `serve run` |
+| Memory one backtest job may use, in MiB of address space, at least 1; a job that needs more is stopped and fails as `invalid_request`, saying so. Enforced on Linux only | `--job-memory-mib <mib>` | `QF_JOB_MEMORY_MIB` | `4096` | `serve run` |
+| Wall-clock time one backtest job may run, in seconds, at least 1; the server then kills its worker, and the job fails as `invalid_request`, saying so. The `job_limits:` line shows all three | `--job-wall-secs <secs>` | `QF_JOB_WALL_SECS` | `1800` | `serve run` |
 
 ## Storage backends
 
@@ -261,6 +264,7 @@ with no QuantForge-specific meaning, so they have no flags:
 | `RUST_BACKTRACE`, `RUST_LIB_BACKTRACE` | Rust standard library, anyhow | add backtraces to panics and error reports |
 | `TOKIO_WORKER_THREADS` | tokio | async runtime worker threads; a value that is not a positive integer makes QuantForge panic at startup |
 | `SQLITE_TMPDIR`, `TMPDIR` | SQLite | directory for SQLite's temporary files |
+| `TMPDIR`; `TMP`, `TEMP` on Windows | Rust standard library | where `serve run` makes the directory that holds its job workers' scratch directories |
 | `SSL_CERT_FILE`, `SSL_CERT_DIR` | rustls-native-certs | replace the system's trust store for PostgreSQL's TLS |
 
 `RUST_LOG` is not read: the log filter comes only from `--log-level` or

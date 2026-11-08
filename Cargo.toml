@@ -68,6 +68,17 @@ uuid = { version = "1", features = ["v4", "serde"] }
 # Without the defaults: no decoders for zstd's pre-1.0 formats.
 zstd = { version = "0.14", default-features = false }
 
+# A job worker's limits, and the process group it runs in.
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["process"] }
+
+# A job worker's sandbox on Linux: files confined to its scratch directory
+# (Landlock), and no sockets (seccomp, which names syscalls by libc's numbers).
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "0.4"
+libc = "0.2"
+seccompiler = "0.5"
+
 [dev-dependencies]
 assert_cmd = "2"
 http-body-util = "0.1"

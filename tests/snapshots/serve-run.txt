@@ -11,6 +11,11 @@ Options:
       --log-level <LOG_LEVEL>          Log filter (trace, debug, info, warn, error or a full tracing filter expression) [env: QF_LOG=] [default: info]
   -h, --help                           Print help
 
+Job limits:
+      --job-cpu-secs <SECS>   CPU time one backtest job may use, in seconds; a job that uses more is stopped [env: QF_JOB_CPU_SECS=] [default: 600]
+      --job-memory-mib <MIB>  Memory one backtest job may use, in MiB of address space; enforced on Linux [env: QF_JOB_MEMORY_MIB=] [default: 4096]
+      --job-wall-secs <SECS>  Wall-clock time one backtest job may run, in seconds, before it is stopped [env: QF_JOB_WALL_SECS=] [default: 1800]
+
 Storage:
       --db <DB>
           SQLite database path; refused with --storage postgres [env: QF_DB=] [default: data/market.sqlite]

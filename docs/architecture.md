@@ -40,7 +40,7 @@ as in `quantforge data sync: ...`. No other note may start with `quantforge`.
 
 ```text
 src/
-├── main.rs                     binary entry point: parse the arguments, run the command
+├── main.rs                     binary entry point: parse the arguments, run a job's worker or the command
 ├── lib.rs                      library root: crate docs and the public re-exports
 ├── cli/                        the command tree, binary only
 │   ├── mod.rs                  quantforge: root parser, global flags, dispatch into groups
@@ -70,11 +70,13 @@ src/
 │   ├── serve/                  the server other instances connect to
 │   │   ├── mod.rs              quantforge serve: subcommand enum and dispatch
 │   │   └── run.rs              quantforge serve run: listen, answer, and stop on a signal
-│   └── store/                  the database's own record: environment, identity, legacy runs
-│       ├── mod.rs              quantforge store: subcommand enum and dispatch
-│       ├── status.rs           quantforge store status: identity, environment, migrations, legacy runs
-│       ├── bind.rs             quantforge store bind: declare the environment, once and for life
-│       └── adopt_run.rs        quantforge store adopt-run: give a legacy run a verified identity
+│   ├── store/                  the database's own record: environment, identity, legacy runs
+│   │   ├── mod.rs              quantforge store: subcommand enum and dispatch
+│   │   ├── status.rs           quantforge store status: identity, environment, migrations, legacy runs
+│   │   ├── bind.rs             quantforge store bind: declare the environment, once and for life
+│   │   └── adopt_run.rs        quantforge store adopt-run: give a legacy run a verified identity
+│   └── worker/                 the hidden command a job's worker process runs, not in --help
+│       └── mod.rs              a job's worker: run before any thread starts, on stdin and stdout
 ├── protocol/                   the wire format between instances; uses no other module
 │   ├── mod.rs                  the wire spec: encoding, versions, compatibility; ProtocolError
 │   ├── version.rs              ProtoVersion, PROTO_VERSION, MIN_SUPPORTED, VersionRange negotiation
@@ -283,6 +285,20 @@ src/
     │   ├── queue.rs            the dispatcher, a job's input read from the store, and its end written
     │   ├── status.rs           a job's record as the protocol shows it
     │   └── worker.rs           JobWorker: what runs a job, its cancel, and the worker with no runtime
+    ├── workers/                the processes that run jobs, one per job, and what each may reach
+    │   ├── mod.rs              the boundary, and what each operating system enforces of it
+    │   ├── pool.rs             WorkerPool: workers started ahead of jobs, each killed after its one job
+    │   ├── config.rs           what a pool starts with, and what a job's run on it answers
+    │   ├── job.rs              one job's run: its bundle in scratch, its frames sent, its limits watched
+    │   ├── process.rs          a worker's process: started bare, killed with its group, why it stopped
+    │   ├── frames.rs           what a server and its workers say: length-prefixed JSON frames
+    │   ├── scratch.rs          the scratch directories: owner-only, removed with their worker
+    │   ├── child.rs            the worker's side: setup, its limits and sandbox, the job, its end
+    │   ├── synthetic.rs        the tests' workloads, which run into each limit in place of a strategy
+    │   └── isolation/          the limits and sandbox a worker puts on itself as it starts
+    │       ├── mod.rs          Posture and Guard: what held, and why not; the server closed to workers
+    │       ├── unix.rs         rlimits: CPU time and address space, and no core dumps
+    │       └── linux.rs        Landlock for files, seccomp for sockets, and not dumpable
     ├── refusal.rs              every failed answer as an error envelope, and what a storage failure may say
     └── tests/                  the routes in process, over a real SQLite store
         ├── mod.rs              the fixtures, health, version, unknown paths and methods
@@ -305,8 +321,9 @@ uses `model`, `exchange` and `storage` use `model` and `ports`, `sdk` uses
 `model`, and `engine` uses `model`, `ports`, and `sdk`. `server` uses
 `protocol`, `model`, the `ports` it reads and writes the store through, and
 the segment codec of `storage::segments` to check what it sends; `serve run`
-opens the store, binds the address, and hands it both, with the worker that
-runs jobs. The engines reach the exchange
+opens the store, binds the address, and hands it both, with the pool of
+worker processes that run jobs, each a process of this binary that sees
+nothing of the store, one per job ([worker-isolation.md](worker-isolation.md)). The engines reach the exchange
 and storage adapters only through the `ports` traits; the binary chooses
 which adapters to pass in, building the connectors of the exchange that
 `--exchange` names through `exchange::connect`, and opening the store that
@@ -358,6 +375,12 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   integration tests; the live engine's dry runs and resume checks, and the
   job queue's lifecycle with a scripted worker, run on SQLite and, with
   `QUANTFORGE_TEST_POSTGRES_URL`, on PostgreSQL
+- `tests/workers/`: the job workers of
+  [worker-isolation.md](worker-isolation.md), this build's binary started as
+  `quantforge worker` and running the synthetic workloads: each limit run
+  into and named, crashes, kills and cancels, scratch directories, the
+  network and the environment a worker gets, recycling, and jobs through
+  the queue on each backend
 - `tests/storage/`: the storage contract of
   [storage-schema.md](storage-schema.md) and
   [storage-conformance.md](storage-conformance.md) — the shared

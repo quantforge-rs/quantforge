@@ -43,6 +43,10 @@
 //! 5. A server that stops fails the jobs it runs, with `internal` and the
 //!    reason, so that their clients submit them again; one that was killed
 //!    fails them as it starts again. Queued jobs wait for it either way.
+//! 6. A job runs within the server's limits on its CPU time, its memory and
+//!    its wall-clock time. A job past one fails with `invalid_request`, its
+//!    message naming the limit; a job whose worker stops before the job
+//!    finishes fails with `internal`, its message saying how it stopped.
 //!
 //! A server without a worker runtime fails every job as it starts, with
 //! `unavailable`.
