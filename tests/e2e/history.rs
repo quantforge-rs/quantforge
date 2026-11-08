@@ -31,26 +31,26 @@ const MINUTE: i64 = 60_000;
 const DAY: i64 = 86_400_000;
 
 /// A response read to the end of its connection.
-struct Fetched {
-    status: u16,
+pub(crate) struct Fetched {
+    pub(crate) status: u16,
     headers: Vec<(String, String)>,
     body: Vec<u8>,
 }
 
 impl Fetched {
-    fn header(&self, name: &str) -> Option<&str> {
+    pub(crate) fn header(&self, name: &str) -> Option<&str> {
         self.headers
             .iter()
             .find(|(key, _)| key.eq_ignore_ascii_case(name))
             .map(|(_, value)| value.as_str())
     }
 
-    fn json<T: DeserializeOwned>(&self) -> T {
+    pub(crate) fn json<T: DeserializeOwned>(&self) -> T {
         serde_json::from_slice(&self.body)
             .unwrap_or_else(|error| panic!("{error}: {}", self.text()))
     }
 
-    fn text(&self) -> String {
+    pub(crate) fn text(&self) -> String {
         String::from_utf8_lossy(&self.body).into_owned()
     }
 }
@@ -58,18 +58,34 @@ impl Fetched {
 /// `GET path`, with `extra` headers, on a connection the server closes once
 /// it has answered.
 fn fetch(address: SocketAddr, path: &str, extra: &[(&str, &str)]) -> Fetched {
+    request(address, "GET", path, extra, None)
+}
+
+/// `method path`, with `extra` headers and `body` if any, on a connection
+/// the server closes once it has answered.
+pub(crate) fn request(
+    address: SocketAddr,
+    method: &str,
+    path: &str,
+    extra: &[(&str, &str)],
+    body: Option<&[u8]>,
+) -> Fetched {
     let mut stream = TcpStream::connect(address).expect("a connection");
     stream
         .set_read_timeout(Some(Duration::from_secs(30)))
         .expect("a read timeout");
-    let mut request = format!("GET {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n");
+    let mut request =
+        format!("{method} {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n");
     for (name, value) in extra {
         request.push_str(&format!("{name}: {value}\r\n"));
     }
+    if let Some(body) = body {
+        request.push_str(&format!("Content-Length: {}\r\n", body.len()));
+    }
     request.push_str("\r\n");
-    stream
-        .write_all(request.as_bytes())
-        .expect("send the request");
+    let mut bytes = request.into_bytes();
+    bytes.extend_from_slice(body.unwrap_or_default());
+    stream.write_all(&bytes).expect("send the request");
     let mut raw = Vec::new();
     stream.read_to_end(&mut raw).expect("a response");
     let end = raw

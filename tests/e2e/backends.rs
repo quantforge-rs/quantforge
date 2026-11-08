@@ -266,7 +266,8 @@ fn the_store_commands_read_and_change_the_selected_store(bed: &TestBed) {
 
     let before = answer(cli_cmd(bed, "error").args(["store", "status"]));
     assert_eq!(before.get("storage"), Some(bed.storage_text().as_str()));
-    assert_eq!(before.get("schema_version"), Some("5"));
+    let schema = quantforge::storage::sqlite::SCHEMA_VERSION.to_string();
+    assert_eq!(before.get("schema_version"), Some(schema.as_str()));
     assert_eq!(before.get("environment"), Some("undeclared"));
     assert_eq!(before.get("legacy_runs"), Some("1"));
     let store_id = before.get("store_id").expect("the store's ID");

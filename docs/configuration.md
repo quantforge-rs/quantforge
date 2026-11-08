@@ -1,7 +1,7 @@
 # Configuration
 
 Every QuantForge setting is a command-line flag. The ten global settings and
-the two settings of `serve run` also read a `QF_*` environment variable as a
+the three settings of `serve run` also read a `QF_*` environment variable as a
 fallback; every other per-command option is a flag only. QuantForge reads no
 other environment variable itself — the few its dependencies honor are listed
 at the end.
@@ -42,8 +42,9 @@ the default:
   is created, so a missing testnet URL can never quietly become production;
 - `QF_LOG=` is an empty filter, which turns log output off, warnings included;
 - without its flag, `QF_LISTEN=` is a usage error (exit status 2, reported
-  against `--listen`), and so is `QF_MAX_SPAN_BARS=` (reported against
-  `--max-span-bars`);
+  against `--listen`), and so are `QF_MAX_SPAN_BARS=` and
+  `QF_JOB_CONCURRENCY=` (reported against `--max-span-bars` and
+  `--job-concurrency`);
 - an empty or whitespace-only API key or secret counts as missing, so commands
   that need credentials fail with the missing-credentials error.
 
@@ -107,7 +108,8 @@ Explanations belong in the Setting cell.
 | Exchange order id of the order to cancel, as the exchange spells it; pass it or `--client-order-id` | `--order-id <id>` | — | none | `monitor cancel-order` |
 | Client order id of the order to cancel; pass it or `--order-id` | `--client-order-id <id>` | — | none | `monitor cancel-order` |
 | Address to listen on: an IP address and a port, such as `0.0.0.0:9600` for every interface; a host name is refused; the default accepts connections from this machine only, and port 0 picks a free port, which the `listening:` line shows | `--listen <addr>` | `QF_LISTEN` | `127.0.0.1:9600` | `serve run` |
-| Most bars one `/v1/candles` answer may span, counted at the range's interval; at least 1, and a longer range is refused as `invalid_request`. The default is a leap year of `1m` bars | `--max-span-bars <count>` | `QF_MAX_SPAN_BARS` | `527040` | `serve run` |
+| Most bars one `/v1/candles` answer or one backtest job may span, counted at the range's interval; at least 1, and a longer range is refused as `invalid_request`. The default is a leap year of `1m` bars | `--max-span-bars <count>` | `QF_MAX_SPAN_BARS` | `527040` | `serve run` |
+| Backtest jobs that run at once; the others wait in the queue, the first submitted first. At least 1; omitted, half the machine's CPU cores, at least 1, which the `job_concurrency:` line shows | `--job-concurrency <count>` | `QF_JOB_CONCURRENCY` | none | `serve run` |
 
 ## Storage backends
 

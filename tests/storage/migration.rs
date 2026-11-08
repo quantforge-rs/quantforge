@@ -2,13 +2,14 @@
 //! in `tests/fixtures/sqlite/` is that build's DDL, verbatim, with rows the
 //! chain must carry forward: candles with their decimal texts, runs from
 //! 0.2.0 without an execution mode, order events and closed trades with
-//! integer venue IDs, and a segment with its hash.
+//! integer venue IDs, and a segment with its hash. Schema 5's is a store the
+//! build before job storage migrated, bound and adopted a run in, dumped.
 
 use quantforge::storage::sqlite::SCHEMA_VERSION;
 use quantforge::{
-    CandleStore, Environment, ExchangeId, ExecutionMode, IdentitySource, Interval, KeyFingerprint,
-    MarketId, RunIdentity, RunJournalStore, SegmentStore, SqliteStore, StorageError,
-    StoreActivation, StoreControl, Symbol, VenueAccountId,
+    BundleHash, CandleStore, Environment, ExchangeId, ExecutionMode, IdentitySource, Interval,
+    JobId, JobPhase, JobStore, KeyFingerprint, MarketId, NewJob, RunIdentity, RunJournalStore,
+    SegmentStore, SqliteStore, StorageError, StoreActivation, StoreControl, Symbol, VenueAccountId,
 };
 use rusqlite::Connection;
 use rusqlite::types::Value;
@@ -279,6 +280,101 @@ fn every_earlier_schema_migrates_to_the_current_one_with_its_rows_unchanged() {
     }
 }
 
+/// Every row of `table`, ordered by every column.
+fn everything(store: &SqliteStore, table: &str) -> Vec<Vec<Option<String>>> {
+    let columns = rows(
+        store,
+        &format!("SELECT count(*) FROM pragma_table_info('{table}')"),
+    );
+    let count: usize = columns[0][0]
+        .as_deref()
+        .expect("a count")
+        .parse()
+        .expect("a number");
+    let order: Vec<String> = (1..=count).map(|column| column.to_string()).collect();
+    rows(
+        store,
+        &format!("SELECT * FROM {table} ORDER BY {}", order.join(", ")),
+    )
+}
+
+#[test]
+fn a_schema_5_store_gains_the_job_tables_and_keeps_every_row() {
+    let fresh_dir = tempfile::tempdir().expect("tempdir");
+    let fresh = SqliteStore::new(fresh_dir.path().join("market.sqlite"));
+    CandleStore::init(&fresh).expect("fresh");
+    let (_tempdir, store) = load(5);
+    assert_eq!(version(&store), 5);
+    let mut kept = tables(&store);
+    kept.push("sqlite_sequence".to_string());
+    let before: Vec<_> = kept.iter().map(|table| everything(&store, table)).collect();
+    let identity = store.store_identity().expect("identity");
+    assert_eq!(identity.environment, Some(Environment::Testnet));
+
+    CandleStore::init(&store).expect("schema 6");
+
+    assert_eq!(version(&store), SCHEMA_VERSION);
+    assert_eq!(shape(&store), shape(&fresh), "not the fresh schema");
+    for (table, rows_before) in kept.iter().zip(&before) {
+        let after = everything(&store, table);
+        match table.as_str() {
+            "meta" => assert_eq!(
+                after,
+                [[Some("schema_version".to_string()), Some("6".to_string())]]
+            ),
+            "schema_migrations" => {
+                assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
+                assert_eq!(after.len(), rows_before.len() + 1, "one step logged");
+            }
+            _ => assert_eq!(&after, rows_before, "{table}"),
+        }
+    }
+    let steps: Vec<(u32, u32)> = store
+        .migrations()
+        .expect("log")
+        .iter()
+        .map(|step| (step.from_version, step.to_version))
+        .collect();
+    assert_eq!(steps, [(4, 5), (5, 6)]);
+    let migrated = store.store_identity().expect("identity");
+    assert_eq!(migrated.store_id, identity.store_id, "the same store");
+    assert_eq!(migrated.environment, identity.environment);
+    assert_eq!(migrated.activation, identity.activation);
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert_eq!(
+        store
+            .run_identity("run-a")
+            .expect("identity")
+            .map(|run| run.source),
+        Some(IdentitySource::Adopted)
+    );
+
+    // The store keeps jobs from now on.
+    let hash = BundleHash::from_digest([1; 32]);
+    assert!(
+        store
+            .store_bundle(&hash, b"tar", DAY_TWO)
+            .expect("a bundle")
+    );
+    let job_id = JobId::generate();
+    store
+        .submit_job(&NewJob {
+            job_id: job_id.clone(),
+            bundle: hash,
+            request_json: "{}".to_string(),
+            submitted_at_ms: DAY_TWO,
+        })
+        .expect("a job");
+    let claimed = store
+        .claim_job(DAY_TWO + 1)
+        .expect("a claim")
+        .expect("the job");
+    assert_eq!((claimed.job_id, claimed.phase), (job_id, JobPhase::Running));
+
+    CandleStore::init(&store).expect("second init");
+    assert_eq!(store.migrations().expect("log").len(), 2);
+}
+
 #[test]
 fn a_fresh_store_logs_one_step_from_zero_and_is_the_documented_schema() {
     let tempdir = tempfile::tempdir().expect("tempdir");
@@ -294,8 +390,10 @@ fn a_fresh_store_logs_one_step_from_zero_and_is_the_documented_schema() {
         tables(&store),
         [
             "bot_runs",
+            "bundles",
             "candles",
             "closed_trades",
+            "jobs",
             "meta",
             "order_events",
             "schema_migrations",

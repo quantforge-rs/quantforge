@@ -228,6 +228,38 @@ exist.
   the same when the store is opened again
 <!-- end: control -->
 
+### The job store
+
+`JobStore`: the bundles a server was sent and its jobs. A bundle is stored
+once under its name; a job moves from queued to running to one final phase,
+or straight to cancelled, each move one guarded change, so a claim never
+takes a job twice and nothing changes an ended job. The scenarios use
+any bytes and names: checking a bundle against its name is the server's.
+
+<!-- begin: jobs -->
+- `jobs.bundle_stored_once`: a bundle is stored once under its name, every
+  byte kept, and loaded back; an unknown name loads nothing
+- `jobs.submitted_queued`: a job is recorded queued with nothing else yet; a
+  job ID twice and a bundle the store does not hold are refused
+- `jobs.listed_newest_first`: jobs are listed the last submitted first, at
+  most as many as asked for
+- `jobs.claimed_in_submission_order`: a claim takes the job submitted first of
+  those queued and starts it; with none queued it takes nothing
+- `jobs.finished_only_from_running`: a running job ends once, succeeded with
+  its results or failed with why; a queued or ended job is left as it is
+- `jobs.cancelled_queued_or_running`: a queued or running job is cancelled,
+  keeping when it started; an ended job stays as it is and an unknown one is
+  not found
+- `jobs.running_failed_on_restart`: every running job, and nothing else, is
+  failed with the reason given, as a server does as it starts
+- `jobs.json_kept_verbatim`: a job's request, results and failure are kept as
+  the text given, whatever it holds
+- `jobs.reopened`: a store opened again keeps every job as it stood, and
+  claims on in order
+- `jobs.claims_racing`: stores claiming at once from many queued jobs claim
+  each exactly once, none twice and none lost
+<!-- end: jobs -->
+
 ## The fixtures
 
 `tests/fixtures/storage_conformance_cases.json` (format 1) holds:
@@ -253,6 +285,7 @@ A step is one operation and its answer: a result, or a refusal of a kind
 | `create_run`, `save_run`, `load_run`, `run_identity`, `latest_run`, `identity_matches` | runs and their identities, every state compared as its JSON |
 | `append_order_event`, `list_order_events`, `append_closed_trade`, `list_closed_trades` | the two journals |
 | `refresh`, `resolve`, `load_segment` | the segment store; every listed segment must also load, open under its name, and be as long as listed |
+| `store_bundle`, `load_bundle`, `submit_job`, `job`, `jobs`, `claim_job`, `finish_job`, `cancel_job`, `fail_running_jobs` | the job store, every record compared as text, its JSON byte for byte |
 | `store_record`, `migrations`, `bind_environment`, `legacy_runs`, `adopt_run` | the store's record |
 | `raw_select`, `raw_contains`, `raw_execute`, `value_types` | the backend's own tables, for what the ports do not show: the text a column holds, a row written behind the store's back, the type a value is stored as |
 | `reopen` | the same database opened again, as a restarted process opens it |
@@ -317,7 +350,8 @@ A backend joins the suite in its own file under `tests/storage/`, the way
    `conformance::candles::<B>()` once it implements `CandleStore`,
    `conformance::journal::<B>()` with `RunJournalStore`,
    `conformance::control::<B>()` with `RunJournalStore` and `StoreControl`,
-   `conformance::segments::<B>()` with `CandleStore` and `SegmentStore`, and
+   `conformance::segments::<B>()` with `CandleStore` and `SegmentStore`,
+   `conformance::jobs::<B>()` with `JobStore`, and
    `conformance::durability::<B>()` with those and a bounded view of the
    store (`conformance::Bounded`). The groups are generic over the ports, so
    a backend switches each on as its store lands.

@@ -9,7 +9,7 @@
 //! step rewrites one, the original is kept beside it.
 
 use super::errors::{commit_failed, failed};
-use super::{META_DDL, SCHEMA_VERSION, SqliteStore, candles, control, journal, segments};
+use super::{META_DDL, SCHEMA_VERSION, SqliteStore, candles, control, jobs, journal, segments};
 use crate::storage::segments as format;
 use crate::{Interval, StorageError, now_utc_ms};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
@@ -36,7 +36,7 @@ struct Step {
 
 /// The chain, in order. Each step's DDL is the text the build that
 /// introduced it wrote, which never changes again.
-const STEPS: [Step; 5] = [
+const STEPS: [Step; 6] = [
     Step {
         to: 1,
         apply: step_1_candles,
@@ -56,6 +56,10 @@ const STEPS: [Step; 5] = [
     Step {
         to: 5,
         apply: step_5_identity,
+    },
+    Step {
+        to: 6,
+        apply: step_6_jobs,
     },
 ];
 
@@ -201,6 +205,11 @@ fn step_5_identity(transaction: &Transaction<'_>) -> Result<(), StorageError> {
     journal::events::migrate_ids(transaction)?;
     batch(transaction, control::SCHEMA_DDL)?;
     control::create_row(transaction)
+}
+
+/// Schema 6 (QUA-358): the bundles a server was sent, and its jobs.
+fn step_6_jobs(transaction: &Transaction<'_>) -> Result<(), StorageError> {
+    batch(transaction, jobs::SCHEMA_DDL)
 }
 
 fn mark_every_window(transaction: &Transaction<'_>) -> Result<(), StorageError> {

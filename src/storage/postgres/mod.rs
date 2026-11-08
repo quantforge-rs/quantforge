@@ -18,6 +18,8 @@
 //!   mark the windows they change in the same transaction.
 //! - `coverage`: the markets the candle table holds, each read in two
 //!   indexed steps.
+//! - `jobs`: `JobStore`, each change one guarded statement, a claim
+//!   skipping what another claim holds locked.
 //! - `journal`: `RunJournalStore`, one statement per call.
 //! - `control`: `StoreControl`, the store's record and legacy runs.
 //! - `segments`: `SegmentStore`, each window and plan read in one snapshot
@@ -36,6 +38,7 @@ mod control;
 mod copying;
 mod coverage;
 mod durability;
+mod jobs;
 mod journal;
 mod migrate;
 mod runner;

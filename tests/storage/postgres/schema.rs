@@ -82,7 +82,8 @@ fn a_fresh_database_has_exactly_the_documented_schema() {
         return;
     };
     let url = url(&fixture);
-    let doc = section_in("docs/storage-schema.md", "postgres schema");
+    let mut doc = section_in("docs/storage-schema.md", "postgres schema");
+    doc.extend(section_in("docs/storage-schema.md", "postgres step 6"));
     let (documented, documented_indexes) = parse(&doc);
     let mut names: Vec<String> = documented.iter().map(|table| table.name.clone()).collect();
     names.sort();
@@ -149,9 +150,11 @@ fn a_fresh_database_has_exactly_the_documented_schema() {
             .count()
             .to_string()
     };
+    // A table's `UNIQUE (…)` and a column's inline `UNIQUE` alike.
+    let unique = doc.iter().filter(|line| line.contains("UNIQUE")).count();
     assert_eq!(
         constraints('u'),
-        lines("UNIQUE ("),
+        unique.to_string(),
         "the unique constraints"
     );
     assert_eq!(constraints('c'), lines("CHECK ("), "the checks");

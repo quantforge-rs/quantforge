@@ -2,8 +2,9 @@
 //! chain, and the row-decoding helpers shared by its responsibilities. The
 //! work is split across private sibling modules — `candles` implements
 //! `CandleStore`, `journal` implements `RunJournalStore`, `segments`
-//! implements `SegmentStore`, `control` implements `StoreControl`, and
-//! `migrate` brings every earlier schema to [`SCHEMA_VERSION`]; `snapshot`
+//! implements `SegmentStore`, `control` implements `StoreControl`, `jobs`
+//! implements `JobStore`, and `migrate` brings every earlier schema to
+//! [`SCHEMA_VERSION`]; `snapshot`
 //! reads a store read-only as the source of a transfer. Only
 //! [`SqliteStore`], [`SqliteSnapshot`] and the version leave this
 //! namespace; the schema and the row decoders are not API.
@@ -11,6 +12,7 @@
 mod candles;
 mod control;
 mod errors;
+mod jobs;
 mod journal;
 mod migrate;
 mod segments;
@@ -41,7 +43,7 @@ use wait::Waits;
 /// earlier schema forward in place (`docs/storage-schema.md`); a database
 /// is never deleted for a schema change. Only a database from a newer
 /// build is refused, as [`StorageError::SchemaUnsupported`].
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 
 // Indentation inside this literal is load-bearing: SQLite records the exact
 // statement text in `sqlite_master`, so reformatting it would change the

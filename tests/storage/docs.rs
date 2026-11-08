@@ -1,12 +1,15 @@
 //! The storage documents held to the code and the fixtures:
 //! `docs/storage-schema.md`'s schema version, its SQLite DDL as a fresh
-//! store has it, its PostgreSQL DDL naming the same tables and columns, its
+//! store has it, every index on its columns included, its PostgreSQL DDL
+//! naming the same tables and columns, its
 //! indexes differing only as the doc lists, and its ownership table
 //! covering every table; and
 //! `docs/storage-conformance.md`'s lists of every scenario and check; and
 //! `docs/storage-migration.md`'s tables a transfer copies and keeps, which
-//! cover the schema, its format, and its worked example. Each part is found
-//! between `<!-- begin: name -->` and `<!-- end: name -->`.
+//! cover the schema, its format, and its worked example; and
+//! `docs/upgrading.md`'s supported upgrades, which take every earlier
+//! schema to the one the code writes. Each part is found between
+//! `<!-- begin: name -->` and `<!-- end: name -->`.
 
 use quantforge::model::{ColumnKind, KEPT_BY_EACH_STORE, TRANSFER_FORMAT, TRANSFER_TABLES};
 use quantforge::storage::sqlite::SCHEMA_VERSION;
@@ -121,6 +124,22 @@ pub(crate) fn parse(lines: &[String]) -> (Vec<Table>, Vec<String>) {
     (tables, indexes)
 }
 
+/// Each `CREATE INDEX` statement of a fenced DDL block, its whitespace
+/// collapsed and its semicolon dropped, as SQLite keeps it in
+/// `sqlite_master`.
+fn index_statements(lines: &[String]) -> Vec<String> {
+    let text: Vec<&str> = lines
+        .iter()
+        .map(|line| line.trim())
+        .filter(|line| !line.starts_with("```"))
+        .collect();
+    text.join(" ")
+        .split(';')
+        .map(|statement| statement.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|statement| statement.starts_with("CREATE INDEX "))
+        .collect()
+}
+
 fn fresh_store() -> (tempfile::TempDir, SqliteStore) {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let store = SqliteStore::new(tempdir.path().join("market.sqlite"));
@@ -136,6 +155,35 @@ fn the_schema_version_in_the_doc_is_the_one_the_code_writes() {
         .filter(|line| !line.is_empty())
         .collect();
     assert_eq!(lines, [SCHEMA_VERSION.to_string()]);
+}
+
+#[test]
+fn the_upgrade_guide_takes_every_earlier_schema_to_the_one_the_code_writes() {
+    let rows: Vec<Vec<String>> = section_in("docs/upgrading.md", "supported upgrades")
+        .iter()
+        .filter(|line| line.starts_with('|'))
+        .skip(2)
+        .map(|line| {
+            line.trim_matches('|')
+                .split('|')
+                .map(|cell| cell.trim().to_string())
+                .collect()
+        })
+        .collect();
+    let current = SCHEMA_VERSION.to_string();
+    let (this_release, earlier) = rows.split_last().expect("the table's rows");
+    assert_eq!(*this_release, ["This release", current.as_str(), "—"]);
+    let mut sources = Vec::new();
+    for row in earlier {
+        assert_eq!(row[2], current, "{row:?} upgrades to the current schema");
+        sources.extend(
+            row[1]
+                .split(|c: char| !c.is_ascii_digit())
+                .filter(|number| !number.is_empty())
+                .map(|number| number.parse::<u32>().expect("a schema number")),
+        );
+    }
+    assert_eq!(sources, (1..SCHEMA_VERSION).collect::<Vec<_>>());
 }
 
 #[test]
@@ -192,12 +240,39 @@ fn the_sqlite_ddl_in_the_doc_is_the_schema_a_fresh_store_has() {
     let mut documented_indexes = doc_indexes;
     documented_indexes.sort();
     assert_eq!(documented_indexes, actual_indexes, "the indexes");
+
+    // Each index on the columns, in the order and direction, the doc shows.
+    let mut stmt = connection
+        .prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL")
+        .expect("prepare");
+    let mut actual_statements: Vec<String> = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .expect("query")
+        .map(|sql| {
+            sql.map(|sql| {
+                sql.replace("IF NOT EXISTS ", "")
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+        })
+        .collect::<Result<_, _>>()
+        .expect("rows");
+    actual_statements.sort();
+    let mut documented_statements = index_statements(&section("sqlite schema"));
+    documented_statements.sort();
+    assert_eq!(
+        documented_statements, actual_statements,
+        "the index columns"
+    );
 }
 
 #[test]
 fn the_postgres_ddl_names_the_same_tables_and_columns_in_the_same_order() {
     let (sqlite, sqlite_indexes) = parse(&section("sqlite schema"));
-    let (postgres, postgres_indexes) = parse(&section("postgres schema"));
+    let mut postgres_ddl = section("postgres schema");
+    postgres_ddl.extend(section("postgres step 6"));
+    let (postgres, postgres_indexes) = parse(&postgres_ddl);
     let names = |tables: &[Table]| -> Vec<(String, Vec<String>)> {
         tables
             .iter()
@@ -348,6 +423,7 @@ fn the_conformance_doc_lists_every_scenario_and_check_with_its_statement() {
             "control",
             pairs(&cases.control, conformance::control::CHECKS),
         ),
+        ("jobs", pairs(&cases.jobs, conformance::jobs::CHECKS)),
     ] {
         for (id, _) in &expected {
             assert!(

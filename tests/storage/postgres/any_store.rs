@@ -77,6 +77,15 @@ fn segments() {
 }
 
 #[test]
+fn jobs() {
+    if server_url().is_none() {
+        eprintln!("skipping: {VARIABLE} is unset");
+        return;
+    }
+    conformance::jobs::<ThroughAnyStore>();
+}
+
+#[test]
 fn durability() {
     if server_url().is_none() {
         eprintln!("skipping: {VARIABLE} is unset");

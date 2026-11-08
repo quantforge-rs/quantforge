@@ -4,7 +4,8 @@
 //! exchange and describes it with [`ExchangeCapabilities`]. A persistence
 //! backend provides [`CandleStore`], [`RunJournalStore`], [`SegmentStore`]
 //! and [`StoreControl`], the store's own identity and control record; they
-//! are in `storage`, re-exported here. A transfer between two stores reads
+//! are in `storage`, re-exported here, and [`JobStore`], a server's bundles
+//! and jobs, is in `jobs`. A transfer between two stores reads
 //! a [`TransferSnapshot`] and writes a [`TransferTarget`], both a
 //! [`TransferSource`] of rows (`transfer`).
 //! [`ExchangeError`] and [`StorageError`] are the two failure channels an
@@ -21,10 +22,12 @@
 pub mod futures;
 
 mod clock;
+mod jobs;
 mod storage;
 mod transfer;
 
 pub use clock::{Clock, SystemClock};
+pub use jobs::JobStore;
 pub use storage::{
     CandleQuery, CandleStore, RunJournalStore, SegmentStore, StorageError, StorageErrorKind,
     StoreControl,

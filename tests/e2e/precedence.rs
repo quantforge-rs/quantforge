@@ -528,6 +528,45 @@ fn max_span_bars_flag_beats_its_variable_and_the_variable_beats_the_default() {
 }
 
 #[test]
+fn job_concurrency_flag_beats_its_variable_and_the_variable_beats_the_default() {
+    let cores = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+    let default = (cores / 2).max(1).to_string();
+    for (flag, env, expected) in [
+        (Some("3"), Some("5"), "3"),
+        (None, Some("5"), "5"),
+        (None, None, default.as_str()),
+        // Unlike a global's, the variable is not even read beside the flag.
+        (Some("3"), Some("nonsense"), "3"),
+    ] {
+        let bed = TestBed::new();
+        let served = Served::start_with(&bed, |cmd| {
+            if let Some(env) = env {
+                cmd.env("QF_JOB_CONCURRENCY", env);
+            }
+            if let Some(flag) = flag {
+                cmd.args(["--job-concurrency", flag]);
+            }
+        });
+        assert_eq!(
+            served.job_concurrency, expected,
+            "flag {flag:?}, variable {env:?}"
+        );
+    }
+
+    // No server runs no jobs at all.
+    let bed = TestBed::new();
+    let mut cmd = serve_cmd(&bed);
+    cmd.args(SERVE_RUN).args(["--job-concurrency", "0"]);
+    cmd.assert().code(2).stderr(predicate::str::contains(
+        "invalid value '0' for '--job-concurrency <COUNT>'",
+    ));
+    assert!(
+        !bed.db_path().exists(),
+        "a concurrency of 0 created a database"
+    );
+}
+
+#[test]
 fn an_exported_but_empty_variable_never_falls_back_to_the_default() {
     // clap rejects the empty path before anything is opened or created.
     let bed = TestBed::new();
@@ -604,5 +643,19 @@ fn an_exported_but_empty_variable_never_falls_back_to_the_default() {
     assert!(
         !bed.db_path().exists(),
         "an empty QF_MAX_SPAN_BARS created a database"
+    );
+
+    let bed = TestBed::new();
+    let held = held_port();
+    let mut cmd = serve_cmd(&bed);
+    cmd.env("QF_JOB_CONCURRENCY", "")
+        .args(SERVE_RUN)
+        .args(["--listen", &address_of(&held)]);
+    cmd.assert().code(2).stderr(predicate::str::contains(
+        "invalid value '' for '--job-concurrency <COUNT>'",
+    ));
+    assert!(
+        !bed.db_path().exists(),
+        "an empty QF_JOB_CONCURRENCY created a database"
     );
 }

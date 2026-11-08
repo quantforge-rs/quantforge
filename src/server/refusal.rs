@@ -45,6 +45,11 @@ impl Refusal {
         Self::new(ErrorCode::NotFound, message)
     }
 
+    /// The request contradicts the state of what it names.
+    pub(super) fn conflict(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::Conflict, message)
+    }
+
     /// The server cannot answer now, and a retry can succeed.
     pub(super) fn unavailable(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::Unavailable, message)

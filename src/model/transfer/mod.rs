@@ -11,8 +11,8 @@
 mod tables;
 
 pub use tables::{
-    BOT_RUNS, CANDLES, CLOSED_TRADES, ColumnKind, KEPT_BY_EACH_STORE, ORDER_EVENTS, SEGMENT_DIRTY,
-    SEGMENT_INDEX, SEGMENTS, TRANSFER_TABLES, TransferColumn, TransferTable,
+    BOT_RUNS, BUNDLES, CANDLES, CLOSED_TRADES, ColumnKind, JOBS, KEPT_BY_EACH_STORE, ORDER_EVENTS,
+    SEGMENT_DIRTY, SEGMENT_INDEX, SEGMENTS, TRANSFER_TABLES, TransferColumn, TransferTable,
 };
 
 use super::{ModelError, StoreId, TimestampMs};
@@ -25,7 +25,7 @@ pub const TRANSFER_FORMAT: u32 = 1;
 
 /// The schema whose tables [`TRANSFER_TABLES`] lists. A source and a target
 /// are both at it, and a schema step that changes a listed table changes it.
-pub const TRANSFER_SCHEMA: u32 = 5;
+pub const TRANSFER_SCHEMA: u32 = 6;
 
 /// A stored value as both backends hold it: no decimal parsed, no text
 /// normalized. Values of a kind compare as SQLite compares them: integers

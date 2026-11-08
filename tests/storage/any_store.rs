@@ -76,6 +76,11 @@ fn segments() {
 }
 
 #[test]
+fn jobs() {
+    conformance::jobs::<Factory>();
+}
+
+#[test]
 fn durability() {
     conformance::durability::<Factory>();
 }

@@ -4,7 +4,8 @@ Usage: quantforge serve run [OPTIONS]
 
 Options:
       --listen <LISTEN>                IP address and port to listen on; port 0 picks a free port [env: QF_LISTEN=] [default: 127.0.0.1:9600]
-      --max-span-bars <MAX_SPAN_BARS>  Most bars one /v1/candles answer may span; a longer range is refused [env: QF_MAX_SPAN_BARS=] [default: 527040]
+      --max-span-bars <MAX_SPAN_BARS>  Most bars one /v1/candles answer or backtest job may span; a longer range is refused [env: QF_MAX_SPAN_BARS=] [default: 527040]
+      --job-concurrency <COUNT>        Backtest jobs that run at once, the rest waiting their turn; omitted, half the CPU cores [env: QF_JOB_CONCURRENCY=]
       --exchange <EXCHANGE>            Exchange to connect to [env: QF_EXCHANGE=] [default: binance] [possible values: binance]
       --base-url <BASE_URL>            Exchange API base URL; omitted, the exchange's production endpoint [env: QF_BASE_URL=]
       --log-level <LOG_LEVEL>          Log filter (trace, debug, info, warn, error or a full tracing filter expression) [env: QF_LOG=] [default: info]

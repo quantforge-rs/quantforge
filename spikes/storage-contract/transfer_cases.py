@@ -84,6 +84,14 @@ TABLES = [
         True,
     ),
     ("segment_dirty", ["id", "exchange", "symbol", "interval", "window_start_ms"], "id", False),
+    ("bundles", ["code_hash", "size_bytes", "data", "stored_at_ms"], "code_hash", False),
+    (
+        "jobs",
+        ["seq", "job_id", "state", "bundle_hash", "request_json", "submitted_at_ms",
+         "started_at_ms", "finished_at_ms", "results_json", "failure_json"],
+        "seq",
+        False,
+    ),
 ]
 
 # --- The canonical text of docs/storage-migration.md --------------------------
@@ -412,6 +420,49 @@ CLOSED_TRADES = [
     trade(4, "run-legacy", "BTCUSD", T + 4_000, "1100.0", "1050.0", "0.010", "-0.5", None, None),
 ]
 
+# Two bundles: their bytes are copied as they are, NUL bytes and all, and
+# their names compare byte by byte.
+BUNDLE_BYTES = [bytes(range(256)) * 3 + b"\x00end", b"quantforge.toml\x00" + bytes(511) + b"x"]
+
+
+def bundle(data, stored):
+    return {"code_hash": "sha256:" + hashlib.sha256(data).hexdigest(), "size_bytes": len(data),
+            "data": data, "stored_at_ms": stored}
+
+
+BUNDLES = [bundle(BUNDLE_BYTES[0], T + 10_000), bundle(BUNDLE_BYTES[1], T + 20_000)]
+
+
+def request(bundle_row, symbol, category="spot"):
+    data = {"exchange": "binance", "category": category, "symbol": symbol, "interval": "1m",
+            "start_open_ms": T, "end_open_ms": T + 2 * MINUTE}
+    submission = {"bundle": bundle_row["code_hash"], "data": data,
+                  "backtest": {"initial_cash": "10000", "fee_bps": "10",
+                               "close_out_at_end": True}}
+    return json.dumps(submission, separators=(",", ":"), ensure_ascii=False)
+
+
+def job(seq, job_id, state, bundle_row, submitted, started=None, finished=None, results=None,
+        failure=None, symbol="BTCUSDT"):
+    return {"seq": seq, "job_id": job_id, "state": state, "bundle_hash": bundle_row["code_hash"],
+            "request_json": request(bundle_row, symbol), "submitted_at_ms": submitted,
+            "started_at_ms": started, "finished_at_ms": finished, "results_json": results,
+            "failure_json": failure}
+
+
+# Every phase, numbered with gaps the copy keeps; one job's market is the
+# non-ASCII symbol of the candles.
+JOBS = [
+    job(1, "0" * 31 + "1", "succeeded", BUNDLES[0], T + 30_000, T + 31_000, T + 32_000,
+        results="[]"),
+    job(2, "f" * 32, "failed", BUNDLES[1], T + 40_000, None, T + 40_500,
+        failure='{"code":"unavailable","message":"this server cannot run Python bundles yet"}'),
+    job(5, "0123456789abcdef0123456789abcdef", "cancelled", BUNDLES[0], T + 50_000, T + 51_000,
+        T + 52_000),
+    job(9, "a" * 32, "running", BUNDLES[0], T + 60_000, T + 61_000, symbol=UNICODE[1]),
+    job(10, "b" * 32, "queued", BUNDLES[1], T + 70_000),
+]
+
 ROWS = {
     "candles": CANDLES,
     "bot_runs": BOT_RUNS,
@@ -420,6 +471,8 @@ ROWS = {
     "segments": SEGMENTS,
     "segment_index": SEGMENT_INDEX,
     "segment_dirty": SEGMENT_DIRTY,
+    "bundles": BUNDLES,
+    "jobs": JOBS,
 }
 
 # --- What a verification reads ------------------------------------------------

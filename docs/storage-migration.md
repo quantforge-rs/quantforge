@@ -37,6 +37,8 @@ are those of the [DDL](storage-schema.md#sqlite-ddl).
 - `segments`: by `hash`, byte by byte
 - `segment_index`: market by market, by `window_start_ms`
 - `segment_dirty`: by `id`, a number the store gave
+- `bundles`: by `code_hash`, byte by byte
+- `jobs`: by `seq`, a number the store gave
 <!-- end: transfer tables -->
 
 Nothing is parsed or rewritten on the way: a decimal keeps its exact text
@@ -179,11 +181,14 @@ verify: failed
 
 Then the command exits with status 1.
 
-Every table is read through an index except where text keys must come in
-byte order on PostgreSQL: no index of the schema serves `COLLATE "C"`, so
-each batch of `segments` and `bot_runs` sorts the table's keys. On
-PostgreSQL 16, verifying 100,000 segments took 11 seconds that way, and the
-time grows with the square of their number. A copy reads only the SQLite
+Every table is read through an index. Text keys come in byte order on
+PostgreSQL, `COLLATE "C"`, which no index of schema 5 served, so each batch
+of `segments` and `bot_runs` sorted the table's keys: walking 100,000
+segment names in a transfer's batches of 64 took 10.8 seconds on
+PostgreSQL 16, and the time grew with the square of their number. Schema 6
+collates `segments.hash` and `bot_runs.run_id` `"C"`, and `bundles.code_hash`
+from the start, so each batch is a range of the primary key and the same
+walk takes 0.04 seconds. A copy reads only the SQLite
 source, in its own order, except when it resumes: then it reads the rows
 the target holds as a verification does. A difference means the target is
 not a copy of the source as it is now: the source was written after the
