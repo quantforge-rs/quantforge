@@ -65,6 +65,8 @@ cases of [segment-spec.md](segment-spec.md#the-shared-cases).
   its newest candle
 - `candles.inexact_text_refused`: stored text a decimal cannot hold exactly is
   refused by every read that returns it, never rounded
+- `candles.coverage`: every market's first and last open time, under its own
+  key, and nothing of a key this build cannot read back
 - `candles.identity_product_lines`: every product line of the identity cases
   stores its market under the storage spelling the cases give, and reads
   back only its own candle
@@ -247,6 +249,7 @@ A step is one operation and its answer: a result, or a refusal of a kind
 | Steps | What they check |
 | --- | --- |
 | `upsert`, `load`, `recent`, `max_open_time` | the candle store, every candle compared as text |
+| `coverage` | the markets the candle store holds, by their stored keys, each with its first and last open time, in any order |
 | `create_run`, `save_run`, `load_run`, `run_identity`, `latest_run`, `identity_matches` | runs and their identities, every state compared as its JSON |
 | `append_order_event`, `list_order_events`, `append_closed_trade`, `list_closed_trades` | the two journals |
 | `refresh`, `resolve`, `load_segment` | the segment store; every listed segment must also load, open under its name, and be as long as listed |

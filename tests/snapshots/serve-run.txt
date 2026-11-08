@@ -3,18 +3,12 @@ Answer HTTP requests until Ctrl-C or SIGTERM, then finish the ones in progress
 Usage: quantforge serve run [OPTIONS]
 
 Options:
-      --listen <LISTEN>
-          IP address and port to listen on; port 0 picks a free port [env: QF_LISTEN=] [default: 127.0.0.1:9600]
-      --segment-cache-dir <SEGMENT_CACHE_DIR>
-          Directory for cached candle segments; created if missing [env: QF_SEGMENT_CACHE_DIR=] [default: data/segments]
-      --exchange <EXCHANGE>
-          Exchange to connect to [env: QF_EXCHANGE=] [default: binance] [possible values: binance]
-      --base-url <BASE_URL>
-          Exchange API base URL; omitted, the exchange's production endpoint [env: QF_BASE_URL=]
-      --log-level <LOG_LEVEL>
-          Log filter (trace, debug, info, warn, error or a full tracing filter expression) [env: QF_LOG=] [default: info]
-  -h, --help
-          Print help
+      --listen <LISTEN>                IP address and port to listen on; port 0 picks a free port [env: QF_LISTEN=] [default: 127.0.0.1:9600]
+      --max-span-bars <MAX_SPAN_BARS>  Most bars one /v1/candles answer may span; a longer range is refused [env: QF_MAX_SPAN_BARS=] [default: 527040]
+      --exchange <EXCHANGE>            Exchange to connect to [env: QF_EXCHANGE=] [default: binance] [possible values: binance]
+      --base-url <BASE_URL>            Exchange API base URL; omitted, the exchange's production endpoint [env: QF_BASE_URL=]
+      --log-level <LOG_LEVEL>          Log filter (trace, debug, info, warn, error or a full tracing filter expression) [env: QF_LOG=] [default: info]
+  -h, --help                           Print help
 
 Storage:
       --db <DB>

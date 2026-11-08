@@ -15,8 +15,8 @@
 //! is written against, and [`engine`] drives all of them. [`protocol`]
 //! stands apart: it is the wire format between QuantForge instances, and it
 //! uses nothing else in the crate, so that it can become a crate of its own.
-//! [`server`] answers other instances in that format, and so far uses
-//! nothing else.
+//! [`server`] answers other instances in that format, reading the store
+//! through the ports.
 //!
 //! - [`model`] — market identity with its venues and product lines, the
 //!   candle grid and its validation, the columnar [`CandleBatch`], the
@@ -49,7 +49,8 @@
 //!   candle segments, and the live bar stream, and the strategy bundle a job
 //!   runs; its documentation is the wire specification.
 //! - [`server`] — the HTTP server that `quantforge serve run` hosts: its
-//!   routes, and how it stops ([`server::serve`]).
+//!   routes, the history they serve from the selected store, and how it
+//!   stops ([`server::serve`]).
 //!
 //! # The command tree it answers to
 //!
@@ -145,13 +146,13 @@ pub use model::{
     AccountTrade, AssetBalance, BotRunState, CancelOrderRequest, Candle, CandleBatch,
     CandleColumns, Category, ClosedTrade, DurabilityReport, DurabilitySetting, Environment,
     ExchangeId, ExchangeOrder, ExecutionMode, Fill, IdentitySource, Interval, KeyFingerprint,
-    KlineRequest, LegacyRun, MarketId, MarketOrderRequest, ModelError, OrderQueryRequest,
-    OrderStatus, PositionState, RunIdentity, RunStatus, SchemaMigration, SegmentHash, SegmentPlan,
-    SegmentRef, SegmentRefresh, SegmentTip, Side, StoreActivation, StoreId, StoreIdentity, Symbol,
-    SymbolRules, TargetPosition, TimestampMs, TransferRecord, TransferState, ValidationIssue,
-    ValidationReport, Venue, VenueAccountId, VenueOrderId, VenueTradeId, decimal_from_f64,
-    decimal_to_f64, describe_account, describe_environment, ms_to_rfc3339, now_utc_ms,
-    parse_rfc3339_to_ms, round_down_to_step, validate_candles,
+    KlineRequest, LegacyRun, MarketCoverage, MarketId, MarketOrderRequest, ModelError,
+    OrderQueryRequest, OrderStatus, PositionState, RunIdentity, RunStatus, SchemaMigration,
+    SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh, SegmentTip, Side, StoreActivation,
+    StoreId, StoreIdentity, Symbol, SymbolRules, TargetPosition, TimestampMs, TransferRecord,
+    TransferState, ValidationIssue, ValidationReport, Venue, VenueAccountId, VenueOrderId,
+    VenueTradeId, decimal_from_f64, decimal_to_f64, describe_account, describe_environment,
+    ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms, round_down_to_step, validate_candles,
 };
 
 /// The seams. An out-of-tree exchange or storage backend implements these

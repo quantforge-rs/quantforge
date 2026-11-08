@@ -5,7 +5,7 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::process::{Child, ExitStatus, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{self, Receiver};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -26,13 +26,19 @@ pub(crate) struct Served {
     lines: Receiver<String>,
     stderr: Option<JoinHandle<String>>,
     storage: String,
-    address: SocketAddr,
+    pub(crate) address: SocketAddr,
 }
 
 impl Served {
     /// Starts `serve run` on the bed's store and waits until it says where
     /// it listens.
     pub(crate) fn start(bed: &TestBed) -> Self {
+        Self::start_with(bed, |_| {})
+    }
+
+    /// [`Served::start`], with `configure` adding settings of `serve run`
+    /// after its own.
+    pub(crate) fn start_with(bed: &TestBed, configure: impl FnOnce(&mut Command)) -> Self {
         let mut cmd = isolated_std_cmd();
         cmd.current_dir(bed.dir());
         match bed.postgres_url() {
@@ -42,9 +48,9 @@ impl Served {
             None => cmd.arg("--db").arg(bed.db_path()),
         };
         cmd.args(["--log-level", "error", "serve", "run"])
-            .args(["--listen", "127.0.0.1:0", "--segment-cache-dir"])
-            .arg(bed.dir().join("segments"))
-            .stdin(Stdio::null())
+            .args(["--listen", "127.0.0.1:0"]);
+        configure(&mut cmd);
+        cmd.stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         let mut child = cmd.spawn().expect("serve run starts");
@@ -121,7 +127,7 @@ impl Drop for Served {
 }
 
 /// Reads a response to the end of its connection: its status and body.
-fn response(mut stream: TcpStream) -> (u16, String) {
+pub(crate) fn response(mut stream: TcpStream) -> (u16, String) {
     let mut text = String::new();
     stream.read_to_string(&mut text).expect("a response");
     let (head, body) = text
@@ -145,7 +151,7 @@ fn connect(address: SocketAddr) -> TcpStream {
 }
 
 /// `GET path` on a connection the server closes once it has answered.
-fn get(address: SocketAddr, path: &str) -> (u16, String) {
+pub(crate) fn get(address: SocketAddr, path: &str) -> (u16, String) {
     let mut stream = connect(address);
     let request = format!("GET {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n");
     stream
@@ -165,7 +171,6 @@ fn serve_run_says_where_it_listens_and_answers_health_and_version(bed: &TestBed)
         MIN_SUPPORTED.0
     );
     assert_eq!(get(served.address, "/version"), (200, version));
-    assert!(bed.dir().join("segments").is_dir(), "no segment cache");
     assert_eq!(bed.postgres_url().is_none(), bed.db_path().is_file());
 
     served.child.kill().expect("stop the server");

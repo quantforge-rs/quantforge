@@ -9,8 +9,8 @@ use thiserror::Error;
 
 use crate::model::{
     BotRunState, Candle, ClosedTrade, DurabilityReport, Environment, ExchangeOrder, ExecutionMode,
-    LegacyRun, MarketId, RunIdentity, SchemaMigration, SegmentHash, SegmentPlan, SegmentRefresh,
-    StoreIdentity, TimestampMs,
+    LegacyRun, MarketCoverage, MarketId, RunIdentity, SchemaMigration, SegmentHash, SegmentPlan,
+    SegmentRefresh, StoreIdentity, TimestampMs,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -154,6 +154,12 @@ pub trait CandleStore: Send + Sync {
         limit: usize,
     ) -> Result<Vec<Candle>, StorageError>;
     fn max_open_time_ms(&self, market: &MarketId) -> Result<Option<TimestampMs>, StorageError>;
+    /// Every market the store holds candles of, with the open times of its
+    /// first and last candle, in no particular order, read in one snapshot.
+    /// A market stored under a name this build cannot read back, such as a
+    /// product line a later build added, is left out and logged: it is never
+    /// read as some other market.
+    fn market_coverage(&self) -> Result<Vec<MarketCoverage>, StorageError>;
 }
 
 /// A market's closed candles packed window by window into immutable

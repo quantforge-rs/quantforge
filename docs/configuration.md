@@ -42,8 +42,8 @@ the default:
   is created, so a missing testnet URL can never quietly become production;
 - `QF_LOG=` is an empty filter, which turns log output off, warnings included;
 - without its flag, `QF_LISTEN=` is a usage error (exit status 2, reported
-  against `--listen`), and so is `QF_SEGMENT_CACHE_DIR=` (reported against
-  `--segment-cache-dir`);
+  against `--listen`), and so is `QF_MAX_SPAN_BARS=` (reported against
+  `--max-span-bars`);
 - an empty or whitespace-only API key or secret counts as missing, so commands
   that need credentials fail with the missing-credentials error.
 
@@ -107,7 +107,7 @@ Explanations belong in the Setting cell.
 | Exchange order id of the order to cancel, as the exchange spells it; pass it or `--client-order-id` | `--order-id <id>` | — | none | `monitor cancel-order` |
 | Client order id of the order to cancel; pass it or `--order-id` | `--client-order-id <id>` | — | none | `monitor cancel-order` |
 | Address to listen on: an IP address and a port, such as `0.0.0.0:9600` for every interface; a host name is refused; the default accepts connections from this machine only, and port 0 picks a free port, which the `listening:` line shows | `--listen <addr>` | `QF_LISTEN` | `127.0.0.1:9600` | `serve run` |
-| Directory for cached candle segments, relative to the working directory; created at startup if missing | `--segment-cache-dir <path>` | `QF_SEGMENT_CACHE_DIR` | `data/segments` | `serve run` |
+| Most bars one `/v1/candles` answer may span, counted at the range's interval; at least 1, and a longer range is refused as `invalid_request`. The default is a leap year of `1m` bars | `--max-span-bars <count>` | `QF_MAX_SPAN_BARS` | `527040` | `serve run` |
 
 ## Storage backends
 
@@ -160,8 +160,8 @@ in separate databases, and bind each with `store bind`. Nothing moves from a
 SQLite file on its own, so a new database starts empty; `data migrate --from
 <file>` copies one into it ([storage-migration.md](storage-migration.md)).
 
-`serve run`'s `--segment-cache-dir` stays on the local disk whichever backend
-is selected; it holds no store.
+`serve run` serves history from the selected store, segments included, and
+keeps nothing beside it on the local disk.
 
 ### The PostgreSQL URL
 
@@ -244,7 +244,7 @@ command does to an account — `--mode live`, `--yes`, a larger
 
 `serve run`'s settings are the exception. A server is set up once for the
 place it runs, often by a service manager or container that configures it
-through its environment, and neither of its settings can touch an account.
+through its environment, and none of its settings can touch an account.
 
 ## Environment variables QuantForge does not own
 

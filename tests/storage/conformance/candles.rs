@@ -10,7 +10,7 @@ use quantforge::{
 };
 use std::str::FromStr;
 
-use super::cases::{CandleText, Cases, decimal, identity_cases, segment_spec_cases};
+use super::cases::{CandleText, Cases, CoverageText, decimal, identity_cases, segment_spec_cases};
 use super::{Coded, Fixture, Step, expect_refused};
 
 /// The checks coded here: id and statement.
@@ -112,6 +112,23 @@ pub fn step<S: CandleStore + ?Sized>(cases: &Cases, store: &S, step: &Step) -> b
                 .max_open_time_ms(&cases.market(market))
                 .expect("max open time");
             assert_eq!(&newest, expect, "max open time of {market}");
+        }
+        Step::Coverage { expect } => {
+            // In no particular order: sorted as the cases list them.
+            let mut covered: Vec<CoverageText> = store
+                .market_coverage()
+                .expect("coverage")
+                .into_iter()
+                .map(|covered| CoverageText {
+                    exchange: covered.market.exchange.as_str().to_string(),
+                    symbol: covered.market.symbol.as_str().to_string(),
+                    interval: covered.market.interval.as_str().to_string(),
+                    first_open_ms: covered.first_open_ms,
+                    last_open_ms: covered.last_open_ms,
+                })
+                .collect();
+            covered.sort();
+            assert_eq!(&covered, expect, "coverage");
         }
         _ => return false,
     }

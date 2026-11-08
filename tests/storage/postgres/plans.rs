@@ -59,6 +59,23 @@ const QUERIES: &[Query] = &[
               WHERE exchange = 'binance_spot' AND symbol = 'BTCUSDT' AND interval = '1m'",
     },
     Query {
+        id: "candles.first_market",
+        indexes: &["candles_pkey"],
+        never_scanned: &["candles"],
+        write: false,
+        sql: "SELECT exchange, symbol, interval, open_time_ms FROM candles \
+              ORDER BY exchange, symbol, interval, open_time_ms LIMIT 1",
+    },
+    Query {
+        id: "candles.next_market",
+        indexes: &["candles_pkey"],
+        never_scanned: &["candles"],
+        write: false,
+        sql: "SELECT exchange, symbol, interval, open_time_ms FROM candles \
+              WHERE (exchange, symbol, interval) > ('binance_spot', 'BTCUSDT', '1m') \
+              ORDER BY exchange, symbol, interval, open_time_ms LIMIT 1",
+    },
+    Query {
         id: "candles.upsert",
         indexes: &["candles_pkey"],
         never_scanned: &["candles"],

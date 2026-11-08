@@ -16,6 +16,8 @@
 //!   forward, one transaction per step (`docs/storage-schema.md`).
 //! - `candles`: `CandleStore`, with SQLite's semantics and batches that
 //!   mark the windows they change in the same transaction.
+//! - `coverage`: the markets the candle table holds, each read in two
+//!   indexed steps.
 //! - `journal`: `RunJournalStore`, one statement per call.
 //! - `control`: `StoreControl`, the store's record and legacy runs.
 //! - `segments`: `SegmentStore`, each window and plan read in one snapshot
@@ -32,6 +34,7 @@ mod bridge;
 mod candles;
 mod control;
 mod copying;
+mod coverage;
 mod durability;
 mod journal;
 mod migrate;

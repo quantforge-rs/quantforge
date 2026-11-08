@@ -30,7 +30,10 @@ own.
 PostgreSQL 16.15 from Homebrew, the oldest version ADR 0001 supports, on
 macOS 26.4.1 (arm64), with `initdb`'s default settings (128 MB of shared
 buffers), on 2026-11-01; the segment store's queries were measured again
-on 2026-11-04, when QUA-112 gave them the store's own shape. Each query was
+on 2026-11-04, when QUA-112 gave them the store's own shape, and the two
+steps of the candle store's walk over its markets on 2026-11-08, when
+QUA-359 added it, against PostgreSQL 16.15 in Docker
+([ci.md](ci.md#postgresql)'s local servers). Each query was
 explained with literal values, reads with `EXPLAIN (ANALYZE, BUFFERS)` and
 writes without running them.
 The PostgreSQL stores send the same values as parameters of unnamed
@@ -69,6 +72,8 @@ it, with the indexes its plan uses:
 - `candles.load`: `candles_pkey`
 - `candles.recent`: `candles_pkey`
 - `candles.max_open_time`: `candles_pkey`
+- `candles.first_market`: `candles_pkey`
+- `candles.next_market`: `candles_pkey`
 - `candles.upsert`: `candles_pkey`
 - `candles.window`: `candles_pkey`
 - `runs.latest`: `idx_bot_runs_market`
@@ -97,6 +102,8 @@ market by market; where the other order differs, it is in brackets.
 | `candles.load` | `load_candles` with a range and a limit | Index Scan on `candles_pkey`, under the limit | 1,000 | 24 (131) | 0.26 ms (0.31) |
 | `candles.recent` | `load_recent_candles` | Index Scan Backward on `candles_pkey` | 300 | 13 (43) | 0.09 ms (0.12) |
 | `candles.max_open_time` | `max_open_time_ms`, and a segment refresh's tip | Index Only Scan Backward on `candles_pkey` | 1 | 4 | 0.04 ms (0.06) |
+| `candles.first_market` | `market_coverage`, for the first market | Index Only Scan on `candles_pkey`, under the limit | 1 | 4 | 0.03 ms |
+| `candles.next_market` | `market_coverage`, for each market after it | Index Only Scan on `candles_pkey` from the key before, under the limit | 1 | 4 (5) | 0.05 ms (0.04) |
 | `candles.upsert` | `upsert_candles` | The batch read from its unnested arrays, conflicts checked on `candles_pkey` | | | |
 | `candles.window` | a refresh reading one window | Bitmap Index Scan on `candles_pkey`, then a sort | 1,440 | 36 (190) | 0.52 ms (0.78) |
 | `runs.latest` | `latest_run_for_market` | Index Scan on `idx_bot_runs_market`, the tie-breakers sorted incrementally, run IDs in byte order | 1 of 3 | 13 | 0.04 ms |

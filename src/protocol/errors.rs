@@ -69,9 +69,12 @@ pub enum ErrorCode {
     InvalidRequest,
     /// The credentials are missing, unknown, or expired. HTTP 401.
     Unauthorized,
-    /// The job, segment, bundle, or market the request names does not exist.
-    /// HTTP 404.
+    /// The job, segment, bundle, or market the request names does not exist,
+    /// or the server answers no such path. HTTP 404.
     NotFound,
+    /// The path exists, but not for the request's method; the `Allow` header
+    /// lists the methods it takes. HTTP 405.
+    MethodNotAllowed,
     /// The request conflicts with the current state, such as cancelling a job
     /// that has finished. HTTP 409.
     Conflict,
@@ -102,6 +105,7 @@ impl ErrorCode {
             Self::InvalidRequest | Self::UnsupportedVersion => Some(400),
             Self::Unauthorized => Some(401),
             Self::NotFound => Some(404),
+            Self::MethodNotAllowed => Some(405),
             Self::Conflict => Some(409),
             Self::LimitExceeded | Self::RateLimited => Some(429),
             Self::Internal => Some(500),
@@ -117,10 +121,11 @@ mod tests {
     use std::collections::HashSet;
 
     /// Every code a server sends, with its wire name and HTTP status.
-    const CODES: [(ErrorCode, &str, u16); 9] = [
+    const CODES: [(ErrorCode, &str, u16); 10] = [
         (ErrorCode::InvalidRequest, "invalid_request", 400),
         (ErrorCode::Unauthorized, "unauthorized", 401),
         (ErrorCode::NotFound, "not_found", 404),
+        (ErrorCode::MethodNotAllowed, "method_not_allowed", 405),
         (ErrorCode::Conflict, "conflict", 409),
         (ErrorCode::UnsupportedVersion, "unsupported_version", 400),
         (ErrorCode::LimitExceeded, "limit_exceeded", 429),
@@ -138,6 +143,7 @@ mod tests {
                 ErrorCode::InvalidRequest
                 | ErrorCode::Unauthorized
                 | ErrorCode::NotFound
+                | ErrorCode::MethodNotAllowed
                 | ErrorCode::Conflict
                 | ErrorCode::UnsupportedVersion
                 | ErrorCode::LimitExceeded

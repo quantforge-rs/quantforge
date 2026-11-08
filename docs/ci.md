@@ -173,8 +173,9 @@ records in `evidence.jsonl`.
 | `storage.migrations` | `tests/storage/migration.rs`, which migrates schemas 1 to 4 on SQLite; the PostgreSQL chain's tests; and `data migrate`'s copy and verification (`tests/storage/transfer/`) |
 | `data.segments`, `data.backend_identity` | The segment groups and the segment spec's cases on both backends, and `both_backends_tell_the_same_story` (`tests/e2e/backends.rs`) |
 | `data.sync`, `data.validate` | The command scenarios of `tests/e2e/offline.rs` on both backends, against the mock exchange |
+| `data.history` | `tests/e2e/history.rs`: `serve run`'s history routes read back against the store on both backends, and `both_backends_answer_byte_for_byte_alike`; the routes' own tests in `src/server/tests/` run on SQLite |
 | `config.storage`, `release.no_hidden_sqlite` | `tests/e2e/backends.rs`, and every command scenario on PostgreSQL |
 | `release.artifact` (`sqlite-build`) | The SQLite-only lines of `checks` and `package` |
 
-`data.history` waits for the history plane (ALG-703), and the server and
-Python surfaces of `config.storage` wait for their stories.
+`data.history`'s release evidence on both exchanges is ALG-703's, and the
+server and Python surfaces of `config.storage` wait for their stories.

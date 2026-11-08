@@ -4,8 +4,10 @@
 use super::errors::{commit_failed, failed};
 use super::{SqliteStore, parse_decimal_str, row_error, segments};
 use crate::storage::common;
-use crate::{Candle, CandleQuery, CandleStore, MarketId, StorageError, TimestampMs};
-use rusqlite::{ToSql, params, params_from_iter};
+use crate::{
+    Candle, CandleQuery, CandleStore, MarketCoverage, MarketId, StorageError, TimestampMs,
+};
+use rusqlite::{OptionalExtension, Row, ToSql, params, params_from_iter};
 use std::collections::BTreeSet;
 
 // Indentation inside this literal is load-bearing: SQLite records the exact
@@ -30,6 +32,33 @@ pub(super) const SCHEMA_DDL: &str = r#"
                 CREATE INDEX IF NOT EXISTS idx_candles_market_time
                   ON candles(exchange, symbol, interval, open_time_ms);
 "#;
+
+/// The first candle of the first market in key order: one indexed step.
+const FIRST_MARKET: &str = r#"
+    SELECT exchange, symbol, interval, open_time_ms FROM candles
+    ORDER BY exchange, symbol, interval, open_time_ms
+    LIMIT 1
+"#;
+
+/// The first candle of the market after a key: one indexed step.
+const NEXT_MARKET: &str = r#"
+    SELECT exchange, symbol, interval, open_time_ms FROM candles
+    WHERE (exchange, symbol, interval) > (?1, ?2, ?3)
+    ORDER BY exchange, symbol, interval, open_time_ms
+    LIMIT 1
+"#;
+
+const MAX_OPEN_TIME: &str = r#"
+    SELECT MAX(open_time_ms) FROM candles
+    WHERE exchange = ?1 AND symbol = ?2 AND interval = ?3
+"#;
+
+/// A market's key, as stored, and the open time of its first candle.
+type FirstCandle = (String, String, String, TimestampMs);
+
+fn first_candle(row: &Row<'_>) -> rusqlite::Result<FirstCandle> {
+    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+}
 
 impl CandleStore for SqliteStore {
     fn init(&self) -> Result<(), StorageError> {
@@ -223,11 +252,7 @@ impl CandleStore for SqliteStore {
         let connection = self.open()?;
         let value = connection
             .query_row(
-                r#"
-                SELECT MAX(open_time_ms)
-                FROM candles
-                WHERE exchange = ?1 AND symbol = ?2 AND interval = ?3
-                "#,
+                MAX_OPEN_TIME,
                 params![
                     market.exchange.as_str(),
                     market.symbol.as_str(),
@@ -237,6 +262,38 @@ impl CandleStore for SqliteStore {
             )
             .map_err(failed)?;
         Ok(value)
+    }
+
+    fn market_coverage(&self) -> Result<Vec<MarketCoverage>, StorageError> {
+        let mut connection = self.open()?;
+        // One snapshot; two indexed steps per market, never a read of every
+        // row.
+        let transaction = connection.transaction().map_err(failed)?;
+        let mut first = transaction.prepare_cached(FIRST_MARKET).map_err(failed)?;
+        let mut next = transaction.prepare_cached(NEXT_MARKET).map_err(failed)?;
+        let mut newest = transaction.prepare_cached(MAX_OPEN_TIME).map_err(failed)?;
+        let mut covered = Vec::new();
+        let mut found = first
+            .query_row([], first_candle)
+            .optional()
+            .map_err(failed)?;
+        while let Some((exchange, symbol, interval, first_open_ms)) = found {
+            let key = params![exchange, symbol, interval];
+            let last_open_ms: TimestampMs =
+                newest.query_row(key, |row| row.get(0)).map_err(failed)?;
+            if let Some(market) = common::stored_market(&exchange, &symbol, &interval) {
+                covered.push(MarketCoverage {
+                    market,
+                    first_open_ms,
+                    last_open_ms,
+                });
+            }
+            found = next
+                .query_row(key, first_candle)
+                .optional()
+                .map_err(failed)?;
+        }
+        Ok(covered)
     }
 }
 

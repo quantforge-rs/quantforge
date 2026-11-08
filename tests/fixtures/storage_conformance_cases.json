@@ -2648,6 +2648,244 @@
      "expect": 1792454520000
     }
    ]
+  },
+  {
+   "id": "candles.coverage",
+   "doc": "every market's first and last open time, under its own key, and nothing of a key this build cannot read back",
+   "steps": [
+    {
+     "op": "coverage",
+     "expect": []
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 1792454460000,
+       "close_time_ms": 1792454519999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 1792544400000,
+       "close_time_ms": 1792544459999,
+       "open": "101",
+       "high": "101",
+       "low": "101",
+       "close": "101",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 3
+    },
+    {
+     "op": "upsert",
+     "market": "linear",
+     "candles": [
+      {
+       "open_time_ms": 1792454820000,
+       "close_time_ms": 1792454879999,
+       "open": "102",
+       "high": "102",
+       "low": "102",
+       "close": "102",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "bybit_spot",
+     "candles": [
+      {
+       "open_time_ms": 1792368000000,
+       "close_time_ms": 1792368059999,
+       "open": "103",
+       "high": "103",
+       "low": "103",
+       "close": "103",
+       "volume": "1.000",
+       "trades": 1
+      },
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454459999,
+       "open": "103",
+       "high": "103",
+       "low": "103",
+       "close": "103",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 2
+    },
+    {
+     "op": "upsert",
+     "market": "eth",
+     "candles": [
+      {
+       "open_time_ms": -60000,
+       "close_time_ms": -1,
+       "open": "104",
+       "high": "104",
+       "low": "104",
+       "close": "104",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "upsert",
+     "market": "spot_5m",
+     "candles": [
+      {
+       "open_time_ms": 1792454400000,
+       "close_time_ms": 1792454699999,
+       "open": "105",
+       "high": "105",
+       "low": "105",
+       "close": "105",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "raw_execute",
+     "sql": "INSERT INTO candles(exchange, symbol, interval, open_time_ms, close_time_ms, open, high, low, close, volume, trades) VALUES ('okx_spot', 'BTCUSDT', '1m', 1792454400000, 1792454459999, '1', '1', '1', '1', '1', NULL)"
+    },
+    {
+     "op": "raw_execute",
+     "sql": "INSERT INTO candles(exchange, symbol, interval, open_time_ms, close_time_ms, open, high, low, close, volume, trades) VALUES ('binance_spot', 'btcusdt', '1m', 1792454400000, 1792454459999, '1', '1', '1', '1', '1', NULL)"
+    },
+    {
+     "op": "raw_execute",
+     "sql": "INSERT INTO candles(exchange, symbol, interval, open_time_ms, close_time_ms, open, high, low, close, volume, trades) VALUES ('binance_spot', '', '1m', 1792454400000, 1792454459999, '1', '1', '1', '1', '1', NULL)"
+    },
+    {
+     "op": "raw_execute",
+     "sql": "INSERT INTO candles(exchange, symbol, interval, open_time_ms, close_time_ms, open, high, low, close, volume, trades) VALUES ('binance_spot', 'BTCUSDT', '2m', 1792454400000, 1792454459999, '1', '1', '1', '1', '1', NULL)"
+    },
+    {
+     "op": "coverage",
+     "expect": [
+      {
+       "exchange": "binance_linear",
+       "symbol": "BTCUSDT",
+       "interval": "1m",
+       "first_open_ms": 1792454820000,
+       "last_open_ms": 1792454820000
+      },
+      {
+       "exchange": "binance_spot",
+       "symbol": "BTCUSDT",
+       "interval": "1m",
+       "first_open_ms": 1792454400000,
+       "last_open_ms": 1792544400000
+      },
+      {
+       "exchange": "binance_spot",
+       "symbol": "BTCUSDT",
+       "interval": "5m",
+       "first_open_ms": 1792454400000,
+       "last_open_ms": 1792454400000
+      },
+      {
+       "exchange": "binance_spot",
+       "symbol": "ETHUSDT",
+       "interval": "1m",
+       "first_open_ms": -60000,
+       "last_open_ms": -60000
+      },
+      {
+       "exchange": "bybit_spot",
+       "symbol": "BTCUSDT",
+       "interval": "1m",
+       "first_open_ms": 1792368000000,
+       "last_open_ms": 1792454400000
+      }
+     ]
+    },
+    {
+     "op": "upsert",
+     "market": "spot",
+     "candles": [
+      {
+       "open_time_ms": 1792454220000,
+       "close_time_ms": 1792454279999,
+       "open": "100",
+       "high": "100",
+       "low": "100",
+       "close": "100",
+       "volume": "1.000",
+       "trades": 1
+      }
+     ],
+     "written": 1
+    },
+    {
+     "op": "coverage",
+     "expect": [
+      {
+       "exchange": "binance_linear",
+       "symbol": "BTCUSDT",
+       "interval": "1m",
+       "first_open_ms": 1792454820000,
+       "last_open_ms": 1792454820000
+      },
+      {
+       "exchange": "binance_spot",
+       "symbol": "BTCUSDT",
+       "interval": "1m",
+       "first_open_ms": 1792454220000,
+       "last_open_ms": 1792544400000
+      },
+      {
+       "exchange": "binance_spot",
+       "symbol": "BTCUSDT",
+       "interval": "5m",
+       "first_open_ms": 1792454400000,
+       "last_open_ms": 1792454400000
+      },
+      {
+       "exchange": "binance_spot",
+       "symbol": "ETHUSDT",
+       "interval": "1m",
+       "first_open_ms": -60000,
+       "last_open_ms": -60000
+      },
+      {
+       "exchange": "bybit_spot",
+       "symbol": "BTCUSDT",
+       "interval": "1m",
+       "first_open_ms": 1792368000000,
+       "last_open_ms": 1792454400000
+      }
+     ]
+    }
+   ]
   }
  ],
  "journal": [

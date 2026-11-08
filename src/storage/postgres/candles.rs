@@ -19,7 +19,9 @@ use tokio_postgres::{IsolationLevel, Row};
 use super::bridge::Effect;
 use super::{PostgresStore, copying, limit};
 use crate::storage::common::{self, read_decimal};
-use crate::{Candle, CandleQuery, CandleStore, MarketId, StorageError, TimestampMs};
+use crate::{
+    Candle, CandleQuery, CandleStore, MarketCoverage, MarketId, StorageError, TimestampMs,
+};
 
 const UPSERT: &str = r#"
     INSERT INTO candles(exchange, symbol, interval, open_time_ms, close_time_ms,
@@ -389,5 +391,9 @@ impl CandleStore for PostgresStore {
                     .try_get(0)
             })
         })
+    }
+
+    fn market_coverage(&self) -> Result<Vec<MarketCoverage>, StorageError> {
+        self.coverage()
     }
 }

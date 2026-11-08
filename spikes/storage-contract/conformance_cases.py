@@ -281,6 +281,24 @@ class Model:
         rows = self.rows(market)
         return rows[-1]["open_time_ms"] if rows else None
 
+    def coverage(self):
+        """Every market holding candles, by its stored key, with its first and last open time."""
+        out = []
+        for market, rows in self.candles.items():
+            if rows:
+                exchange, symbol, interval = MARKETS[market]
+                out.append(
+                    {
+                        "exchange": exchange,
+                        "symbol": symbol,
+                        "interval": interval,
+                        "first_open_ms": min(rows),
+                        "last_open_ms": max(rows),
+                    }
+                )
+        # Code point order, which is UTF-8's byte order.
+        return sorted(out, key=lambda m: (m["exchange"], m["symbol"], m["interval"]))
+
     # Segments.
 
     def tip_window(self, market):
@@ -519,6 +537,9 @@ class Scenario:
 
     def max_open_time(self, market):
         self.step("max_open_time", market=market, expect=self.model.max_open_time(market))
+
+    def coverage(self):
+        self.step("coverage", expect=self.model.coverage())
 
     def refresh(self, market):
         self.step("refresh", market=market, expect=self.model.refresh(market))
@@ -1032,6 +1053,34 @@ def candle_scenarios():
     s.recent("spot", 1)
     s.recent("spot", 2)
     s.max_open_time("spot")
+    out.append(s)
+
+    s = Scenario(
+        "candles.coverage",
+        "every market's first and last open time, under its own key, and nothing of a key this build cannot read back",
+    )
+    s.coverage()
+    s.upsert("spot", [candle(T + i * MINUTE, "101") for i in (0, 1, 1500)])
+    s.upsert("linear", [candle(T + 7 * MINUTE, "102")])
+    s.upsert("bybit_spot", [candle(T - DAY, "103"), candle(T, "103")])
+    s.upsert("eth", [candle(-MINUTE, "104")])
+    s.upsert("spot_5m", [candle(T, "105", interval="5m")])
+    # Keys only a later build, or a hand, could write: a product line, a
+    # symbol not in its normalized form, an empty one, and an interval.
+    for exchange, symbol, interval in [
+        ("okx_spot", "BTCUSDT", "1m"),
+        ("binance_spot", "btcusdt", "1m"),
+        ("binance_spot", "", "1m"),
+        ("binance_spot", "BTCUSDT", "2m"),
+    ]:
+        s.raw_execute(
+            "INSERT INTO candles(exchange, symbol, interval, open_time_ms, close_time_ms, open, "
+            "high, low, close, volume, trades) VALUES "
+            f"('{exchange}', '{symbol}', '{interval}', {T}, {T + MINUTE - 1}, '1', '1', '1', '1', '1', NULL)"
+        )
+    s.coverage()
+    s.upsert("spot", [candle(T - 3 * MINUTE, "100")])
+    s.coverage()
     out.append(s)
     return out
 

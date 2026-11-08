@@ -1,5 +1,6 @@
-//! The candle bar and the validation pass that checks a loaded range for
-//! ordering faults, duplicates, gaps, and impossible OHLCV values.
+//! The candle bar, what a store holds of a market's candles, and the
+//! validation pass that checks a loaded range for ordering faults,
+//! duplicates, gaps, and impossible OHLCV values.
 
 use super::{MarketId, TimestampMs};
 use rust_decimal::Decimal;
@@ -16,6 +17,16 @@ pub struct Candle {
     pub close: Decimal,
     pub volume: Decimal,
     pub trades: Option<u64>,
+}
+
+/// A market a candle store holds candles of, and the open times of its
+/// first and last candle. Between the two the store can still lack candles:
+/// where the exchange published none, or none were synced.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MarketCoverage {
+    pub market: MarketId,
+    pub first_open_ms: TimestampMs,
+    pub last_open_ms: TimestampMs,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

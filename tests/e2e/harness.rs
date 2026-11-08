@@ -82,9 +82,6 @@ pub const FAKE_API_KEY: &str = "test-key";
 pub const FAKE_API_SECRET: &str = "test-secret";
 pub const TESTNET_BASE_URL: &str = "https://testnet.binance.vision/";
 
-/// What `serve run` is told to make in a bed.
-const SEGMENT_CACHE: &str = "segments";
-
 /// Per-test isolated working directory and store: a SQLite file in the
 /// directory unless the bed has a database of its own on PostgreSQL.
 pub struct TestBed {
@@ -196,12 +193,11 @@ impl TestBed {
             .expect("the statement");
     }
 
-    /// What the bed's directory holds, `serve run`'s segment cache aside.
+    /// What the bed's directory holds.
     pub fn created(&self) -> Vec<std::ffi::OsString> {
         std::fs::read_dir(self.dir())
             .expect("read the bed")
             .map(|entry| entry.expect("an entry").file_name())
-            .filter(|name| name != SEGMENT_CACHE)
             .collect()
     }
 
