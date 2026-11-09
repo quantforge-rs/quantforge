@@ -140,9 +140,9 @@ open:
   the server.
 - A job can fill its scratch directory's disk: nothing limits how much it
   writes.
-- On macOS a process a job starts can outlive its worker by leaving the
-  worker's process group, which seccomp refuses on Linux; on Windows every
-  process a job starts outlives its worker.
+- On macOS, and on Linux where seccomp does not hold (`network none`), a
+  process a job starts can outlive its worker by leaving the worker's
+  process group; on Windows every process a job starts outlives its worker.
 - A job that catches `SIGXCPU` is killed a second later and reported as
   stopped by `SIGKILL`, not as out of CPU time.
 

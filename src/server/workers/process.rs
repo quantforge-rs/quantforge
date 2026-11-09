@@ -1,8 +1,9 @@
 //! A worker's process: started from this binary with nothing of the
 //! server's but three pipes, its frames and the end of its standard error
-//! read on threads of their own, and, once it stops, why. A worker is
-//! killed with its process group, so that a process it started goes too,
-//! which on Linux cannot leave the group.
+//! read on threads of their own, and, once it stops, why. On Unix a worker
+//! is killed with its process group, so that a process it started goes too
+//! unless it left the group, which the seccomp filter refuses on Linux
+//! where it holds; on Windows only the worker itself is killed.
 
 use std::io::{self, BufReader, Read};
 use std::path::PathBuf;
@@ -141,8 +142,8 @@ pub(super) fn start(
 }
 
 /// Its own process group: a signal for the server's, such as the Ctrl-C a
-/// terminal sends, never reaches a worker, and a worker is killed with
-/// every process it started.
+/// terminal sends, never reaches a worker, and on Unix a worker is killed
+/// with every process it started that is still in the group.
 fn own_group(command: &mut Command) {
     #[cfg(unix)]
     {
@@ -215,7 +216,7 @@ fn keep_stderr(
 }
 
 impl Process {
-    /// Kills it, and every process in its group.
+    /// Kills it, and on Unix every process in its group.
     pub(super) fn kill(&mut self) {
         #[cfg(unix)]
         if let Some(group) = i32::try_from(self.pid)
