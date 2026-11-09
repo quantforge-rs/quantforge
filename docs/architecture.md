@@ -298,7 +298,7 @@ src/
     │   └── isolation/          the limits and sandbox a worker puts on itself as it starts
     │       ├── mod.rs          Posture and Guard: what held, and why not; the server closed to workers
     │       ├── unix.rs         rlimits: CPU time and address space, and no core dumps
-    │       └── linux.rs        Landlock for files, seccomp for sockets, and not dumpable
+    │       └── linux.rs        Landlock for files, seccomp for sockets and process groups, and not dumpable
     ├── refusal.rs              every failed answer as an error envelope, and what a storage failure may say
     └── tests/                  the routes in process, over a real SQLite store
         ├── mod.rs              the fixtures, health, version, unknown paths and methods

@@ -27,6 +27,9 @@ const READY_PATIENCE: Duration = Duration::from_secs(10);
 /// Why a job failed that found no worker to run on.
 const NO_WORKER: &str = "the server could not start a worker for the job; submit it again";
 
+/// Why a job failed that came as the pool was stopping.
+const STOPPING: &str = "the server is stopping; submit the job again";
+
 /// The workers of a server, which run its jobs. Cloned, it is the same
 /// pool.
 #[derive(Clone)]
@@ -141,8 +144,8 @@ impl WorkerPool {
     /// soon after `cancel` is sent.
     pub fn execute(&self, input: JobInput, cancel: &Cancel) -> Execution {
         let job = input.job_id.to_string();
-        let mut worker = match self.take(cancel) {
-            Ok(worker) => worker,
+        let (running, mut worker) = match self.take(&job, cancel) {
+            Ok(taken) => taken,
             Err(outcome) => {
                 return Execution {
                     outcome,
@@ -152,12 +155,10 @@ impl WorkerPool {
             }
         };
         let pid = worker.process.pid;
-        self.state().running.insert(job.clone(), pid);
         let ran = job::run(&mut worker, input, cancel, &self.inner.config.limits);
         worker.process.retire();
         drop(worker);
-        self.state().running.remove(&job);
-        self.inner.changed.notify_all();
+        drop(running);
         self.replenish();
         Execution {
             outcome: ran.outcome,
@@ -197,8 +198,10 @@ impl WorkerPool {
             .unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// An idle worker, or one started now when none is idle or on its way.
-    fn take(&self, cancel: &Cancel) -> Result<Worker, WorkerOutcome> {
+    /// An idle worker, or one started now when none is idle or on its way,
+    /// and `job` counted as running under the lock that hands the worker
+    /// out: `stop` finds every worker idle, starting, or running a job.
+    fn take(&self, job: &str, cancel: &Cancel) -> Result<(Running<'_>, Worker), WorkerOutcome> {
         let deadline = Instant::now() + READY_PATIENCE;
         let mut state = self.state();
         loop {
@@ -206,21 +209,35 @@ impl WorkerPool {
                 return Err(WorkerOutcome::Cancelled);
             }
             if state.stopping {
-                return Err(unavailable("the server is stopping; submit the job again"));
+                return Err(unavailable(STOPPING));
             }
             if let Some(worker) = state.idle.pop() {
-                return Ok(worker);
+                return Ok((self.admit(&mut state, job, &worker), worker));
             }
             if state.starting == 0 {
                 state.starting += 1;
                 drop(state);
                 let started = start_worker(&self.inner.config, &self.inner.root);
-                self.state().starting -= 1;
+                let mut state = self.state();
+                state.starting -= 1;
+                let taken = match started {
+                    Ok(worker) if !state.stopping => {
+                        Ok((self.admit(&mut state, job, &worker), worker))
+                    }
+                    // Retired under the lock, so that `stop` cannot finish
+                    // while this worker still runs.
+                    Ok(mut worker) => {
+                        worker.process.retire();
+                        Err(unavailable(STOPPING))
+                    }
+                    Err(failure) => {
+                        error!(%failure, "a worker could not start");
+                        Err(unavailable(NO_WORKER))
+                    }
+                };
+                drop(state);
                 self.inner.changed.notify_all();
-                return started.map_err(|failure| {
-                    error!(%failure, "a worker could not start");
-                    unavailable(NO_WORKER)
-                });
+                return taken;
             }
             if Instant::now() >= deadline {
                 return Err(unavailable(NO_WORKER));
@@ -230,6 +247,15 @@ impl WorkerPool {
                 .changed
                 .wait_timeout(state, Duration::from_millis(50))
                 .map_or_else(|poisoned| poisoned.into_inner().0, |(state, _)| state);
+        }
+    }
+
+    /// Counts `job` as running on `worker`, under the lock `state` holds.
+    fn admit(&self, state: &mut State, job: &str, worker: &Worker) -> Running<'_> {
+        state.running.insert(job.to_string(), worker.process.pid);
+        Running {
+            pool: self,
+            job: job.to_string(),
         }
     }
 
@@ -270,6 +296,21 @@ impl WorkerPool {
             self.state().starting -= 1;
             self.inner.changed.notify_all();
         }
+    }
+}
+
+/// A job counted as running until this is dropped: by its run once the job
+/// has ended, or as a run that panicked unwinds, so that `stop` never waits
+/// for a job that has ended.
+struct Running<'a> {
+    pool: &'a WorkerPool,
+    job: String,
+}
+
+impl Drop for Running<'_> {
+    fn drop(&mut self) {
+        self.pool.state().running.remove(&self.job);
+        self.pool.inner.changed.notify_all();
     }
 }
 

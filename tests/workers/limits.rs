@@ -1,7 +1,8 @@
 //! Each limit run into and named: CPU time and memory where the worker can
-//! enforce them, wall-clock time everywhere; and a crash, an outside kill
-//! and a cancel, each of which ends only its own job and leaves the pool
-//! running the next.
+//! enforce them, wall-clock time everywhere; a crash, an outside kill and a
+//! cancel, each of which ends only its own job and leaves the pool running
+//! the next; and a pool that stops as a job's worker starts, which runs
+//! nothing more.
 
 use std::time::{Duration, Instant};
 
@@ -88,6 +89,21 @@ fn a_job_past_its_wall_clock_time_is_killed_and_named() {
         )
     );
     assert!(took >= Duration::from_secs(1) && took < SLACK, "{took:?}");
+    assert!(pool.pool.running().is_empty());
+}
+
+#[test]
+fn a_wall_clock_limit_longer_than_any_clock_counts_lets_a_job_finish() {
+    // No instant lies that far ahead: the limit is measured, never added.
+    let pool = Pool::start(
+        1,
+        WorkerLimits {
+            wall_secs: u64::MAX,
+            ..roomy()
+        },
+    );
+    let ran = pool.run(input(r#"workload = "report""#, candles(10)));
+    assert_eq!(report(&ran)["bars"], 10);
     assert!(pool.pool.running().is_empty());
 }
 
@@ -208,4 +224,84 @@ fn a_worker_that_floods_its_standard_error_holds_nothing_up() {
     let pool = Pool::start(1, roomy());
     let ran = pool.run(input("workload = \"chatter\"\nkib = 16384", candles(10)));
     assert_eq!(report(&ran)["written"], true);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_worker_that_starts_for_a_job_as_its_pool_stops_runs_nothing() {
+    use quantforge::server::{PoolConfig, WorkerMode, WorkerPool, WorkerProgram};
+
+    use crate::support::{runtime, until};
+
+    const STOPPING: &str = "the server is stopping; submit the job again";
+    // Workers that start only once `go` exists, and that leave `go.waiting`
+    // when they find it missing, so that a job's own worker can be held on
+    // its way while the pool begins to stop.
+    const HELD: &str = r#"
+        [ -e "$0" ] || : > "$0.waiting"
+        while [ ! -e "$0" ]; do /bin/sleep 0.05; done
+        exec "$1" worker
+    "#;
+    let dir = tempfile::tempdir().expect("a directory");
+    let go = dir.path().join("go");
+    let waiting = dir.path().join("go.waiting");
+    std::fs::write(&go, b"").expect("go");
+    let parent = tempfile::tempdir().expect("a directory");
+    let pool = WorkerPool::start(PoolConfig {
+        program: WorkerProgram {
+            path: "/bin/sh".into(),
+            args: vec![
+                "-c".into(),
+                HELD.into(),
+                go.clone().into_os_string(),
+                env!("CARGO_BIN_EXE_quantforge").into(),
+            ],
+        },
+        size: 1,
+        limits: roomy(),
+        mode: WorkerMode::Synthetic { runtime: runtime() },
+        scratch_parent: parent.path().to_path_buf(),
+    })
+    .expect("a started pool");
+    std::fs::remove_file(&go).expect("workers held from now on");
+    let held = input(r#"workload = "sleep""#, candles(1));
+    let held_job = held.job_id.to_string();
+    let cancel = Cancel::new();
+    let (first, second, third) = std::thread::scope(|scope| {
+        // The first job takes the only worker, so the second starts one of
+        // its own, which waits.
+        let first = scope.spawn(|| pool.execute(held, &cancel));
+        until("the first job to run", || {
+            let running = pool.running();
+            running
+                .iter()
+                .any(|job| job.job_id == held_job)
+                .then_some(())
+        });
+        let second = scope
+            .spawn(|| pool.execute(input(r#"workload = "report""#, candles(1)), &Cancel::new()));
+        until("the second job's worker to wait", || {
+            waiting.exists().then_some(())
+        });
+        let stopped = scope.spawn(|| pool.stop());
+        // A third job is answered only once the pool is stopping.
+        let third = pool.execute(input(r#"workload = "report""#, candles(1)), &Cancel::new());
+        std::fs::write(&go, b"").expect("go");
+        let second = second.join().expect("the second job's run");
+        cancel.cancel();
+        let first = first.join().expect("the first job's run");
+        stopped.join().expect("the stop");
+        (first, second, third)
+    });
+    assert_eq!(
+        failure(&third),
+        (ErrorCode::Unavailable, STOPPING.to_string())
+    );
+    assert_eq!(
+        failure(&second),
+        (ErrorCode::Unavailable, STOPPING.to_string())
+    );
+    assert_eq!(first.outcome, WorkerOutcome::Cancelled);
+    assert!(pool.running().is_empty());
+    assert!(!pool.scratch_root().exists());
 }

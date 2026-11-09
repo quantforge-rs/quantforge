@@ -187,6 +187,21 @@ fn a_job_reaches_no_network() {
     }
 }
 
+#[test]
+fn a_job_cannot_leave_its_workers_process_group_where_seccomp_holds() {
+    let pool = Pool::start(1, roomy());
+    if let Some(why) = unenforced(&pool.pool.posture().network) {
+        assert_ne!(std::env::consts::OS, "linux", "{why}");
+        eprintln!("skipping: the workers enforce no seccomp filter here: {why}");
+        return;
+    }
+    let left = report(&pool.run(input(r#"workload = "leave""#, candles(1))));
+    // Without the filter `setpgid` is allowed, and `setsid` fails with
+    // EPERM, a worker leading its own group.
+    let refused = "refused: Permission denied (os error 13)";
+    assert_eq!(left, json!({"setsid": refused, "setpgid": refused}));
+}
+
 #[cfg(unix)]
 #[test]
 fn a_program_a_job_starts_goes_with_its_worker_or_never_starts() {
@@ -263,6 +278,7 @@ fn a_worker_refuses_a_server_of_another_build() {
 /// The report of one job, `params` its workload's, on a worker started
 /// here in `dir` with whatever this process holds open, as a server would
 /// start it.
+#[cfg(unix)]
 fn alone(dir: &Path, params: Value) -> Value {
     let mut child = worker().current_dir(dir).spawn().expect("a worker");
     let mut stdin = child.stdin.take().expect("its input");

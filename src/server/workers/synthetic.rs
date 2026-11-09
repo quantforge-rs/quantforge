@@ -87,6 +87,7 @@ pub(super) fn run(job: &JobFrame, candles: &[Candle], seen: &Seen, posture: &Pos
         Some("connect") => report(&connect(text("address").unwrap_or_default())),
         Some("connect_unix") => report(&connect_unix(text("path").unwrap_or_default())),
         Some("chatter") => report(&chatter(number("kib").unwrap_or(1024))),
+        Some("leave") => report(&leave()),
         Some("spawn") => report(&spawn(
             text("program").unwrap_or_default(),
             job.params
@@ -292,6 +293,26 @@ fn spawn(program: &str, args: Vec<&str>) -> Value {
         "pid": started.as_ref().ok().map(std::process::Child::id),
         "outcome": started.map_or_else(|error| format!("refused: {error}"), |_| "started".to_string()),
     })
+}
+
+/// What the worker is answered when it tries to leave its process group,
+/// the way a process a job started could outlive it: with `setsid`, for a
+/// session of its own, or with `setpgid`, for a group of its own.
+#[cfg(unix)]
+fn leave() -> Value {
+    let answer = |called: rustix::io::Result<()>| match called {
+        Ok(()) => "allowed".to_string(),
+        Err(error) => format!("refused: {}", std::io::Error::from(error)),
+    };
+    json!({
+        "setsid": answer(rustix::process::setsid().map(drop)),
+        "setpgid": answer(rustix::process::setpgid(None, None)),
+    })
+}
+
+#[cfg(not(unix))]
+fn leave() -> Value {
+    json!({ "setsid": "no process groups here", "setpgid": "no process groups here" })
 }
 
 /// Writes `kib` KiB to standard error.

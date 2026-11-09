@@ -1,6 +1,7 @@
 //! The sandbox a worker puts on itself on Linux: closed to the other
 //! processes of its user, its files confined to its scratch directory by
-//! Landlock, and its sockets refused by seccomp.
+//! Landlock, and its sockets and any way out of its process group refused
+//! by seccomp.
 
 use std::path::Path;
 
@@ -20,9 +21,11 @@ const LANDLOCK: ABI = ABI::V6;
 
 /// The system calls a worker may not make: `socket`, so that a job reaches
 /// no network and no local service, the server's database included;
-/// io_uring's, which can open a socket without it; and `ptrace` and
-/// `process_vm_*`, which read and write other processes' memory.
-const REFUSED: [i64; 7] = [
+/// io_uring's, which can open a socket without it; `ptrace` and
+/// `process_vm_*`, which read and write other processes' memory; and
+/// `setsid` and `setpgid`, with which a process a job starts could leave
+/// its worker's process group, which the server kills, and outlive it.
+const REFUSED: [i64; 9] = [
     libc::SYS_socket,
     libc::SYS_io_uring_setup,
     libc::SYS_io_uring_enter,
@@ -30,12 +33,14 @@ const REFUSED: [i64; 7] = [
     libc::SYS_ptrace,
     libc::SYS_process_vm_readv,
     libc::SYS_process_vm_writev,
+    libc::SYS_setsid,
+    libc::SYS_setpgid,
 ];
 
 /// The same calls under their x32 numbers, which a 64-bit process can also
 /// make on a kernel built with x32 (`arch/x86/entry/syscalls/syscall_64.tbl`).
 #[cfg(target_arch = "x86_64")]
-const REFUSED_X32: [i64; 7] = [
+const REFUSED_X32: [i64; 9] = [
     X32 | 41,
     X32 | 425,
     X32 | 426,
@@ -43,6 +48,8 @@ const REFUSED_X32: [i64; 7] = [
     X32 | 521,
     X32 | 539,
     X32 | 540,
+    X32 | 112,
+    X32 | 109,
 ];
 
 #[cfg(target_arch = "x86_64")]

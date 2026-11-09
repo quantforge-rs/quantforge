@@ -1,7 +1,8 @@
 //! A worker's process: started from this binary with nothing of the
 //! server's but three pipes, its frames and the end of its standard error
 //! read on threads of their own, and, once it stops, why. A worker is
-//! killed with its process group, so that a process it started goes too.
+//! killed with its process group, so that a process it started goes too,
+//! which on Linux cannot leave the group.
 
 use std::io::{self, BufReader, Read};
 use std::path::PathBuf;

@@ -92,8 +92,10 @@ files landlock`. In detail:
   reaches no network and no local service, a PostgreSQL server listening on
   a Unix socket included. It cannot use io_uring, which can open a socket
   without the `socket` call, or `ptrace` and `process_vm_readv`/`writev`,
-  which read and write other processes' memory. A refused call fails with
-  `EACCES`.
+  which read and write other processes' memory. Nor can it call `setsid` or
+  `setpgid`, so a process a job starts never leaves the worker's process
+  group, and goes when the server kills that group. A refused call fails
+  with `EACCES`.
 - **Files** (Landlock, Linux 5.13 and later, where the kernel enables it):
   a worker can open, create, change or run nothing outside its scratch
   directory: not another job's scratch directory, not the server's database
@@ -138,8 +140,9 @@ open:
   the server.
 - A job can fill its scratch directory's disk: nothing limits how much it
   writes.
-- A process a job starts is killed with its worker on Linux and macOS,
-  unless it leaves the worker's process group; on Windows it outlives it.
+- On macOS a process a job starts can outlive its worker by leaving the
+  worker's process group, which seccomp refuses on Linux; on Windows every
+  process a job starts outlives its worker.
 - A job that catches `SIGXCPU` is killed a second later and reported as
   stopped by `SIGKILL`, not as out of CPU time.
 
@@ -159,6 +162,7 @@ follows as `job` and its `candles`, and the worker answers `finished` once.
 
 The tests in `tests/workers/` start this build's binary as a worker in a
 synthetic mode, whose workloads stand in for a strategy: they spin, take
-memory, sleep, crash, leave state behind, and try to read files and open
-connections, so that each limit and guard is run into before any user code
-runs in a worker. `serve run` never starts its workers in that mode.
+memory, sleep, crash, leave state behind, and try to read files, open
+connections and leave their process group, so that each limit and guard is
+run into before any user code runs in a worker. `serve run` never starts
+its workers in that mode.

@@ -60,9 +60,16 @@ fn private_dir(path: &Path) -> io::Result<()> {
 }
 
 /// Removes `dir` and everything in it, without following a link a job left
-/// there.
+/// there, and even when a job took its owner's rights to a directory away.
 pub(super) fn wipe(dir: &Path) {
-    match fs::remove_dir_all(dir) {
+    let removed = match fs::remove_dir_all(dir) {
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            open_up(dir);
+            fs::remove_dir_all(dir)
+        }
+        removed => removed,
+    };
+    match removed {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => {
@@ -70,6 +77,27 @@ pub(super) fn wipe(dir: &Path) {
         }
     }
 }
+
+/// Gives the owner every right to `dir` and to each directory under it,
+/// never through a link: a job runs as its server's user, so it can take
+/// them away, and no sandbox here stops it.
+#[cfg(unix)]
+fn open_up(dir: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(next) = pending.pop() {
+        if !fs::symlink_metadata(&next).is_ok_and(|found| found.is_dir()) {
+            continue;
+        }
+        let _ = fs::set_permissions(&next, fs::Permissions::from_mode(0o700));
+        if let Ok(entries) = fs::read_dir(&next) {
+            pending.extend(entries.flatten().map(|entry| entry.path()));
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn open_up(_dir: &Path) {}
 
 /// Writes the bundle's files into `bundle/` in the scratch directory `dir`,
 /// each at its path in the bundle, which the bundle spec keeps inside it.
@@ -121,6 +149,53 @@ mod tests {
                 .mode();
             assert_eq!(mode & 0o777, 0o700, "{}", path.display());
         }
+    }
+
+    #[cfg(unix)]
+    fn set_mode(path: &Path, mode: u32) {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode)).expect("a mode");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_scratch_directory_goes_even_where_its_job_took_the_rights_away() {
+        let parent = tempfile::tempdir().expect("a directory");
+        let dir = parent.path().join("scratch");
+        fs::create_dir_all(dir.join("closed/inner")).expect("directories");
+        fs::write(dir.join("closed/inner/file"), b"x").expect("a file");
+        fs::create_dir(dir.join("read-only")).expect("a directory");
+        fs::write(dir.join("read-only/file"), b"x").expect("a file");
+        set_mode(&dir.join("closed/inner"), 0o000);
+        set_mode(&dir.join("closed"), 0o000);
+        set_mode(&dir.join("read-only"), 0o500);
+        set_mode(&dir, 0o500);
+        wipe(&dir);
+        assert!(!dir.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_out_of_a_scratch_directory_is_never_followed_to_give_rights() {
+        use std::os::unix::fs::PermissionsExt;
+        let parent = tempfile::tempdir().expect("a directory");
+        let outside = parent.path().join("outside");
+        fs::create_dir(&outside).expect("a directory");
+        fs::write(outside.join("kept"), b"x").expect("a file");
+        let dir = parent.path().join("scratch");
+        fs::create_dir_all(dir.join("closed")).expect("directories");
+        std::os::unix::fs::symlink(&outside, dir.join("link")).expect("a link");
+        set_mode(&outside, 0o500);
+        set_mode(&dir.join("closed"), 0o000);
+        wipe(&dir);
+        assert!(!dir.exists());
+        let mode = fs::metadata(&outside)
+            .expect("still there")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o500);
+        assert!(outside.join("kept").exists());
+        set_mode(&outside, 0o700);
     }
 
     #[test]

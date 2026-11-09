@@ -66,8 +66,7 @@ pub(super) fn run(
             );
         }
     };
-    let deadline = Instant::now() + Duration::from_secs(limits.wall_secs);
-    let ran = match watch(process, cancel, deadline) {
+    let ran = match watch(process, cancel, Duration::from_secs(limits.wall_secs)) {
         Watched::Finished(Finished::Succeeded { results }) => succeeded(results),
         Watched::Finished(Finished::Failed { error }) => Ran {
             outcome: WorkerOutcome::Failed(error),
@@ -133,9 +132,13 @@ enum Watched {
     Garbled(String),
 }
 
-fn watch(process: &Process, cancel: &Cancel, deadline: Instant) -> Watched {
+/// Watches the worker until it says how the job ended, the job is
+/// cancelled, the worker stops, or `limit` has passed: measured from now,
+/// never as an instant that far ahead, which may not exist.
+fn watch(process: &Process, cancel: &Cancel, limit: Duration) -> Watched {
+    let started = Instant::now();
     loop {
-        let wait = deadline.saturating_duration_since(Instant::now()).min(POLL);
+        let wait = limit.saturating_sub(started.elapsed()).min(POLL);
         match process.frames.recv_timeout(wait) {
             Ok(Ok(FromWorker::Finished { outcome })) => return Watched::Finished(outcome),
             Ok(Ok(FromWorker::Ready { .. })) => {
@@ -148,7 +151,7 @@ fn watch(process: &Process, cancel: &Cancel, deadline: Instant) -> Watched {
         if cancel.is_cancelled() {
             return Watched::Cancelled;
         }
-        if Instant::now() >= deadline {
+        if started.elapsed() >= limit {
             return Watched::OutOfTime;
         }
     }
