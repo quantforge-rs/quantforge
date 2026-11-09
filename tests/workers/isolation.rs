@@ -260,15 +260,11 @@ fn a_worker_refuses_a_server_of_another_build() {
     );
 }
 
-#[cfg(unix)]
-#[test]
-fn a_worker_given_a_descriptor_closes_it_before_it_runs_anything() {
-    // Inheritable, as a descriptor still being opened by another thread is
-    // as its server starts a worker: nothing marked it close-on-exec.
-    let dir = tempfile::tempdir().expect("a directory");
-    let given = std::fs::File::create(dir.path().join("given")).expect("a file");
-    rustix::io::fcntl_setfd(&given, rustix::io::FdFlags::empty()).expect("an inheritable file");
-    let mut child = worker().current_dir(dir.path()).spawn().expect("a worker");
+/// The report of one job, `params` its workload's, on a worker started
+/// here in `dir` with whatever this process holds open, as a server would
+/// start it.
+fn alone(dir: &Path, params: Value) -> Value {
+    let mut child = worker().current_dir(dir).spawn().expect("a worker");
     let mut stdin = child.stdin.take().expect("its input");
     let mut stdout = child.stdout.take().expect("its output");
     stdin
@@ -289,18 +285,72 @@ fn a_worker_given_a_descriptor_closes_it_before_it_runs_anything() {
             "job_id": job.job_id.to_string(),
             "submission": job.submission,
             "entry": "strategy.py:Hold",
-            "params": {"workload": "inspect"},
+            "params": params,
             "bars": 0,
         })))
         .expect("the job");
     let finished = read_frame(&mut stdout);
     let text = finished["outcome"]["results"][0]["text"]
         .as_str()
-        .expect("a report");
-    let seen: Value = serde_json::from_str(text).expect("a JSON report");
-    assert_eq!(seen["descriptors"], json!([0, 1, 2]), "{seen}");
+        .unwrap_or_else(|| panic!("a report, not {finished}"));
     drop(stdin);
     assert!(exited(&mut child).success());
+    serde_json::from_str(text).expect("a JSON report")
+}
+
+/// `path` opened here and left inheritable, as a descriptor still being
+/// opened by another thread is as its server starts a worker: nothing
+/// marked it close-on-exec.
+#[cfg(unix)]
+fn inheritable(path: &Path) -> std::fs::File {
+    let file = std::fs::File::open(path).expect("a descriptor");
+    rustix::io::fcntl_setfd(&file, rustix::io::FdFlags::empty()).expect("an inheritable one");
+    file
+}
+
+#[cfg(unix)]
+#[test]
+fn a_worker_given_a_descriptor_closes_it_before_it_runs_anything() {
+    let dir = tempfile::tempdir().expect("a directory");
+    std::fs::write(dir.path().join("given"), b"given").expect("a file");
+    let _given = inheritable(&dir.path().join("given"));
+    let seen = alone(dir.path(), json!({"workload": "inspect"}));
+    assert_eq!(seen["descriptors"], json!([0, 1, 2]), "{seen}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_worker_given_a_directory_closes_it_even_the_one_it_lists_descriptors_in() {
+    use std::os::fd::AsRawFd;
+
+    let dir = tempfile::tempdir().expect("a directory");
+    let listed = if cfg!(target_os = "linux") {
+        "/proc/self/fd"
+    } else {
+        "/dev/fd"
+    };
+    // One at a time: a descriptor given alone is the one a worker might
+    // miss, since any other makes it close them all.
+    for path in [Path::new(listed), dir.path()] {
+        let given = inheritable(path);
+        let number = u64::try_from(given.as_raw_fd()).expect("a descriptor");
+        // Looked up by number, apart from any listing: its standard input
+        // is open, and what it was given is not.
+        let probed = alone(dir.path(), json!({"workload": "probe", "fds": [0, number]}));
+        assert_eq!(
+            probed["open"],
+            json!([{"fd": 0, "open": true}, {"fd": number, "open": false}]),
+            "{}: {probed}",
+            path.display()
+        );
+        let seen = alone(dir.path(), json!({"workload": "inspect"}));
+        assert_eq!(
+            seen["descriptors"],
+            json!([0, 1, 2]),
+            "{}: {seen}",
+            path.display()
+        );
+    }
 }
 
 #[test]

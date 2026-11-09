@@ -71,6 +71,13 @@ pub(super) fn run(job: &JobFrame, candles: &[Candle], seen: &Seen, posture: &Pos
         })),
         Some("expect") => expect(candles, text("digest").unwrap_or_default()),
         Some("inspect") => report(&inspect(seen, posture)),
+        Some("probe") => report(&probe(
+            job.params
+                .get("fds")
+                .and_then(Value::as_array)
+                .map(|fds| fds.iter().filter_map(Value::as_u64).collect())
+                .unwrap_or_default(),
+        )),
         Some("plant") => {
             PLANTED.store(true, Ordering::SeqCst);
             let written = std::fs::write(PLANTED_FILE, b"left by an earlier job");
@@ -183,6 +190,25 @@ fn inspect(seen: &Seen, posture: &Posture) -> Value {
         "scratch": listing(Path::new(".")),
         "posture": posture,
     })
+}
+
+/// Whether each of the descriptors `fds` is open now, looked up by its
+/// number, whatever the listing of them says.
+#[cfg(unix)]
+fn probe(fds: Vec<u64>) -> Value {
+    let open: Vec<Value> = fds
+        .into_iter()
+        .map(|fd| {
+            let path = Path::new(isolation::LISTED).join(fd.to_string());
+            json!({ "fd": fd, "open": std::fs::metadata(path).is_ok() })
+        })
+        .collect();
+    json!({ "open": open })
+}
+
+#[cfg(not(unix))]
+fn probe(fds: Vec<u64>) -> Value {
+    json!({ "fds": fds, "open": "no descriptor numbers here" })
 }
 
 /// Every file under `dir`, by its path from it, in order.

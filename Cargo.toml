@@ -72,7 +72,7 @@ zstd = { version = "0.14", default-features = false }
 # descriptor it was given but its three pipes.
 [target.'cfg(unix)'.dependencies]
 close_fds = "0.3"
-rustix = { version = "1", features = ["process"] }
+rustix = { version = "1", features = ["fs", "process"] }
 
 # A job worker's sandbox on Linux: files confined to its scratch directory
 # (Landlock), and no sockets (seccomp, which names syscalls by libc's numbers).

@@ -148,27 +148,35 @@ pub(super) fn isolate(_limits: Limits, _scratch: &Path) -> Posture {
     }
 }
 
+/// The directory that lists this process's descriptors, each by its number.
+#[cfg(unix)]
+pub(super) const LISTED: &str = if cfg!(target_os = "linux") {
+    "/proc/self/fd"
+} else {
+    "/dev/fd"
+};
+
 /// The descriptors open in this process, but the one that lists them, which
-/// is the listed directory itself.
+/// is known by its number: a descriptor the process was given on the same
+/// directory is listed like any other.
 #[cfg(unix)]
 pub(super) fn descriptors() -> Option<Vec<u64>> {
-    use std::os::unix::fs::MetadataExt;
+    use rustix::fs::{CWD, Dir, Mode, OFlags, openat};
+    use std::os::fd::AsRawFd;
 
-    let listed = if cfg!(target_os = "linux") {
-        Path::new("/proc/self/fd")
-    } else {
-        Path::new("/dev/fd")
-    };
-    let itself = std::fs::metadata(listed).ok()?;
+    let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC;
+    let listing = openat(CWD, LISTED, flags, Mode::empty()).ok()?;
+    let itself = u64::try_from(listing.as_raw_fd()).ok()?;
+    let mut entries = Dir::new(listing).ok()?;
     let mut open = Vec::new();
-    for entry in std::fs::read_dir(listed).ok()? {
+    while let Some(entry) = entries.read() {
         let entry = entry.ok()?;
-        let Ok(number) = entry.file_name().to_string_lossy().parse::<u64>() else {
-            continue;
-        };
-        let lister = std::fs::metadata(entry.path())
-            .is_ok_and(|seen| seen.dev() == itself.dev() && seen.ino() == itself.ino());
-        if !lister {
+        let number = entry
+            .file_name()
+            .to_str()
+            .ok()
+            .and_then(|name| name.parse::<u64>().ok());
+        if let Some(number) = number.filter(|&number| number != itself) {
             open.push(number);
         }
     }
@@ -214,6 +222,18 @@ mod tests {
         );
         assert!(posture.cpu.is_enforced());
         assert!(!posture.files.is_enforced());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_descriptor_on_the_listed_directory_is_listed_like_any_other() {
+        use std::os::fd::AsRawFd;
+
+        let held = std::fs::File::open(LISTED).expect("the listed directory");
+        let number = u64::try_from(held.as_raw_fd()).expect("a descriptor");
+        let open = descriptors().expect("a listing");
+        assert!(open.contains(&number), "{open:?} leaves out {number}");
+        assert!(open.starts_with(&[0, 1, 2]), "{open:?}");
     }
 
     #[test]
