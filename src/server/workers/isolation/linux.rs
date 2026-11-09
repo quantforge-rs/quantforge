@@ -38,19 +38,37 @@ const REFUSED: [i64; 9] = [
 ];
 
 /// The same calls under their x32 numbers, which a 64-bit process can also
-/// make on a kernel built with x32 (`arch/x86/entry/syscalls/syscall_64.tbl`).
+/// make on a kernel built with x32 (`arch/x86/entry/syscalls/syscall_64.tbl`),
+/// each beside the call it stands for, in the order of `REFUSED`.
 #[cfg(target_arch = "x86_64")]
-const REFUSED_X32: [i64; 9] = [
-    X32 | 41,
-    X32 | 425,
-    X32 | 426,
-    X32 | 427,
-    X32 | 521,
-    X32 | 539,
-    X32 | 540,
-    X32 | 112,
-    X32 | 109,
+const REFUSED_X32: [(i64, i64); 9] = [
+    (libc::SYS_socket, X32 | 41),
+    (libc::SYS_io_uring_setup, X32 | 425),
+    (libc::SYS_io_uring_enter, X32 | 426),
+    (libc::SYS_io_uring_register, X32 | 427),
+    (libc::SYS_ptrace, X32 | 521),
+    (libc::SYS_process_vm_readv, X32 | 539),
+    (libc::SYS_process_vm_writev, X32 | 540),
+    (libc::SYS_setsid, X32 | 112),
+    (libc::SYS_setpgid, X32 | 109),
 ];
+
+// Every call refused has its x32 number refused too, or the build fails.
+#[cfg(target_arch = "x86_64")]
+const _: () = {
+    assert!(
+        REFUSED_X32.len() == REFUSED.len(),
+        "every call in REFUSED needs its x32 number in REFUSED_X32"
+    );
+    let mut call = 0;
+    while call < REFUSED.len() {
+        assert!(
+            REFUSED_X32[call].0 == REFUSED[call],
+            "REFUSED_X32 pairs each x32 number with its call, in the order of REFUSED"
+        );
+        call += 1;
+    }
+};
 
 #[cfg(target_arch = "x86_64")]
 const X32: i64 = 0x4000_0000;
@@ -92,7 +110,7 @@ pub(super) fn refuse_sockets() -> Guard {
     };
     let refused = REFUSED.iter();
     #[cfg(target_arch = "x86_64")]
-    let refused = refused.chain(REFUSED_X32.iter());
+    let refused = refused.chain(REFUSED_X32.iter().map(|(_, x32)| x32));
     let filter = SeccompFilter::new(
         refused.map(|&number| (number, Vec::new())).collect(),
         SeccompAction::Allow,
