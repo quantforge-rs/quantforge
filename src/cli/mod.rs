@@ -1,9 +1,9 @@
 //! Command-line interface: the root parser and its `parse()` entry point,
 //! the command tree, and the `run()` dispatch. Each command group owns a
 //! module mirroring its command path (`backtest`, `data`, `monitor`, `serve`,
-//! `store`, `trade`).
+//! `store`, `trade`), and `worker`, the hidden command a job's worker runs.
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::error::ErrorKind;
 use clap::parser::ValueSource;
@@ -20,6 +20,7 @@ mod serve;
 mod storage_args;
 mod store;
 mod trade;
+pub(crate) mod worker;
 
 use context::AppContext;
 
@@ -89,8 +90,16 @@ fn credentials_on_command_line(matches: &ArgMatches) -> bool {
         .any(|id| matches.value_source(id) == Some(ValueSource::CommandLine))
 }
 
-/// Build the per-invocation context and dispatch the parsed command.
+/// Why `quantforge worker` refuses to run as an ordinary command.
+const WORKER_ONLY: &str =
+    "`quantforge worker` runs only as a job's worker, which `serve run` starts";
+
+/// Build the per-invocation context and dispatch the parsed command. A
+/// worker never comes here: `main` runs it before any runtime starts.
 pub(crate) async fn run(cli: Cli) -> Result<()> {
+    if cli.is_worker() {
+        bail!(WORKER_ONLY);
+    }
     let ctx = AppContext::init(&cli)?;
 
     match cli.command {
@@ -113,6 +122,7 @@ pub(crate) async fn run(cli: Cli) -> Result<()> {
         }
         Command::Serve { command } => serve::dispatch(&ctx, command).await?,
         Command::Store { command } => store::dispatch(&ctx, command)?,
+        Command::Worker => bail!(WORKER_ONLY),
     }
 
     Ok(())
@@ -256,6 +266,17 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: StoreCommand,
     },
+
+    /// A job's worker, which `serve run` starts; never run by hand.
+    #[command(hide = true)]
+    Worker,
+}
+
+impl Cli {
+    /// Whether this process is a job's worker.
+    pub(crate) fn is_worker(&self) -> bool {
+        matches!(self.command, Command::Worker)
+    }
 }
 
 #[cfg(test)]

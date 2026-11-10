@@ -34,6 +34,7 @@ use crate::protocol::bundle::BundleLimits;
 use crate::protocol::{ErrorBody, ErrorCode};
 
 pub(super) use routes::{cancel, job, list, submit, upload};
+pub(in crate::server) use worker::NO_RUNTIME;
 pub use worker::{Cancel, JobInput, JobWorker, NoRuntime, WorkerOutcome};
 
 /// How many jobs one server runs at once, and how long a job's range may

@@ -36,7 +36,9 @@
 //! thread, so a slow store never stalls the server's other requests; a
 //! request that waits longer than [`StoreLimits::wait`] is answered `503`
 //! with `Retry-After`. A job's worker never sees the store: the server reads
-//! everything the job runs on and writes how it ended.
+//! everything the job runs on and writes how it ended. `serve run` runs each
+//! job in a worker process of its own, from a [`WorkerPool`], within the
+//! limits of [`WorkerLimits`].
 //!
 //! - `store`: the store and the turns at it.
 //! - `history`: the markets and candles routes.
@@ -45,6 +47,7 @@
 //! - `segment`: the segment route, its caching headers, and the check of
 //!   the bytes it sends.
 //! - `jobs`: the job routes, the queue, and what runs a job.
+//! - `workers`: the processes that run jobs, one per job, and their limits.
 //! - `refusal`: every failed answer, and what a storage failure tells a
 //!   client.
 
@@ -56,6 +59,7 @@ mod selection;
 mod store;
 #[cfg(test)]
 mod tests;
+mod workers;
 
 use std::fmt::Debug;
 use std::io;
@@ -72,6 +76,11 @@ use crate::protocol::{MIN_SUPPORTED, PROTO_VERSION, ProtoVersion, ServerVersion}
 pub use history::{DEFAULT_MAX_SPAN_BARS, DEFAULT_MAX_TIP_BARS, History, HistoryLimits};
 pub use jobs::{Cancel, JobInput, JobLimits, JobWorker, Jobs, NoRuntime, WorkerOutcome};
 pub use store::{ServedStore, ServerStore, StoreLimits};
+pub use workers::{
+    DEFAULT_JOB_CPU_SECS, DEFAULT_JOB_MEMORY_MIB, DEFAULT_JOB_WALL_SECS, Execution, Guard,
+    PoolConfig, Posture, ResultFile, RunningWorker, WORKER_COMMAND, WorkerError, WorkerLimits,
+    WorkerMode, WorkerPool, WorkerProgram, protect_server, run_worker,
+};
 
 /// Answers every route on `listener` until `shutdown` resolves, the history
 /// routes from `history` and the job routes from `jobs`. Then it stops

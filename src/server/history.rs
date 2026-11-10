@@ -267,7 +267,7 @@ fn segment_entry(market: &MarketId, segment: &SegmentRef) -> SegmentEntry {
     }
 }
 
-fn bar(candle: &Candle) -> Bar {
+pub(super) fn bar(candle: &Candle) -> Bar {
     Bar {
         open_time_ms: candle.open_time_ms,
         close_time_ms: candle.close_time_ms,
