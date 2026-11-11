@@ -37,7 +37,7 @@ pub(super) struct Step {
 }
 
 /// The chain, in order. A step's DDL never changes once a build ran it.
-pub(super) const STEPS: [Step; 2] = [
+pub(super) const STEPS: [Step; 3] = [
     Step {
         to: 5,
         apply: step_5_schema,
@@ -45,6 +45,10 @@ pub(super) const STEPS: [Step; 2] = [
     Step {
         to: 6,
         apply: step_6_jobs,
+    },
+    Step {
+        to: 7,
+        apply: step_7_job_results,
     },
 ];
 
@@ -253,4 +257,9 @@ fn step_5_schema<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
 /// Schema 6 (QUA-358): bundles and jobs, and the byte-ordered keys.
 fn step_6_jobs<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
     Box::pin(async move { transaction.batch_execute(schema::SCHEMA_6).await })
+}
+
+/// Schema 7 (QUA-356): the results of the jobs that succeeded.
+fn step_7_job_results<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
+    Box::pin(async move { transaction.batch_execute(schema::SCHEMA_7).await })
 }

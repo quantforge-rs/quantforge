@@ -148,12 +148,12 @@ pub use model::{
     ExchangeId, ExchangeOrder, ExecutionMode, Fill, IdentitySource, Interval, JobId, JobOutcome,
     JobPhase, JobRecord, KeyFingerprint, KlineRequest, LegacyRun, MarketCoverage, MarketId,
     MarketOrderRequest, ModelError, NewJob, OrderQueryRequest, OrderStatus, PositionState,
-    RunIdentity, RunStatus, SchemaMigration, SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh,
-    SegmentTip, Side, StoreActivation, StoreId, StoreIdentity, Symbol, SymbolRules, TargetPosition,
-    TimestampMs, TransferRecord, TransferState, ValidationIssue, ValidationReport, Venue,
-    VenueAccountId, VenueOrderId, VenueTradeId, decimal_from_f64, decimal_to_f64, describe_account,
-    describe_environment, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms, round_down_to_step,
-    validate_candles,
+    ResultHash, RunIdentity, RunStatus, SchemaMigration, SegmentHash, SegmentPlan, SegmentRef,
+    SegmentRefresh, SegmentTip, Side, StoreActivation, StoreId, StoreIdentity, StoredResult,
+    Symbol, SymbolRules, TargetPosition, TimestampMs, TransferRecord, TransferState,
+    ValidationIssue, ValidationReport, Venue, VenueAccountId, VenueOrderId, VenueTradeId,
+    decimal_from_f64, decimal_to_f64, describe_account, describe_environment, ms_to_rfc3339,
+    now_utc_ms, parse_rfc3339_to_ms, round_down_to_step, validate_candles,
 };
 
 /// The seams. An out-of-tree exchange or storage backend implements the
@@ -208,7 +208,7 @@ pub use sdk::{
 /// `EngineError` folding the strategy, exchange and storage failures into
 /// one channel.
 pub use engine::EngineError;
-pub use engine::backtest::{BacktestConfig, BacktestEngine, BacktestResult};
+pub use engine::backtest::{BacktestConfig, BacktestEngine, BacktestResult, EquityPoint};
 pub use engine::data_sync::{DataSyncConfig, DataSyncEngine, DataSyncSummary};
 pub use engine::live::{LiveTradeConfig, LiveTradeEngine, LiveTradeSummary};
 pub use engine::transfer::{

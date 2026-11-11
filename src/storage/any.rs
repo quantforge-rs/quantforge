@@ -12,8 +12,8 @@ use std::time::Duration;
 use crate::model::{
     BotRunState, BundleHash, Candle, ClosedTrade, DurabilityReport, Environment, ExchangeOrder,
     ExecutionMode, JobId, JobOutcome, JobRecord, LegacyRun, MarketCoverage, MarketId, NewJob,
-    RunIdentity, SchemaMigration, SegmentHash, SegmentPlan, SegmentRefresh, StoreIdentity,
-    TimestampMs,
+    ResultHash, RunIdentity, SchemaMigration, SegmentHash, SegmentPlan, SegmentRefresh,
+    StoreIdentity, TimestampMs,
 };
 use crate::ports::{
     CandleQuery, CandleStore, JobStore, RunJournalStore, SegmentStore, StorageError, StoreControl,
@@ -255,6 +255,10 @@ impl JobStore for AnyStore {
         finished_at_ms: TimestampMs,
     ) -> Result<bool, StorageError> {
         delegate!(self, store => store.finish_job(job_id, outcome, finished_at_ms))
+    }
+
+    fn load_result(&self, hash: &ResultHash) -> Result<Option<Vec<u8>>, StorageError> {
+        delegate!(self, store => store.load_result(hash))
     }
 
     fn cancel_job(

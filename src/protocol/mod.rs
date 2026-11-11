@@ -12,6 +12,9 @@
 //! # Surfaces
 //!
 //! - [`jobs`]: remote backtests of a Python strategy bundle, over HTTP.
+//! - [`results`]: what a job produces: its metrics, its trades and its
+//!   equity curve, as the files a client downloads; a table's bytes are
+//!   the [result spec].
 //! - [`bundle`]: the strategy bundle a job runs, uploaded as its canonical
 //!   tar and named by its code hash; its rules are the [bundle spec].
 //! - [`segments`]: stored candles over HTTP: the markets a server stores,
@@ -22,16 +25,18 @@
 //!
 //! [bundle spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md>
 //! [segment spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md>
+//! [result spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/result-spec.md>
 //!
 //! # Encoding
 //!
 //! - Every message is one JSON object in UTF-8: an HTTP body, or a WebSocket
 //!   text frame. A list is never sent bare but inside an object, such as
-//!   [`segments::MarketIndex`], so that fields can join it later. Three
+//!   [`segments::MarketIndex`], so that fields can join it later. Four
 //!   bodies are not JSON: a bundle upload, which is its canonical tar, as
 //!   [`bundle::BUNDLE_MEDIA_TYPE`]; a segment, which is one zstd frame, as
-//!   [`segments::SEGMENT_MEDIA_TYPE`]; and the plain-text `ok` of
-//!   `GET /healthz`.
+//!   [`segments::SEGMENT_MEDIA_TYPE`]; a job's trades or equity curve,
+//!   which is an Arrow IPC file, as [`results::ARROW_FILE_MEDIA_TYPE`]; and
+//!   the plain-text `ok` of `GET /healthz`.
 //! - Field names and enum values are `snake_case`. In Rust, the serde name
 //!   of each field and variant here is its wire name.
 //! - Every integer is below 2^53 in magnitude, so JavaScript reads it
@@ -57,7 +62,7 @@
 //!
 //! # Versions
 //!
-//! One protocol version covers all three surfaces. A build speaks every
+//! One protocol version covers every surface. A build speaks every
 //! version from [`MIN_SUPPORTED`] to [`PROTO_VERSION`], its
 //! [`VersionRange::SUPPORTED`].
 //!
@@ -120,6 +125,7 @@ mod discovery;
 mod errors;
 mod hash;
 pub mod jobs;
+pub mod results;
 pub mod segments;
 pub mod stream;
 mod version;

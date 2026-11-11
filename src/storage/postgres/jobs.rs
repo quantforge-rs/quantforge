@@ -1,7 +1,8 @@
-//! The job store on PostgreSQL, with SQLite's answers: each change is one
-//! statement that names the phase it moves a job from and carries the copy
-//! guard, and a claim skips a job another claim holds locked, so stores
-//! claiming at once each get a job of their own.
+//! The job store on PostgreSQL, with SQLite's answers: each change names
+//! the phase it moves a job from and carries the copy guard, and a claim
+//! skips a job another claim holds locked, so stores claiming at once each
+//! get a job of their own. A job's end and the results it names are one
+//! transaction.
 
 use tokio_postgres::error::SqlState;
 use tokio_postgres::types::{ToSql, Type};
@@ -9,9 +10,13 @@ use tokio_postgres::{GenericClient, IsolationLevel, Row};
 
 use super::bridge::Effect;
 use super::{PostgresStore, copying, limit};
-use crate::model::{BundleHash, JobId, JobOutcome, JobPhase, JobRecord, NewJob, TimestampMs};
+use crate::model::{
+    BundleHash, JobId, JobOutcome, JobPhase, JobRecord, NewJob, ResultHash, TimestampMs,
+};
 use crate::ports::{JobStore, StorageError};
-use crate::storage::jobs::{COLUMNS, JobRow, already_recorded, no_bundle, outcome_columns};
+use crate::storage::jobs::{
+    COLUMNS, JobRow, already_recorded, no_bundle, outcome_columns, outcome_results,
+};
 
 const STORE_BUNDLE: &str = concat!(
     r#"
@@ -53,6 +58,15 @@ const FINISH: &str = concat!(
     WHERE job_id = $1 AND state = $6 AND "#,
     copying::not_copying!()
 );
+
+/// Run after `FINISH` in its transaction, which holds the guard by then.
+const STORE_RESULT: &str = r#"
+    INSERT INTO job_results(hash, size_bytes, data, stored_at_ms)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (hash) DO NOTHING
+    "#;
+
+const LOAD_RESULT: &str = "SELECT data FROM job_results WHERE hash = $1";
 
 const CANCEL: &str = concat!(
     r#"
@@ -232,9 +246,26 @@ impl JobStore for PostgresStore {
             results.map(str::to_string),
             failure.map(str::to_string),
         );
+        let stored: Vec<(String, i64, Vec<u8>)> = outcome_results(outcome)
+            .iter()
+            .map(|result| {
+                (
+                    result.hash.to_string(),
+                    i64::try_from(result.size_bytes).unwrap_or(i64::MAX),
+                    result.data.clone(),
+                )
+            })
+            .collect();
         self.bridge.execute(Effect::Write, move |client| {
             Box::pin(async move {
-                let finished = client
+                // The end and the results it names, in one transaction: a
+                // job never shows results the store does not hold.
+                let transaction = client
+                    .build_transaction()
+                    .isolation_level(IsolationLevel::ReadCommitted)
+                    .start()
+                    .await?;
+                let finished = transaction
                     .execute_typed(
                         FINISH,
                         &[
@@ -247,15 +278,42 @@ impl JobStore for PostgresStore {
                         ],
                     )
                     .await?;
-                if finished > 0 {
-                    return Ok(Ok(true));
+                if finished == 0 {
+                    return Ok(match copying::refusal(&*transaction).await? {
+                        Some(refused) => Err(refused),
+                        None => Ok(false),
+                    });
                 }
-                Ok(match copying::refusal(&**client).await? {
-                    Some(refused) => Err(refused),
-                    None => Ok(false),
-                })
+                for (hash, size, data) in &stored {
+                    transaction
+                        .execute_typed(
+                            STORE_RESULT,
+                            &[
+                                (hash, Type::TEXT),
+                                (size, Type::INT8),
+                                (data, Type::BYTEA),
+                                (&finished_at_ms, Type::INT8),
+                            ],
+                        )
+                        .await?;
+                }
+                transaction.commit().await?;
+                Ok(Ok(true))
             })
         })?
+    }
+
+    fn load_result(&self, hash: &ResultHash) -> Result<Option<Vec<u8>>, StorageError> {
+        let hash = hash.to_string();
+        self.bridge.execute(Effect::Read, move |client| {
+            Box::pin(async move {
+                client
+                    .query_typed_opt(LOAD_RESULT, &[(&hash, Type::TEXT)])
+                    .await?
+                    .map(|row| row.try_get(0))
+                    .transpose()
+            })
+        })
     }
 
     fn cancel_job(

@@ -45,7 +45,7 @@ The public surface is layered as Rust modules, innermost first:
 - `storage` - persistence adapters, one namespace per backend, `sqlite` and `postgres`; `settings` and `factory`, which select a backend and open it; and `segments`, the [segment format](https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md) every backend packs a market's closed candles into, window by window, as immutable segments named by their hash
 - `sdk` - the strategy trait and its context, indicator math, and built-in strategies
 - `engine` - the drivers: `engine::backtest`, `engine::data_sync`, and `engine::live`
-- `protocol` - stands apart from the layers above: the versioned wire types between QuantForge instances, for remote backtest jobs, candle segments, and the live bar stream, and the [strategy bundle](https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md) a remote backtest runs; its rustdoc is the wire specification
+- `protocol` - stands apart from the layers above: the versioned wire types between QuantForge instances, for remote backtest jobs, candle segments, and the live bar stream, the [strategy bundle](https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md) a remote backtest runs, and the [result files](https://github.com/quantforge-rs/quantforge/blob/main/docs/result-spec.md) it produces; its rustdoc is the wire specification
 - `server` - the HTTP server `serve run` hosts for other QuantForge instances, speaking `protocol`: its routes, the history they serve from the selected store, the backtest job queue it keeps there, and a shutdown that finishes the requests in progress
 
 The `quantforge` binary adds `cli`, a module tree that mirrors the command
@@ -333,6 +333,11 @@ canonical tar, `POST /v1/backtests` submits a job on candles the store
 holds, `GET /v1/backtests` and `GET /v1/backtests/{job_id}` say where jobs
 stand, and `POST /v1/backtests/{job_id}/cancel` cancels one (see the
 [job protocol](https://github.com/quantforge-rs/quantforge/blob/main/src/protocol/jobs/mod.rs)).
+A job that succeeds keeps its result in the store with it:
+`GET /v1/backtests/{job_id}/result` answers its metrics and where its files
+are, `metrics.json`, and `trades.arrow` and `equity.arrow`, Arrow files with
+every decimal as its exact text
+([result spec](https://github.com/quantforge-rs/quantforge/blob/main/docs/result-spec.md)).
 Jobs run `--job-concurrency` at a time, half the CPU cores unless set, each
 in a worker process of its own: started ahead of the job, held to
 `--job-cpu-secs`, `--job-memory-mib` and `--job-wall-secs`, given nothing

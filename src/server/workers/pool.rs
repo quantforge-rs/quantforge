@@ -146,23 +146,16 @@ impl WorkerPool {
         let job = input.job_id.to_string();
         let (running, mut worker) = match self.take(&job, cancel) {
             Ok(taken) => taken,
-            Err(outcome) => {
-                return Execution {
-                    outcome,
-                    results: Vec::new(),
-                    pid: None,
-                };
-            }
+            Err(outcome) => return Execution { outcome, pid: None },
         };
         let pid = worker.process.pid;
-        let ran = job::run(&mut worker, input, cancel, &self.inner.config.limits);
+        let outcome = job::run(&mut worker, input, cancel, &self.inner.config.limits);
         worker.process.retire();
         drop(worker);
         drop(running);
         self.replenish();
         Execution {
-            outcome: ran.outcome,
-            results: ran.results,
+            outcome,
             pid: Some(pid),
         }
     }

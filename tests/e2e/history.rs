@@ -53,6 +53,10 @@ impl Fetched {
     pub(crate) fn text(&self) -> String {
         String::from_utf8_lossy(&self.body).into_owned()
     }
+
+    pub(crate) fn body(&self) -> &[u8] {
+        &self.body
+    }
 }
 
 /// `GET path`, with `extra` headers, on a connection the server closes once

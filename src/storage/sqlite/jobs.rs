@@ -1,14 +1,19 @@
-//! The job store on SQLite: the bundles a server was sent and its jobs,
-//! each change one statement that names the phase it moves a job from, so
-//! a job is claimed once and never leaves a final phase.
+//! The job store on SQLite: the bundles a server was sent, its jobs and
+//! their results, each change one statement or transaction that names the
+//! phase it moves a job from, so a job is claimed once and never leaves a
+//! final phase.
 
 use rusqlite::{ErrorCode, OptionalExtension, Row, TransactionBehavior, params};
 
 use super::SqliteStore;
 use super::errors::{commit_failed, failed};
-use crate::model::{BundleHash, JobId, JobOutcome, JobPhase, JobRecord, NewJob, TimestampMs};
+use crate::model::{
+    BundleHash, JobId, JobOutcome, JobPhase, JobRecord, NewJob, ResultHash, TimestampMs,
+};
 use crate::ports::{JobStore, StorageError};
-use crate::storage::jobs::{COLUMNS, JobRow, already_recorded, no_bundle, outcome_columns};
+use crate::storage::jobs::{
+    COLUMNS, JobRow, already_recorded, no_bundle, outcome_columns, outcome_results,
+};
 
 // Indentation inside this literal is load-bearing: SQLite records the exact
 // statement text in `sqlite_master`, so reformatting it would change the
@@ -36,6 +41,16 @@ pub(super) const SCHEMA_DDL: &str = r#"
 
                 CREATE INDEX IF NOT EXISTS idx_jobs_state
                   ON jobs(state, seq);
+"#;
+
+// Indentation inside this literal is load-bearing, as above.
+pub(super) const RESULTS_DDL: &str = r#"
+                CREATE TABLE IF NOT EXISTS job_results (
+                  hash TEXT PRIMARY KEY,
+                  size_bytes INTEGER NOT NULL,
+                  data BLOB NOT NULL,
+                  stored_at_ms INTEGER NOT NULL
+                );
 "#;
 
 fn job_row(row: &Row<'_>) -> rusqlite::Result<JobRow> {
@@ -178,8 +193,13 @@ impl JobStore for SqliteStore {
         finished_at_ms: TimestampMs,
     ) -> Result<bool, StorageError> {
         let (phase, results, failure) = outcome_columns(outcome);
-        let connection = self.open()?;
-        let finished = connection
+        let mut connection = self.open()?;
+        // The end and the results it names, in one transaction: a job never
+        // shows results the store does not hold.
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(failed)?;
+        let finished = transaction
             .execute(
                 r#"
                 UPDATE jobs SET state = ?2, finished_at_ms = ?3, results_json = ?4, failure_json = ?5
@@ -194,8 +214,41 @@ impl JobStore for SqliteStore {
                     JobPhase::Running.as_str()
                 ],
             )
-            .map_err(commit_failed)?;
-        Ok(finished > 0)
+            .map_err(failed)?;
+        if finished == 0 {
+            return Ok(false);
+        }
+        for result in outcome_results(outcome) {
+            transaction
+                .execute(
+                    r#"
+                    INSERT INTO job_results(hash, size_bytes, data, stored_at_ms)
+                    VALUES (?1, ?2, ?3, ?4)
+                    ON CONFLICT(hash) DO NOTHING
+                    "#,
+                    params![
+                        result.hash.to_string(),
+                        i64::try_from(result.size_bytes).unwrap_or(i64::MAX),
+                        result.data,
+                        finished_at_ms
+                    ],
+                )
+                .map_err(failed)?;
+        }
+        transaction.commit().map_err(commit_failed)?;
+        Ok(true)
+    }
+
+    fn load_result(&self, hash: &ResultHash) -> Result<Option<Vec<u8>>, StorageError> {
+        let connection = self.open()?;
+        connection
+            .query_row(
+                "SELECT data FROM job_results WHERE hash = ?1",
+                [hash.to_string()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(failed)
     }
 
     fn cancel_job(

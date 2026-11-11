@@ -3,7 +3,7 @@
 
 use std::str::FromStr;
 
-use crate::model::{BundleHash, JobId, JobOutcome, JobPhase, JobRecord};
+use crate::model::{BundleHash, JobId, JobOutcome, JobPhase, JobRecord, StoredResult};
 use crate::ports::StorageError;
 
 /// A job's columns, in the order every read selects them.
@@ -55,12 +55,20 @@ impl JobRow {
 /// The phase an outcome ends a job in, and its two JSON columns.
 pub(crate) fn outcome_columns(outcome: &JobOutcome) -> (JobPhase, Option<&str>, Option<&str>) {
     match outcome {
-        JobOutcome::Succeeded { results_json } => {
+        JobOutcome::Succeeded { results_json, .. } => {
             (JobPhase::Succeeded, Some(results_json.as_str()), None)
         }
         JobOutcome::Failed { failure_json } => {
             (JobPhase::Failed, None, Some(failure_json.as_str()))
         }
+    }
+}
+
+/// The files an outcome stores: a succeeded job's results.
+pub(crate) fn outcome_results(outcome: &JobOutcome) -> &[StoredResult] {
+    match outcome {
+        JobOutcome::Succeeded { results, .. } => results,
+        JobOutcome::Failed { .. } => &[],
     }
 }
 

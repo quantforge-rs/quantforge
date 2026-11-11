@@ -25,6 +25,10 @@
 //! `docs/worker-isolation.md` says what each guard covers and what none
 //! does yet.
 //!
+//! A backtest that ran to its end sends its server its summary and the
+//! rows of its trades and its equity curve, never files: the server checks
+//! every row as it reads it, and writes the result files itself.
+//!
 //! - `pool`: the workers a server keeps, and a job's run on one.
 //! - `config`: what a pool starts with, and what a run answers.
 //! - `job`: one job's run on a worker.
@@ -32,9 +36,11 @@
 //! - `frames`: what a server and a worker say to each other.
 //! - `scratch`: the scratch directories.
 //! - `child`: the worker's side.
+//! - `backtest`: the engine's run over a job's candles, in the worker.
 //! - `isolation`: the limits and sandbox a worker puts on itself.
 //! - `synthetic`: workloads the tests run in place of a strategy.
 
+mod backtest;
 mod child;
 mod config;
 mod frames;
@@ -46,9 +52,7 @@ mod scratch;
 mod synthetic;
 
 pub use child::{WorkerError, run_worker};
-pub use config::{
-    Execution, PoolConfig, ResultFile, RunningWorker, WorkerLimits, WorkerMode, WorkerProgram,
-};
+pub use config::{Execution, PoolConfig, RunningWorker, WorkerLimits, WorkerMode, WorkerProgram};
 pub use isolation::{Guard, Posture, protect_server};
 pub use pool::WorkerPool;
 

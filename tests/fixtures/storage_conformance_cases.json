@@ -5989,7 +5989,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 6,
+      "schema_version": 7,
       "environment": null,
       "activation": "inactive",
       "activation_epoch": 0
@@ -5999,7 +5999,7 @@
      "op": "migrations",
      "expect": [
       {
-       "to_version": 6,
+       "to_version": 7,
        "from_version": 0
       }
      ]
@@ -6010,7 +6010,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 6,
+      "schema_version": 7,
       "environment": null,
       "activation": "inactive",
       "activation_epoch": 0
@@ -6044,7 +6044,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 6,
+      "schema_version": 7,
       "environment": "testnet",
       "activation": "inactive",
       "activation_epoch": 0
@@ -7361,6 +7361,475 @@
        "started_at_ms": 1792454400100,
        "finished_at_ms": 1792454400200,
        "results_json": "[{\"name\":\"ünïcode\",\"size_bytes\":0}]",
+       "failure_json": null
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "jobs.results_stored_with_the_end",
+   "doc": "a succeeded job's results are stored as it ends, every byte kept, and loaded back by name; an unknown name loads nothing, and a store opened again still holds them",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400100,
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "running",
+      "started_at_ms": 1792454400100,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "load_result",
+     "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+     "expect": null
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000001",
+     "outcome": {
+      "succeeded": "[{\"hash\":\"sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab\"},{\"hash\":\"sha256:8924122386052615ff75dcf45e524b129571d52c5821868ec368559640c3b13c\"}]",
+      "results": [
+       {
+        "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+        "size_bytes": 4096,
+        "data": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0dfdedddcdbdad9d8d7d6d5d4d3d2d1d0cfcecdcccbcac9c8c7c6c5c4c3c2c1c0bfbebdbcbbbab9b8b7b6b5b4b3b2b1b0afaeadacabaaa9a8a7a6a5a4a3a2a1a09f9e9d9c9b9a999897969594939291908f8e8d8c8b8a898887868584838281807f7e7d7c7b7a797877767574737271706f6e6d6c6b6a696867666564636261605f5e5d5c5b5a595857565554535251504f4e4d4c4b4a494847464544434241403f3e3d3c3b3a393837363534333231302f2e2d2c2b2a292827262524232221201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
+       },
+       {
+        "hash": "sha256:8924122386052615ff75dcf45e524b129571d52c5821868ec368559640c3b13c",
+        "size_bytes": 26,
+        "data": "4152524f5731000065717569747920e29c930000000000000000"
+       }
+      ]
+     },
+     "at": 1792454400200,
+     "expect": true
+    },
+    {
+     "op": "load_result",
+     "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+     "expect": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0dfdedddcdbdad9d8d7d6d5d4d3d2d1d0cfcecdcccbcac9c8c7c6c5c4c3c2c1c0bfbebdbcbbbab9b8b7b6b5b4b3b2b1b0afaeadacabaaa9a8a7a6a5a4a3a2a1a09f9e9d9c9b9a999897969594939291908f8e8d8c8b8a898887868584838281807f7e7d7c7b7a797877767574737271706f6e6d6c6b6a696867666564636261605f5e5d5c5b5a595857565554535251504f4e4d4c4b4a494847464544434241403f3e3d3c3b3a393837363534333231302f2e2d2c2b2a292827262524232221201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
+    },
+    {
+     "op": "load_result",
+     "hash": "sha256:8924122386052615ff75dcf45e524b129571d52c5821868ec368559640c3b13c",
+     "expect": "4152524f5731000065717569747920e29c930000000000000000"
+    },
+    {
+     "op": "load_result",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "expect": null
+    },
+    {
+     "op": "job",
+     "job_id": "00000000000000000000000000000001",
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "succeeded",
+      "started_at_ms": 1792454400100,
+      "finished_at_ms": 1792454400200,
+      "results_json": "[{\"hash\":\"sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab\"},{\"hash\":\"sha256:8924122386052615ff75dcf45e524b129571d52c5821868ec368559640c3b13c\"}]",
+      "failure_json": null
+     }
+    },
+    {
+     "op": "reopen"
+    },
+    {
+     "op": "load_result",
+     "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+     "expect": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0dfdedddcdbdad9d8d7d6d5d4d3d2d1d0cfcecdcccbcac9c8c7c6c5c4c3c2c1c0bfbebdbcbbbab9b8b7b6b5b4b3b2b1b0afaeadacabaaa9a8a7a6a5a4a3a2a1a09f9e9d9c9b9a999897969594939291908f8e8d8c8b8a898887868584838281807f7e7d7c7b7a797877767574737271706f6e6d6c6b6a696867666564636261605f5e5d5c5b5a595857565554535251504f4e4d4c4b4a494847464544434241403f3e3d3c3b3a393837363534333231302f2e2d2c2b2a292827262524232221201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
+    },
+    {
+     "op": "load_result",
+     "hash": "sha256:8924122386052615ff75dcf45e524b129571d52c5821868ec368559640c3b13c",
+     "expect": "4152524f5731000065717569747920e29c930000000000000000"
+    }
+   ]
+  },
+  {
+   "id": "jobs.results_of_no_end_not_stored",
+   "doc": "an end that changes nothing stores nothing: not the results of a job cancelled as it ran, of one that had ended, of a queued one or of an unknown one; a failed job stores none",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000003",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":3}",
+      "submitted_at_ms": 1792454580000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000004",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":4}",
+      "submitted_at_ms": 1792454640000
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400100,
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "running",
+      "started_at_ms": 1792454400100,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "cancel_job",
+     "job_id": "00000000000000000000000000000001",
+     "at": 1792454400200,
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "cancelled",
+      "started_at_ms": 1792454400100,
+      "finished_at_ms": 1792454400200,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000001",
+     "outcome": {
+      "succeeded": "[{\"hash\":\"sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab\"}]",
+      "results": [
+       {
+        "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+        "size_bytes": 256,
+        "data": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0dfdedddcdbdad9d8d7d6d5d4d3d2d1d0cfcecdcccbcac9c8c7c6c5c4c3c2c1c0bfbebdbcbbbab9b8b7b6b5b4b3b2b1b0afaeadacabaaa9a8a7a6a5a4a3a2a1a09f9e9d9c9b9a999897969594939291908f8e8d8c8b8a898887868584838281807f7e7d7c7b7a797877767574737271706f6e6d6c6b6a696867666564636261605f5e5d5c5b5a595857565554535251504f4e4d4c4b4a494847464544434241403f3e3d3c3b3a393837363534333231302f2e2d2c2b2a292827262524232221201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
+       }
+      ]
+     },
+     "at": 1792454400300,
+     "expect": false
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000004",
+     "outcome": {
+      "succeeded": "[{\"hash\":\"sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab\"}]",
+      "results": [
+       {
+        "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+        "size_bytes": 256,
+        "data": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0dfdedddcdbdad9d8d7d6d5d4d3d2d1d0cfcecdcccbcac9c8c7c6c5c4c3c2c1c0bfbebdbcbbbab9b8b7b6b5b4b3b2b1b0afaeadacabaaa9a8a7a6a5a4a3a2a1a09f9e9d9c9b9a999897969594939291908f8e8d8c8b8a898887868584838281807f7e7d7c7b7a797877767574737271706f6e6d6c6b6a696867666564636261605f5e5d5c5b5a595857565554535251504f4e4d4c4b4a494847464544434241403f3e3d3c3b3a393837363534333231302f2e2d2c2b2a292827262524232221201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
+       }
+      ]
+     },
+     "at": 1792454400300,
+     "expect": false
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000009",
+     "outcome": {
+      "succeeded": "[{\"hash\":\"sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab\"}]",
+      "results": [
+       {
+        "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+        "size_bytes": 256,
+        "data": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0dfdedddcdbdad9d8d7d6d5d4d3d2d1d0cfcecdcccbcac9c8c7c6c5c4c3c2c1c0bfbebdbcbbbab9b8b7b6b5b4b3b2b1b0afaeadacabaaa9a8a7a6a5a4a3a2a1a09f9e9d9c9b9a999897969594939291908f8e8d8c8b8a898887868584838281807f7e7d7c7b7a797877767574737271706f6e6d6c6b6a696867666564636261605f5e5d5c5b5a595857565554535251504f4e4d4c4b4a494847464544434241403f3e3d3c3b3a393837363534333231302f2e2d2c2b2a292827262524232221201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
+       }
+      ]
+     },
+     "at": 1792454400300,
+     "expect": false
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400400,
+     "expect": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000,
+      "phase": "running",
+      "started_at_ms": 1792454400400,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000002",
+     "outcome": {
+      "failed": "{\"code\":\"invalid_request\",\"message\":\"the strategy raised ValueError\"}"
+     },
+     "at": 1792454400500,
+     "expect": true
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000002",
+     "outcome": {
+      "succeeded": "[{\"hash\":\"sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab\"}]",
+      "results": [
+       {
+        "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+        "size_bytes": 256,
+        "data": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0dfdedddcdbdad9d8d7d6d5d4d3d2d1d0cfcecdcccbcac9c8c7c6c5c4c3c2c1c0bfbebdbcbbbab9b8b7b6b5b4b3b2b1b0afaeadacabaaa9a8a7a6a5a4a3a2a1a09f9e9d9c9b9a999897969594939291908f8e8d8c8b8a898887868584838281807f7e7d7c7b7a797877767574737271706f6e6d6c6b6a696867666564636261605f5e5d5c5b5a595857565554535251504f4e4d4c4b4a494847464544434241403f3e3d3c3b3a393837363534333231302f2e2d2c2b2a292827262524232221201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
+       }
+      ]
+     },
+     "at": 1792454400600,
+     "expect": false
+    },
+    {
+     "op": "load_result",
+     "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+     "expect": null
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400700,
+     "expect": {
+      "job_id": "00000000000000000000000000000003",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":3}",
+      "submitted_at_ms": 1792454580000,
+      "phase": "running",
+      "started_at_ms": 1792454400700,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000003",
+     "outcome": {
+      "succeeded": "[{\"hash\":\"sha256:8924122386052615ff75dcf45e524b129571d52c5821868ec368559640c3b13c\"}]",
+      "results": [
+       {
+        "hash": "sha256:8924122386052615ff75dcf45e524b129571d52c5821868ec368559640c3b13c",
+        "size_bytes": 26,
+        "data": "4152524f5731000065717569747920e29c930000000000000000"
+       }
+      ]
+     },
+     "at": 1792454400800,
+     "expect": true
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000003",
+     "outcome": {
+      "succeeded": "[{\"hash\":\"sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab\"}]",
+      "results": [
+       {
+        "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+        "size_bytes": 256,
+        "data": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0dfdedddcdbdad9d8d7d6d5d4d3d2d1d0cfcecdcccbcac9c8c7c6c5c4c3c2c1c0bfbebdbcbbbab9b8b7b6b5b4b3b2b1b0afaeadacabaaa9a8a7a6a5a4a3a2a1a09f9e9d9c9b9a999897969594939291908f8e8d8c8b8a898887868584838281807f7e7d7c7b7a797877767574737271706f6e6d6c6b6a696867666564636261605f5e5d5c5b5a595857565554535251504f4e4d4c4b4a494847464544434241403f3e3d3c3b3a393837363534333231302f2e2d2c2b2a292827262524232221201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
+       }
+      ]
+     },
+     "at": 1792454400900,
+     "expect": false
+    },
+    {
+     "op": "load_result",
+     "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+     "expect": null
+    },
+    {
+     "op": "load_result",
+     "hash": "sha256:8924122386052615ff75dcf45e524b129571d52c5821868ec368559640c3b13c",
+     "expect": "4152524f5731000065717569747920e29c930000000000000000"
+    }
+   ]
+  },
+  {
+   "id": "jobs.result_stored_once",
+   "doc": "a result two jobs produce is stored once under its name: the second job ends with its results listed, and the bytes stored first stay",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000
+     }
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400100,
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "running",
+      "started_at_ms": 1792454400100,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000001",
+     "outcome": {
+      "succeeded": "[{\"hash\":\"sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab\"}]",
+      "results": [
+       {
+        "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+        "size_bytes": 256,
+        "data": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0dfdedddcdbdad9d8d7d6d5d4d3d2d1d0cfcecdcccbcac9c8c7c6c5c4c3c2c1c0bfbebdbcbbbab9b8b7b6b5b4b3b2b1b0afaeadacabaaa9a8a7a6a5a4a3a2a1a09f9e9d9c9b9a999897969594939291908f8e8d8c8b8a898887868584838281807f7e7d7c7b7a797877767574737271706f6e6d6c6b6a696867666564636261605f5e5d5c5b5a595857565554535251504f4e4d4c4b4a494847464544434241403f3e3d3c3b3a393837363534333231302f2e2d2c2b2a292827262524232221201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
+       }
+      ]
+     },
+     "at": 1792454400200,
+     "expect": true
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400300,
+     "expect": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000,
+      "phase": "running",
+      "started_at_ms": 1792454400300,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "finish_job",
+     "job_id": "00000000000000000000000000000002",
+     "outcome": {
+      "succeeded": "[{\"hash\":\"sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab\"},{\"hash\":\"sha256:8924122386052615ff75dcf45e524b129571d52c5821868ec368559640c3b13c\"}]",
+      "results": [
+       {
+        "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+        "size_bytes": 1,
+        "data": "4152524f5731000065717569747920e29c930000000000000000"
+       },
+       {
+        "hash": "sha256:8924122386052615ff75dcf45e524b129571d52c5821868ec368559640c3b13c",
+        "size_bytes": 26,
+        "data": "4152524f5731000065717569747920e29c930000000000000000"
+       }
+      ]
+     },
+     "at": 1792454400400,
+     "expect": true
+    },
+    {
+     "op": "load_result",
+     "hash": "sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab",
+     "expect": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0dfdedddcdbdad9d8d7d6d5d4d3d2d1d0cfcecdcccbcac9c8c7c6c5c4c3c2c1c0bfbebdbcbbbab9b8b7b6b5b4b3b2b1b0afaeadacabaaa9a8a7a6a5a4a3a2a1a09f9e9d9c9b9a999897969594939291908f8e8d8c8b8a898887868584838281807f7e7d7c7b7a797877767574737271706f6e6d6c6b6a696867666564636261605f5e5d5c5b5a595857565554535251504f4e4d4c4b4a494847464544434241403f3e3d3c3b3a393837363534333231302f2e2d2c2b2a292827262524232221201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
+    },
+    {
+     "op": "load_result",
+     "hash": "sha256:8924122386052615ff75dcf45e524b129571d52c5821868ec368559640c3b13c",
+     "expect": "4152524f5731000065717569747920e29c930000000000000000"
+    },
+    {
+     "op": "jobs",
+     "limit": 10,
+     "expect": [
+      {
+       "job_id": "00000000000000000000000000000002",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":2}",
+       "submitted_at_ms": 1792454520000,
+       "phase": "succeeded",
+       "started_at_ms": 1792454400300,
+       "finished_at_ms": 1792454400400,
+       "results_json": "[{\"hash\":\"sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab\"},{\"hash\":\"sha256:8924122386052615ff75dcf45e524b129571d52c5821868ec368559640c3b13c\"}]",
+       "failure_json": null
+      },
+      {
+       "job_id": "00000000000000000000000000000001",
+       "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+       "request_json": "{\"job\":1}",
+       "submitted_at_ms": 1792454460000,
+       "phase": "succeeded",
+       "started_at_ms": 1792454400100,
+       "finished_at_ms": 1792454400200,
+       "results_json": "[{\"hash\":\"sha256:cd6816b77f68d70001fc3eaa4d42bdd67cb5973b3151cc5292ecc02a3daac6ab\"}]",
        "failure_json": null
       }
      ]

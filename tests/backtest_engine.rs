@@ -6,8 +6,8 @@
 
 use quantforge::{
     BacktestConfig, BacktestEngine, BacktestResult, BuiltInStrategyConfig, Candle, ClosedTrade,
-    EngineError, ExchangeId, Interval, MarketId, Strategy, StrategyContext, StrategyError, Symbol,
-    TargetPosition, TimestampMs, validate_candles,
+    EngineError, EquityPoint, ExchangeId, Interval, MarketId, Strategy, StrategyContext,
+    StrategyError, Symbol, TargetPosition, TimestampMs, validate_candles,
 };
 use rust_decimal::Decimal;
 use std::str::FromStr;
@@ -244,6 +244,17 @@ fn backtest_sma_cross_on_fixed_fixture_reproduces_pinned_result() {
                 exit_order_id: None,
             },
         ],
+        // Cash until the first fill, the position at each close while long,
+        // the cash of the losing trade while flat, and the second position
+        // up to the last close: close-out's 11.011 fee is not in it.
+        equity_curve: [
+            "10010", "10010", "10010", "10300", "10500", "11000", "10300", "9900", "9999.99",
+            "9999.99", "9999.99", "9999.99", "10300", "10500", "11011",
+        ]
+        .iter()
+        .zip(0..)
+        .map(|(equity, index)| point(index * 60_000, equity))
+        .collect(),
     };
     assert_eq!(result, expected);
 
@@ -535,6 +546,52 @@ fn max_drawdown_follows_close_marked_equity() {
     assert_eq!(result.max_drawdown_pct, dec("25"));
     assert_eq!(result.final_equity, dec("1500"));
     assert_eq!(result.total_return_pct, dec("50"));
+    assert_eq!(
+        result.equity_curve,
+        [
+            (0, "1000"),
+            (60_000, "1200"),
+            (120_000, "900"),
+            (180_000, "1500")
+        ]
+        .map(|(open_time_ms, equity)| point(open_time_ms, equity)),
+        "one point per bar, named by its open time and marked at its close"
+    );
+}
+
+fn point(open_time_ms: TimestampMs, equity: &str) -> EquityPoint {
+    EquityPoint {
+        open_time_ms,
+        equity: dec(equity),
+    }
+}
+
+// The entry at 100 pays a 10 fee, so 10010 buys 100. The last point marks
+// the position at the last close, 12000; close-out then sells it for a 12
+// fee, which only the final equity shows.
+#[test]
+fn the_equity_curve_marks_every_bar_and_leaves_out_the_close_out_fee() {
+    let candles = vec![
+        ohlc_candle(0, "100", "100"),
+        ohlc_candle(1, "100", "105"),
+        ohlc_candle(2, "105", "120"),
+    ];
+    let mut strategy = Recorder::deciding(vec![Some(TargetPosition::LongAllIn)]);
+    let result = engine("10010", "10", true)
+        .run(&market(), &candles, &mut strategy)
+        .expect("backtest");
+
+    assert_eq!(
+        result.equity_curve,
+        [
+            point(0, "10010"),
+            point(60_000, "10500"),
+            point(120_000, "12000")
+        ],
+        "cash before the fill, then the position at each close"
+    );
+    assert_eq!(result.equity_curve.len(), candles.len());
+    assert_eq!(result.final_equity, dec("11988"));
 }
 
 // 1000 / 1e-28 is about 1e31, beyond the decimal maximum of about 7.9e28.

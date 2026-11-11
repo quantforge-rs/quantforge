@@ -33,7 +33,7 @@ T = 1_792_454_400_000
 # 29 decimal places: more than a Decimal holds.
 INEXACT = "1.00000000000000000000000000001"
 # The schema every backend creates; a new store logs one step to it from 0.
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 WINDOW_BARS = 1440
 STEP_MS = {
     "1s": 1_000,
@@ -240,6 +240,7 @@ class Model:
         self.edits = {}  # (run_id, trade name) -> columns written behind the store's back
         self.environment = None  # the store's binding
         self.bundles = {}  # name -> bytes
+        self.results = {}  # name -> what the store keeps of a result
         self.jobs = []  # records, in submission order
 
     # Candles.
@@ -345,10 +346,16 @@ class Model:
             return False
         if "succeeded" in outcome:
             job["phase"], job["results_json"] = "succeeded", outcome["succeeded"]
+            # Stored with the end, each once: the first bytes under a name stay.
+            for result in outcome.get("results", []):
+                self.results.setdefault(result["hash"], result["data"])
         else:
             job["phase"], job["failure_json"] = "failed", outcome["failed"]
         job["finished_at_ms"] = at
         return True
+
+    def load_result(self, name):
+        return self.results.get(name)
 
     def cancel_job(self, job_id, at):
         job = self.find_job(job_id)
@@ -637,6 +644,9 @@ class Scenario:
     def finish_job(self, job_id, outcome, at):
         self.step("finish_job", job_id=job_id, outcome=outcome, at=at,
                   expect=self.model.finish_job(job_id, outcome, at))
+
+    def load_result(self, name):
+        self.step("load_result", hash=name, expect=self.model.load_result(name))
 
     def cancel_job(self, job_id, at):
         self.step("cancel_job", job_id=job_id, at=at, expect=self.model.cancel_job(job_id, at))
@@ -1426,6 +1436,25 @@ def new_job(n, bundle, request=None):
 
 
 SUCCEEDED = {"succeeded": '[{"name":"metrics","media_type":"application/json"}]'}
+
+
+def result(data, size=None):
+    """What a store is handed of one result: its name, the size of the file
+    it stands for, and the bytes to keep, which a store never reads. The
+    name here is the hash of those bytes, which is all a store needs."""
+    return {"hash": bundle_name(data), "size_bytes": len(data) if size is None else size,
+            "data": data.hex()}
+
+
+def succeeded_with(*results):
+    listed = ",".join(f'{{"hash":"{r["hash"]}"}}' for r in results)
+    return {"succeeded": f"[{listed}]", "results": list(results)}
+
+
+# Every byte value, and bytes with a NUL after text: a result's bytes are
+# kept exactly.
+RESULT_A = bytes(reversed(range(256)))
+RESULT_B = b"ARROW1\x00\x00" + "equity ✓".encode("utf-8") + bytes(8)
 FAILED = {"failed": '{"code":"invalid_request","message":"the strategy raised ValueError"}'}
 RESTARTED = '{"code":"internal","message":"the server stopped while the job ran"}'
 
@@ -1528,6 +1557,58 @@ def jobs_scenarios():
     s.finish_job(job_id(1), {"succeeded": '[{"name":"ünïcode","size_bytes":0}]'}, T + 200)
     s.claim_job(T + 300)
     s.finish_job(job_id(2), {"failed": '{"message":"a\\nb"}'}, T + 400)
+    s.jobs(10)
+    out.append(s)
+
+    s = Scenario("jobs.results_stored_with_the_end", "a succeeded job's results are stored as it ends, every byte kept, and loaded back by name; an unknown name loads nothing, and a store opened again still holds them")
+    s.store_bundle(BUNDLE_A)
+    s.submit_job(new_job(1, BUNDLE_A))
+    s.claim_job(T + 100)
+    a, b = result(RESULT_A, size=4096), result(RESULT_B)
+    s.load_result(a["hash"])
+    s.finish_job(job_id(1), succeeded_with(a, b), T + 200)
+    s.load_result(a["hash"])
+    s.load_result(b["hash"])
+    s.load_result(bundle_name(BUNDLE_A))
+    s.job(job_id(1))
+    s.reopen()
+    s.load_result(a["hash"])
+    s.load_result(b["hash"])
+    out.append(s)
+
+    s = Scenario("jobs.results_of_no_end_not_stored", "an end that changes nothing stores nothing: not the results of a job cancelled as it ran, of one that had ended, of a queued one or of an unknown one; a failed job stores none")
+    s.store_bundle(BUNDLE_A)
+    for n in (1, 2, 3, 4):
+        s.submit_job(new_job(n, BUNDLE_A))
+    a, b = result(RESULT_A), result(RESULT_B)
+    s.claim_job(T + 100)
+    s.cancel_job(job_id(1), T + 200)
+    s.finish_job(job_id(1), succeeded_with(a), T + 300)
+    s.finish_job(job_id(4), succeeded_with(a), T + 300)
+    s.finish_job(job_id(9), succeeded_with(a), T + 300)
+    s.claim_job(T + 400)
+    s.finish_job(job_id(2), FAILED, T + 500)
+    s.finish_job(job_id(2), succeeded_with(a), T + 600)
+    s.load_result(a["hash"])
+    s.claim_job(T + 700)
+    s.finish_job(job_id(3), succeeded_with(b), T + 800)
+    s.finish_job(job_id(3), succeeded_with(a), T + 900)
+    s.load_result(a["hash"])
+    s.load_result(b["hash"])
+    out.append(s)
+
+    s = Scenario("jobs.result_stored_once", "a result two jobs produce is stored once under its name: the second job ends with its results listed, and the bytes stored first stay")
+    s.store_bundle(BUNDLE_A)
+    for n in (1, 2):
+        s.submit_job(new_job(n, BUNDLE_A))
+    first = result(RESULT_A)
+    again = dict(first, data=RESULT_B.hex(), size_bytes=1)
+    s.claim_job(T + 100)
+    s.finish_job(job_id(1), succeeded_with(first), T + 200)
+    s.claim_job(T + 300)
+    s.finish_job(job_id(2), succeeded_with(again, result(RESULT_B)), T + 400)
+    s.load_result(first["hash"])
+    s.load_result(bundle_name(RESULT_B))
     s.jobs(10)
     out.append(s)
 

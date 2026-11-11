@@ -96,12 +96,14 @@ pub enum JobState {
     Unrecognized,
 }
 
-/// One result of a succeeded job, to fetch by its hash.
+/// One result file of a succeeded job: `metrics`, `trades` or `equity`,
+/// which [`results`](super::super::results) specifies. A
+/// [`JobResult`](super::JobResult) says where each is fetched.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResultRef {
-    /// What the result holds, such as `trades`, `equity`, or `metrics`.
+    /// What the result holds: `metrics`, `trades`, or `equity`.
     pub name: String,
-    /// Its media type, such as `application/json`.
+    /// The file's media type, such as `application/json`.
     pub media_type: String,
     /// Its name as stored content: the hash of the bytes a download returns.
     pub hash: ContentHash,

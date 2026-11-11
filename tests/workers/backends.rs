@@ -1,9 +1,10 @@
 //! Jobs through the server's queue to real workers, with the store on
 //! SQLite and, where `QUANTFORGE_TEST_POSTGRES_URL` names a server, on
 //! PostgreSQL: a job runs on exactly the candles its server read for it, a
-//! crash fails only its own job, every job gets a worker of its own, and a
-//! worker sees nothing of the store its server holds open. Each scenario is
-//! one generic body, run once per backend.
+//! crash fails only its own job, every job gets a worker of its own, a
+//! worker sees nothing of the store its server holds open, and a backtest
+//! run in a worker is downloaded as the files a local run writes. Each
+//! scenario is one generic body, run once per backend.
 
 use std::any::Any;
 use std::net::SocketAddr;
@@ -296,6 +297,59 @@ async fn every_job_gets_a_worker_of_its_own<B: Backend>(backend: &B) {
     }
 }
 
+/// A backtest run in a worker, through the queue: the job succeeds with
+/// three results, and each downloads as the file a run of the same engine
+/// in this process writes, byte for byte, whichever store keeps it.
+async fn a_backtest_run_in_a_worker_downloads_as_a_local_runs_files<B: Backend>(backend: &B) {
+    let stored = candles(12_000);
+    backend
+        .store()
+        .upsert_candles(&market(), &stored)
+        .expect("the candles");
+    let pool = Pool::start(1, roomy());
+    let address = serve(backend, &pool.pool, 1).await;
+    let hash = upload(address, &bundle(r#"workload = "backtest""#)).await;
+    let job = submit(address, &hash, 11_999).await;
+    let state = ended(address, &job).await;
+    assert_eq!(state["kind"], "succeeded", "{state}");
+
+    let expected = crate::results::local_files(&stored, 2, 3);
+    let listed: Vec<Value> = expected
+        .iter()
+        .map(|file| serde_json::to_value(&file.reference).expect("json"))
+        .collect();
+    assert_eq!(state["results"], Value::Array(listed));
+
+    let answered: Value = client()
+        .get(format!("http://{address}/v1/backtests/{job}/result"))
+        .send()
+        .await
+        .expect("a response")
+        .json()
+        .await
+        .expect("a result");
+    assert_eq!(
+        answered["metrics"],
+        serde_json::from_slice::<Value>(&expected[0].bytes).expect("metrics")
+    );
+    for (link, file) in answered["results"]
+        .as_array()
+        .expect("the links")
+        .iter()
+        .zip(&expected)
+    {
+        let path = link["path"].as_str().expect("a path");
+        let response = client()
+            .get(format!("http://{address}{path}"))
+            .send()
+            .await
+            .expect("a response");
+        assert_eq!(response.status(), 200, "{path}");
+        let body = response.bytes().await.expect("a body");
+        assert!(body.as_ref() == file.bytes.as_slice(), "{path}: every byte");
+    }
+}
+
 /// A worker gets no environment and no descriptor of the server's while
 /// the server holds its store open.
 async fn a_worker_sees_nothing_of_the_store_its_server_holds_open<B: Backend>(backend: &B) {
@@ -338,6 +392,7 @@ on_each_backend!(
     a_crash_fails_only_its_own_job,
     every_job_gets_a_worker_of_its_own,
     a_worker_sees_nothing_of_the_store_its_server_holds_open,
+    a_backtest_run_in_a_worker_downloads_as_a_local_runs_files,
 );
 
 #[cfg(feature = "postgres")]

@@ -1,26 +1,37 @@
-//! The job store's steps, and the check coded here: stores claiming at once
-//! from many queued jobs each claim jobs of their own, so every job is
-//! claimed once, none twice and none lost.
+//! The job store's steps, and the checks coded here: stores claiming at
+//! once from many queued jobs each claim jobs of their own, so every job is
+//! claimed once, none twice and none lost; and an end whose results cannot
+//! be stored ends nothing.
 
 use std::collections::BTreeSet;
 use std::str::FromStr;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use quantforge::{BundleHash, JobId, JobStore, NewJob, StorageError, StorageErrorKind};
+use quantforge::{
+    BundleHash, JobId, JobOutcome, JobPhase, JobStore, NewJob, ResultHash, StorageError,
+    StorageErrorKind, StoredResult,
+};
 
 use super::cases::JobText;
 use super::{Coded, Fixture, Step, expect_refused};
 
 /// The checks coded here: id and statement.
-pub const CHECKS: &[(&str, &str)] = &[(
-    "jobs.claims_racing",
-    "stores claiming at once from many queued jobs claim each exactly once, none twice and none lost",
-)];
+pub const CHECKS: &[(&str, &str)] = &[
+    (
+        "jobs.claims_racing",
+        "stores claiming at once from many queued jobs claim each exactly once, none twice and none lost",
+    ),
+    (
+        "jobs.failed_end_changes_nothing",
+        "an end whose results cannot all be stored changes nothing: the job still runs and holds no result, and ends once they can",
+    ),
+];
 
 pub fn check<S: JobStore + Send>(id: &str) -> Coded<S> {
     match id {
         "jobs.claims_racing" => claims_racing,
+        "jobs.failed_end_changes_nothing" => failed_end_changes_nothing,
         other => panic!("no job check {other}"),
     }
 }
@@ -51,6 +62,11 @@ pub fn step<S: JobStore + ?Sized>(store: &S, step: &Step) -> bool {
                 .expect("load")
                 .map(hex::encode);
             assert_eq!(&loaded, expect, "bundle {name}");
+        }
+        Step::LoadResult { hash: name, expect } => {
+            let name: ResultHash = name.parse().expect("a result hash");
+            let loaded = store.load_result(&name).expect("load").map(hex::encode);
+            assert_eq!(&loaded, expect, "result {name}");
         }
         Step::SubmitJob { job, refused } => {
             let outcome = store.submit_job(&job.new_job());
@@ -158,4 +174,65 @@ fn claims_racing<S: JobStore + Send>(fixture: &Fixture<S>) {
     assert_eq!(claimed.len(), distinct.len(), "a job claimed twice");
     assert_eq!(distinct.len() as u64, JOBS, "a job never claimed");
     assert_eq!(fixture.store.claim_job(2).expect("a claim"), None);
+}
+
+/// With the results table refusing every new row, a succeeded end fails
+/// whole: the job is still running, its record shows no results, and the
+/// first result, which the table took before it refused, is gone with the
+/// rest. Once the table takes rows again, the same end goes through.
+fn failed_end_changes_nothing<S: JobStore + Send>(fixture: &Fixture<S>) {
+    let (store, raw) = (&fixture.store, &fixture.raw);
+    let bundle = hash(&format!("sha256:{}", "cd".repeat(32)));
+    store.store_bundle(&bundle, b"tar", 0).expect("a bundle");
+    let id = job_id(&format!("{:032x}", 1));
+    store
+        .submit_job(&NewJob {
+            job_id: id.clone(),
+            bundle,
+            request_json: "{}".to_string(),
+            submitted_at_ms: 1,
+        })
+        .expect("a job");
+    store.claim_job(2).expect("a claim").expect("the job");
+    let result = |fill: u8| StoredResult {
+        hash: ResultHash::from_digest([fill; 32]),
+        size_bytes: 3,
+        data: vec![fill; 3],
+    };
+    let (first, second) = (result(0x11), result(0x22));
+    let outcome = JobOutcome::Succeeded {
+        results_json: "[]".to_string(),
+        results: vec![first.clone(), second.clone()],
+    };
+    let count = || raw.select("SELECT CAST(COUNT(*) AS TEXT) FROM job_results");
+    let none = [[Some("0".to_string())]];
+
+    let [refuse, allow] = raw.write_refusal("job_results");
+    raw.execute(&refuse);
+    store
+        .finish_job(&id, &outcome, 3)
+        .expect_err("the results table refuses the rows");
+    let record = store.job(&id).expect("a read").expect("the job");
+    assert_eq!(record.phase, JobPhase::Running, "the job still runs");
+    assert_eq!(
+        (record.finished_at_ms, record.results_json),
+        (None, None),
+        "nothing of the end is recorded"
+    );
+    assert_eq!(count(), none, "no result without the end that names it");
+    assert_eq!(store.load_result(&first.hash).expect("a read"), None);
+
+    raw.execute(&allow);
+    assert!(store.finish_job(&id, &outcome, 4).expect("the end"));
+    let record = store.job(&id).expect("a read").expect("the job");
+    assert_eq!(
+        (record.phase, record.finished_at_ms),
+        (JobPhase::Succeeded, Some(4))
+    );
+    for kept in [first, second] {
+        assert_eq!(
+            store.load_result(&kept.hash).expect("a read"),
+            Some(kept.data)
+        );
+    }
 }

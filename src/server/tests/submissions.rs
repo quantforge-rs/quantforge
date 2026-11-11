@@ -353,6 +353,7 @@ async fn a_queued_job_is_cancelled_once_and_a_finished_one_cannot_be() {
     assert_eq!(claimed.job_id, done);
     let outcome = JobOutcome::Succeeded {
         results_json: "[]".to_string(),
+        results: Vec::new(),
     };
     assert!(
         bed.store

@@ -1,14 +1,16 @@
 //! The worker's side: the process this binary becomes when a server starts
 //! it with the `worker` command. It reads its setup, puts its limits and
 //! sandbox on itself before anything else runs, says it is ready, runs the
-//! one job it is handed, says how it ended, and exits. Once it holds its
+//! one job it is handed, says how it ended, a backtest's rows first, and
+//! exits. Once it holds its
 //! job, the end of its input means that the server has gone or given up on
 //! the job, and it exits at once.
 
 use std::io::{self, BufReader, BufWriter, Read, Write};
 
+use super::backtest::Ended;
 use super::config::WorkerMode;
-use super::frames::{self, Finished, FromWorker, MOST_TO_WORKER, ToWorker};
+use super::frames::{self, Finished, FromWorker, MOST_TO_WORKER, ROWS_PER_FRAME, ToWorker};
 use super::isolation::{self, Limits};
 use super::synthetic::{self, Seen};
 use crate::model::Candle;
@@ -112,20 +114,42 @@ where
     };
     let candles = read_candles(&mut input, job.bars)?;
     watch(input)?;
-    let outcome = match (&mode, &seen) {
+    let ended = match (&mode, &seen) {
         (WorkerMode::Synthetic { .. }, Some(seen)) => {
             synthetic::run(&job, &candles, seen, &posture)
         }
-        _ => Finished::Failed {
+        _ => Ended::Said(Finished::Failed {
             error: ErrorBody {
                 code: ErrorCode::Unavailable,
                 message: NO_RUNTIME.to_string(),
                 supported: None,
             },
-        },
+        }),
     };
-    frames::write(&mut output, &FromWorker::Finished { outcome })?;
+    say(&mut output, ended)?;
     Ok(())
+}
+
+/// Says how the job ended: a backtest's trades and equity curve first, a
+/// frame per run of rows, then the one `finished` frame.
+fn say<W: Write>(output: &mut W, ended: Ended) -> io::Result<()> {
+    let outcome = match ended {
+        Ended::Said(outcome) => outcome,
+        Ended::Backtest(result) => {
+            for rows in result.trades.chunks(ROWS_PER_FRAME) {
+                let rows = rows.iter().map(Into::into).collect();
+                frames::write(output, &FromWorker::Trades { rows })?;
+            }
+            for rows in result.equity.chunks(ROWS_PER_FRAME) {
+                let rows = rows.iter().map(Into::into).collect();
+                frames::write(output, &FromWorker::Equity { rows })?;
+            }
+            Finished::Backtest {
+                metrics: result.metrics,
+            }
+        }
+    };
+    frames::write(output, &FromWorker::Finished { outcome })
 }
 
 /// Leaves the worker no descriptor but its three pipes, before it reads or

@@ -1,16 +1,20 @@
 //! `serve run`'s job routes as a process, on each backend: a bundle
 //! uploaded and a job submitted, then failed as it starts, since this build
-//! has no worker runtime; and a server that starts on jobs a killed one
-//! left, failing the one that ran and running the queued one. On
-//! PostgreSQL every scenario also proves that nothing was created beside
-//! the store.
+//! has no worker runtime; a server that starts on jobs a killed one left,
+//! failing the one that ran and running the queued one; and a succeeded
+//! job's result, served file by file by every server that starts on its
+//! store. On PostgreSQL every scenario also proves that nothing was created
+//! beside the store.
 
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
 use quantforge::protocol::bundle::{Bundle, BundleLimits};
+use quantforge::protocol::jobs::ResultRef;
+use quantforge::server::{BacktestOutput, ResultFile};
 use quantforge::{
-    BundleHash, Candle, CandleStore, ExchangeId, Interval, JobId, JobStore, MarketId, NewJob,
+    BacktestConfig, BacktestEngine, BuiltInStrategyConfig, BundleHash, Candle, CandleQuery,
+    CandleStore, ExchangeId, Interval, JobId, JobOutcome, JobStore, MarketId, NewJob, StoredResult,
     Symbol,
 };
 use rust_decimal::Decimal;
@@ -196,7 +200,150 @@ fn serve_run_fails_the_jobs_left_running_and_runs_the_queued_ones_as_it_starts(b
     assert_eq!(next["state"]["error"]["message"], NO_RUNTIME);
 }
 
+/// The three files of an SMA cross over the bed's ten bars, as a server
+/// that ran the job would have written them.
+fn result_files(bed: &TestBed) -> Vec<ResultFile> {
+    let candles = bed
+        .store()
+        .load_candles(
+            &market(),
+            CandleQuery {
+                start_time_ms: None,
+                end_time_ms: None,
+                limit: None,
+            },
+        )
+        .expect("the candles");
+    let mut strategy = BuiltInStrategyConfig::SmaCross { fast: 2, slow: 3 }
+        .build()
+        .expect("a strategy");
+    let result = BacktestEngine::new(BacktestConfig {
+        initial_cash: Decimal::from(10_000),
+        fee_bps: Decimal::from(10),
+        close_out_at_end: true,
+    })
+    .run(&market(), &candles, strategy.as_mut())
+    .expect("a backtest");
+    assert_eq!(
+        result.trade_count, 1,
+        "the bars rise: one trade, closed out"
+    );
+    BacktestOutput::of(&result).files().expect("the files")
+}
+
+/// Everything a client reads of the job's result from the server at
+/// `address`, each file held to its reference.
+fn fetch_result(address: SocketAddr, job: &JobId, files: &[ResultFile]) -> Vec<Vec<u8>> {
+    let answered = get(address, &format!("/v1/backtests/{job}/result"));
+    assert_eq!(answered.status, 200, "{}", answered.text());
+    let result: Value = answered.json();
+    assert_eq!(result["job_id"], job.as_str());
+    assert_eq!(result["format"], 1);
+    assert_eq!(
+        result["metrics"],
+        serde_json::from_slice::<Value>(&files[0].bytes).expect("metrics")
+    );
+    let links = result["results"].as_array().expect("the links");
+    let names: Vec<&str> = links
+        .iter()
+        .filter_map(|link| link["name"].as_str())
+        .collect();
+    assert_eq!(names, ["metrics", "trades", "equity"]);
+    links
+        .iter()
+        .zip(files)
+        .map(|(link, file)| {
+            let path = link["path"].as_str().expect("a path");
+            let tag = format!("\"{}\"", file.reference.hash);
+            let fetched = get(address, path);
+            assert_eq!(fetched.status, 200, "{path}: {}", fetched.text());
+            assert_eq!(
+                fetched.header("content-type"),
+                Some(file.reference.media_type.as_str())
+            );
+            assert_eq!(fetched.header("etag"), Some(tag.as_str()));
+            assert_eq!(
+                fetched.header("cache-control"),
+                Some("private, max-age=31536000, immutable")
+            );
+            assert_eq!(
+                fetched.header("content-length"),
+                Some(file.reference.size_bytes.to_string().as_str())
+            );
+            assert!(
+                fetched.body() == file.bytes.as_slice(),
+                "{path}: every byte"
+            );
+            let cached = request(address, "GET", path, &[("If-None-Match", &tag)], None);
+            assert_eq!((cached.status, cached.body().len()), (304, 0), "{path}");
+            fetched.body().to_vec()
+        })
+        .collect()
+}
+
+fn serve_run_serves_a_succeeded_jobs_result_from_its_store_start_after_start(bed: &TestBed) {
+    seed(bed);
+    let files = result_files(bed);
+    let store = bed.store();
+    let bundle = bundle();
+    let hash = BundleHash::from_digest(*bundle.code_hash().digest());
+    store
+        .store_bundle(&hash, &bundle.canonical_tar(), T)
+        .expect("the bundle");
+    let (job, pending) = (JobId::generate(), JobId::generate());
+    for job_id in [&job, &pending] {
+        store
+            .submit_job(&NewJob {
+                job_id: job_id.clone(),
+                bundle: hash,
+                request_json: submission(&bundle).to_string(),
+                submitted_at_ms: T,
+            })
+            .expect("a job");
+    }
+    // The first job as a server that ran it to its end leaves it.
+    let claimed = store.claim_job(T + 1).expect("a claim").expect("a job");
+    assert_eq!(claimed.job_id, job);
+    let listed: Vec<&ResultRef> = files.iter().map(|file| &file.reference).collect();
+    let stored: Vec<StoredResult> = files
+        .iter()
+        .map(|file| file.stored().expect("a stored result"))
+        .collect();
+    let outcome = JobOutcome::Succeeded {
+        results_json: serde_json::to_string(&listed).expect("json"),
+        results: stored,
+    };
+    assert!(store.finish_job(&job, &outcome, T + 2).expect("an end"));
+    drop(store);
+
+    let first = {
+        let served = Served::start(bed);
+        let status: Value = get(served.address, &format!("/v1/backtests/{job}")).json();
+        assert_eq!(status["state"]["kind"], "succeeded", "{status}");
+        assert_eq!(
+            status["state"]["results"],
+            serde_json::to_value(&listed).expect("json")
+        );
+        // The other job fails as it starts, and has no result.
+        until_state(served.address, pending.as_str(), "failed");
+        let none = get(
+            served.address,
+            &format!("/v1/backtests/{pending}/result/equity.arrow"),
+        );
+        assert_eq!(none.status, 409, "{}", none.text());
+        assert_eq!(
+            none.json::<Value>()["error"]["message"],
+            format!("job {pending} failed; only a job that has succeeded has a result")
+        );
+        fetch_result(served.address, &job, &files)
+    };
+    // That server is gone; the next one on the store serves the same bytes.
+    let served = Served::start(bed);
+    assert_eq!(fetch_result(served.address, &job, &files), first);
+}
+
 on_each_backend!(
     serve_run_queues_a_job_and_fails_it_as_it_starts_without_a_worker_runtime,
     serve_run_fails_the_jobs_left_running_and_runs_the_queued_ones_as_it_starts,
+    serve_run_serves_a_succeeded_jobs_result_from_its_store_start_after_start,
 );

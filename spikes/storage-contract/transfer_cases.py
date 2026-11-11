@@ -85,6 +85,7 @@ TABLES = [
     ),
     ("segment_dirty", ["id", "exchange", "symbol", "interval", "window_start_ms"], "id", False),
     ("bundles", ["code_hash", "size_bytes", "data", "stored_at_ms"], "code_hash", False),
+    ("job_results", ["hash", "size_bytes", "data", "stored_at_ms"], "hash", False),
     (
         "jobs",
         ["seq", "job_id", "state", "bundle_hash", "request_json", "submitted_at_ms",
@@ -450,11 +451,35 @@ def job(seq, job_id, state, bundle_row, submitted, started=None, finished=None, 
             "failure_json": failure}
 
 
+# The two result files of the job that succeeded, each kept as one zstd
+# frame under the hash of the file: a row's bytes are copied as they are,
+# and its size is the file's, not the frame's.
+RESULT_FILES = [
+    ("metrics", "application/json",
+     b'{"initial_cash":"10000","final_equity":"10250.50","total_return_pct":"2.5050",'
+     b'"max_drawdown_pct":"1.2","trade_count":0}'),
+    ("trades", "application/vnd.apache.arrow.file", b"ARROW1\x00\x00" + bytes(range(256))),
+]
+
+
+def result(data, stored):
+    return {"hash": "sha256:" + hashlib.sha256(data).hexdigest(), "size_bytes": len(data),
+            "data": zstd_frame(data), "stored_at_ms": stored}
+
+
+JOB_RESULTS = [result(data, T + 32_000) for _, _, data in RESULT_FILES]
+
+RESULTS_JSON = json.dumps(
+    [{"name": name, "media_type": media_type, "hash": row["hash"], "size_bytes": row["size_bytes"]}
+     for (name, media_type, _), row in zip(RESULT_FILES, JOB_RESULTS)],
+    separators=(",", ":"),
+)
+
 # Every phase, numbered with gaps the copy keeps; one job's market is the
 # non-ASCII symbol of the candles.
 JOBS = [
     job(1, "0" * 31 + "1", "succeeded", BUNDLES[0], T + 30_000, T + 31_000, T + 32_000,
-        results="[]"),
+        results=RESULTS_JSON),
     job(2, "f" * 32, "failed", BUNDLES[1], T + 40_000, None, T + 40_500,
         failure='{"code":"unavailable","message":"this server cannot run Python bundles yet"}'),
     job(5, "0123456789abcdef0123456789abcdef", "cancelled", BUNDLES[0], T + 50_000, T + 51_000,
@@ -472,6 +497,7 @@ ROWS = {
     "segment_index": SEGMENT_INDEX,
     "segment_dirty": SEGMENT_DIRTY,
     "bundles": BUNDLES,
+    "job_results": JOB_RESULTS,
     "jobs": JOBS,
 }
 
