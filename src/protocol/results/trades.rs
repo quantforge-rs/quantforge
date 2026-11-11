@@ -70,11 +70,16 @@ pub struct TradeRow {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn encode_trades(trades: &[TradeRow]) -> Result<Vec<u8>, ResultError> {
-    if trades.len() > MAX_ROWS {
+    encode_within(trades, MAX_ROWS)
+}
+
+/// [`encode_trades`] for a table that holds at most `most` rows.
+fn encode_within(trades: &[TradeRow], most: usize) -> Result<Vec<u8>, ResultError> {
+    if trades.len() > most {
         return Err(ResultError::TooManyRows {
             result: RESULT,
             rows: trades.len(),
-            most: MAX_ROWS,
+            most,
         });
     }
     let text = |column: &'static str, value: &dyn Fn(&TradeRow) -> String| {
@@ -275,17 +280,23 @@ mod tests {
         }
     }
 
+    // The rows are counted before any is read, so a table that holds two
+    // shows the refusal: `MAX_ROWS + 1` trades would take gigabytes to show
+    // the same comparison.
     #[test]
     fn more_rows_than_a_table_holds_are_refused() {
-        let one = trade(1, "1", "1");
-        let trades = vec![one; MAX_ROWS + 1];
+        let trades: Vec<TradeRow> = (1..=3).map(|index| trade(index, "1", "1")).collect();
         assert_eq!(
-            encode_trades(&trades).expect_err("too many"),
+            encode_within(&trades, 2).expect_err("too many"),
             ResultError::TooManyRows {
                 result: "trades",
-                rows: MAX_ROWS + 1,
-                most: MAX_ROWS
+                rows: 3,
+                most: 2
             }
         );
+        // As many rows as a table holds are written, and as the file the
+        // table always is: the limit is `MAX_ROWS` and changes no byte.
+        assert_eq!(encode_within(&trades[..2], 2), encode_trades(&trades[..2]));
+        assert_eq!(encode_within(&trades, MAX_ROWS), encode_trades(&trades));
     }
 }

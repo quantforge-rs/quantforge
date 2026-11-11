@@ -46,11 +46,16 @@ pub struct EquityRow {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn encode_equity(curve: &[EquityRow]) -> Result<Vec<u8>, ResultError> {
-    if curve.len() > MAX_ROWS {
+    encode_within(curve, MAX_ROWS)
+}
+
+/// [`encode_equity`] for a table that holds at most `most` rows.
+fn encode_within(curve: &[EquityRow], most: usize) -> Result<Vec<u8>, ResultError> {
+    if curve.len() > most {
         return Err(ResultError::TooManyRows {
             result: RESULT,
             rows: curve.len(),
-            most: MAX_ROWS,
+            most,
         });
     }
     let mut equity = Text::default();
@@ -127,6 +132,26 @@ mod tests {
         let read = decode_equity(&file).expect("the curve");
         assert_eq!(texts(&read), texts(&written));
         assert_eq!(encode_equity(&read).expect("a file"), file);
+    }
+
+    // The rows are counted before any is read, so a table that holds two
+    // shows the refusal without the memory `MAX_ROWS + 1` rows would take.
+    #[test]
+    fn more_rows_than_a_table_holds_are_refused() {
+        let written = curve(&["1", "2", "3"]);
+        assert_eq!(
+            encode_within(&written, 2).expect_err("too many"),
+            ResultError::TooManyRows {
+                result: "equity",
+                rows: 3,
+                most: 2
+            }
+        );
+        assert_eq!(
+            encode_within(&written[..2], 2),
+            encode_equity(&written[..2])
+        );
+        assert_eq!(encode_within(&written, MAX_ROWS), encode_equity(&written));
     }
 
     #[test]

@@ -150,6 +150,39 @@ mod tests {
         }
     }
 
+    // A file's own row count is checked against the most a table holds
+    // before anything is sized by it. The count is written three times in a
+    // table of two columns, in the batch and in each column's node, and
+    // seven rows make it a number no offset, length or value here is.
+    #[test]
+    fn a_file_that_says_it_holds_more_rows_than_a_table_holds_is_refused() {
+        let rows: Vec<(i64, &str)> = (100..107).map(|at| (at, "abc")).collect();
+        let file = write(&PAIRS, rows.len(), &pairs(&rows));
+        let count = 7_i64.to_le_bytes();
+        let places: Vec<usize> = (0..file.len() - 8)
+            .filter(|at| file[*at..*at + 8] == count)
+            .collect();
+        assert_eq!(places.len(), 3, "the batch's length and two nodes");
+        let claim = |claimed: usize| {
+            let mut altered = file.clone();
+            for at in &places {
+                altered[*at..*at + 8].copy_from_slice(&(claimed as i64).to_le_bytes());
+            }
+            read(&PAIRS, &altered)
+        };
+        assert_eq!(
+            claim(MAX_ROWS + 1).expect_err("more than a table holds"),
+            "it holds 16777217 rows, and a result at most 16777216"
+        );
+        // The most a table holds passes that check, and fails the next: the
+        // file has seven values for each column.
+        assert_eq!(
+            claim(MAX_ROWS).expect_err("seven values"),
+            "its at_ms column does not hold 16777216 values"
+        );
+        assert_eq!(MAX_ROWS, 16_777_216);
+    }
+
     #[test]
     fn a_file_cut_short_or_altered_is_refused_or_reads_as_other_rows_without_a_panic() {
         let rows = [(1_i64, "ab"), (2, "c")];
