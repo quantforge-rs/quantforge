@@ -170,7 +170,7 @@ records in `evidence.jsonl`.
 | --- | --- |
 | `storage.conformance` | The conformance groups (`tests/storage/conformance/`) on SQLite, and on PostgreSQL in each `postgres` leg, directly and through `AnyStore`; the execution store joins with ALG-738 |
 | `storage.durability` | The `durability` group, `src/storage/postgres/tests/durability.rs` and the weak server; the server-crash test runs on demand |
-| `storage.migrations` | `tests/storage/migration.rs`, which migrates schemas 1 to 4 on SQLite; the PostgreSQL chain's tests; and `data migrate`'s copy and verification (`tests/storage/transfer/`) |
+| `storage.migrations` | `tests/storage/migration.rs`, which migrates every earlier schema, 1 to 6, on SQLite; the PostgreSQL chain's tests; and `data migrate`'s copy and verification (`tests/storage/transfer/`) |
 | `data.segments`, `data.backend_identity` | The segment groups and the segment spec's cases on both backends, and `both_backends_tell_the_same_story` (`tests/e2e/backends.rs`) |
 | `data.sync`, `data.validate` | The command scenarios of `tests/e2e/offline.rs` on both backends, against the mock exchange |
 | `data.history` | `tests/e2e/history.rs`: `serve run`'s history routes read back against the store on both backends, and `both_backends_answer_byte_for_byte_alike`; the routes' own tests in `src/server/tests/` run on SQLite |

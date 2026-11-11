@@ -1,6 +1,6 @@
 //! What a pool is started with, and what a job's run on it answers: the
 //! program its workers run, the limits on each job, what the workers run,
-//! and each run's outcome with the results it produced.
+//! and each run's outcome.
 
 use std::ffi::OsString;
 use std::fmt;
@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 
 use super::{DEFAULT_JOB_CPU_SECS, DEFAULT_JOB_MEMORY_MIB, DEFAULT_JOB_WALL_SECS, WORKER_COMMAND};
 use crate::protocol::bundle::Runtime;
-use crate::protocol::jobs::ResultRef;
 use crate::server::jobs::WorkerOutcome;
 
 /// The program a worker runs: this binary, as `quantforge worker`.
@@ -73,8 +72,9 @@ pub enum WorkerMode {
     /// Nothing yet: the workers offer no runtime, so the server fails each
     /// job as it starts and never hands one over.
     NoRuntime,
-    /// The synthetic workloads the tests try a worker's isolation with,
-    /// offering `runtime` so that the tests' bundles are admitted.
+    /// The synthetic workloads the tests try a worker's isolation and a
+    /// job's results with, offering `runtime` so that the tests' bundles
+    /// are admitted.
     /// `serve run` never starts its workers in this mode.
     Synthetic {
         /// The runtime the workers say they offer.
@@ -111,22 +111,10 @@ pub struct PoolConfig {
 /// A job's run on a worker.
 #[derive(Debug)]
 pub struct Execution {
-    /// How it ended.
+    /// How it ended: a succeeded run with the result files it produced.
     pub outcome: WorkerOutcome,
-    /// What it produced: each result's reference and bytes. A server keeps
-    /// the references; the results routes, which keep the bytes, come later.
-    pub results: Vec<ResultFile>,
     /// The process of the worker that ran it, if one did.
     pub pid: Option<u32>,
-}
-
-/// One result: its reference and its bytes.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ResultFile {
-    /// Its name, media type, hash and size.
-    pub reference: ResultRef,
-    /// Its bytes.
-    pub bytes: Vec<u8>,
 }
 
 /// A job running on a worker.

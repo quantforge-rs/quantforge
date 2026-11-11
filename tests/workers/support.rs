@@ -189,13 +189,11 @@ pub(crate) fn input(params: &str, candles: Vec<Candle>) -> JobInput {
 
 /// The report a job answered.
 pub(crate) fn report(execution: &Execution) -> Value {
-    assert!(
-        matches!(execution.outcome, WorkerOutcome::Succeeded(_)),
-        "{:?}",
-        execution.outcome
-    );
-    let [result] = execution.results.as_slice() else {
-        panic!("one result, not {:?}", execution.results);
+    let WorkerOutcome::Succeeded(results) = &execution.outcome else {
+        panic!("a succeeded job, not {:?}", execution.outcome);
+    };
+    let [result] = results.as_slice() else {
+        panic!("one result, not {results:?}");
     };
     assert_eq!(result.reference.name, "report");
     assert_eq!(result.reference.media_type, "application/json");

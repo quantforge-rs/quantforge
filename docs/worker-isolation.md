@@ -158,11 +158,21 @@ names its build, so a worker refuses a server of another. A server sends
 `setup`, and the worker answers `ready` with what it enforced; the job
 follows as `job` and its `candles`, and the worker answers `finished` once.
 
+A backtest that ran to its end sends its closed trades and its equity curve
+before `finished`, as `trades` and `equity` frames of rows, and its summary
+in `finished`. A worker never sends a file: the server reads each row,
+every decimal as its exact text, keeps no more rows than the job has bars,
+refuses a curve that does not have one row per bar or a summary that
+miscounts the trades, and writes the job's result files itself
+([result-spec.md](result-spec.md)). So what a client downloads is always
+exactly a result file, whatever the job's code did to its worker.
+
 ## Testing it
 
 The tests in `tests/workers/` start this build's binary as a worker in a
 synthetic mode, whose workloads stand in for a strategy: they spin, take
 memory, sleep, crash, leave state behind, and try to read files, open
 connections and leave their process group, so that each limit and guard is
-run into before any user code runs in a worker. `serve run` never starts
-its workers in that mode.
+run into before any user code runs in a worker; one runs the engine on a
+strategy built into QuantForge, so that a job ends with a result as a real
+one will. `serve run` never starts its workers in that mode.

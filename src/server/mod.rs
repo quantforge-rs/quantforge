@@ -16,10 +16,13 @@
 //! | `GET /v1/backtests/{job_id}` | `200`, where a job stands |
 //! | `GET /v1/backtests` | `200`, the jobs, the last submitted first |
 //! | `POST /v1/backtests/{job_id}/cancel` | `200`, a job, cancelled |
+//! | `GET /v1/backtests/{job_id}/result` | `200`, a succeeded job's metrics and where its result files are |
+//! | `GET /v1/backtests/{job_id}/result/{file}` | `200`, one result file, `metrics.json`, `trades.arrow` or `equity.arrow`, which the client's cache may keep for a year; or `304` |
 //!
 //! [`protocol::segments`](crate::protocol::segments) specifies the three
-//! history routes and [`protocol::jobs`](crate::protocol::jobs) the five
-//! job routes: their parameters, their answers and their refusals. The
+//! history routes, [`protocol::jobs`](crate::protocol::jobs) the job routes
+//! and [`protocol::results`](crate::protocol::results) the files a job's
+//! result is: their parameters, their answers and their refusals. The
 //! first two paths name no protocol version: a client asks them before it
 //! knows which version to send its requests under (see
 //! [`protocol`](crate::protocol)). `HEAD` works wherever `GET` does. Any
@@ -36,9 +39,10 @@
 //! thread, so a slow store never stalls the server's other requests; a
 //! request that waits longer than [`StoreLimits::wait`] is answered `503`
 //! with `Retry-After`. A job's worker never sees the store: the server reads
-//! everything the job runs on and writes how it ended. `serve run` runs each
-//! job in a worker process of its own, from a [`WorkerPool`], within the
-//! limits of [`WorkerLimits`].
+//! everything the job runs on and writes how it ended, its result files
+//! with it, in the one change that ends the job. `serve run` runs each job
+//! in a worker process of its own, from a [`WorkerPool`], within the limits
+//! of [`WorkerLimits`].
 //!
 //! - `store`: the store and the turns at it.
 //! - `history`: the markets and candles routes.
@@ -47,6 +51,8 @@
 //! - `segment`: the segment route, its caching headers, and the check of
 //!   the bytes it sends.
 //! - `jobs`: the job routes, the queue, and what runs a job.
+//! - `results`: a job's result as its three files, and as the store keeps
+//!   them.
 //! - `workers`: the processes that run jobs, one per job, and their limits.
 //! - `refusal`: every failed answer, and what a storage failure tells a
 //!   client.
@@ -54,6 +60,7 @@
 mod history;
 mod jobs;
 mod refusal;
+mod results;
 mod segment;
 mod selection;
 mod store;
@@ -75,11 +82,12 @@ use crate::protocol::{MIN_SUPPORTED, PROTO_VERSION, ProtoVersion, ServerVersion}
 
 pub use history::{DEFAULT_MAX_SPAN_BARS, DEFAULT_MAX_TIP_BARS, History, HistoryLimits};
 pub use jobs::{Cancel, JobInput, JobLimits, JobWorker, Jobs, NoRuntime, WorkerOutcome};
+pub use results::{BacktestOutput, ResultFile};
 pub use store::{ServedStore, ServerStore, StoreLimits};
 pub use workers::{
     DEFAULT_JOB_CPU_SECS, DEFAULT_JOB_MEMORY_MIB, DEFAULT_JOB_WALL_SECS, Execution, Guard,
-    PoolConfig, Posture, ResultFile, RunningWorker, WORKER_COMMAND, WorkerError, WorkerLimits,
-    WorkerMode, WorkerPool, WorkerProgram, protect_server, run_worker,
+    PoolConfig, Posture, RunningWorker, WORKER_COMMAND, WorkerError, WorkerLimits, WorkerMode,
+    WorkerPool, WorkerProgram, protect_server, run_worker,
 };
 
 /// Answers every route on `listener` until `shutdown` resolves, the history
@@ -171,6 +179,14 @@ fn router(history: History, jobs: Jobs) -> Router {
             .route(
                 &format!("/{version}/backtests/{{job_id}}/cancel"),
                 post(jobs::cancel),
+            )
+            .route(
+                &format!("/{version}/backtests/{{job_id}}/result"),
+                get(jobs::result),
+            )
+            .route(
+                &format!("/{version}/backtests/{{job_id}}/result/{{file}}"),
+                get(jobs::result_file),
             );
     }
     let state = ServerState {

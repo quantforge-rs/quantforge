@@ -257,6 +257,22 @@ pub const BUNDLES: TransferTable = TransferTable {
     max_batch: Some(2),
 };
 
+/// The results of the jobs that succeeded, by their names in byte order.
+/// A row holds a whole result file, packed, so a batch holds few.
+pub const JOB_RESULTS: TransferTable = TransferTable {
+    name: "job_results",
+    columns: &[
+        text("hash"),
+        integer("size_bytes"),
+        blob("data"),
+        integer("stored_at_ms"),
+    ],
+    key: "hash",
+    by_market: false,
+    numbered: false,
+    max_batch: Some(2),
+};
+
 /// The jobs, by the sequence number the store gave each, which keeps their
 /// order: the queue runs them in it, and lists them newest first.
 pub const JOBS: TransferTable = TransferTable {
@@ -281,9 +297,10 @@ pub const JOBS: TransferTable = TransferTable {
 
 /// The tables a transfer copies, in the order it copies them: a run before
 /// its journals, a segment before the index entry naming it, candles before
-/// the marks on their windows, a bundle before the jobs that run it. Each
-/// part of a target is whole when read.
-pub const TRANSFER_TABLES: [TransferTable; 9] = [
+/// the marks on their windows, a bundle before the jobs that run it, a
+/// result before the job that lists it. Each part of a target is whole when
+/// read.
+pub const TRANSFER_TABLES: [TransferTable; 10] = [
     CANDLES,
     BOT_RUNS,
     ORDER_EVENTS,
@@ -292,6 +309,7 @@ pub const TRANSFER_TABLES: [TransferTable; 9] = [
     SEGMENT_INDEX,
     SEGMENT_DIRTY,
     BUNDLES,
+    JOB_RESULTS,
     JOBS,
 ];
 
@@ -333,6 +351,7 @@ mod tests {
         assert_eq!(SEGMENTS.batch_rows(5000), 64);
         assert_eq!(SEGMENTS.batch_rows(10), 10);
         assert_eq!(BUNDLES.batch_rows(5000), 2);
+        assert_eq!(JOB_RESULTS.batch_rows(5000), 2);
         assert_eq!(CANDLES.batch_rows(5000), 5000);
         assert_eq!(CANDLES.batch_rows(0), 1);
     }

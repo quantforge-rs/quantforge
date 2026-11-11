@@ -263,7 +263,7 @@ fn a_worker_refuses_a_server_of_another_build() {
     let said = String::from_utf8_lossy(&output.stderr);
     assert!(
         said.contains(&format!(
-            "the server is quantforge 0.0.0 frames 0, and this worker quantforge {} frames 1; a \
+            "the server is quantforge 0.0.0 frames 0, and this worker quantforge {} frames 2; a \
              worker runs only for a server of its own build",
             env!("CARGO_PKG_VERSION")
         )),
@@ -286,7 +286,7 @@ fn alone(dir: &Path, params: Value) -> Value {
     stdin
         .write_all(&frame(&json!({
             "type": "setup",
-            "build": format!("quantforge {} frames 1", env!("CARGO_PKG_VERSION")),
+            "build": format!("quantforge {} frames 2", env!("CARGO_PKG_VERSION")),
             "mode": {"kind": "synthetic", "runtime": {"engine": "0.3.0", "python": "3.12", "packages": {}}},
             "cpu_secs": 60,
             "memory_bytes": 1_u64 << 31,
@@ -377,7 +377,7 @@ fn a_worker_whose_server_goes_away_mid_job_exits() {
     stdin
         .write_all(&frame(&json!({
             "type": "setup",
-            "build": format!("quantforge {} frames 1", env!("CARGO_PKG_VERSION")),
+            "build": format!("quantforge {} frames 2", env!("CARGO_PKG_VERSION")),
             "mode": {"kind": "synthetic", "runtime": {"engine": "0.3.0", "python": "3.12", "packages": {}}},
             "cpu_secs": 60,
             "memory_bytes": 1_u64 << 31,
@@ -435,7 +435,7 @@ fn a_worker_given_no_job_exits_once_its_input_ends() {
     stdin
         .write_all(&frame(&json!({
             "type": "setup",
-            "build": format!("quantforge {} frames 1", env!("CARGO_PKG_VERSION")),
+            "build": format!("quantforge {} frames 2", env!("CARGO_PKG_VERSION")),
             "mode": {"kind": "no_runtime"},
             "cpu_secs": 60,
             "memory_bytes": 1_u64 << 31,

@@ -8,7 +8,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 
 use crate::model::{
-    BundleHash, Candle, JobId, JobOutcome, JobRecord, MarketCoverage, MarketId, NewJob,
+    BundleHash, Candle, JobId, JobOutcome, JobRecord, MarketCoverage, MarketId, NewJob, ResultHash,
     SegmentHash, SegmentPlan, SegmentRefresh, TimestampMs,
 };
 use crate::ports::{CandleQuery, CandleStore, JobStore, SegmentStore, StorageError};
@@ -208,6 +208,11 @@ impl<S: JobStore> JobStore for Faulty<S> {
     ) -> Result<bool, StorageError> {
         self.fault()?;
         self.inner.finish_job(job_id, outcome, finished_at_ms)
+    }
+
+    fn load_result(&self, hash: &ResultHash) -> Result<Option<Vec<u8>>, StorageError> {
+        self.fault()?;
+        self.inner.load_result(hash)
     }
 
     fn cancel_job(

@@ -534,6 +534,32 @@
         ]
       ]
     },
+    "job_results": {
+      "columns": [
+        "hash",
+        "size_bytes",
+        "data",
+        "stored_at_ms"
+      ],
+      "rows": [
+        [
+          "sha256:8cf777ac5e8ce77ffc07c69dbfb2314dccbbbfdf6889765fccb6434d2a9ea517",
+          119,
+          {
+            "hex": "28b52ffda077000000b903007b22696e697469616c5f63617368223a223130303030222c2266696e616c5f657175697479223a2231303235302e3530222c22746f74616c5f72657475726e5f706374223a22322e35303530222c226d61785f64726177646f776e5f706374223a22312e32222c2274726164655f636f756e74223a307d"
+          },
+          1792454432000
+        ],
+        [
+          "sha256:1f62a93aa692367389ad09bb8569b740ef4aa7c310974f358672276519952348",
+          264,
+          {
+            "hex": "28b52ffda0080100004108004152524f57310000000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"
+          },
+          1792454432000
+        ]
+      ]
+    },
     "jobs": {
       "columns": [
         "seq",
@@ -557,7 +583,7 @@
           1792454430000,
           1792454431000,
           1792454432000,
-          "[]",
+          "[{\"name\":\"metrics\",\"media_type\":\"application/json\",\"hash\":\"sha256:8cf777ac5e8ce77ffc07c69dbfb2314dccbbbfdf6889765fccb6434d2a9ea517\",\"size_bytes\":119},{\"name\":\"trades\",\"media_type\":\"application/vnd.apache.arrow.file\",\"hash\":\"sha256:1f62a93aa692367389ad09bb8569b740ef4aa7c310974f358672276519952348\",\"size_bytes\":264}]",
           null
         ],
         [
@@ -733,12 +759,20 @@
       "checksum": "sha256:4436acfb543eeb0426e5a9e89c750a7ee2ed99c894344c326beaa0b5b8efe505"
     },
     {
+      "table": "job_results",
+      "market": null,
+      "rows": 2,
+      "first": null,
+      "last": null,
+      "checksum": "sha256:5761f422257f1ab1425aa0194f25251af7ee1b364027ed9f36d8eae71aaffd68"
+    },
+    {
       "table": "jobs",
       "market": null,
       "rows": 5,
       "first": 1,
       "last": 10,
-      "checksum": "sha256:d26e1bb526c7dae115d02921c87f192327242547899797ae4c0f70a1903d1d87"
+      "checksum": "sha256:89ac6b08ab8064485e8f7e45686c6fbf0b48808d784391f3b3b327b6a46af196"
     }
   ],
   "worked_example": {

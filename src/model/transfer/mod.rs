@@ -25,7 +25,7 @@ pub const TRANSFER_FORMAT: u32 = 1;
 
 /// The schema whose tables [`TRANSFER_TABLES`] lists. A source and a target
 /// are both at it, and a schema step that changes a listed table changes it.
-pub const TRANSFER_SCHEMA: u32 = 6;
+pub const TRANSFER_SCHEMA: u32 = 7;
 
 /// A stored value as both backends hold it: no decimal parsed, no text
 /// normalized. Values of a kind compare as SQLite compares them: integers

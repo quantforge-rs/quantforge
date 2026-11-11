@@ -4,8 +4,9 @@
 //! It is the only kind of job: the strategies built into QuantForge are not
 //! offered remotely. A client uploads its bundle, which is named by its
 //! [`ContentHash`](super::ContentHash); submits a [`JobSubmission`]; reads
-//! the job's [`JobStatus`] until the job has finished; and then fetches each
-//! result by its [`ResultRef`].
+//! the job's [`JobStatus`] until the job has finished; and then fetches
+//! what it produced: a [`JobResult`], and the files it lists, which
+//! [`results`](super::results) specifies.
 //!
 //! # Routes
 //!
@@ -16,6 +17,10 @@
 //! | `GET /v1/backtests/{job_id}` | | `200` and the job's [`JobStatus`] |
 //! | `GET /v1/backtests` | | `200` and a [`JobList`], newest first: at most `limit` jobs, a query parameter of 1 to 1,000, 100 when it is left out |
 //! | `POST /v1/backtests/{job_id}/cancel` | | `200` and the job's [`JobStatus`], cancelled |
+//! | `GET /v1/backtests/{job_id}/result` | | `200` and the job's [`JobResult`]: its metrics, and each result file's hash, size and path |
+//! | `GET /v1/backtests/{job_id}/result/metrics.json` | | `200` and the job's metrics: a [`Metrics`](super::results::Metrics), as JSON |
+//! | `GET /v1/backtests/{job_id}/result/trades.arrow` | | `200` and the job's closed trades, as an Arrow IPC file |
+//! | `GET /v1/backtests/{job_id}/result/equity.arrow` | | `200` and the job's equity curve, as an Arrow IPC file |
 //!
 //! None of the routes needs credentials yet. A refused request is answered
 //! with an [`ErrorEnvelope`](super::ErrorEnvelope):
@@ -23,10 +28,10 @@
 //! | Status and code | When |
 //! | --- | --- |
 //! | 400 `invalid_request` | An upload not sent as `application/x-tar`, larger than any bundle within the server's limits, whose bytes hash to another name, that is not exactly a canonical tar, breaks the [bundle spec], or cannot run on this server: from the third on, the message is the bundle's refusal, each problem's message verbatim. A submission that is not in its canonical form, whose settings are out of range, whose market without `category` is ambiguous, whose range spans more bars than the server runs one job on, that names a bundle the server does not hold or cannot run, or whose range is not within the bars the server stores, from the first to the last |
-//! | 404 `not_found` | No job of that ID |
-//! | 409 `conflict` | Cancelling a job that has finished |
+//! | 404 `not_found` | No job of that ID; a result file of another name |
+//! | 409 `conflict` | Cancelling a job that has finished; asking for the result of a job that has not succeeded, which the message says is queued, running, failed or cancelled |
 //! | 503 `unavailable` | The server's store could not answer in time; `Retry-After` says how many seconds to wait |
-//! | 500 `internal` | The server failed |
+//! | 500 `internal` | The server failed: its store refused, or its copy of a result does not match the result's hash |
 //!
 //! # A job's life
 //!
@@ -51,6 +56,25 @@
 //! A server without a worker runtime fails every job as it starts, with
 //! `unavailable`.
 //!
+//! # A job's result
+//!
+//! A job that has succeeded has three result files, which its
+//! [`JobState::Succeeded`] lists as [`ResultRef`]s and its [`JobResult`]
+//! with their paths: `metrics.json`, `trades.arrow` and `equity.arrow`.
+//! [`results`](super::results) is their contract: the metrics' fields, each
+//! table's columns and types, and how a decimal is written. A job's result
+//! never changes, and it outlives the server that ran the job: it is kept
+//! in the server's store, with the job.
+//!
+//! Each file is answered with its media type, the entity tag `"<hash>"`,
+//! quotes included, and
+//! [`RESULT_CACHE_CONTROL`](super::results::RESULT_CACHE_CONTROL), which
+//! lets the client's own cache keep it for a year. A request whose
+//! `If-None-Match` names that tag, weakly or not, or is `*`, gets
+//! `304 Not Modified` and no body. The server checks a file against its
+//! hash before it sends it, and a client that wants to be sure of what it
+//! holds hashes the bytes it received and compares.
+//!
 //! # A market without `category`
 //!
 //! A [`DataSelection`] may leave out `category`: the form a market took
@@ -61,6 +85,7 @@
 //!
 //! [bundle spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md>
 
+mod result;
 mod status;
 mod submission;
 
@@ -70,6 +95,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{ProtocolError, opaque_id};
 
+pub use result::{JobResult, ResultLink};
 pub use status::{JobList, JobState, JobStatus, ResultRef};
 pub use submission::{BacktestSettings, BundleReceipt, DataSelection, JobSubmission};
 

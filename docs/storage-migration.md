@@ -38,6 +38,7 @@ are those of the [DDL](storage-schema.md#sqlite-ddl).
 - `segment_index`: market by market, by `window_start_ms`
 - `segment_dirty`: by `id`, a number the store gave
 - `bundles`: by `code_hash`, byte by byte
+- `job_results`: by `hash`, byte by byte
 - `jobs`: by `seq`, a number the store gave
 <!-- end: transfer tables -->
 

@@ -188,10 +188,15 @@ pub(in crate::server) async fn cancel(
 /// that is not an ID this server makes up names no job here.
 fn named(id: Result<Path<String>, PathRejection>) -> Result<JobId, Refusal> {
     let Path(text) = id.map_err(|rejection| Refusal::invalid(rejection.body_text()))?;
+    job_named(text)
+}
+
+/// The job `text` names, as [`named`] reads a path's.
+pub(super) fn job_named(text: String) -> Result<JobId, Refusal> {
     let wire = jobs::JobId::new(text).map_err(|failure| Refusal::invalid(failure.to_string()))?;
     JobId::new(wire.as_str()).map_err(|_| no_job(wire.as_str()))
 }
 
-fn no_job(job_id: &str) -> Refusal {
+pub(super) fn no_job(job_id: &str) -> Refusal {
     Refusal::not_found(format!("the server holds no job {job_id}"))
 }

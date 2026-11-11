@@ -230,11 +230,13 @@ exist.
 
 ### The job store
 
-`JobStore`: the bundles a server was sent and its jobs. A bundle is stored
-once under its name; a job moves from queued to running to one final phase,
-or straight to cancelled, each move one guarded change, so a claim never
-takes a job twice and nothing changes an ended job. The scenarios use
-any bytes and names: checking a bundle against its name is the server's.
+`JobStore`: the bundles a server was sent, its jobs and their results. A
+bundle is stored once under its name; a job moves from queued to running to
+one final phase, or straight to cancelled, each move one guarded change, so a
+claim never takes a job twice and nothing changes an ended job; a succeeded
+job's results are stored in the change that ends it, each once under its
+name. The scenarios use any bytes and names: checking a bundle or a result
+against its name is the server's.
 
 <!-- begin: jobs -->
 - `jobs.bundle_stored_once`: a bundle is stored once under its name, every
@@ -254,10 +256,22 @@ any bytes and names: checking a bundle against its name is the server's.
   failed with the reason given, as a server does as it starts
 - `jobs.json_kept_verbatim`: a job's request, results and failure are kept as
   the text given, whatever it holds
+- `jobs.results_stored_with_the_end`: a succeeded job's results are stored as
+  it ends, every byte kept, and loaded back by name; an unknown name loads
+  nothing, and a store opened again still holds them
+- `jobs.results_of_no_end_not_stored`: an end that changes nothing stores
+  nothing: not the results of a job cancelled as it ran, of one that had
+  ended, of a queued one or of an unknown one; a failed job stores none
+- `jobs.result_stored_once`: a result two jobs produce is stored once under
+  its name: the second job ends with its results listed, and the bytes stored
+  first stay
 - `jobs.reopened`: a store opened again keeps every job as it stood, and
   claims on in order
 - `jobs.claims_racing`: stores claiming at once from many queued jobs claim
   each exactly once, none twice and none lost
+- `jobs.failed_end_changes_nothing`: an end whose results cannot all be
+  stored changes nothing: the job still runs and holds no result, and ends
+  once they can
 <!-- end: jobs -->
 
 ## The fixtures

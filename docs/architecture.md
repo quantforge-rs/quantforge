@@ -101,7 +101,16 @@ src/
 │   ├── jobs/                   remote backtests of a Python bundle, over HTTP
 │   │   ├── mod.rs              the job surface and JobId
 │   │   ├── submission.rs       JobSubmission: the bundle's hash, the candles, the backtest settings
-│   │   └── status.rs           JobStatus, JobState, and the references to a job's results
+│   │   ├── status.rs           JobStatus, JobState, and the references to a job's results
+│   │   └── result.rs           JobResult and ResultLink: a succeeded job's metrics, and where its files are
+│   ├── results/                what a job produces: its metrics, trades and equity curve as files
+│   │   ├── mod.rs              the result contract: files, columns, types, decimals; ResultKind, ResultError
+│   │   ├── metrics.rs          Metrics: the summary, and metrics.json
+│   │   ├── trades.rs           TradeRow, and trades.arrow written and read back strictly
+│   │   ├── equity.rs           EquityRow, and equity.arrow written and read back strictly
+│   │   ├── arrow.rs            the one Arrow IPC file a table is: its schema, record batch and footer
+│   │   ├── reader.rs           a table's file read back: its record batch, and each column from its buffers
+│   │   └── flatbuf.rs          the FlatBuffers layout Arrow's metadata takes, built and read by hand
 │   ├── segments/               stored candles over HTTP: the markets, a range, each segment
 │   │   ├── mod.rs              the history routes and their rules; SegmentEntry, the media type, the cache header
 │   │   ├── markets.rs          MarketIndex and MarketEntry: what GET /v1/markets answers
@@ -119,7 +128,7 @@ src/
 │   ├── durability.rs           DurabilityReport: the settings a store's commits rely on, read back
 │   ├── identity.rs             Environment, InstrumentId, venue ids as text, OperationId, the text_id! macro
 │   ├── interval.rs             Interval: wire form, step duration, parsing
-│   ├── job.rs                  JobId, BundleHash, JobPhase, JobRecord: a remote backtest as a store keeps it
+│   ├── job.rs                  JobId, BundleHash, ResultHash, JobPhase, JobRecord, StoredResult: a remote backtest as a store keeps it
 │   ├── market.rs               Symbol, Venue, Category, ExchangeId (the product lines), MarketId
 │   ├── money.rs                Asset and Money: amounts that never mix assets
 │   ├── order.rs                Side, OrderStatus, Fill, ExchangeOrder, AccountTrade
@@ -154,7 +163,7 @@ src/
 │   ├── mod.rs                  Spot connector traits, their capabilities and errors; re-exports the storage ports
 │   ├── clock.rs                Clock, the injected time source, and SystemClock
 │   ├── storage.rs              CandleStore, SegmentStore, RunJournalStore, StoreControl, StorageError
-│   ├── jobs.rs                 JobStore: a server's bundles and jobs, each move of a job one guarded change
+│   ├── jobs.rs                 JobStore: a server's bundles, jobs and their results, each move of a job one guarded change
 │   ├── transfer.rs             TransferSource, TransferSnapshot, TransferTarget: a store's rows for a copy
 │   └── futures.rs              futures ports by capability, FuturesCapabilities, FuturesConnectors
 ├── exchange/                   the connector registry, one adapter per exchange, and the conformance suite
@@ -278,22 +287,27 @@ src/
     ├── history.rs              History: the markets and candles routes
     ├── selection.rs            a candles query or a job's data read into a market and a range, every value canonical
     ├── segment.rs              the segment route: stored bytes, cached for a year, checked before they go
+    ├── results.rs              a job's result as its three files, and as the store keeps and returns them
     ├── jobs/                   Jobs: the backtest job routes and the queue behind them
     │   ├── mod.rs              the queue's state, its start after a restart, and its stop
     │   ├── routes.rs           the upload, submission, status, list and cancel routes
     │   ├── submission.rs       what an upload and a submission must pass before anything is stored
     │   ├── queue.rs            the dispatcher, a job's input read from the store, and its end written
     │   ├── status.rs           a job's record as the protocol shows it
+    │   ├── results.rs          the result routes: a succeeded job's metrics and files, each checked before it goes
     │   └── worker.rs           JobWorker: what runs a job, its cancel, and the worker with no runtime
     ├── workers/                the processes that run jobs, one per job, and what each may reach
     │   ├── mod.rs              the boundary, and what each operating system enforces of it
     │   ├── pool.rs             WorkerPool: workers started ahead of jobs, each killed after its one job
     │   ├── config.rs           what a pool starts with, and what a job's run on it answers
     │   ├── job.rs              one job's run: its bundle in scratch, its frames sent, its limits watched
+    │   ├── job/                its unit tests, beside it for the line budget
+    │   │   └── tests.rs        a backtest's rows kept while they fit the job, and written as its files
     │   ├── process.rs          a worker's process: started bare, killed with its group, why it stopped
     │   ├── frames.rs           what a server and its workers say: length-prefixed JSON frames
     │   ├── scratch.rs          the scratch directories: owner-only, removed with their worker
     │   ├── child.rs            the worker's side: setup, its limits and sandbox, the job, its end
+    │   ├── backtest.rs         the engine's run over a job's candles in the worker, and its result as rows
     │   ├── synthetic.rs        the tests' workloads, which run into each limit in place of a strategy
     │   └── isolation/          the limits and sandbox a worker puts on itself as it starts
     │       ├── mod.rs          Posture and Guard: what held, and why not; the server closed to workers
@@ -308,6 +322,7 @@ src/
         ├── markets.rs          every stored market, in order, with its span
         ├── queries.rs          the queries refused before the store is asked anything
         ├── queue.rs            a job that waits out a busy store as it starts
+        ├── results.rs          a result the store holds damaged, lost or unlisted, never sent
         ├── segments.rs         stored bytes, 304s, unknown hashes, and damaged copies never sent
         ├── store.rs            storage failures named to no client, and the turns at the store
         ├── jobs.rs             uploads stored once, and every upload refused before it is stored
@@ -319,8 +334,10 @@ apart and uses no other module, then the six layers innermost first, as in
 the `src/lib.rs` docs, then `server`. `model` uses no other module, `ports`
 uses `model`, `exchange` and `storage` use `model` and `ports`, `sdk` uses
 `model`, and `engine` uses `model`, `ports`, and `sdk`. `server` uses
-`protocol`, `model`, the `ports` it reads and writes the store through, and
-the segment codec of `storage::segments` to check what it sends; `serve run`
+`protocol`, `model`, the `ports` it reads and writes the store through, the
+segment codec of `storage::segments` to check what it sends, and, in a
+worker, the backtest `engine` and the `sdk` strategy it runs, whose result
+it writes as the protocol's result files; `serve run`
 opens the store, binds the address, and hands it both, with the pool of
 worker processes that run jobs, each a process of this binary that sees
 nothing of the store, one per job ([worker-isolation.md](worker-isolation.md)). The engines reach the exchange
@@ -347,7 +364,8 @@ compiles `protocol` on its own and scans its sources, so it fails if
 `protocol` uses anything else in the crate, or a dependency beyond `serde`,
 `serde_json`, `rust_decimal`, `sha2`, `thiserror`, and `toml`: the module is
 meant to become a crate of its own. The strategy bundle format it carries
-is written down in [bundle-spec.md](bundle-spec.md). The candle segments
+is written down in [bundle-spec.md](bundle-spec.md), and the files a job's
+result is in [result-spec.md](result-spec.md). The candle segments
 `storage` packs, and a server will serve, are written down in
 [segment-spec.md](segment-spec.md). Decisions that shape more than one
 change, such as how the storage ports reach PostgreSQL, are recorded in
@@ -379,8 +397,13 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   [worker-isolation.md](worker-isolation.md), this build's binary started as
   `quantforge worker` and running the synthetic workloads: each limit run
   into and named, crashes, kills and cancels, scratch directories, the
-  network and the environment a worker gets, recycling, and jobs through
-  the queue on each backend
+  network and the environment a worker gets, recycling, a backtest run in a
+  worker and the result files its rows become, and jobs through the queue
+  on each backend
+- `tests/results/`: a job's result files against
+  [result-spec.md](result-spec.md): the shared cases of
+  `tests/fixtures/result_cases.json`, the spec held to the code, and an
+  engine's result read back from its files digit for digit
 - `tests/storage/`: the storage contract of
   [storage-schema.md](storage-schema.md) and
   [storage-conformance.md](storage-conformance.md) — the shared
@@ -430,8 +453,8 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
 - `tests/fixtures/`: data shared with the Python bindings' tests: the
   decimal ↔ float64 conformance cases of
   [decimal-float-policy.md](decimal-float-policy.md), the shared cases
-  of the bundle and segment specs, the storage identity cases, and the
-  SQLite databases of every earlier schema under `sqlite/`
+  of the bundle, segment and result specs, the storage identity cases, and
+  the SQLite databases of every earlier schema under `sqlite/`
 - unit tests sit at the bottom of the module they test, in
   `#[cfg(test)] mod tests`, or in a `tests.rs` beside it once they would
   push the file over its line budget (`src/cli/tests.rs`)

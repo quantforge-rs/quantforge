@@ -121,7 +121,9 @@ pub(super) fn start(
                 runtime,
             })
         }
-        Ok(Ok(FromWorker::Finished { .. })) => Err(io::Error::other(
+        Ok(Ok(
+            FromWorker::Finished { .. } | FromWorker::Trades { .. } | FromWorker::Equity { .. },
+        )) => Err(io::Error::other(
             "the worker said a job finished before it was ready",
         )),
         Ok(Err(error)) => Err(error),

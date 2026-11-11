@@ -11,8 +11,8 @@
 use quantforge::{
     BotRunState, BundleHash, Candle, ClosedTrade, Environment, ExchangeId, ExchangeOrder,
     ExecutionMode, Fill, Interval, JobId, JobOutcome, JobRecord, KeyFingerprint, MarketId, NewJob,
-    OrderStatus, PositionState, RunIdentity, RunStatus, Side, Symbol, VenueAccountId, VenueOrderId,
-    VenueTradeId,
+    OrderStatus, PositionState, RunIdentity, RunStatus, Side, StoredResult, Symbol, VenueAccountId,
+    VenueOrderId, VenueTradeId,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -149,6 +149,10 @@ pub enum Step {
         expect: bool,
     },
     LoadBundle {
+        hash: String,
+        expect: Option<String>,
+    },
+    LoadResult {
         hash: String,
         expect: Option<String>,
     },
@@ -387,23 +391,45 @@ impl JobText {
     }
 }
 
-/// How the cases end a run.
+/// How the cases end a run: succeeded with its results' JSON, and the
+/// results a store keeps with it, or failed with why.
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "snake_case")]
-pub enum OutcomeText {
-    Succeeded(String),
-    Failed(String),
+#[serde(deny_unknown_fields)]
+pub struct OutcomeText {
+    succeeded: Option<String>,
+    failed: Option<String>,
+    #[serde(default)]
+    results: Vec<StoredResultText>,
+}
+
+/// One result as the cases hand it to a store: its bytes as hex.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StoredResultText {
+    hash: String,
+    size_bytes: u64,
+    data: String,
 }
 
 impl OutcomeText {
     pub fn outcome(&self) -> JobOutcome {
-        match self {
-            Self::Succeeded(results_json) => JobOutcome::Succeeded {
+        match (&self.succeeded, &self.failed) {
+            (Some(results_json), None) => JobOutcome::Succeeded {
                 results_json: results_json.clone(),
+                results: self
+                    .results
+                    .iter()
+                    .map(|result| StoredResult {
+                        hash: result.hash.parse().expect("a result hash"),
+                        size_bytes: result.size_bytes,
+                        data: hex::decode(&result.data).expect("hex"),
+                    })
+                    .collect(),
             },
-            Self::Failed(failure_json) => JobOutcome::Failed {
+            (None, Some(failure_json)) if self.results.is_empty() => JobOutcome::Failed {
                 failure_json: failure_json.clone(),
             },
+            other => panic!("an outcome succeeded or failed, not {other:?}"),
         }
     }
 }

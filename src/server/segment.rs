@@ -62,7 +62,7 @@ pub(super) async fn segment(
 
 /// Whether an `If-None-Match` field names `tag`, or is `*`. Entity tags
 /// compare weakly there, so `W/"…"` names it too.
-fn names_tag(headers: &HeaderMap, tag: &str) -> bool {
+pub(super) fn names_tag(headers: &HeaderMap, tag: &str) -> bool {
     headers
         .get_all(IF_NONE_MATCH)
         .iter()

@@ -9,8 +9,9 @@ use std::time::Duration;
 
 use crate::model::Candle;
 use crate::protocol::bundle::{Bundle, Runtime};
-use crate::protocol::jobs::{JobId, JobSubmission, ResultRef};
+use crate::protocol::jobs::{JobId, JobSubmission};
 use crate::protocol::{ErrorBody, ErrorCode};
+use crate::server::results::ResultFile;
 
 /// Why a server with no worker runtime fails each job as it starts.
 pub(in crate::server) const NO_RUNTIME: &str = "this server cannot run Python bundles yet; a later \
@@ -32,8 +33,9 @@ pub struct JobInput {
 /// How a run ended.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkerOutcome {
-    /// Finished, with what it produced.
-    Succeeded(Vec<ResultRef>),
+    /// Finished, with the result files it produced, which the server keeps
+    /// with the job.
+    Succeeded(Vec<ResultFile>),
     /// Finished without results, with why: `invalid_request` when the bundle
     /// or its data is at fault, `internal` or `unavailable` when the server
     /// is.

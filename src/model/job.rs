@@ -30,52 +30,72 @@ impl JobId {
 
 const PREFIX: &str = "sha256:";
 
-/// A bundle's name: the SHA-256 of its canonical tar, written `sha256:` and
-/// 64 lowercase hex digits, the protocol's code hash.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct BundleHash([u8; 32]);
+/// A name that is the SHA-256 of what it names, written `sha256:` and 64
+/// lowercase hex digits, the protocol's content hash.
+macro_rules! sha256_name {
+    ($(#[$doc:meta])* $name:ident, $invalid:ident) => {
+        $(#[$doc])*
+        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $name([u8; 32]);
 
-impl BundleHash {
-    /// The name of a canonical tar whose SHA-256 digest is `digest`.
-    pub const fn from_digest(digest: [u8; 32]) -> Self {
-        Self(digest)
-    }
+        impl $name {
+            /// The name of bytes whose SHA-256 digest is `digest`.
+            pub const fn from_digest(digest: [u8; 32]) -> Self {
+                Self(digest)
+            }
 
-    /// The SHA-256 digest.
-    pub const fn digest(&self) -> &[u8; 32] {
-        &self.0
-    }
-}
-
-impl fmt::Display for BundleHash {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(PREFIX)?;
-        self.0.iter().try_for_each(|byte| write!(f, "{byte:02x}"))
-    }
-}
-
-impl fmt::Debug for BundleHash {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "BundleHash({self})")
-    }
-}
-
-/// Reads the written form back; uppercase hex is refused, so that each name
-/// has one spelling.
-impl FromStr for BundleHash {
-    type Err = ModelError;
-
-    fn from_str(text: &str) -> Result<Self, Self::Err> {
-        let invalid = || ModelError::InvalidBundleHash(text.to_string());
-        let hex = text.strip_prefix(PREFIX).ok_or_else(invalid)?;
-        if !(hex.len() == 64 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))) {
-            return Err(invalid());
+            /// The SHA-256 digest.
+            pub const fn digest(&self) -> &[u8; 32] {
+                &self.0
+            }
         }
-        let mut digest = [0; 32];
-        hex::decode_to_slice(hex, &mut digest).map_err(|_| invalid())?;
-        Ok(Self(digest))
-    }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(PREFIX)?;
+                self.0.iter().try_for_each(|byte| write!(f, "{byte:02x}"))
+            }
+        }
+
+        impl fmt::Debug for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, concat!(stringify!($name), "({})"), self)
+            }
+        }
+
+        /// Reads the written form back; uppercase hex is refused, so that
+        /// each name has one spelling.
+        impl FromStr for $name {
+            type Err = ModelError;
+
+            fn from_str(text: &str) -> Result<Self, Self::Err> {
+                let invalid = || ModelError::$invalid(text.to_string());
+                let hex = text.strip_prefix(PREFIX).ok_or_else(invalid)?;
+                let lowercase = |b: u8| matches!(b, b'0'..=b'9' | b'a'..=b'f');
+                if !(hex.len() == 64 && hex.bytes().all(lowercase)) {
+                    return Err(invalid());
+                }
+                let mut digest = [0; 32];
+                hex::decode_to_slice(hex, &mut digest).map_err(|_| invalid())?;
+                Ok(Self(digest))
+            }
+        }
+    };
 }
+
+sha256_name!(
+    /// A bundle's name: the SHA-256 of its canonical tar, written `sha256:`
+    /// and 64 lowercase hex digits, the protocol's code hash.
+    BundleHash,
+    InvalidBundleHash
+);
+
+sha256_name!(
+    /// A result's name: the SHA-256 of the file a client downloads, written
+    /// `sha256:` and 64 lowercase hex digits, as the job's results list it.
+    ResultHash,
+    InvalidResultHash
+);
 
 /// Where a job stands. A job is queued, then running, then succeeded,
 /// failed or cancelled; it can also be cancelled before it starts, and the
@@ -167,11 +187,38 @@ pub struct JobRecord {
     pub failure_json: Option<String>,
 }
 
+/// One file a job produced, as a store keeps it under its name.
+#[derive(Clone, PartialEq, Eq)]
+pub struct StoredResult {
+    /// The file's name: the SHA-256 of its bytes as a client downloads
+    /// them.
+    pub hash: ResultHash,
+    /// How many bytes a client downloads.
+    pub size_bytes: u64,
+    /// What the store keeps: the file as the server packed it.
+    pub data: Vec<u8>,
+}
+
+impl fmt::Debug for StoredResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StoredResult")
+            .field("hash", &self.hash)
+            .field("size_bytes", &self.size_bytes)
+            .field("stored_bytes", &self.data.len())
+            .finish()
+    }
+}
+
 /// How a run ended, as the server writes it into the job's record.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum JobOutcome {
-    /// Finished, with what it produced.
-    Succeeded { results_json: String },
+    /// Finished, with what it produced: the list the job's record shows,
+    /// as the server's JSON, and the files it names, which the store keeps
+    /// in the same change.
+    Succeeded {
+        results_json: String,
+        results: Vec<StoredResult>,
+    },
     /// Finished without results, with why.
     Failed { failure_json: String },
 }
@@ -214,6 +261,26 @@ mod tests {
                 "{refused:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_result_hash_reads_back_only_its_written_form_and_a_stored_result_hides_its_bytes() {
+        let text = format!("sha256:{EMPTY}");
+        let hash: ResultHash = text.parse().expect("hash");
+        assert_eq!(hash.to_string(), text);
+        assert_eq!(format!("{hash:?}"), format!("ResultHash({text})"));
+        assert!(
+            matches!(EMPTY.parse::<ResultHash>(), Err(ModelError::InvalidResultHash(input)) if input == EMPTY)
+        );
+        let stored = StoredResult {
+            hash,
+            size_bytes: 9,
+            data: vec![7; 4],
+        };
+        assert_eq!(
+            format!("{stored:?}"),
+            format!("StoredResult {{ hash: ResultHash({text}), size_bytes: 9, stored_bytes: 4 }}")
+        );
     }
 
     #[test]

@@ -1,0 +1,20 @@
+# Evidence for docs/result-spec.md: the fixture's Arrow files read with
+# arrow-rs, and their metadata rebuilt with the reference FlatBuffers
+# builder. Standalone on purpose: QuantForge itself depends on neither.
+[package]
+name = "result-format-spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+arrow-array = "60"
+arrow-ipc = "60"
+arrow-schema = "60"
+flatbuffers = "25"
+serde_json = "1"

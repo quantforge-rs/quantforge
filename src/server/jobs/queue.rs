@@ -1,7 +1,8 @@
 //! The dispatcher and a job's run. The dispatcher claims the job submitted
 //! first whenever a slot is free; a run reads the job's input from the
 //! store, hands it to the worker on a thread of its own, and writes how it
-//! ended. A cancelled job's end is the cancel: the store already says so.
+//! ended, a succeeded job's result files in the same change. A cancelled
+//! job's end is the cancel: the store already says so.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,12 +12,14 @@ use tracing::{error, info, warn};
 
 use super::Jobs;
 use super::worker::{Cancel, JobInput, NO_RUNTIME, WorkerOutcome};
-use crate::model::{Candle, JobId, JobOutcome, JobPhase, JobRecord, now_utc_ms};
+use crate::model::{Candle, JobId, JobOutcome, JobPhase, JobRecord, StoredResult, now_utc_ms};
 use crate::ports::CandleQuery;
 use crate::protocol::bundle::{Bundle, Runtime};
+use crate::protocol::jobs::ResultRef;
 use crate::protocol::jobs::{self, JobSubmission};
 use crate::protocol::{ErrorBody, ErrorCode};
 use crate::server::refusal::Refusal;
+use crate::server::results::ResultFile;
 use crate::server::selection::Selection;
 use crate::server::store::ServedStore;
 
@@ -131,21 +134,25 @@ async fn execute(jobs: &Jobs, record: JobRecord, cancel: &Cancel) -> Ended {
     };
     let worker = Arc::clone(&jobs.inner.worker);
     let signal = cancel.clone();
-    let ran = tokio::task::spawn_blocking(move || worker.run(input, &signal)).await;
+    // The files are packed for the store on the worker's thread too.
+    let ran = tokio::task::spawn_blocking(move || match worker.run(input, &signal) {
+        WorkerOutcome::Succeeded(files) => Ran::Succeeded(succeeded(&files)),
+        WorkerOutcome::Failed(error) => Ran::Failed(error),
+        WorkerOutcome::Cancelled => Ran::Cancelled,
+    })
+    .await;
     match ran {
-        Ok(WorkerOutcome::Succeeded(results)) => match serde_json::to_string(&results) {
-            Ok(results_json) => Ended::Finished(JobOutcome::Succeeded { results_json }),
-            Err(failure) => {
-                error!(job = %record.job_id, %failure, "a job's results cannot be written");
-                Ended::Finished(failed(
-                    ErrorCode::Internal,
-                    "the server cannot write the job's results",
-                ))
-            }
-        },
-        Ok(WorkerOutcome::Failed(error)) => Ended::Finished(written(error)),
-        Ok(WorkerOutcome::Cancelled) if cancel.is_cancelled() => Ended::Stopped,
-        Ok(WorkerOutcome::Cancelled) => Ended::Finished(failed(
+        Ok(Ran::Succeeded(Ok(outcome))) => Ended::Finished(outcome),
+        Ok(Ran::Succeeded(Err(failure))) => {
+            error!(job = %record.job_id, %failure, "a job's results cannot be written");
+            Ended::Finished(failed(
+                ErrorCode::Internal,
+                "the server cannot write the job's results",
+            ))
+        }
+        Ok(Ran::Failed(error)) => Ended::Finished(written(error)),
+        Ok(Ran::Cancelled) if cancel.is_cancelled() => Ended::Stopped,
+        Ok(Ran::Cancelled) => Ended::Finished(failed(
             ErrorCode::Internal,
             "the worker stopped the job without being asked to",
         )),
@@ -157,6 +164,28 @@ async fn execute(jobs: &Jobs, record: JobRecord, cancel: &Cancel) -> Ended {
             ))
         }
     }
+}
+
+/// How a worker's run ended, a succeeded one's files already packed.
+enum Ran {
+    Succeeded(std::io::Result<JobOutcome>),
+    Failed(ErrorBody),
+    Cancelled,
+}
+
+/// A succeeded job's outcome: the list its record shows, and each file as
+/// the store keeps it.
+fn succeeded(files: &[ResultFile]) -> std::io::Result<JobOutcome> {
+    let listed: Vec<&ResultRef> = files.iter().map(|file| &file.reference).collect();
+    let results_json = serde_json::to_string(&listed)?;
+    let results: Vec<StoredResult> = files
+        .iter()
+        .map(ResultFile::stored)
+        .collect::<Result<_, _>>()?;
+    Ok(JobOutcome::Succeeded {
+        results_json,
+        results,
+    })
 }
 
 /// The job's input: its submission, its bundle admitted again against the
@@ -266,7 +295,9 @@ async fn read_input(
 /// Writes a job's end unless it has ended already. A job whose end is never
 /// written stays running until the next start fails it.
 async fn finish(jobs: &Jobs, job_id: &JobId, outcome: JobOutcome) {
-    let (id, end) = (job_id.clone(), outcome.clone());
+    let name = outcome_name(&outcome);
+    // Shared with every attempt: an outcome holds the job's result files.
+    let (id, end) = (job_id.clone(), Arc::new(outcome));
     let written = patiently(jobs, move |store| {
         store
             .finish_job(&id, &end, now_utc_ms())
@@ -274,7 +305,7 @@ async fn finish(jobs: &Jobs, job_id: &JobId, outcome: JobOutcome) {
     })
     .await;
     match written {
-        Ok(true) => info!(job = %job_id, outcome = outcome_name(&outcome), "a job ended"),
+        Ok(true) => info!(job = %job_id, outcome = name, "a job ended"),
         Ok(false) => info!(job = %job_id, "a job ended after it was cancelled"),
         Err(refusal) => error!(
             job = %job_id,

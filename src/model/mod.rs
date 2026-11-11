@@ -40,7 +40,9 @@ pub use identity::{
     Environment, InstrumentId, OperationId, VenueAlgoId, VenueOrderId, VenueTradeId,
 };
 pub use interval::Interval;
-pub use job::{BundleHash, JobId, JobOutcome, JobPhase, JobRecord, NewJob};
+pub use job::{
+    BundleHash, JobId, JobOutcome, JobPhase, JobRecord, NewJob, ResultHash, StoredResult,
+};
 pub use market::{Category, ExchangeId, MarketId, Symbol, Venue};
 pub use money::{Asset, Money};
 pub use order::{AccountTrade, ExchangeOrder, Fill, OrderStatus, Side};
@@ -77,6 +79,9 @@ pub enum ModelError {
 
     #[error("invalid bundle hash {0:?}: expected sha256: and 64 lowercase hex digits")]
     InvalidBundleHash(String),
+
+    #[error("invalid result hash {0:?}: expected sha256: and 64 lowercase hex digits")]
+    InvalidResultHash(String),
 
     #[error("invalid rfc3339 timestamp: {0}")]
     InvalidTimestamp(String),

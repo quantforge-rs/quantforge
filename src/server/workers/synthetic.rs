@@ -3,7 +3,9 @@
 //! only when the server starts them in the synthetic mode, which `serve run`
 //! never does. A job's bundle names its workload in its `workload`
 //! parameter; each answers a report, holds its worker until it is killed,
-//! runs into a limit, or stops the worker.
+//! runs into a limit, or stops the worker. One, `backtest`, runs the engine
+//! on a strategy built into QuantForge, so that the tests have a job that
+//! ends as a real one will.
 
 use std::io::Write;
 use std::net::{SocketAddr, TcpStream};
@@ -14,10 +16,12 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+use super::backtest::{self, Ended};
 use super::frames::{Finished, JobFrame, ResultText};
 use super::isolation::{self, Posture};
 use crate::model::Candle;
 use crate::protocol::{ErrorBody, ErrorCode};
+use crate::sdk::BuiltInStrategyConfig;
 
 /// Set by `plant` in the process that ran it, which a worker that went on
 /// to another job would still have.
@@ -57,7 +61,34 @@ impl Seen {
 }
 
 /// Runs the workload the job's bundle names.
-pub(super) fn run(job: &JobFrame, candles: &[Candle], seen: &Seen, posture: &Posture) -> Finished {
+pub(super) fn run(job: &JobFrame, candles: &[Candle], seen: &Seen, posture: &Posture) -> Ended {
+    let number = |name: &str| job.params.get(name).and_then(Value::as_u64);
+    if job.params.get("workload").and_then(Value::as_str) == Some("backtest") {
+        let periods = |name: &str, default: u64| {
+            usize::try_from(number(name).unwrap_or(default)).unwrap_or(usize::MAX)
+        };
+        return sma_cross(job, candles, periods("fast", 2), periods("slow", 3));
+    }
+    Ended::Said(workload(job, candles, seen, posture))
+}
+
+/// A backtest of the SMA cross built into QuantForge, of `fast` and `slow`
+/// bars, under the job's settings.
+fn sma_cross(job: &JobFrame, candles: &[Candle], fast: usize, slow: usize) -> Ended {
+    match (BuiltInStrategyConfig::SmaCross { fast, slow }).build() {
+        Ok(mut strategy) => backtest::run(job, candles, strategy.as_mut()),
+        Err(error) => Ended::Said(Finished::Failed {
+            error: ErrorBody {
+                code: ErrorCode::InvalidRequest,
+                message: format!("the strategy cannot be built: {error}"),
+                supported: None,
+            },
+        }),
+    }
+}
+
+/// Runs a workload that answers a report, or never answers.
+fn workload(job: &JobFrame, candles: &[Candle], seen: &Seen, posture: &Posture) -> Finished {
     let text = |name: &str| job.params.get(name).and_then(Value::as_str);
     let number = |name: &str| job.params.get(name).and_then(Value::as_u64);
     match text("workload") {

@@ -8,13 +8,15 @@
 //! its store holds as running, and a cancel stops only a job running in the
 //! server that took it.
 //!
-//! - `routes`: the five routes.
+//! - `routes`: the upload, submission, status, list and cancel routes.
+//! - `results`: the routes that answer what a succeeded job produced.
 //! - `submission`: what an upload and a submission must pass.
 //! - `queue`: the dispatcher, a job's run, and the stop.
 //! - `status`: a job's record as the protocol shows it.
 //! - `worker`: what runs a job, and the signal a cancel sends it.
 
 mod queue;
+mod results;
 mod routes;
 mod status;
 mod submission;
@@ -33,6 +35,7 @@ use crate::model::{JobId, now_utc_ms};
 use crate::protocol::bundle::BundleLimits;
 use crate::protocol::{ErrorBody, ErrorCode};
 
+pub(super) use results::{result, result_file};
 pub(super) use routes::{cancel, job, list, submit, upload};
 pub(in crate::server) use worker::NO_RUNTIME;
 pub use worker::{Cancel, JobInput, JobWorker, NoRuntime, WorkerOutcome};

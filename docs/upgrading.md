@@ -13,17 +13,17 @@ contract behind it.
 <!-- begin: supported upgrades -->
 | Written by | Schema | Upgrades to |
 | --- | --- | --- |
-| QuantForge 0.1.0 | 1 | 6 |
-| QuantForge 0.2.0 | 2 | 6 |
-| A development build after 0.2.0 | 3, 4 or 5 | 6 |
-| This release | 6 | — |
+| QuantForge 0.1.0 | 1 | 7 |
+| QuantForge 0.2.0 | 2 | 7 |
+| A development build after 0.2.0 | 3, 4, 5 or 6 | 7 |
+| This release | 7 | — |
 <!-- end: supported upgrades -->
 
 Every step of the chain runs forward only. A file a newer release has
 already upgraded is refused by an older one, untouched:
 
 ```text
-database schema version 6 is newer than this build supports (5); use a newer
+database schema version 7 is newer than this build supports (6); use a newer
 quantforge release, and never an older one on this database
 ```
 
@@ -62,6 +62,7 @@ Each step runs in one transaction with its version stamp, and
 | 3 → 4 | Creates the segment tables, and marks every window that holds candles, so the next `data sync` packs the candles the older release stored into segments. |
 | 4 → 5 | Turns the venue's order and trade IDs into text, in the journal columns and inside `state_json` and `raw_json`, keeping each row's original JSON in `legacy_state_json` and `legacy_raw_json`; gives every run its identity columns, with every existing run marked `legacy`; and creates the store's own record: a fresh store ID, no environment, `inactive`. |
 | 5 → 6 | Creates the tables `serve run` keeps remote backtests in: the bundles clients upload, and the jobs that run them. On PostgreSQL it also collates segment hashes and run IDs byte by byte, which rebuilds those two primary keys and leaves every value as it was. |
+| 6 → 7 | Creates the table `serve run` keeps the result files of succeeded jobs in. Every job an earlier build recorded stays as it was. |
 
 Candles are not rewritten. The journal tables are copied row by row, so the
 upgrade takes seconds for any journal and leaves the sequence numbers as

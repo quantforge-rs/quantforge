@@ -34,9 +34,11 @@
 //!   last bar is sold at that bar's close, stamped with its close time, fee
 //!   included. Without it, the position is valued at that close.
 //! - **Equity.** Equity is `cash + position × close`, marked at every bar's
-//!   close after that bar's fill. `max_drawdown_pct` is the largest fall of
-//!   that series from an earlier peak, in percent; it does not include the
-//!   close-out fee, but `final_equity` does.
+//!   close after that bar's fill. [`BacktestResult::equity_curve`] is that
+//!   series, one [`EquityPoint`] per bar in the order given, and
+//!   `max_drawdown_pct` is its largest fall from an earlier peak, in
+//!   percent. Neither includes the close-out fee, but `final_equity` does,
+//!   so the last point can lie above it by that fee.
 //! - **Lifecycle.** [`Strategy::on_start`] runs once before the first bar,
 //!   with the first bar's open time, the initial cash, and no position.
 //!   [`Strategy::on_finish`] runs once after close-out, with the last bar's
@@ -89,6 +91,16 @@ pub struct BacktestConfig {
     pub close_out_at_end: bool,
 }
 
+/// Equity at one bar's close: `cash + position × close`, after that bar's
+/// fill.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EquityPoint {
+    /// The bar's open time, which names the bar.
+    pub open_time_ms: TimestampMs,
+    /// The equity marked at the bar's close, in quote currency.
+    pub equity: Decimal,
+}
+
 /// What a backtest produced. Amounts are in quote currency.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BacktestResult {
@@ -106,6 +118,10 @@ pub struct BacktestResult {
     /// Every round trip, in order. `gross_quote_pnl` is net of both fees,
     /// and the order ids are `None`: nothing reached an exchange.
     pub trades: Vec<ClosedTrade>,
+    /// The close-marked equity, one point per bar in the order given: the
+    /// series `max_drawdown_pct` is measured on. It does not include the
+    /// close-out fee.
+    pub equity_curve: Vec<EquityPoint>,
 }
 
 /// Runs a [`Strategy`] over a candle slice, under the execution model in the
@@ -227,6 +243,7 @@ impl BacktestEngine {
         let mut pending_target: Option<TargetPosition> = None;
         let mut peak_equity = Decimal::ZERO;
         let mut max_drawdown = Decimal::ZERO;
+        let mut equity_curve = Vec::with_capacity(candles.len());
 
         let mut ctx = StrategyContext {
             market: market.clone(),
@@ -260,6 +277,10 @@ impl BacktestEngine {
             ctx.position_qty = qty;
 
             let equity = mark(cash, qty, candle.close)?;
+            equity_curve.push(EquityPoint {
+                open_time_ms: candle.open_time_ms,
+                equity,
+            });
             if equity > peak_equity {
                 peak_equity = equity;
             }
@@ -328,6 +349,7 @@ impl BacktestEngine {
             trade_count: trades.len(),
             max_drawdown_pct,
             trades,
+            equity_curve,
         })
     }
 }

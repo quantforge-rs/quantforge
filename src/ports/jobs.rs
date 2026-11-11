@@ -4,12 +4,14 @@
 //! the behavior every backend passes.
 
 use super::storage::StorageError;
-use crate::model::{BundleHash, JobId, JobOutcome, JobRecord, NewJob, TimestampMs};
+use crate::model::{BundleHash, JobId, JobOutcome, JobRecord, NewJob, ResultHash, TimestampMs};
 
-/// Bundles and jobs. A bundle is stored once under its name and never
-/// changed; a job moves from queued to running to one final phase, or from
-/// queued or running straight to cancelled, and each move is one guarded
-/// change, so a job never leaves a final phase and is never claimed twice.
+/// Bundles, jobs and their results. A bundle is stored once under its name
+/// and never changed; a job moves from queued to running to one final
+/// phase, or from queued or running straight to cancelled, and each move is
+/// one guarded change, so a job never leaves a final phase and is never
+/// claimed twice. A succeeded job's results are stored in the change that
+/// ends it, each once under its name, and never changed.
 pub trait JobStore: Send + Sync {
     /// Stores a bundle's canonical tar under its name. Answers whether it
     /// was new: a bundle stored again changes nothing.
@@ -38,7 +40,9 @@ pub trait JobStore: Send + Sync {
     /// once each get a job of their own.
     fn claim_job(&self, started_at_ms: TimestampMs) -> Result<Option<JobRecord>, StorageError>;
 
-    /// Ends a running job with its outcome. Answers `false`, changing
+    /// Ends a running job with its outcome, and in the same change stores
+    /// each result of a succeeded one under its name; a result the store
+    /// holds already stays as it is. Answers `false`, changing and storing
     /// nothing, when the job is not running, such as one cancelled while it
     /// ran.
     fn finish_job(
@@ -47,6 +51,12 @@ pub trait JobStore: Send + Sync {
         outcome: &JobOutcome,
         finished_at_ms: TimestampMs,
     ) -> Result<bool, StorageError>;
+
+    /// What the store keeps of a result, as [`StoredResult::data`] gave it,
+    /// or `None` when no result has that name.
+    ///
+    /// [`StoredResult::data`]: crate::model::StoredResult::data
+    fn load_result(&self, hash: &ResultHash) -> Result<Option<Vec<u8>>, StorageError>;
 
     /// Cancels a queued or running job, and answers its record: cancelled,
     /// or unchanged when it had already ended. `None` when there is no such

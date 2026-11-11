@@ -18,3 +18,5 @@ docs/segment-spec.md text eol=lf
 docs/parity/* text eol=lf
 # The migration doc's worked example is compared with the transfer fixture.
 docs/storage-migration.md text eol=lf
+# The result spec's worked example is compared with the file the code writes.
+docs/result-spec.md text eol=lf
