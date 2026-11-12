@@ -274,6 +274,7 @@ fn the_postgres_ddl_names_the_same_tables_and_columns_in_the_same_order() {
     postgres_ddl.extend(section("postgres step 6"));
     postgres_ddl.extend(section("postgres step 7"));
     postgres_ddl.extend(section("postgres step 8"));
+    postgres_ddl.extend(section("postgres step 9"));
     let (postgres, postgres_indexes) = parse(&postgres_ddl);
     let names = |tables: &[Table]| -> Vec<(String, Vec<String>)> {
         tables
@@ -426,6 +427,10 @@ fn the_conformance_doc_lists_every_scenario_and_check_with_its_statement() {
             pairs(&cases.control, conformance::control::CHECKS),
         ),
         ("jobs", pairs(&cases.jobs, conformance::jobs::CHECKS)),
+        (
+            "policies",
+            pairs(&cases.policies, conformance::policies::CHECKS),
+        ),
     ] {
         for (id, _) in &expected {
             assert!(

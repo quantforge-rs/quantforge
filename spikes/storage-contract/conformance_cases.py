@@ -33,7 +33,7 @@ T = 1_792_454_400_000
 # 29 decimal places: more than a Decimal holds.
 INEXACT = "1.00000000000000000000000000001"
 # The schema every backend creates; a new store logs one step to it from 0.
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 WINDOW_BARS = 1440
 STEP_MS = {
     "1s": 1_000,
@@ -243,6 +243,9 @@ class Model:
         self.results = {}  # name -> what the store keeps of a result
         self.logs = {}  # job ID -> what a server kept of the job's log, as text
         self.jobs = []  # records, in submission order
+        self.profiles = {}  # profile ID -> the identity it was created with
+        self.policies = {}  # profile ID -> [(revision, changed_at_ms, text)], as appended
+        self.foreign = {}  # (profile ID, revision) -> what a read says of a row written over
 
     # Candles.
 
@@ -579,6 +582,70 @@ class Model:
         record["loads"] = True
         return None
 
+    # Policies.
+
+    def create_profile(self, document, at):
+        ident = document["identity"]
+        profile = ident["id"]
+        if document["revision"] != 1:
+            return refusal(
+                f"a profile is created with revision 1 of its policy, not revision {document['revision']}"
+            )
+        asked = ident["account_ref"]["environment"].lower()
+        if self.environment is None:
+            return refusal(f"the store is bound to no environment yet, and profile {profile} needs one")
+        if self.environment != asked:
+            return refusal(f"profile {profile} is for {asked}, and the store is bound to {self.environment}")
+        if profile in self.profiles:
+            return refusal(f"profile {profile} is already recorded")
+        if any(held["owner_tag"] == ident["owner_tag"] for held in self.profiles.values()):
+            return refusal(f"owner tag {ident['owner_tag']} already belongs to another profile of this store")
+        self.profiles[profile] = ident
+        self.policies[profile] = [(1, at, policy_text(document))]
+        return None
+
+    def listed_profiles(self):
+        return [self.profiles[key] for key in sorted(self.profiles, key=lambda text: text.encode("utf-8"))]
+
+    def read_policy(self, profile, row):
+        if row is None:
+            return None, None
+        says = self.foreign.get((profile, row[0]))
+        return (None, refusal(says)) if says else (row[2], None)
+
+    def profile_policy(self, profile):
+        rows = self.policies.get(profile)
+        return self.read_policy(profile, rows[-1] if rows else None)
+
+    def profile_policy_at(self, profile, revision):
+        rows = [row for row in self.policies.get(profile, []) if row[0] == revision]
+        return self.read_policy(profile, rows[0] if rows else None)
+
+    def policy_revisions(self, profile):
+        return [{"revision": revision, "changed_at_ms": at} for revision, at, _ in self.policies.get(profile, [])]
+
+    def save_policy(self, document, at):
+        ident = document["identity"]
+        profile, revision = ident["id"], document["revision"]
+        if revision == 1:
+            return None, refusal(
+                f"revision 1 of profile {profile}'s policy is written when the profile is created, and never again"
+            )
+        held = self.profiles.get(profile)
+        if held is None:
+            return None, refusal(f"the store holds no profile {profile}")
+        if held != ident:
+            return None, refusal(
+                f"the policy names another account, product family or owner tag than profile {profile} was created with"
+            )
+        rows = self.policies[profile]
+        # Appended only after the revision before it: of two made from one
+        # revision the second finds the profile moved on, and changes nothing.
+        if rows[-1][0] != revision - 1:
+            return False, None
+        rows.append((revision, at, policy_text(document)))
+        return True, None
+
     def listed(self, kind, run_id, limit):
         names = [item for k, r, item in self.journal if k == kind and r == run_id]
         names = list(reversed(names))[:limit]
@@ -686,6 +753,41 @@ class Scenario:
 
     def load_segment(self, hash_text):
         self.step("load_segment", hash=hash_text, expect=self.model.load_segment(hash_text))
+
+    def create_profile(self, document, at):
+        refused = self.model.create_profile(document, at)
+        extra = {"refused": refused} if refused else {}
+        self.step("create_profile", policy=policy_text(document), at=at, **extra)
+
+    def profiles(self):
+        self.step("profiles", expect=self.model.listed_profiles())
+
+    def profile_policy(self, profile):
+        found, refused = self.model.profile_policy(profile)
+        answer = {"refused": refused} if refused else {"expect": found}
+        self.step("profile_policy", profile=profile, **answer)
+
+    def profile_policy_at(self, profile, revision):
+        found, refused = self.model.profile_policy_at(profile, revision)
+        answer = {"refused": refused} if refused else {"expect": found}
+        self.step("profile_policy_at", profile=profile, revision=revision, **answer)
+
+    def policy_revisions(self, profile):
+        self.step("policy_revisions", profile=profile, expect=self.model.policy_revisions(profile))
+
+    def save_policy(self, document, at):
+        stored, refused = self.model.save_policy(document, at)
+        answer = {"refused": refused} if refused else {"expect": stored}
+        self.step("save_policy", policy=policy_text(document), at=at, **answer)
+
+    def write_over_policy(self, profile, revision, text, says):
+        """Writes other text under a revision's key, behind the store's back;
+        `says` is what a read of that row says from then on."""
+        self.model.foreign[(profile, revision)] = says
+        self.raw_execute(
+            f"UPDATE policy_revisions SET policy_json = {sql_text(text)} "
+            f"WHERE profile_id = {sql_text(profile)} AND revision = {revision}"
+        )
 
     def raw_select(self, sql, expect):
         self.step("raw_select", sql=sql, expect=expect)
@@ -1685,6 +1787,306 @@ def jobs_scenarios():
     return out
 
 
+# --- The policy store's scenarios --------------------------------------------
+
+NO_DEFAULTS = {"enabled": False, "risk_percent": None, "stop_percent": None, "leverage": None,
+               "revision": 1}
+# A made-up key fingerprint: sixteen hex digits, plain enough that a secret
+# scanner does not take a fixture's fingerprint for a key.
+FINGERPRINT = "00000000000000a1"
+
+
+def policy(profile="main", revision=1, tag="k3x9p2", account=("Venue", "71002233"),
+           category="Linear", environment="Demo", label=None, settings=NO_DEFAULTS, assets=(),
+           funds=()):
+    """One revision of a profile's policy as a store is given it and keeps
+    it: the whole document, policy format 1 of docs/automation-policy.md."""
+    return {
+        "format": 1,
+        "identity": {
+            "id": profile,
+            "account_ref": {
+                "venue": "Bybit",
+                "environment": environment,
+                "venue_account_id": {account[0]: account[1]},
+            },
+            "category": category,
+            "owner_tag": tag,
+        },
+        "revision": revision,
+        "label": label,
+        "defaults": settings,
+        "assets": list(assets),
+        "capital": list(funds),
+    }
+
+
+def policy_text(document):
+    """The document in the one spelling a store keeps: compact JSON, fields
+    in the order of the format, text as it is."""
+    return json.dumps(document, separators=(",", ":"), ensure_ascii=False)
+
+
+def policy_scenarios():
+    out = []
+    first = policy()
+    second = policy(revision=2, label="second")
+    third = policy(revision=3, label="third")
+    columns = (
+        "SELECT profile_id, venue, environment, account_kind, account_id, category, owner_tag, "
+        "CAST(created_at_ms AS TEXT) FROM automation_profiles ORDER BY created_at_ms"
+    )
+
+    s = Scenario(
+        "policies.profile_created_once",
+        "a profile is recorded once, with the first revision of its policy; recorded again it is refused, and nothing of the second is kept",
+    )
+    s.bind_environment("demo")
+    s.profiles()
+    s.profile_policy("main")
+    s.policy_revisions("main")
+    s.create_profile(first, T)
+    s.profiles()
+    s.profile_policy("main")
+    s.profile_policy_at("main", 1)
+    s.profile_policy_at("main", 2)
+    s.policy_revisions("main")
+    s.create_profile(policy(label="again"), T + 1)
+    s.profile_policy("main")
+    s.policy_revisions("main")
+    s.raw_select(columns, [["main", "bybit", "demo", "venue", "71002233", "linear", "k3x9p2", str(T)]])
+    out.append(s)
+
+    s = Scenario(
+        "policies.owner_tag_of_its_own",
+        "a profile whose owner tag another profile of the store holds is refused, and nothing of it is kept",
+    )
+    s.bind_environment("demo")
+    s.create_profile(first, T)
+    other = ("KeyFingerprint", FINGERPRINT)
+    s.create_profile(policy(profile="other", account=other, category="Inverse"), T + 1)
+    s.profiles()
+    s.profile_policy("other")
+    s.policy_revisions("other")
+    s.create_profile(policy(profile="other", tag="a1b2c3", account=other, category="Inverse"), T + 2)
+    s.profiles()
+    s.raw_select(
+        columns,
+        [
+            ["main", "bybit", "demo", "venue", "71002233", "linear", "k3x9p2", str(T)],
+            ["other", "bybit", "demo", "key_fingerprint", FINGERPRINT, "inverse", "a1b2c3",
+             str(T + 2)],
+        ],
+    )
+    out.append(s)
+
+    s = Scenario(
+        "policies.environment_of_the_store",
+        "a store bound to no environment takes no profile, and a bound one takes only profiles of its own environment",
+    )
+    s.create_profile(first, T)
+    s.profiles()
+    s.bind_environment("demo")
+    s.create_profile(policy(profile="live", tag="a1b2c3", environment="Mainnet"), T + 1)
+    s.create_profile(policy(profile="test", tag="b1b2c3", environment="Testnet"), T + 2)
+    s.profiles()
+    s.create_profile(first, T + 3)
+    s.profiles()
+    s.policy_revisions("main")
+    out.append(s)
+
+    s = Scenario(
+        "policies.first_revision_comes_with_the_profile",
+        "a profile is created with revision 1 of its policy and no other, and revision 1 is never written again",
+    )
+    s.bind_environment("demo")
+    s.create_profile(second, T)
+    s.profiles()
+    s.create_profile(first, T + 1)
+    s.save_policy(policy(label="first again"), T + 2)
+    s.profile_policy("main")
+    s.policy_revisions("main")
+    out.append(s)
+
+    s = Scenario(
+        "policies.revisions_appended",
+        "each revision is appended after the one before it, read back by its number word for word, and listed with the time it was given; the newest is the policy in force",
+    )
+    s.bind_environment("demo")
+    s.create_profile(first, T)
+    s.save_policy(second, T + MINUTE)
+    s.profile_policy("main")
+    s.save_policy(third, T + 2 * MINUTE)
+    s.profile_policy("main")
+    for revision in (1, 2, 3, 4):
+        s.profile_policy_at("main", revision)
+    s.policy_revisions("main")
+    s.raw_select(
+        "SELECT CAST(revision AS TEXT), CAST(changed_at_ms AS TEXT) FROM policy_revisions "
+        "WHERE profile_id = 'main' ORDER BY seq",
+        [["1", str(T)], ["2", str(T + MINUTE)], ["3", str(T + 2 * MINUTE)]],
+    )
+    out.append(s)
+
+    s = Scenario(
+        "policies.one_of_two_from_one_revision",
+        "of two revisions made from the same one the first is stored, and the second changes nothing, however often it is offered",
+    )
+    s.bind_environment("demo")
+    s.create_profile(first, T)
+    s.save_policy(second, T + 1)
+    s.save_policy(policy(revision=2, label="the other second"), T + 2)
+    s.save_policy(policy(revision=2, label="the other second"), T + 3)
+    s.save_policy(second, T + 4)
+    s.profile_policy("main")
+    s.policy_revisions("main")
+    s.save_policy(third, T + 5)
+    s.profile_policy("main")
+    s.policy_revisions("main")
+    out.append(s)
+
+    s = Scenario(
+        "policies.no_revision_skipped",
+        "a revision that does not follow the newest one is not stored",
+    )
+    s.bind_environment("demo")
+    s.create_profile(first, T)
+    s.save_policy(third, T + 1)
+    s.profile_policy("main")
+    s.save_policy(second, T + 2)
+    s.save_policy(policy(revision=4, label="fourth"), T + 3)
+    s.save_policy(third, T + 4)
+    s.policy_revisions("main")
+    out.append(s)
+
+    s = Scenario(
+        "policies.only_its_own_profile",
+        "a policy is stored only for the profile it names: one for a profile the store does not hold is refused, and so is one naming another account, product family or owner tag than the profile was created with",
+    )
+    s.bind_environment("demo")
+    s.create_profile(first, T)
+    s.save_policy(policy(profile="ghost", revision=2), T + 1)
+    s.save_policy(policy(revision=2, tag="zzzzzz"), T + 2)
+    s.save_policy(policy(revision=2, account=("Venue", "71002234")), T + 3)
+    s.save_policy(policy(revision=2, account=("KeyFingerprint", FINGERPRINT)), T + 4)
+    s.save_policy(policy(revision=2, category="Inverse"), T + 5)
+    s.save_policy(policy(revision=2, environment="Testnet"), T + 6)
+    # Refused for whose it is, whatever revision it claims.
+    s.save_policy(policy(revision=5, tag="zzzzzz"), T + 7)
+    s.profile_policy("main")
+    s.policy_revisions("main")
+    s.policy_revisions("ghost")
+    out.append(s)
+
+    s = Scenario("policies.profiles_in_byte_order", "profiles are listed by ID, byte by byte")
+    s.bind_environment("demo")
+    for n, profile in enumerate(("main_3", "main0", "main-2", "main", "z9")):
+        s.create_profile(policy(profile=profile, tag=f"tag00{n}", account=("Venue", str(71002233 + n))), T + n)
+    s.profiles()
+    out.append(s)
+
+    s = Scenario(
+        "policies.profiles_apart",
+        "each profile has revisions of its own: a revision of one changes nothing of another",
+    )
+    s.bind_environment("demo")
+    hedge = {"profile": "hedge", "tag": "a1b2c3", "category": "Inverse"}
+    s.create_profile(first, T)
+    s.create_profile(policy(**hedge), T + 1)
+    s.save_policy(second, T + 2)
+    s.save_policy(policy(revision=2, label="hedge's second", **hedge), T + 3)
+    s.save_policy(third, T + 4)
+    # A revision made of another profile's history is not this one's next.
+    s.save_policy(policy(revision=4, label="not hedge's", **hedge), T + 5)
+    for profile in ("main", "hedge"):
+        s.profile_policy(profile)
+        s.policy_revisions(profile)
+    out.append(s)
+
+    scaled = policy(
+        revision=2,
+        label="측정 ž \"x\" \\",
+        settings={"enabled": True, "risk_percent": "1.50", "stop_percent": "3.50", "leverage": "5.0",
+                  "revision": 2},
+        assets=[
+            {"instrument": {"exchange": "BybitLinear", "symbol": "BTCUSDT", "settle": "USDT"},
+             "enabled": False, "risk_percent": None, "stop": "Inherit", "leverage": None,
+             "revision": 2},
+            {"instrument": {"exchange": "BybitLinear", "symbol": "SOLUSDT", "settle": "USDT"},
+             "enabled": True, "risk_percent": "0.10", "stop": {"Percent": "2.500"},
+             "leverage": "12.5", "revision": 2},
+        ],
+        funds=[{"amount": {"amount": "15000.00", "asset": "USDT"}, "revision": 2}],
+    )
+    s = Scenario(
+        "policies.text_kept",
+        "a policy reads back as the text that was stored, every decimal with its scale",
+    )
+    s.bind_environment("demo")
+    s.create_profile(first, T)
+    s.save_policy(scaled, T + 1)
+    s.profile_policy("main")
+    s.raw_select(
+        "SELECT policy_json FROM policy_revisions WHERE profile_id = 'main' ORDER BY revision",
+        [[policy_text(first)], [policy_text(scaled)]],
+    )
+    s.value_types("policy_revisions", "policy_json", ["text"])
+    out.append(s)
+
+    s = Scenario(
+        "policies.reopened",
+        "a store opened again holds every profile and every revision as they stood, and appends on",
+    )
+    s.bind_environment("demo")
+    s.create_profile(first, T)
+    s.save_policy(second, T + 1)
+    s.reopen()
+    s.profiles()
+    s.profile_policy("main")
+    s.policy_revisions("main")
+    s.save_policy(second, T + 2)
+    s.save_policy(third, T + 3)
+    s.reopen()
+    for revision in (1, 2, 3):
+        s.profile_policy_at("main", revision)
+    s.policy_revisions("main")
+    out.append(s)
+
+    s = Scenario(
+        "policies.foreign_document_refused",
+        "a row whose document is another profile's, another revision's or of another format is refused when read, and the rows beside it still read",
+    )
+    s.bind_environment("demo")
+    s.create_profile(first, T)
+    s.save_policy(second, T + 1)
+    s.save_policy(third, T + 2)
+    s.create_profile(policy(profile="other", tag="a1b2c3"), T + 3)
+    theirs = policy_text(policy(profile="other", revision=3, tag="a1b2c3"))
+    s.write_over_policy(
+        "main", 3, theirs,
+        "the stored policy of profile main at revision 3 cannot be read: it is the policy of profile other",
+    )
+    s.write_over_policy(
+        "main", 2, policy_text(policy(revision=7, label="seventh")),
+        "the stored policy of profile main at revision 2 cannot be read: it is revision 7",
+    )
+    later = dict(first, format=2)
+    s.write_over_policy(
+        "other", 1, policy_text(later),
+        "the stored policy of profile other at revision 1 cannot be read: policy format 2 is not supported; this build reads format 1",
+    )
+    s.profile_policy("main")
+    s.profile_policy_at("main", 3)
+    s.profile_policy_at("main", 2)
+    s.profile_policy_at("main", 1)
+    s.profile_policy("other")
+    # What is listed is the rows' keys, which nothing was written over.
+    s.policy_revisions("main")
+    s.profiles()
+    out.append(s)
+    return out
+
+
 # --- The store record's scenarios --------------------------------------------
 
 
@@ -2156,7 +2558,8 @@ def main() -> int:
     cases["races"] = races()
     cases["control"] = [s.out() for s in control_scenarios()]
     cases["jobs"] = [s.out() for s in jobs_scenarios()]
-    groups = ("candles", "journal", "segments", "races", "control", "jobs")
+    cases["policies"] = [s.out() for s in policy_scenarios()]
+    groups = ("candles", "journal", "segments", "races", "control", "jobs", "policies")
     ids = [s["id"] for group in groups for s in cases[group]]
     if len(ids) != len(set(ids)):
         raise SystemExit("scenario ids repeat")

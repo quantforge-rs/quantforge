@@ -86,6 +86,7 @@ fn a_fresh_database_has_exactly_the_documented_schema() {
     doc.extend(section_in("docs/storage-schema.md", "postgres step 6"));
     doc.extend(section_in("docs/storage-schema.md", "postgres step 7"));
     doc.extend(section_in("docs/storage-schema.md", "postgres step 8"));
+    doc.extend(section_in("docs/storage-schema.md", "postgres step 9"));
     let (documented, documented_indexes) = parse(&doc);
     let mut names: Vec<String> = documented.iter().map(|table| table.name.clone()).collect();
     names.sort();

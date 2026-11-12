@@ -1,11 +1,13 @@
 //! An external signal's intent as the store records it (ADR 0002 §1, §5,
-//! §9): what the signal asked for, where it stands, and every order
-//! attempt sent for it. Evidence counts only for the intent's own attempts,
-//! and §9's bounds decide when "not found" means never placed.
+//! §9): what the signal asked for, where it stands, the policy an entry
+//! was admitted under, and every order attempt sent for it. Evidence counts
+//! only for the intent's own attempts, and §9's bounds decide when "not
+//! found" means never placed.
 
 use super::{
     ClientOrderId, FuturesFill, FuturesOrder, IntentState, OrderAttempt, OrderLeg,
-    OrderLookupGuarantee, PositionKey, PositionSnapshot, ProfileId, Rejection, SignalId,
+    OrderLookupGuarantee, PolicySnapshot, PositionKey, PositionSnapshot, ProfileId, Rejection,
+    SignalId,
 };
 use crate::model::{InstrumentId, ModelError, PositionSide, Price, TimestampMs};
 use serde::{Deserialize, Serialize};
@@ -70,15 +72,42 @@ impl IntentKind {
             Self::Exit(_) => OrderLeg::Close,
         }
     }
+
+    /// Whether it is admitted under `policy`: an entry under a snapshot of
+    /// its own profile's policy for its own account and instrument, an exit
+    /// under none.
+    fn takes(&self, policy: Option<&PolicySnapshot>) -> bool {
+        match (self, policy) {
+            (Self::Entry(entry), Some(policy)) => {
+                policy.profile() == &entry.profile
+                    && policy.account() == entry.key.account()
+                    && policy.instrument() == entry.key.instrument()
+            }
+            (Self::Exit(_), None) => true,
+            _ => false,
+        }
+    }
+
+    /// Whether `policy` leaves it a stop to be sized against: an entry's
+    /// own, or the policy's fallback. Only an entry needs one.
+    fn has_stop(&self, policy: Option<&PolicySnapshot>) -> bool {
+        match (self, policy) {
+            (Self::Entry(entry), Some(policy)) => policy.stop_for(entry.stop).is_ok(),
+            _ => true,
+        }
+    }
 }
 
 /// An external intent and its progress: the record a store keeps.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(try_from = "ExternalIntentParts")]
+#[serde(try_from = "stored::ExternalIntentParts")]
 pub struct ExternalIntent {
     format: u32,
     kind: IntentKind,
     state: IntentState,
+    /// The policy an entry was admitted under: taken once, at admission,
+    /// and never changed. An exit has none.
+    policy: Option<PolicySnapshot>,
     attempts: Vec<OrderAttempt>,
 }
 
@@ -89,8 +118,42 @@ impl ExternalIntent {
             format: INTENT_FORMAT,
             kind,
             state: IntentState::INITIAL,
+            policy: None,
             attempts: Vec::new(),
         }
+    }
+
+    /// The policy the entry was admitted under: the settings it is sized
+    /// from and their revisions, as they stood then. Later edits of the
+    /// profile's policy never reach it.
+    pub fn policy(&self) -> Option<&PolicySnapshot> {
+        self.policy.as_ref()
+    }
+
+    /// Admits a received signal. An entry is admitted under a snapshot of
+    /// its own profile's policy for its own account and instrument, which
+    /// it keeps for good; an exit takes none, since no policy can hold back
+    /// a close.
+    ///
+    /// An entry with no stop of its own, under a snapshot that gives no
+    /// fallback, is never admitted: [`PolicySnapshot::stop_for`] refuses it
+    /// as `no_stop`, which is what its caller records it with.
+    pub fn admit(&mut self, policy: Option<PolicySnapshot>) -> Result<(), ModelError> {
+        if !self.kind.takes(policy.as_ref()) {
+            return Err(Self::unadmitted(
+                "a snapshot of its own profile's policy for its account and instrument, for an \
+                 entry, and none for an exit",
+            ));
+        }
+        if !self.kind.has_stop(policy.as_ref()) {
+            return Err(Self::unadmitted(
+                "a stop, the alert's own or its policy's fallback; an entry with neither is \
+                 refused as no_stop",
+            ));
+        }
+        self.state = self.state.move_to(IntentState::Admitted)?;
+        self.policy = policy;
+        Ok(())
     }
 
     pub const fn format(&self) -> u32 {
@@ -109,8 +172,14 @@ impl ExternalIntent {
         &self.attempts
     }
 
-    /// A move that needs no venue evidence. An exit never expires.
+    /// A move that needs no venue evidence. An exit never expires, and
+    /// nothing is admitted this way: [`ExternalIntent::admit`] does that.
     pub fn move_to(&mut self, to: IntentState) -> Result<(), ModelError> {
+        if to == IntentState::Admitted {
+            return Err(Self::unadmitted(
+                "its admission, with an entry's policy snapshot",
+            ));
+        }
         if to == IntentState::Expired && matches!(self.kind, IntentKind::Exit(_)) {
             return Err(ModelError::InvalidTransition {
                 machine: "exit intent",
@@ -270,59 +339,14 @@ impl ExternalIntent {
             evidence: evidence.to_string(),
         }
     }
-}
 
-#[derive(Deserialize)]
-struct ExternalIntentParts {
-    format: u32,
-    kind: IntentKind,
-    state: IntentState,
-    attempts: Vec<OrderAttempt>,
-}
-
-impl TryFrom<ExternalIntentParts> for ExternalIntent {
-    type Error = ModelError;
-
-    fn try_from(parts: ExternalIntentParts) -> Result<Self, Self::Error> {
-        if parts.format != INTENT_FORMAT {
-            return Err(ModelError::UnsupportedFormat {
-                record: "intent",
-                found: parts.format,
-                expected: INTENT_FORMAT,
-            });
+    /// Why an intent is not admitted.
+    fn unadmitted(evidence: &str) -> ModelError {
+        ModelError::MissingEvidence {
+            machine: "intent",
+            to: IntentState::Admitted.as_str(),
+            evidence: evidence.to_string(),
         }
-        for attempt in &parts.attempts {
-            super::order::expect_leg(&attempt.client_order_id, &[parts.kind.leg()])?;
-        }
-        if matches!(
-            parts.state,
-            IntentState::Submitting
-                | IntentState::OutcomeUnknown
-                | IntentState::PartiallyFilled
-                | IntentState::Filled
-                | IntentState::Unfilled
-                | IntentState::NotPlaced
-        ) && parts.attempts.is_empty()
-        {
-            return Err(ModelError::MissingEvidence {
-                machine: "intent",
-                to: parts.state.as_str(),
-                evidence: "an owned order attempt".to_string(),
-            });
-        }
-        if matches!(parts.kind, IntentKind::Entry(_)) && parts.attempts.len() > 1 {
-            return Err(ModelError::InvalidIdentifier {
-                what: "entry intent",
-                value: format!("{} attempts", parts.attempts.len()),
-                rule: "an entry is sent once",
-            });
-        }
-        Ok(Self {
-            format: parts.format,
-            kind: parts.kind,
-            state: parts.state,
-            attempts: parts.attempts,
-        })
     }
 }
 
@@ -339,52 +363,7 @@ pub struct NotPlacedEvidence {
     pub position: PositionSnapshot,
 }
 
+mod stored;
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::model::futures::{ActivationEpoch, OwnerTag};
-    use crate::model::{
-        AccountRef, Asset, Environment, ExchangeId, OperationId, Symbol, Venue, VenueAccountId,
-    };
-
-    fn exit() -> ExternalIntent {
-        let id = VenueAccountId::issued("1").expect("account id");
-        let account = AccountRef::new(Venue::Bybit, Environment::Demo, id).expect("account");
-        let symbol = Symbol::new("BTCUSDT").expect("symbol");
-        let usdt = Asset::new("USDT").expect("asset");
-        let instrument = InstrumentId::new(ExchangeId::BybitLinear, symbol, usdt);
-        ExternalIntent::new(IntentKind::Exit(ExitIntent {
-            profile: ProfileId::new("main").expect("profile"),
-            signal: SignalId::new("exit").expect("signal"),
-            signal_time_ms: 0,
-            key: PositionKey::new(account, instrument).expect("key"),
-            side: PositionSide::Short,
-        }))
-    }
-
-    #[test]
-    fn a_stored_intent_of_another_format_is_refused_never_guessed_at() {
-        let mut json = serde_json::to_value(exit()).expect("json");
-        assert_eq!(json["format"], INTENT_FORMAT);
-        let back: ExternalIntent = serde_json::from_value(json.clone()).expect("round trip");
-        assert_eq!(back, exit());
-        json["format"] = serde_json::json!(INTENT_FORMAT + 1);
-        let error = serde_json::from_value::<ExternalIntent>(json).expect_err("format");
-        assert!(error.to_string().contains("intent format 2"), "{error}");
-    }
-
-    #[test]
-    fn a_stored_attempt_on_the_wrong_leg_is_refused() {
-        let mut json = serde_json::to_value(exit()).expect("json");
-        let entry_leg = ClientOrderId::new(
-            OwnerTag::new("k3x9p2").expect("tag"),
-            ActivationEpoch(1),
-            OperationId::new(1).expect("operation"),
-            OrderLeg::Entry,
-            1,
-        )
-        .expect("client order id");
-        json["attempts"] = serde_json::json!([{"client_order_id": entry_leg, "sent_at_ms": 0}]);
-        assert!(serde_json::from_value::<ExternalIntent>(json).is_err());
-    }
-}
+mod tests;

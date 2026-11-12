@@ -7,9 +7,11 @@ ALG-534. This page tracks each change:
 - where it stands;
 - who consumes it.
 
-ALG-733 built the Rust side of the identity and the futures contract, and
+ALG-733 built the Rust side of the identity and the futures contract,
 QUA-37 (ALG-734 in the previous workspace) the storage, the wire's
-`category` and the migrations. The rest lands with the stories named below.
+`category` and the migrations, and QUA-36 (ALG-735 in the parity matrix) a
+profile's policy and its store. The rest lands with the stories named
+below.
 
 ## Changed in Rust by ALG-733
 
@@ -32,6 +34,15 @@ QUA-37 (ALG-734 in the previous workspace) the storage, the wire's
 | The protocol's markets carry a required `category` beside `exchange`, which stays the venue's name: `DataSelection`, `SegmentEntry`, `Subscribe`, `BarClosed` and `GapNotice` | `quantforge::protocol` | No; remote jobs, the bar stream and provenance name markets with it |
 | Product lines in storage: the `exchange` column holds their storage names, candle and segment keys stay as they are, each store is bound to one environment (`store bind`), and a SQLite database is migrated from schema 1 on, never deleted; [storage-schema.md](storage-schema.md) is the contract for both backends | `quantforge::{StoreControl, StoreIdentity, RunIdentity}` | No |
 | Segment identity under the new key, with old segments and hashes still readable ([segment-spec.md](segment-spec.md#identity)) | `docs/segment-spec.md` | No |
+
+## Changed by QUA-36
+
+| Change | Where | Reaches the Python FFI |
+| --- | --- | --- |
+| An automation profile's policy, policy format 1 ([automation-policy.md](automation-policy.md)):<ul><li>`ProfilePolicy`, with its defaults, per-asset settings and capital, and `PolicyRevision`;</li><li>`PolicyChange`, each change the next revision;</li><li>`EffectivePolicy`, `PolicySnapshot` and `EntryStop`;</li><li>`PolicyProblem`, a policy held against a venue's instrument list;</li><li>the units `RiskPercent` and `StopPercent`.</li></ul> | `quantforge::model::futures` | No |
+| An intent is admitted with `ExternalIntent::admit`: an entry under a snapshot of its own profile's policy, with a stop of its own or the snapshot's fallback, which its stored form keeps as `policy`, and an exit under none. `move_to(IntentState::Admitted)` is refused | `quantforge::model::futures` | No |
+| `PolicyStore`, the storage port for profiles and every revision of their policies, on both backends from schema 9 ([storage-schema.md](storage-schema.md#keeping-policies)) | `quantforge::PolicyStore` | No |
+| `PolicyService`, the first part of `automation`: what a command or an executor keeps a policy through | `quantforge::automation` | No |
 
 ## Changing next
 

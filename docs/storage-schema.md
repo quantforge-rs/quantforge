@@ -1,6 +1,6 @@
 # The storage schema
 
-**Schema 8.** Every QuantForge store holds the same tables under one schema
+**Schema 9.** Every QuantForge store holds the same tables under one schema
 version, on SQLite and on PostgreSQL. This page is the contract between
 them: the identities their rows carry, the record a store keeps
 about itself and the activation contract behind it, who owns which tables
@@ -11,7 +11,7 @@ hold every backend to the identities. [upgrading.md](upgrading.md) is the
 operator's side of the same contract.
 
 <!-- begin: schema version -->
-8
+9
 <!-- end: schema version -->
 
 ## Contents
@@ -28,6 +28,7 @@ operator's side of the same contract.
 - [Segments on PostgreSQL](#segments-on-postgresql)
 - [Keeping segments](#keeping-segments)
 - [Keeping jobs](#keeping-jobs)
+- [Keeping policies](#keeping-policies)
 - [The shared cases](#the-shared-cases)
 - [Backends and ownership](#backends-and-ownership)
 
@@ -160,7 +161,7 @@ story exist yet.
 | `bundles`, `jobs` | QUA-358 (ALG-509) | schema 6 |
 | `job_results` | QUA-356 (ALG-511) | schema 7 |
 | `job_logs` | QUA-355 (ALG-512) | schema 8 |
-| Asset defaults, risk capital and per-asset policies | ALG-735 | a later schema |
+| `automation_profiles`, `policy_revisions` | QUA-36 (ALG-735) | schema 9 |
 | The signal inbox, intents, protection and the event outbox | ALG-738 | a later schema |
 | Notifications | ALG-749 | a later schema |
 | Jobs' provenance: the reproducibility ledger | ALG-516 | a later schema |
@@ -170,9 +171,8 @@ story exist yet.
 same steps from there on; a step that applies to a backend that never had
 the earlier schema is the whole step's DDL for that backend.
 
-**A later step.** A story that changes the schema, such as ALG-735's
-policies, ALG-738's execution store, or the jobs and provenance of ALG-509
-and ALG-516:
+**A later step.** A story that changes the schema, such as ALG-738's
+execution store, ALG-749's notifications, or the provenance of ALG-516:
 
 - adds one step for the next version on both backends in the same change:
   SQLite's to `src/storage/sqlite/migrate.rs`, PostgreSQL's to
@@ -217,6 +217,7 @@ untouched (`StorageError::SchemaUnsupported`).
 | 5 → 6 | QUA-358 | `bundles` and `jobs`: the bundles a server was sent, and its jobs. |
 | 6 → 7 | QUA-356 | `job_results`: the result files of the jobs that succeed. Every job an earlier build recorded stays as it was; none of them has a file, since no earlier build kept one. |
 | 7 → 8 | QUA-355 | `job_logs`: what is kept of each job's log. No job an earlier build recorded has one, since no earlier build kept any. |
+| 8 → 9 | QUA-36 | `automation_profiles` and `policy_revisions`: automation profiles and every revision of their policies. Both start empty: no earlier build recorded a profile. |
 
 ## The chain on PostgreSQL
 
@@ -241,6 +242,7 @@ committed, and the waiting process would apply the step again.
 | 5 → 6 | QUA-358 | `bundles` and `jobs`, as [below](#schema-6-on-postgresql); `segments.hash` and `bot_runs.run_id` collated `"C"`. |
 | 6 → 7 | QUA-356 | `job_results`, as [below](#schema-7-on-postgresql), its names collated `"C"` from the start. |
 | 7 → 8 | QUA-355 | `job_logs`, as [below](#schema-8-on-postgresql), its job IDs collated `"C"` from the start. |
+| 8 → 9 | QUA-36 | `automation_profiles` and `policy_revisions`, as [below](#schema-9-on-postgresql), their profile IDs collated `"C"` from the start. |
 
 Refused untouched, before anything is created:
 
@@ -480,6 +482,26 @@ CREATE TABLE job_logs (
   log_json TEXT NOT NULL,
   stored_at_ms INTEGER NOT NULL
 );
+
+CREATE TABLE automation_profiles (
+  profile_id TEXT PRIMARY KEY,
+  venue TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  category TEXT NOT NULL,
+  owner_tag TEXT NOT NULL UNIQUE,
+  created_at_ms INTEGER NOT NULL
+);
+
+CREATE TABLE policy_revisions (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  profile_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  changed_at_ms INTEGER NOT NULL,
+  policy_json TEXT NOT NULL,
+  UNIQUE (profile_id, revision)
+);
 ```
 <!-- end: sqlite schema -->
 
@@ -707,6 +729,34 @@ CREATE TABLE job_logs (
 ```
 <!-- end: postgres step 8 -->
 
+### Schema 9 on PostgreSQL
+
+The step after schema 8, `SCHEMA_9`, held to this text the same way:
+
+<!-- begin: postgres step 9 -->
+```sql
+CREATE TABLE automation_profiles (
+  profile_id TEXT COLLATE "C" PRIMARY KEY,
+  venue TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  category TEXT NOT NULL,
+  owner_tag TEXT NOT NULL UNIQUE,
+  created_at_ms BIGINT NOT NULL
+);
+
+CREATE TABLE policy_revisions (
+  seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  profile_id TEXT COLLATE "C" NOT NULL,
+  revision BIGINT NOT NULL,
+  changed_at_ms BIGINT NOT NULL,
+  policy_json TEXT NOT NULL,
+  UNIQUE (profile_id, revision)
+);
+```
+<!-- end: postgres step 9 -->
+
 ## Segments on PostgreSQL
 
 The segment tables are SQLite's, and so is the protocol over them, which
@@ -847,6 +897,66 @@ shared suite's `jobs` group holds both backends to the same answers
   with `internal` and the reason; a server that stops fails the jobs it
   runs the same way. A cancel stops a job's worker only in the server that
   claimed it.
+
+## Keeping policies
+
+A store keeps automation profiles and every revision of their policies
+through the `PolicyStore` port, in the store the operator selected; the
+shared suite's `policies` group holds both backends to the same answers
+([storage-conformance.md](storage-conformance.md#the-policy-store)).
+[automation-policy.md](automation-policy.md) is the contract of what a
+policy holds and how it changes; this section is what a store promises
+about keeping one.
+
+- **A profile is recorded once and never changed.** Its row of
+  `automation_profiles` holds its ID and the identity it was created with:
+  the venue, the environment, the account (`account_kind` is `venue` for an
+  ID the venue issued and `key_fingerprint` for the fingerprint of an API
+  key, as a run's is), the product family (`linear` or `inverse`) and the
+  owner tag its client order IDs carry, which no other profile of the store
+  shares. The first revision of its policy is written in the same
+  transaction, so a store never holds a profile without a policy. A profile
+  recorded again is refused, and so is a second profile with an owner tag
+  the store already holds.
+- **A store takes profiles of its own environment.** A profile is refused
+  while the store is bound to no environment, and one for another
+  environment than the store's is refused for good
+  ([The store's record](#the-stores-record)): demo settings never reach a
+  store that trades mainnet.
+- **A policy is one document for each revision.** A row of
+  `policy_revisions` holds a profile's whole policy at one revision as the
+  model's JSON (`policy_json`, policy format 1): the profile's identity,
+  its defaults, the assets with settings of their own and its capital,
+  every decimal as exact text with the scale it was written with. A read
+  parses the document and refuses a row whose document names another
+  profile, or another revision, than the row's key.
+- **Revisions are appended, one after another, and never changed.**
+  Revision 1 comes with the profile. Each later revision is one guarded
+  insert that writes only where the profile is the policy's own, identity
+  for identity, and stands at exactly the revision before: of two changes
+  made from one revision the first is stored and the second changes
+  nothing (`save_policy` answers `false`), so its writer reads the policy
+  again and makes its change on top. No revision is skipped, none is
+  written twice, and no release deletes one: an entry is admitted under a
+  revision it names, and that revision is read back, word for word, for as
+  long as the store exists.
+- **The newest revision is the policy in force.** `UNIQUE (profile_id,
+  revision)` serves it, any revision by its number, and a profile's
+  history, which lists each revision with `changed_at_ms`, the time its
+  writer gave it.
+- **`seq` numbers the rows as they are appended**, across profiles, as a
+  job's `seq` does, so a transfer copies them in the order they were
+  written ([storage-migration.md](storage-migration.md)). On PostgreSQL a
+  profile's ID is collated `"C"` in both tables, so both keys serve the
+  byte order SQLite lists them in.
+- **A copy in progress refuses these writes** on PostgreSQL, as it refuses
+  every other ordinary write
+  ([storage-migration.md](storage-migration.md#a-copy-cut-off-or-run-again)).
+
+Nothing in these tables arms a profile or admits an entry: a policy is a
+setting. The execution store of ALG-738 records each admitted entry with
+the snapshot of the policy it was admitted under, which names the revision
+kept here.
 
 ## The shared cases
 

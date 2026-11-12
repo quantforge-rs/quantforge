@@ -5989,7 +5989,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 8,
+      "schema_version": 9,
       "environment": null,
       "activation": "inactive",
       "activation_epoch": 0
@@ -5999,7 +5999,7 @@
      "op": "migrations",
      "expect": [
       {
-       "to_version": 8,
+       "to_version": 9,
        "from_version": 0
       }
      ]
@@ -6010,7 +6010,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 8,
+      "schema_version": 9,
       "environment": null,
       "activation": "inactive",
       "activation_epoch": 0
@@ -6044,7 +6044,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 8,
+      "schema_version": 9,
       "environment": "testnet",
       "activation": "inactive",
       "activation_epoch": 0
@@ -8252,6 +8252,1179 @@
      "op": "claim_job",
      "at": 1792454400300,
      "expect": null
+    }
+   ]
+  }
+ ],
+ "policies": [
+  {
+   "id": "policies.profile_created_once",
+   "doc": "a profile is recorded once, with the first revision of its policy; recorded again it is refused, and nothing of the second is kept",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "profiles",
+     "expect": []
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "expect": null
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": []
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400000
+    },
+    {
+     "op": "profiles",
+     "expect": [
+      {
+       "id": "main",
+       "account_ref": {
+        "venue": "Bybit",
+        "environment": "Demo",
+        "venue_account_id": {
+         "Venue": "71002233"
+        }
+       },
+       "category": "Linear",
+       "owner_tag": "k3x9p2"
+      }
+     ]
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "profile_policy_at",
+     "profile": "main",
+     "revision": 1,
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "profile_policy_at",
+     "profile": "main",
+     "revision": 2,
+     "expect": null
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400000
+      }
+     ]
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":\"again\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400001,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "profile main is already recorded"
+     }
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400000
+      }
+     ]
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT profile_id, venue, environment, account_kind, account_id, category, owner_tag, CAST(created_at_ms AS TEXT) FROM automation_profiles ORDER BY created_at_ms",
+     "expect": [
+      [
+       "main",
+       "bybit",
+       "demo",
+       "venue",
+       "71002233",
+       "linear",
+       "k3x9p2",
+       "1792454400000"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "policies.owner_tag_of_its_own",
+   "doc": "a profile whose owner tag another profile of the store holds is refused, and nothing of it is kept",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400000
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"other\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"KeyFingerprint\":\"00000000000000a1\"}},\"category\":\"Inverse\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400001,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "owner tag k3x9p2 already belongs to another profile of this store"
+     }
+    },
+    {
+     "op": "profiles",
+     "expect": [
+      {
+       "id": "main",
+       "account_ref": {
+        "venue": "Bybit",
+        "environment": "Demo",
+        "venue_account_id": {
+         "Venue": "71002233"
+        }
+       },
+       "category": "Linear",
+       "owner_tag": "k3x9p2"
+      }
+     ]
+    },
+    {
+     "op": "profile_policy",
+     "profile": "other",
+     "expect": null
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "other",
+     "expect": []
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"other\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"KeyFingerprint\":\"00000000000000a1\"}},\"category\":\"Inverse\",\"owner_tag\":\"a1b2c3\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400002
+    },
+    {
+     "op": "profiles",
+     "expect": [
+      {
+       "id": "main",
+       "account_ref": {
+        "venue": "Bybit",
+        "environment": "Demo",
+        "venue_account_id": {
+         "Venue": "71002233"
+        }
+       },
+       "category": "Linear",
+       "owner_tag": "k3x9p2"
+      },
+      {
+       "id": "other",
+       "account_ref": {
+        "venue": "Bybit",
+        "environment": "Demo",
+        "venue_account_id": {
+         "KeyFingerprint": "00000000000000a1"
+        }
+       },
+       "category": "Inverse",
+       "owner_tag": "a1b2c3"
+      }
+     ]
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT profile_id, venue, environment, account_kind, account_id, category, owner_tag, CAST(created_at_ms AS TEXT) FROM automation_profiles ORDER BY created_at_ms",
+     "expect": [
+      [
+       "main",
+       "bybit",
+       "demo",
+       "venue",
+       "71002233",
+       "linear",
+       "k3x9p2",
+       "1792454400000"
+      ],
+      [
+       "other",
+       "bybit",
+       "demo",
+       "key_fingerprint",
+       "00000000000000a1",
+       "inverse",
+       "a1b2c3",
+       "1792454400002"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "policies.environment_of_the_store",
+   "doc": "a store bound to no environment takes no profile, and a bound one takes only profiles of its own environment",
+   "steps": [
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400000,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the store is bound to no environment yet, and profile main needs one"
+     }
+    },
+    {
+     "op": "profiles",
+     "expect": []
+    },
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"live\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Mainnet\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"a1b2c3\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400001,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "profile live is for mainnet, and the store is bound to demo"
+     }
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"test\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Testnet\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"b1b2c3\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400002,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "profile test is for testnet, and the store is bound to demo"
+     }
+    },
+    {
+     "op": "profiles",
+     "expect": []
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400003
+    },
+    {
+     "op": "profiles",
+     "expect": [
+      {
+       "id": "main",
+       "account_ref": {
+        "venue": "Bybit",
+        "environment": "Demo",
+        "venue_account_id": {
+         "Venue": "71002233"
+        }
+       },
+       "category": "Linear",
+       "owner_tag": "k3x9p2"
+      }
+     ]
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400003
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "policies.first_revision_comes_with_the_profile",
+   "doc": "a profile is created with revision 1 of its policy and no other, and revision 1 is never written again",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400000,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "a profile is created with revision 1 of its policy, not revision 2"
+     }
+    },
+    {
+     "op": "profiles",
+     "expect": []
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400001
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":\"first again\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400002,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "revision 1 of profile main's policy is written when the profile is created, and never again"
+     }
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400001
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "policies.revisions_appended",
+   "doc": "each revision is appended after the one before it, read back by its number word for word, and listed with the time it was given; the newest is the policy in force",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400000
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454460000,
+     "expect": true
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":3,\"label\":\"third\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454520000,
+     "expect": true
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":3,\"label\":\"third\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "profile_policy_at",
+     "profile": "main",
+     "revision": 1,
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "profile_policy_at",
+     "profile": "main",
+     "revision": 2,
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "profile_policy_at",
+     "profile": "main",
+     "revision": 3,
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":3,\"label\":\"third\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "profile_policy_at",
+     "profile": "main",
+     "revision": 4,
+     "expect": null
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400000
+      },
+      {
+       "revision": 2,
+       "changed_at_ms": 1792454460000
+      },
+      {
+       "revision": 3,
+       "changed_at_ms": 1792454520000
+      }
+     ]
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT CAST(revision AS TEXT), CAST(changed_at_ms AS TEXT) FROM policy_revisions WHERE profile_id = 'main' ORDER BY seq",
+     "expect": [
+      [
+       "1",
+       "1792454400000"
+      ],
+      [
+       "2",
+       "1792454460000"
+      ],
+      [
+       "3",
+       "1792454520000"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "policies.one_of_two_from_one_revision",
+   "doc": "of two revisions made from the same one the first is stored, and the second changes nothing, however often it is offered",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400000
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400001,
+     "expect": true
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"the other second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400002,
+     "expect": false
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"the other second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400003,
+     "expect": false
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400004,
+     "expect": false
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400000
+      },
+      {
+       "revision": 2,
+       "changed_at_ms": 1792454400001
+      }
+     ]
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":3,\"label\":\"third\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400005,
+     "expect": true
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":3,\"label\":\"third\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400000
+      },
+      {
+       "revision": 2,
+       "changed_at_ms": 1792454400001
+      },
+      {
+       "revision": 3,
+       "changed_at_ms": 1792454400005
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "policies.no_revision_skipped",
+   "doc": "a revision that does not follow the newest one is not stored",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400000
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":3,\"label\":\"third\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400001,
+     "expect": false
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400002,
+     "expect": true
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":4,\"label\":\"fourth\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400003,
+     "expect": false
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":3,\"label\":\"third\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400004,
+     "expect": true
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400000
+      },
+      {
+       "revision": 2,
+       "changed_at_ms": 1792454400002
+      },
+      {
+       "revision": 3,
+       "changed_at_ms": 1792454400004
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "policies.only_its_own_profile",
+   "doc": "a policy is stored only for the profile it names: one for a profile the store does not hold is refused, and so is one naming another account, product family or owner tag than the profile was created with",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400000
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"ghost\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400001,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the store holds no profile ghost"
+     }
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"zzzzzz\"},\"revision\":2,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400002,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the policy names another account, product family or owner tag than profile main was created with"
+     }
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002234\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400003,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the policy names another account, product family or owner tag than profile main was created with"
+     }
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"KeyFingerprint\":\"00000000000000a1\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400004,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the policy names another account, product family or owner tag than profile main was created with"
+     }
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Inverse\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400005,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the policy names another account, product family or owner tag than profile main was created with"
+     }
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Testnet\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400006,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the policy names another account, product family or owner tag than profile main was created with"
+     }
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"zzzzzz\"},\"revision\":5,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400007,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the policy names another account, product family or owner tag than profile main was created with"
+     }
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400000
+      }
+     ]
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "ghost",
+     "expect": []
+    }
+   ]
+  },
+  {
+   "id": "policies.profiles_in_byte_order",
+   "doc": "profiles are listed by ID, byte by byte",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main_3\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"tag000\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400000
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main0\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002234\"}},\"category\":\"Linear\",\"owner_tag\":\"tag001\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400001
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main-2\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002235\"}},\"category\":\"Linear\",\"owner_tag\":\"tag002\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400002
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002236\"}},\"category\":\"Linear\",\"owner_tag\":\"tag003\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400003
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"z9\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002237\"}},\"category\":\"Linear\",\"owner_tag\":\"tag004\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400004
+    },
+    {
+     "op": "profiles",
+     "expect": [
+      {
+       "id": "main",
+       "account_ref": {
+        "venue": "Bybit",
+        "environment": "Demo",
+        "venue_account_id": {
+         "Venue": "71002236"
+        }
+       },
+       "category": "Linear",
+       "owner_tag": "tag003"
+      },
+      {
+       "id": "main-2",
+       "account_ref": {
+        "venue": "Bybit",
+        "environment": "Demo",
+        "venue_account_id": {
+         "Venue": "71002235"
+        }
+       },
+       "category": "Linear",
+       "owner_tag": "tag002"
+      },
+      {
+       "id": "main0",
+       "account_ref": {
+        "venue": "Bybit",
+        "environment": "Demo",
+        "venue_account_id": {
+         "Venue": "71002234"
+        }
+       },
+       "category": "Linear",
+       "owner_tag": "tag001"
+      },
+      {
+       "id": "main_3",
+       "account_ref": {
+        "venue": "Bybit",
+        "environment": "Demo",
+        "venue_account_id": {
+         "Venue": "71002233"
+        }
+       },
+       "category": "Linear",
+       "owner_tag": "tag000"
+      },
+      {
+       "id": "z9",
+       "account_ref": {
+        "venue": "Bybit",
+        "environment": "Demo",
+        "venue_account_id": {
+         "Venue": "71002237"
+        }
+       },
+       "category": "Linear",
+       "owner_tag": "tag004"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "policies.profiles_apart",
+   "doc": "each profile has revisions of its own: a revision of one changes nothing of another",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400000
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"hedge\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Inverse\",\"owner_tag\":\"a1b2c3\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400001
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400002,
+     "expect": true
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"hedge\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Inverse\",\"owner_tag\":\"a1b2c3\"},\"revision\":2,\"label\":\"hedge's second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400003,
+     "expect": true
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":3,\"label\":\"third\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400004,
+     "expect": true
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"hedge\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Inverse\",\"owner_tag\":\"a1b2c3\"},\"revision\":4,\"label\":\"not hedge's\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400005,
+     "expect": false
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":3,\"label\":\"third\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400000
+      },
+      {
+       "revision": 2,
+       "changed_at_ms": 1792454400002
+      },
+      {
+       "revision": 3,
+       "changed_at_ms": 1792454400004
+      }
+     ]
+    },
+    {
+     "op": "profile_policy",
+     "profile": "hedge",
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"hedge\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Inverse\",\"owner_tag\":\"a1b2c3\"},\"revision\":2,\"label\":\"hedge's second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "hedge",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400001
+      },
+      {
+       "revision": 2,
+       "changed_at_ms": 1792454400003
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "policies.text_kept",
+   "doc": "a policy reads back as the text that was stored, every decimal with its scale",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400000
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"측정 ž \\\"x\\\" \\\\\",\"defaults\":{\"enabled\":true,\"risk_percent\":\"1.50\",\"stop_percent\":\"3.50\",\"leverage\":\"5.0\",\"revision\":2},\"assets\":[{\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"BTCUSDT\",\"settle\":\"USDT\"},\"enabled\":false,\"risk_percent\":null,\"stop\":\"Inherit\",\"leverage\":null,\"revision\":2},{\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"enabled\":true,\"risk_percent\":\"0.10\",\"stop\":{\"Percent\":\"2.500\"},\"leverage\":\"12.5\",\"revision\":2}],\"capital\":[{\"amount\":{\"amount\":\"15000.00\",\"asset\":\"USDT\"},\"revision\":2}]}",
+     "at": 1792454400001,
+     "expect": true
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"측정 ž \\\"x\\\" \\\\\",\"defaults\":{\"enabled\":true,\"risk_percent\":\"1.50\",\"stop_percent\":\"3.50\",\"leverage\":\"5.0\",\"revision\":2},\"assets\":[{\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"BTCUSDT\",\"settle\":\"USDT\"},\"enabled\":false,\"risk_percent\":null,\"stop\":\"Inherit\",\"leverage\":null,\"revision\":2},{\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"enabled\":true,\"risk_percent\":\"0.10\",\"stop\":{\"Percent\":\"2.500\"},\"leverage\":\"12.5\",\"revision\":2}],\"capital\":[{\"amount\":{\"amount\":\"15000.00\",\"asset\":\"USDT\"},\"revision\":2}]}"
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT policy_json FROM policy_revisions WHERE profile_id = 'main' ORDER BY revision",
+     "expect": [
+      [
+       "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+      ],
+      [
+       "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"측정 ž \\\"x\\\" \\\\\",\"defaults\":{\"enabled\":true,\"risk_percent\":\"1.50\",\"stop_percent\":\"3.50\",\"leverage\":\"5.0\",\"revision\":2},\"assets\":[{\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"BTCUSDT\",\"settle\":\"USDT\"},\"enabled\":false,\"risk_percent\":null,\"stop\":\"Inherit\",\"leverage\":null,\"revision\":2},{\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"enabled\":true,\"risk_percent\":\"0.10\",\"stop\":{\"Percent\":\"2.500\"},\"leverage\":\"12.5\",\"revision\":2}],\"capital\":[{\"amount\":{\"amount\":\"15000.00\",\"asset\":\"USDT\"},\"revision\":2}]}"
+      ]
+     ]
+    },
+    {
+     "op": "value_types",
+     "table": "policy_revisions",
+     "column": "policy_json",
+     "expect": [
+      "text"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "policies.reopened",
+   "doc": "a store opened again holds every profile and every revision as they stood, and appends on",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400000
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400001,
+     "expect": true
+    },
+    {
+     "op": "reopen"
+    },
+    {
+     "op": "profiles",
+     "expect": [
+      {
+       "id": "main",
+       "account_ref": {
+        "venue": "Bybit",
+        "environment": "Demo",
+        "venue_account_id": {
+         "Venue": "71002233"
+        }
+       },
+       "category": "Linear",
+       "owner_tag": "k3x9p2"
+      }
+     ]
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400000
+      },
+      {
+       "revision": 2,
+       "changed_at_ms": 1792454400001
+      }
+     ]
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400002,
+     "expect": false
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":3,\"label\":\"third\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400003,
+     "expect": true
+    },
+    {
+     "op": "reopen"
+    },
+    {
+     "op": "profile_policy_at",
+     "profile": "main",
+     "revision": 1,
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "profile_policy_at",
+     "profile": "main",
+     "revision": 2,
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "profile_policy_at",
+     "profile": "main",
+     "revision": 3,
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":3,\"label\":\"third\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400000
+      },
+      {
+       "revision": 2,
+       "changed_at_ms": 1792454400001
+      },
+      {
+       "revision": 3,
+       "changed_at_ms": 1792454400003
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "policies.foreign_document_refused",
+   "doc": "a row whose document is another profile's, another revision's or of another format is refused when read, and the rows beside it still read",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400000
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":\"second\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400001,
+     "expect": true
+    },
+    {
+     "op": "save_policy",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":3,\"label\":\"third\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400002,
+     "expect": true
+    },
+    {
+     "op": "create_profile",
+     "policy": "{\"format\":1,\"identity\":{\"id\":\"other\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"a1b2c3\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}",
+     "at": 1792454400003
+    },
+    {
+     "op": "raw_execute",
+     "sql": "UPDATE policy_revisions SET policy_json = '{\"format\":1,\"identity\":{\"id\":\"other\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"a1b2c3\"},\"revision\":3,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}' WHERE profile_id = 'main' AND revision = 3"
+    },
+    {
+     "op": "raw_execute",
+     "sql": "UPDATE policy_revisions SET policy_json = '{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":7,\"label\":\"seventh\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}' WHERE profile_id = 'main' AND revision = 2"
+    },
+    {
+     "op": "raw_execute",
+     "sql": "UPDATE policy_revisions SET policy_json = '{\"format\":2,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}' WHERE profile_id = 'other' AND revision = 1"
+    },
+    {
+     "op": "profile_policy",
+     "profile": "main",
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the stored policy of profile main at revision 3 cannot be read: it is the policy of profile other"
+     }
+    },
+    {
+     "op": "profile_policy_at",
+     "profile": "main",
+     "revision": 3,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the stored policy of profile main at revision 3 cannot be read: it is the policy of profile other"
+     }
+    },
+    {
+     "op": "profile_policy_at",
+     "profile": "main",
+     "revision": 2,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the stored policy of profile main at revision 2 cannot be read: it is revision 7"
+     }
+    },
+    {
+     "op": "profile_policy_at",
+     "profile": "main",
+     "revision": 1,
+     "expect": "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+    },
+    {
+     "op": "profile_policy",
+     "profile": "other",
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the stored policy of profile other at revision 1 cannot be read: policy format 2 is not supported; this build reads format 1"
+     }
+    },
+    {
+     "op": "policy_revisions",
+     "profile": "main",
+     "expect": [
+      {
+       "revision": 1,
+       "changed_at_ms": 1792454400000
+      },
+      {
+       "revision": 2,
+       "changed_at_ms": 1792454400001
+      },
+      {
+       "revision": 3,
+       "changed_at_ms": 1792454400002
+      }
+     ]
+    },
+    {
+     "op": "profiles",
+     "expect": [
+      {
+       "id": "main",
+       "account_ref": {
+        "venue": "Bybit",
+        "environment": "Demo",
+        "venue_account_id": {
+         "Venue": "71002233"
+        }
+       },
+       "category": "Linear",
+       "owner_tag": "k3x9p2"
+      },
+      {
+       "id": "other",
+       "account_ref": {
+        "venue": "Bybit",
+        "environment": "Demo",
+        "venue_account_id": {
+         "Venue": "71002233"
+        }
+       },
+       "category": "Linear",
+       "owner_tag": "a1b2c3"
+      }
+     ]
     }
    ]
   }

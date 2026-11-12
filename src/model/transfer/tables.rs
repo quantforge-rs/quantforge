@@ -306,12 +306,49 @@ pub const JOB_LOGS: TransferTable = TransferTable {
     max_batch: Some(4),
 };
 
+/// The automation profiles, by their IDs in byte order.
+pub const AUTOMATION_PROFILES: TransferTable = TransferTable {
+    name: "automation_profiles",
+    columns: &[
+        text("profile_id"),
+        text("venue"),
+        text("environment"),
+        text("account_kind"),
+        text("account_id"),
+        text("category"),
+        text("owner_tag"),
+        integer("created_at_ms"),
+    ],
+    key: "profile_id",
+    by_market: false,
+    numbered: false,
+    max_batch: None,
+};
+
+/// Every revision of the profiles' policies, in the order they were made.
+/// A row holds a whole policy, so a batch holds few.
+pub const POLICY_REVISIONS: TransferTable = TransferTable {
+    name: "policy_revisions",
+    columns: &[
+        integer("seq"),
+        text("profile_id"),
+        integer("revision"),
+        integer("changed_at_ms"),
+        text("policy_json"),
+    ],
+    key: "seq",
+    by_market: false,
+    numbered: true,
+    max_batch: Some(64),
+};
+
 /// The tables a transfer copies, in the order it copies them: a run before
 /// its journals, a segment before the index entry naming it, candles before
 /// the marks on their windows, a bundle before the jobs that run it, a
-/// result before the job that lists it, a job before its log. Each part of
-/// a target is whole when read.
-pub const TRANSFER_TABLES: [TransferTable; 11] = [
+/// result before the job that lists it, a job before its log, a profile
+/// before the revisions of its policy. Each part of a target is whole when
+/// read.
+pub const TRANSFER_TABLES: [TransferTable; 13] = [
     CANDLES,
     BOT_RUNS,
     ORDER_EVENTS,
@@ -323,6 +360,8 @@ pub const TRANSFER_TABLES: [TransferTable; 11] = [
     JOB_RESULTS,
     JOBS,
     JOB_LOGS,
+    AUTOMATION_PROFILES,
+    POLICY_REVISIONS,
 ];
 
 /// The tables every store keeps for itself, which a transfer never copies:
@@ -332,40 +371,4 @@ pub const TRANSFER_TABLES: [TransferTable; 11] = [
 pub const KEPT_BY_EACH_STORE: [&str; 3] = ["meta", "store_control", "schema_migrations"];
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_header_names_the_format_the_table_and_its_columns() {
-        assert_eq!(
-            String::from_utf8(SEGMENT_DIRTY.canonical_header()).expect("utf-8"),
-            "quantforge transfer 1\nsegment_dirty\nid,exchange,symbol,interval,window_start_ms\n"
-        );
-    }
-
-    #[test]
-    fn every_table_is_keyed_by_one_of_its_columns_and_a_market_table_starts_with_its_market() {
-        for table in TRANSFER_TABLES {
-            assert!(table.column_index(table.key).is_some(), "{}", table.name);
-            if table.numbered {
-                assert_eq!(table.key_kind(), ColumnKind::Integer, "{}", table.name);
-            }
-            if table.by_market {
-                let names: Vec<&str> = table.columns[..3].iter().map(|c| c.name).collect();
-                assert_eq!(names, ["exchange", "symbol", "interval"], "{}", table.name);
-                assert_eq!(table.key_kind(), ColumnKind::Integer, "{}", table.name);
-            }
-        }
-    }
-
-    #[test]
-    fn a_batch_of_large_rows_is_capped_and_never_empty() {
-        assert_eq!(SEGMENTS.batch_rows(5000), 64);
-        assert_eq!(SEGMENTS.batch_rows(10), 10);
-        assert_eq!(BUNDLES.batch_rows(5000), 2);
-        assert_eq!(JOB_RESULTS.batch_rows(5000), 2);
-        assert_eq!(JOB_LOGS.batch_rows(5000), 4);
-        assert_eq!(CANDLES.batch_rows(5000), 5000);
-        assert_eq!(CANDLES.batch_rows(0), 1);
-    }
-}
+mod tests;

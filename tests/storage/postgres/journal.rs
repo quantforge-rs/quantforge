@@ -89,6 +89,21 @@ fn the_candle_store_finds_every_market_under_a_linguistic_collation() {
     conformance::candles::<Linguistic>();
 }
 
+/// Profiles are listed by their IDs, which a linguistic collation orders
+/// otherwise: the list must still be byte by byte.
+#[test]
+fn the_policy_store_keeps_byte_order_under_a_linguistic_collation() {
+    let Some(server) = server_url() else {
+        eprintln!("skipping: {VARIABLE} is unset");
+        return;
+    };
+    if !linguistic_collation(&server) {
+        skip("the server has no en_US.UTF-8 locale");
+        return;
+    }
+    conformance::policies::<Linguistic>();
+}
+
 fn order(order_id: String) -> ExchangeOrder {
     ExchangeOrder {
         symbol: Symbol::new("BTCUSDT").expect("symbol"),

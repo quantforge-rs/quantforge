@@ -81,6 +81,11 @@ fn jobs() {
 }
 
 #[test]
+fn policies() {
+    conformance::policies::<Factory>();
+}
+
+#[test]
 fn durability() {
     conformance::durability::<Factory>();
 }

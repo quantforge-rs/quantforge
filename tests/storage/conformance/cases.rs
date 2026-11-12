@@ -52,6 +52,15 @@ pub struct Cases {
     pub races: Vec<serde_json::Value>,
     pub control: Vec<Scenario>,
     pub jobs: Vec<Scenario>,
+    pub policies: Vec<Scenario>,
+}
+
+/// A revision of a policy and when it was made, as a store lists it.
+#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StampText {
+    pub revision: u64,
+    pub changed_at_ms: i64,
 }
 
 pub fn load() -> Cases {
@@ -201,6 +210,44 @@ pub enum Step {
         failure: String,
         at: i64,
         expect: usize,
+    },
+    /// `policy` is the document as stored, policy format 1.
+    CreateProfile {
+        policy: String,
+        at: i64,
+        #[serde(default)]
+        refused: Option<Refusal>,
+    },
+    /// Each identity as the document spells it.
+    Profiles {
+        expect: Vec<serde_json::Value>,
+    },
+    ProfilePolicy {
+        profile: String,
+        #[serde(default)]
+        expect: Option<String>,
+        #[serde(default)]
+        refused: Option<Refusal>,
+    },
+    ProfilePolicyAt {
+        profile: String,
+        revision: u64,
+        #[serde(default)]
+        expect: Option<String>,
+        #[serde(default)]
+        refused: Option<Refusal>,
+    },
+    PolicyRevisions {
+        profile: String,
+        expect: Vec<StampText>,
+    },
+    SavePolicy {
+        policy: String,
+        at: i64,
+        #[serde(default)]
+        expect: Option<bool>,
+        #[serde(default)]
+        refused: Option<Refusal>,
     },
     CreateRun {
         run: String,

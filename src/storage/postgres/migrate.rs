@@ -37,7 +37,7 @@ pub(super) struct Step {
 }
 
 /// The chain, in order. A step's DDL never changes once a build ran it.
-pub(super) const STEPS: [Step; 4] = [
+pub(super) const STEPS: [Step; 5] = [
     Step {
         to: 5,
         apply: step_5_schema,
@@ -53,6 +53,10 @@ pub(super) const STEPS: [Step; 4] = [
     Step {
         to: 8,
         apply: step_8_job_logs,
+    },
+    Step {
+        to: 9,
+        apply: step_9_policies,
     },
 ];
 
@@ -271,4 +275,10 @@ fn step_7_job_results<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
 /// Schema 8 (QUA-355): what is kept of each job's log.
 fn step_8_job_logs<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
     Box::pin(async move { transaction.batch_execute(schema::SCHEMA_8).await })
+}
+
+/// Schema 9 (QUA-36): automation profiles, and every revision of their
+/// policies.
+fn step_9_policies<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
+    Box::pin(async move { transaction.batch_execute(schema::SCHEMA_9).await })
 }

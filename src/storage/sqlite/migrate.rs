@@ -9,7 +9,9 @@
 //! step rewrites one, the original is kept beside it.
 
 use super::errors::{commit_failed, failed};
-use super::{META_DDL, SCHEMA_VERSION, SqliteStore, candles, control, jobs, journal, segments};
+use super::{
+    META_DDL, SCHEMA_VERSION, SqliteStore, candles, control, jobs, journal, policies, segments,
+};
 use crate::storage::segments as format;
 use crate::{Interval, StorageError, now_utc_ms};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
@@ -36,7 +38,7 @@ struct Step {
 
 /// The chain, in order. Each step's DDL is the text the build that
 /// introduced it wrote, which never changes again.
-const STEPS: [Step; 8] = [
+const STEPS: [Step; 9] = [
     Step {
         to: 1,
         apply: step_1_candles,
@@ -68,6 +70,10 @@ const STEPS: [Step; 8] = [
     Step {
         to: 8,
         apply: step_8_job_logs,
+    },
+    Step {
+        to: 9,
+        apply: step_9_policies,
     },
 ];
 
@@ -228,6 +234,12 @@ fn step_7_job_results(transaction: &Transaction<'_>) -> Result<(), StorageError>
 /// Schema 8 (QUA-355): what is kept of each job's log.
 fn step_8_job_logs(transaction: &Transaction<'_>) -> Result<(), StorageError> {
     batch(transaction, jobs::LOGS_DDL)
+}
+
+/// Schema 9 (QUA-36): automation profiles, and every revision of their
+/// policies.
+fn step_9_policies(transaction: &Transaction<'_>) -> Result<(), StorageError> {
+    batch(transaction, policies::SCHEMA_DDL)
 }
 
 fn mark_every_window(transaction: &Transaction<'_>) -> Result<(), StorageError> {

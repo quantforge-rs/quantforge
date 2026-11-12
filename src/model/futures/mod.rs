@@ -1,8 +1,10 @@
 //! The futures contract of ADR 0002, as types: what a perpetual is and
 //! whether universe rule 1 keeps it; an account, its settings and its
 //! positions; the orders that enter, close and protect a position; what a
-//! venue reports back; and the records a store keeps: an external signal's
-//! intent, a position cycle with its protection, and realized PnL.
+//! venue reports back; an automation profile's policy, the settings its
+//! entries are sized from; and the records a store keeps: an external
+//! signal's intent with the policy it was admitted under, a position cycle
+//! with its protection, and realized PnL.
 //!
 //! Everything here is venue-neutral. A venue's own fields, such as Bybit's
 //! `positionIdx` or Binance's `positionSide`, stay inside its adapter, which
@@ -28,6 +30,7 @@ mod intent;
 mod intent_state;
 mod ledger;
 mod order;
+mod policy;
 mod position;
 mod protection_state;
 mod stop;
@@ -58,6 +61,12 @@ pub use order::{
     AttachedStop, CancelAttribution, CloseOrder, EntryOrder, FuturesFill, FuturesOrder,
     FuturesOrderStatus, OrderAck, OrderAttempt, OrderLookup, OrderLookupGuarantee, OrderOrigin,
     RecordSource, Rejection,
+};
+pub use policy::{
+    AssetEdit, AssetPolicy, Capital, DefaultsEdit, Edit, EffectivePolicy, EntryStop, NewAsset,
+    POLICY_FORMAT, POLICY_SNAPSHOT_FORMAT, PolicyChange, PolicyDefaults, PolicyProblem,
+    PolicyProblemKind, PolicyRefusal, PolicyRevision, PolicySnapshot, PolicyStamp, PolicySubject,
+    ProfileLabel, ProfilePolicy, RiskPercent, SettingSource, Sourced, StopFallback, StopPercent,
 };
 pub use position::{CloseReason, OperatorRemoval, PositionCycle};
 pub use protection_state::ProtectionState;

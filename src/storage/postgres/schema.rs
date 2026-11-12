@@ -19,7 +19,7 @@ pub(super) const LOCK_KEY: i64 = 0x5146_5343_4845_4D41;
 
 /// The tables of the current schema. A database holding any of them but no
 /// recorded version is not a QuantForge store, and `init` refuses it.
-pub(super) const TABLES: [&str; 14] = [
+pub(super) const TABLES: [&str; 16] = [
     "meta",
     "candles",
     "bot_runs",
@@ -34,6 +34,8 @@ pub(super) const TABLES: [&str; 14] = [
     "jobs",
     "job_results",
     "job_logs",
+    "automation_profiles",
+    "policy_revisions",
 ];
 
 /// Schema 5, where PostgreSQL starts: the tables of SQLite's schema 5,
@@ -208,6 +210,32 @@ CREATE TABLE job_logs (
   job_id TEXT COLLATE "C" PRIMARY KEY,
   log_json TEXT NOT NULL,
   stored_at_ms BIGINT NOT NULL
+);
+"#;
+
+/// Schema 9 (QUA-36): automation profiles, each under its ID, and every
+/// revision of their policies, numbered by the store as they are appended.
+/// A profile's ID is collated `"C"` in both tables, so that both keys serve
+/// the byte order the IDs are listed and transferred in.
+pub(super) const SCHEMA_9: &str = r#"
+CREATE TABLE automation_profiles (
+  profile_id TEXT COLLATE "C" PRIMARY KEY,
+  venue TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  category TEXT NOT NULL,
+  owner_tag TEXT NOT NULL UNIQUE,
+  created_at_ms BIGINT NOT NULL
+);
+
+CREATE TABLE policy_revisions (
+  seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  profile_id TEXT COLLATE "C" NOT NULL,
+  revision BIGINT NOT NULL,
+  changed_at_ms BIGINT NOT NULL,
+  policy_json TEXT NOT NULL,
+  UNIQUE (profile_id, revision)
 );
 "#;
 

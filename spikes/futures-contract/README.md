@@ -2,11 +2,12 @@
 
 Two scripts back the numbers in
 [ADR 0002](../../docs/adr/0002-automation-architecture.md) and
-[futures-venues.md](../../docs/futures-venues.md). Both use the Python
-standard library only. Run them with `python3 -I`, which ignores the
-environment and the current directory, from the repository root.
+[futures-venues.md](../../docs/futures-venues.md), and a third writes the
+shared cases of a profile's policy. All use the Python standard library
+only. Run them with `python3 -I`, which ignores the environment and the
+current directory, from the repository root.
 
-Neither script is built, tested or shipped by the crate: `Cargo.toml`
+No script here is built, tested or shipped by the crate: `Cargo.toml`
 excludes `spikes/` from the package.
 
 ## `universe.py`: the product universe
@@ -84,3 +85,23 @@ The instrument rules in the cases are the 2026-10-22 values from `universe.py`.
 The taker fees are illustrative. Bybit's leverage tiers are its public risk
 limits on 2026-10-22. Binance serves its brackets per account, to signed
 requests only, so the Binance tiers are illustrative too.
+
+## `policy_cases.py`: a profile's policy
+
+```bash
+python3 -I spikes/futures-contract/policy_cases.py --write tests/fixtures/policy_cases.json
+```
+
+An independent model of an automation profile's policy, the contract of
+[automation-policy.md](../../docs/automation-policy.md): the defaults and
+what an asset inherits from them, each change with the revision it stamps,
+the refusals, the snapshot an admitted entry carries and the stop it uses,
+and what a venue's instrument list says about a policy. It shares no code
+with the Rust model. Every case runs on each of the four futures product
+lines, and two changes made from one revision are recorded in either order.
+
+It writes [`tests/fixtures/policy_cases.json`](../../tests/fixtures/policy_cases.json),
+which `tests/policy/` replays through the Rust model and through the policy
+service on SQLite and PostgreSQL. Without `--write` it only runs the model
+and prints the counts. Change a case here, never in the fixture, and write
+the fixture again.

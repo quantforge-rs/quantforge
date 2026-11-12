@@ -9,14 +9,16 @@
 //!
 //! # Module tree
 //!
-//! Eight modules. Six of them layer innermost first: [`model`] names the
+//! Nine modules. Six of them layer innermost first: [`model`] names the
 //! domain, [`ports`] names the seams over it, [`exchange`] and [`storage`]
 //! are the adapters behind those seams, [`sdk`] is the boundary a strategy
-//! is written against, and [`engine`] drives all of them. [`protocol`]
-//! stands apart: it is the wire format between QuantForge instances, and it
-//! uses nothing else in the crate, so that it can become a crate of its own.
-//! [`server`] answers other instances in that format, reading the store
-//! through the ports.
+//! is written against, and [`engine`] drives all of them. [`automation`]
+//! sits beside the engines, over the model and the ports, and runs no
+//! strategy: it is where execution on external signals is built.
+//! [`protocol`] stands apart: it is the wire format between QuantForge
+//! instances, and it uses nothing else in the crate, so that it can become
+//! a crate of its own. [`server`] answers other instances in that format,
+//! reading the store through the ports.
 //!
 //! - [`model`] — market identity with its venues and product lines, the
 //!   candle grid and its validation, the columnar [`CandleBatch`], the
@@ -28,9 +30,11 @@
 //! - [`ports`] — [`MarketDataConnector`], [`TradingConnector`] and
 //!   [`AccountConnector`] are what an exchange adapter provides, described by
 //!   [`ExchangeCapabilities`]; [`CandleStore`], [`RunJournalStore`] and
-//!   [`SegmentStore`] are what a persistence backend provides; plus their
-//!   error types. The futures connector ports, split by capability, are in
-//!   [`ports::futures`], and [`ports::Clock`] is the injected time source.
+//!   [`SegmentStore`] are what a persistence backend provides, with
+//!   [`JobStore`] for a server's jobs and [`PolicyStore`] for automation
+//!   profiles and their policies; plus their error types. The futures
+//!   connector ports, split by capability, are in [`ports::futures`], and
+//!   [`ports::Clock`] is the injected time source.
 //! - [`exchange`] — the connector registry, which names each exchange
 //!   ([`exchange::lookup`]) and builds its connectors
 //!   ([`exchange::connect`]), and one adapter namespace per exchange;
@@ -45,6 +49,13 @@
 //!   from, and the built-in SMA crossover the CLI runs.
 //! - [`engine`] — the drivers: [`engine::backtest`], [`engine::data_sync`]
 //!   and [`engine::live`].
+//! - [`automation`] — automation on external signals (ADR 0002). Its first
+//!   part is [`automation::PolicyService`]: each futures profile's defaults,
+//!   per-asset settings and capital, kept revision by revision through
+//!   [`PolicyStore`], checked against the venue's own instrument list, and
+//!   handed to an entry as the policy it is admitted under. The
+//!   [policy contract](https://github.com/quantforge-rs/quantforge/blob/main/docs/automation-policy.md)
+//!   is what a command or an executor is written against.
 //! - [`protocol`] — the versioned wire types of remote backtest jobs,
 //!   candle segments, and the live bar stream, and the strategy bundle a job
 //!   runs; its documentation is the wire specification.
@@ -111,9 +122,10 @@
 //!   in the crate only [`server`] names it;
 //! - it is the futures contract, published ahead of the adapters and the
 //!   automation that will implement and use it: [`model::futures`] and
-//!   [`ports::futures`] are used through their modules, and nothing in the
-//!   crate drives them yet. [`Venue`] and [`Category`] are re-exported here
-//!   because [`ExchangeId`]'s methods return them.
+//!   [`ports::futures`] are used through their modules, as is
+//!   [`automation`], the first part of the crate that drives them, which
+//!   no command reaches yet. [`Venue`] and [`Category`] are re-exported
+//!   here because [`ExchangeId`]'s methods return them.
 //!
 //! Everything else is internal and moves without notice: the Binance wire
 //! DTOs, request signing and HTTP transport behind
@@ -127,6 +139,7 @@
 // Declared alphabetically: rustfmt re-sorts a contiguous run of module
 // declarations, and rustdoc sorts the module list it renders. The layer
 // order is the one the crate docs above state and the re-exports below use.
+pub mod automation;
 pub mod engine;
 pub mod exchange;
 pub mod model;
@@ -158,8 +171,9 @@ pub use model::{
 
 /// The seams. An out-of-tree exchange or storage backend implements the
 /// traits here: an exchange its connectors, a store its storage ports, the
-/// job store's among them, and a transfer's when it copies; the engines and
-/// the server are written against them and never against an adapter. `ExchangeCapabilities` describes what an exchange supports,
+/// job store's and the policy store's among them, and a transfer's when it
+/// copies; the engines, the automation and the server are written against
+/// them and never against an adapter. `ExchangeCapabilities` describes what an exchange supports,
 /// `SignedConnectors` pairs the two connectors that need credentials, and
 /// `ExchangeError` and `StorageError` are the two failure channels they
 /// report through, with `ExchangeErrorKind` classifying an exchange's
@@ -169,7 +183,7 @@ pub use model::{
 pub use ports::{
     AccountConnector, CandleQuery, CandleStore, ExchangeCapabilities, ExchangeConnector,
     ExchangeError, ExchangeErrorKind, JobStore, MarketDataCapabilities, MarketDataConnector,
-    OrderCapabilities, RunJournalStore, SegmentStore, SignedConnectors, StorageError,
+    OrderCapabilities, PolicyStore, RunJournalStore, SegmentStore, SignedConnectors, StorageError,
     StorageErrorKind, StoreControl, StreamCapabilities, TradingConnector, TransferBegun,
     TransferSnapshot, TransferSource, TransferTarget,
 };

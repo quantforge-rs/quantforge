@@ -13,17 +13,17 @@ contract behind it.
 <!-- begin: supported upgrades -->
 | Written by | Schema | Upgrades to |
 | --- | --- | --- |
-| QuantForge 0.1.0 | 1 | 8 |
-| QuantForge 0.2.0 | 2 | 8 |
-| A development build after 0.2.0 | 3, 4, 5, 6 or 7 | 8 |
-| This release | 8 | — |
+| QuantForge 0.1.0 | 1 | 9 |
+| QuantForge 0.2.0 | 2 | 9 |
+| A development build after 0.2.0 | 3, 4, 5, 6, 7 or 8 | 9 |
+| This release | 9 | — |
 <!-- end: supported upgrades -->
 
 Every step of the chain runs forward only. A file a newer release has
 already upgraded is refused by an older one, untouched:
 
 ```text
-database schema version 8 is newer than this build supports (7); use a newer
+database schema version 9 is newer than this build supports (8); use a newer
 quantforge release, and never an older one on this database
 ```
 
@@ -64,6 +64,7 @@ Each step runs in one transaction with its version stamp, and
 | 5 → 6 | Creates the tables `serve run` keeps remote backtests in: the bundles clients upload, and the jobs that run them. On PostgreSQL it also collates segment hashes and run IDs byte by byte, which rebuilds those two primary keys and leaves every value as it was. |
 | 6 → 7 | Creates the table `serve run` keeps the result files of succeeded jobs in. Every job an earlier build recorded stays as it was. |
 | 7 → 8 | Creates the table `serve run` keeps each job's log in once the job has ended. Every job an earlier build recorded stays as it was, without a log. |
+| 8 → 9 | Creates the tables automation profiles and every revision of their policies are kept in. Both start empty, and nothing a store already holds changes. |
 
 Candles are not rewritten. The journal tables are copied row by row, so the
 upgrade takes seconds for any journal and leaves the sequence numbers as
