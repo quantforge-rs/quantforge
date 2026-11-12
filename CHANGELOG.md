@@ -176,6 +176,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- `README.md` leads with examples: a quickstart that shows each command's output, a cookbook for every command group, the HTTP routes and the configuration, and library examples that run as doctests
+- the `README.md` development section lists the same checks as `CONTRIBUTING.md`, and no longer starts with `cargo generate-lockfile`, which rebuilt the committed `Cargo.lock` with newer dependency versions
 - the database schema is version 9: the first command a store is opened with adds the `automation_profiles` and `policy_revisions` tables, on SQLite and on PostgreSQL, and keeps every row; back the store up first, since a release before this one refuses it afterwards (`docs/upgrading.md`)
 - `model::futures::ExternalIntent` is admitted with `admit`, which takes an entry's policy snapshot and none for an exit, and refuses an entry that has neither a stop of its own nor a fallback in the snapshot, and no longer with `move_to(IntentState::Admitted)`; its stored form has a new field, `policy`, which an entry holds from its admission on
 - the database schema is version 8: the first command a store is opened with adds the `job_logs` table, on SQLite and on PostgreSQL, and keeps every row; back the store up first, since a release before this one refuses it afterwards (`docs/upgrading.md`)
