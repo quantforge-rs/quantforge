@@ -261,6 +261,65 @@ async fn a_log_has_not_ended_for_its_readers_until_the_store_holds_it_and_the_jo
     assert!(bed.store.job_log(&job_id).expect("a read").is_some());
 }
 
+#[tokio::test]
+async fn a_job_whose_log_the_store_does_not_take_ends_all_the_same_without_one() {
+    let bed = Bed::new();
+    let job_id = queued(&bed);
+    let lossy = Faulty::losing_logs(bed.store.within(Duration::from_secs(2)));
+    let jobs = Jobs::new(
+        served(lossy),
+        Talking,
+        JobLimits {
+            concurrency: 1,
+            max_span_bars: DEFAULT_MAX_SPAN_BARS,
+            log: LogLimits::default(),
+        },
+    );
+    let address = start_with(bed.history(), jobs.clone()).await;
+    assert_eq!(jobs.start().await.expect("a started queue"), 0);
+    // How the job did is written, and the log is told to have ended.
+    within("the log's end", async {
+        loop {
+            let page: Value = client()
+                .get(format!("http://{address}/v1/backtests/{job_id}/logs"))
+                .send()
+                .await
+                .expect("a response")
+                .json()
+                .await
+                .expect("a page");
+            if page["complete"] == true {
+                return page;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await;
+    let job = bed.store.job(&job_id).expect("a read").expect("the job");
+    assert_eq!(job.phase, JobPhase::Succeeded, "{job:?}");
+    // The log goes with the server's memory of it: the store holds none,
+    // and once the server has let the job go, its log reads as empty.
+    assert_eq!(bed.store.job_log(&job_id).expect("a read"), None);
+    let later = within("an empty log", async {
+        loop {
+            let page: Value = client()
+                .get(format!("http://{address}/v1/backtests/{job_id}/logs"))
+                .send()
+                .await
+                .expect("a response")
+                .json()
+                .await
+                .expect("a page");
+            if page["lines"] == serde_json::json!([]) {
+                return page;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await;
+    assert_eq!(later["complete"], true);
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn a_stop_that_begins_while_a_claim_waits_for_its_turn_at_the_store_claims_nothing() {
     let bed = Bed::new();

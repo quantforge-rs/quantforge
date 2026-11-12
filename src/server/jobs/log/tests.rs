@@ -161,6 +161,21 @@ fn progress_never_passes_its_total_nor_goes_back() {
     assert_eq!(said(&log), Some((10, 100)), "never back");
     log.progress(250, 100);
     assert_eq!(said(&log), Some((100, 100)), "never past the total");
+    // Said with another total, it still never goes back: fewer bars are
+    // not taken, as many are with their total, and more are.
+    let mut changes = log.changes();
+    log.progress(40, 400);
+    assert_eq!(
+        said(&log),
+        Some((100, 100)),
+        "never back, whatever the total"
+    );
+    assert!(!woke(&mut changes), "nothing new");
+    log.progress(100, 400);
+    assert_eq!(said(&log), Some((100, 400)));
+    assert!(woke(&mut changes));
+    log.progress(150, 400);
+    assert_eq!(said(&log), Some((150, 400)));
     // Progress is no line: it takes no number.
     log.line(LogLevel::Info, "one");
     assert_eq!(numbers(&log.read(0, 10)), [1]);

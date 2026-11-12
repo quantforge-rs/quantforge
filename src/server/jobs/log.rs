@@ -223,7 +223,8 @@ impl JobLog {
     }
 
     /// Says how far the job has come: `bars_done` of `bars_total`, never
-    /// more than the total, and never less than it said before.
+    /// more than the total, and never less than it said before, whatever
+    /// total that was said with.
     pub fn progress(&self, bars_done: u64, bars_total: u64) {
         let progress = JobProgress {
             bars_done: bars_done.min(bars_total),
@@ -231,9 +232,11 @@ impl JobLog {
         };
         {
             let mut state = self.state();
-            let behind = state.kept.progress.is_some_and(|said| {
-                said.bars_total == bars_total && said.bars_done >= progress.bars_done
-            });
+            // Fewer bars than it said, or nothing it has not said.
+            let behind = state
+                .kept
+                .progress
+                .is_some_and(|said| said.bars_done > progress.bars_done || said == progress);
             if state.closed || behind {
                 return;
             }

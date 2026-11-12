@@ -90,7 +90,9 @@
 //!   ended, however it ended. The server stores it before it says
 //!   `complete` or `end`, so the server that ran the job and every server
 //!   that runs on its store afterwards answer both ways with the same
-//!   lines. The log of a job that never started is empty, and that of a
+//!   lines; a log its store would not take is lost once the server that
+//!   ran the job no longer holds it, and the job ends all the same. The
+//!   log of a job that never started is empty, and that of a
 //!   job whose server was killed while it ran is lost with the server:
 //!   only a job whose run ends has its log kept.
 //!

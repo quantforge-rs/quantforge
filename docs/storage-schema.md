@@ -831,7 +831,12 @@ shared suite's `jobs` group holds both backends to the same answers
   refused for a job the store does not hold. Its row is written before the job's
   end is, so a store that says a job succeeded or failed holds the job's
   log already, and the server that ran the job tells whoever follows the
-  log that it has ended only after both. A cancel is the exception: it is
+  log that it has ended only after both. A log the store does not take,
+  because it fails the write or stays out of time through every try a
+  job's writes get, is lost: the server records the error in its own log
+  and writes the job's end all the same, since how a job did and what it
+  produced matter more than what it said, and the job then has no row
+  here. A cancel is the other exception: it is
   written as it is asked, while the job's worker is still being stopped, so
   a job can be `cancelled` for a moment before its log is stored, and the
   server that ran it answers from memory until then. A server killed

@@ -1,8 +1,8 @@
 //! A store that fails, or stalls until released, or lists its markets
 //! backwards, or finds itself out of time for its first candle reads or
-//! for some reads of a job, or holds back the write of a job's log, on
-//! demand, and otherwise answers as the store it wraps: for what no real
-//! store does on cue.
+//! for some reads of a job, or holds back or loses the write of a job's
+//! log, on demand, and otherwise answers as the store it wraps: for what
+//! no real store does on cue.
 
 use std::sync::Mutex;
 use std::sync::mpsc::{Receiver, Sender};
@@ -28,6 +28,8 @@ pub(super) struct Faulty<S> {
     /// Reads of a job still to be answered, and then those still to find
     /// the store out of time.
     busy_jobs: Mutex<(usize, usize)>,
+    /// Whether the call that stores a job's log fails, and no other.
+    loses_logs: bool,
 }
 
 /// A stall: a call says it began, then waits until released.
@@ -46,6 +48,7 @@ impl<S> Faulty<S> {
             busy_loads: Mutex::new(0),
             log_stall: None,
             busy_jobs: Mutex::new((0, 0)),
+            loses_logs: false,
         }
     }
 
@@ -87,6 +90,14 @@ impl<S> Faulty<S> {
     pub(super) fn busy_jobs(inner: S, spared: usize, count: usize) -> Self {
         Self {
             busy_jobs: Mutex::new((spared, count)),
+            ..Self::wrapping(inner)
+        }
+    }
+
+    /// Storing a job's log fails; every other call answers.
+    pub(super) fn losing_logs(inner: S) -> Self {
+        Self {
+            loses_logs: true,
             ..Self::wrapping(inner)
         }
     }
@@ -269,6 +280,9 @@ impl<S: JobStore> JobStore for Faulty<S> {
         self.fault()?;
         if let Some(stall) = &self.log_stall {
             stall.wait();
+        }
+        if self.loses_logs {
+            return Err(StorageError::Other("no room for a log".into()));
         }
         self.inner.store_job_log(job_id, log_json, stored_at_ms)
     }

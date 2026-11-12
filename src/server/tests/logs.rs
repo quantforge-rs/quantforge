@@ -18,6 +18,10 @@ use crate::ports::JobStore;
 /// say "the sample nonce".
 const NONCE: &str = "dGhlIHNhbXBsZSBub25jZQ==";
 
+/// A stored log of one line.
+const ONE_LINE: &str =
+    r#"{"dropped_lines":0,"lines":[{"seq":1,"at_ms":5,"level":"info","message":"one"}]}"#;
+
 /// The headers of a WebSocket handshake.
 const HANDSHAKE: [(&str, &str); 4] = [
     ("connection", "Upgrade"),
@@ -95,10 +99,7 @@ async fn the_log_route_reads_its_job_as_every_job_route_does_and_takes_only_get(
 #[tokio::test]
 async fn a_log_query_is_refused_unless_its_cursor_and_limit_are_numbers_in_range() {
     let bed = Bed::new();
-    let job = ended(
-        &bed,
-        r#"{"dropped_lines":0,"lines":[{"seq":1,"at_ms":5,"level":"info","message":"one"}]}"#,
-    );
+    let job = ended(&bed, ONE_LINE);
     let address = serve_jobs(&bed, jobs_of(&bed, Admitting(runtime("3.12")), 100)).await;
     let path = |query: &str| format!("/v1/backtests/{job}/logs{query}");
 
@@ -210,9 +211,7 @@ async fn a_request_that_names_an_upgrade_and_is_no_websocket_handshake_is_refuse
 #[tokio::test]
 async fn a_stored_log_no_build_can_answer_is_never_sent_on() {
     let bed = Bed::new();
-    let good =
-        r#"{"dropped_lines":0,"lines":[{"seq":1,"at_ms":5,"level":"info","message":"one"}]}"#;
-    let job = ended(&bed, good);
+    let job = ended(&bed, ONE_LINE);
     let address = serve_jobs(&bed, jobs_of(&bed, Admitting(runtime("3.12")), 100)).await;
     let path = format!("/v1/backtests/{job}/logs");
     assert_eq!(get(address, &path, &[]).await.status(), 200);
@@ -295,10 +294,7 @@ async fn a_stream_the_server_cannot_go_on_with_ends_with_an_error_frame() {
 #[tokio::test]
 async fn a_stream_waits_out_a_store_too_busy_to_say_where_its_job_stands() {
     let bed = Bed::new();
-    let job = ended(
-        &bed,
-        r#"{"dropped_lines":0,"lines":[{"seq":1,"at_ms":5,"level":"info","message":"one"}]}"#,
-    );
+    let job = ended(&bed, ONE_LINE);
     // The store answers as the stream is opened, and is then out of time
     // once: the stream asks again, and says nothing of it.
     let busy = Faulty::busy_jobs(bed.store.within(Duration::from_secs(2)), 1, 1);
