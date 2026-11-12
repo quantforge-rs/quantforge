@@ -245,10 +245,10 @@ place:
 ## What an entry is held to
 
 When an entry signal is admitted, two things answer for it, in this order.
-First the profile's newest policy answers for the instrument, as the venue
-lists it at that moment (`PolicyService::entry`): either the entry is
-refused, with one of the parity matrix's refusals, or it gets a **policy
-snapshot**. Then the snapshot answers for the entry's stop
+First the profile's newest policy answers for the instrument, as its caller
+read it from the venue's list at that moment (`PolicyService::entry`):
+either the entry is refused, with one of the parity matrix's refusals, or
+it gets a **policy snapshot**. Then the snapshot answers for the entry's stop
 (`PolicySnapshot::stop_for`, asked with the alert's own stop, if it brought
 one). Only an entry both have answered for is admitted, and it keeps its
 snapshot for good: `ExternalIntent::admit` takes no entry that has neither
@@ -374,7 +374,10 @@ The snapshot the policy above gives an entry on `SOLUSDT`:
 Symbols, settlement assets and leverage are the venue's to define, so they
 are checked against the instrument list of the profile's own connector
 (`InstrumentConnector` for its venue, family and environment), never
-against a list kept here:
+against a list kept here. Only the calls that are handed the connector
+check: `PolicyService::change` asks no venue and holds a change to the
+policy's own rules alone, so a change that adds an asset, enables one or
+sets a leverage goes through `add_asset` or `change_checked`:
 
 - **An asset is added as the venue lists it.** `PolicyService::add_asset`
   takes a symbol and reads the instrument, settlement asset included, from
@@ -396,6 +399,12 @@ against a list kept here:
   then by name, `outside_universe` or `no_capital_in_settlement_asset`; its
   leverage, like every entry's, is held to the venue's brackets when the
   entry is sized.
+- **An entry is held to the listing its caller hands in.**
+  `PolicyService::entry` asks no venue. Whoever admits an entry reads the
+  venue's instrument list as it stands, refuses the entry itself when the
+  venue lists no such symbol, and hands `entry` the listing it found. A
+  listing read earlier is not read again here: a stale one is answered for
+  as it was handed in.
 
 The problems, in the order an asset is looked at; the first that applies is
 the asset's:
@@ -433,11 +442,11 @@ connection nor a credential of its own.
 | `policy(profile)` | The newest revision |
 | `policy_at(profile, revision)` | The policy as it stood at a revision |
 | `history(profile)` | Each revision with the time it was made, oldest first |
-| `change(profile, expected, change)` | Makes one change as the next revision; `expected` is the revision the caller read, or none |
+| `change(profile, expected, change)` | Makes one change as the next revision, held to the policy's own rules only: no venue is asked; `expected` is the revision the caller read, or none |
 | `change_checked(…, venue)` | The same, refused when it would enable what the venue does not take |
 | `add_asset(profile, expected, symbol, settings, venue)` | Gives a symbol settings of its own, as the venue lists it |
 | `check(profile, venue)` | The problems that keep the profile from executing, and the revision checked |
-| `entry(profile, instrument)` | The snapshot an entry is admitted under, or why the policy refuses the entry; the entry's stop is then the snapshot's to answer (`stop_for`) |
+| `entry(profile, instrument)` | The snapshot an entry is admitted under, or why the policy refuses the entry, for the listing its caller read from the venue: no venue is asked; the entry's stop is then the snapshot's to answer (`stop_for`) |
 
 A change answers the policy it left and whether it made a revision. What a
 call refuses is a `PolicyError`: a profile or a revision the store does not
