@@ -114,6 +114,27 @@ fn until_state(address: SocketAddr, job: &str, kind: &str) -> Value {
     }
 }
 
+/// The first page of the job's log once it says the log is complete, or a
+/// failed test after 30 seconds. A job's end is written before its log is
+/// said to have ended, so a page read as soon as the job's state is final
+/// may still say that more could follow.
+fn until_complete(address: SocketAddr, job: &str) -> Value {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let fetched = get(address, &format!("/v1/backtests/{job}/logs"));
+        assert_eq!(fetched.status, 200, "{}", fetched.text());
+        let page: Value = fetched.json();
+        if page["complete"] == true {
+            return page;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the log of job {job} is not complete: {page}"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
 fn serve_run_queues_a_job_and_fails_it_as_it_starts_without_a_worker_runtime(bed: &TestBed) {
     seed(bed);
     let served = Served::start(bed);
@@ -513,7 +534,7 @@ fn serve_run_serves_an_ended_jobs_log_by_pages_and_as_a_stream_start_after_start
         // The other job fails as it starts, having written nothing: its
         // log is empty, and ends at once.
         until_state(served.address, pending.as_str(), "failed");
-        let empty: Value = get(served.address, &format!("/v1/backtests/{pending}/logs")).json();
+        let empty = until_complete(served.address, pending.as_str());
         assert_eq!(
             empty,
             json!({"job_id": pending.as_str(), "lines": [], "dropped_lines": 0, "next_after": 0,
