@@ -72,10 +72,18 @@ async fn replay<B: Backend>(backend: &B, line: &Line, case: &Case) -> Vec<String
             assert_eq!(Some(effective_json(&effective)), step.expect, "{at}");
         } else if let Some(symbol) = &step.entry {
             // The model's answer on the policy the store handed back, and
-            // the service's own, which reads the newest revision itself.
+            // the service's own, which reads the newest revision itself:
+            // the same snapshot, or the same refusal.
             enter(&held, line, step, &at);
-            let own = service.entry(&profile(), line.listed(symbol));
-            assert_eq!(own.is_ok(), step.snapshot.is_some(), "{at}");
+            let listed = line.listed(symbol);
+            match (
+                service.entry(&profile(), listed),
+                held.entry_snapshot(listed),
+            ) {
+                (Ok(own), Ok(model)) => assert_eq!(own, model, "{at}"),
+                (Err(PolicyError::Refused(own)), Err(model)) => assert_eq!(own, model, "{at}"),
+                (own, model) => panic!("{at}: the service says {own:?}, the model {model:?}"),
+            }
         } else {
             let check = service.check(&profile(), &venue).await.expect("a check");
             assert_eq!(check.revision, held.revision(), "{at}");

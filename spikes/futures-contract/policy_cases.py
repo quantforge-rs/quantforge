@@ -506,7 +506,10 @@ def stop_for(snapshot, signal_stop):
 
 
 def check(policy, instruments):
-    """Every reason the profile cannot execute as its policy stands, by the venue's list."""
+    """Every reason the profile cannot execute as its policy stands, by the venue's list:
+    each enabled asset held to its listing, its leverage and its capital, and enabled
+    defaults only to capital in some asset. An instrument the policy does not name is
+    not looked at: an entry on it is refused by name when it arrives."""
     line = exchange_of(policy)
     problems = []
     for asset in policy["assets"]:

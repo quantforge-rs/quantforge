@@ -180,6 +180,23 @@ async fn nothing_a_signal_says_reaches_the_policy_but_its_own_stop<B: Backend>(b
         matches!(policy.stop_for(None), Ok(EntryStop::Fallback(percent)) if percent.to_string() == "3")
     );
 
+    // With the fallback off, an entry that brings no stop is refused as
+    // `no_stop` and never admitted; one that brings its own still is.
+    let off = json!({"edit_asset": {"symbol": line.symbols.main, "stop": "off"}});
+    service
+        .change(&profile(), None, &change(line, &off))
+        .expect("a change");
+    let bare = service.entry(&profile(), listed).expect("a snapshot");
+    let refusal = bare.stop_for(None).expect_err("no stop");
+    assert_eq!(refusal.refusal, Refusal::NoStop);
+    let unadmitted = entry(line, "e", "234.23", None)
+        .admit(Some(bare.clone()))
+        .expect_err("no stop, no admission");
+    assert!(unadmitted.to_string().contains("no_stop"), "{unadmitted}");
+    entry(line, "f", "234.23", Some("200.00"))
+        .admit(Some(bare))
+        .expect("its own stop");
+
     // An entry's stored form has no field a payload could fill for the
     // account, the credentials, the risk or the switch.
     let Value::Object(fields) = serde_json::to_value(entry(line, "d", "1", None)).expect("json")

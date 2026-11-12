@@ -1,6 +1,7 @@
 //! An intent's admission and its stored form: an entry is admitted under
-//! its own policy and keeps it from then on, an exit under none; and a
-//! stored record's format and its attempts' legs.
+//! its own policy, with a stop of its own or the policy's fallback, and
+//! keeps the policy from then on, an exit under none; and a stored
+//! record's format and its attempts' legs.
 
 use super::*;
 use crate::model::futures::{ActivationEpoch, OwnerTag};
@@ -9,7 +10,7 @@ use crate::model::{
 };
 
 /// What profile `main` holds SOLUSDT to on its venue's linear line, as an
-/// admitted entry stores it.
+/// admitted entry stores it. It gives no fallback stop.
 const POLICY: &str = r#"{"format":1,"profile":"main","account":{"venue":"Bybit","environment":"Demo","venue_account_id":{"Venue":"1"}},"revision":4,"instrument":{"exchange":"BybitLinear","symbol":"SOLUSDT","settle":"USDT"},"risk_percent":{"value":"0.5","source":"Asset"},"stop_percent":{"value":null,"source":"Asset"},"leverage":{"value":"5","source":"Defaults"},"capital":{"amount":"15000","asset":"USDT"},"capital_revision":4}"#;
 
 fn policy() -> PolicySnapshot {
@@ -30,7 +31,13 @@ fn key_of(account: &str, symbol: &str) -> PositionKey {
     PositionKey::new(account, instrument).expect("key")
 }
 
+/// An entry whose alert brings a stop of its own.
 fn entry(profile: &str, symbol: &str) -> ExternalIntent {
+    let stop = Price::new(rust_decimal::Decimal::TEN).expect("price");
+    entry_stopped_at(profile, symbol, Some(stop))
+}
+
+fn entry_stopped_at(profile: &str, symbol: &str, stop: Option<Price>) -> ExternalIntent {
     ExternalIntent::new(IntentKind::Entry(EntryIntent {
         profile: ProfileId::new(profile).expect("profile"),
         signal: SignalId::new("entry").expect("signal"),
@@ -38,8 +45,15 @@ fn entry(profile: &str, symbol: &str) -> ExternalIntent {
         key: key(symbol),
         side: PositionSide::Long,
         expected_price: Price::new(rust_decimal::Decimal::ONE_HUNDRED).expect("price"),
-        stop: None,
+        stop,
     }))
+}
+
+/// [`policy`] with a fallback stop of 3 % from the defaults.
+fn policy_with_fallback() -> PolicySnapshot {
+    let mut snapshot: serde_json::Value = serde_json::from_str(POLICY).expect("json");
+    snapshot["stop_percent"] = serde_json::json!({"value": "3", "source": "Defaults"});
+    serde_json::from_value(snapshot).expect("a snapshot")
 }
 
 fn exit() -> ExternalIntent {
@@ -105,6 +119,43 @@ fn an_entry_is_admitted_under_its_own_policy_once_and_an_exit_under_none() {
         (closing.state(), closing.policy()),
         (IntentState::Admitted, None)
     );
+}
+
+#[test]
+fn an_entry_is_admitted_only_with_a_stop_of_its_own_or_its_policys_fallback() {
+    // Neither the alert nor the policy gives a stop: the policy says
+    // `no_stop`, which is what the entry is recorded with, and nothing
+    // admits it.
+    let mut bare = entry_stopped_at("main", "SOLUSDT", None);
+    let refusal = policy().stop_for(None).expect_err("no stop");
+    assert_eq!(refusal.refusal.as_str(), "no_stop");
+    let refused = bare.admit(Some(policy())).expect_err("no stop");
+    assert_eq!(
+        refused.to_string(),
+        "intent reaches admitted only on a stop, the alert's own or its policy's fallback; an \
+         entry with neither is refused as no_stop"
+    );
+    assert_eq!((bare.state(), bare.policy()), (IntentState::Received, None));
+
+    // The policy's fallback will do, and so will the alert's own stop.
+    bare.admit(Some(policy_with_fallback()))
+        .expect("the fallback");
+    assert_eq!(bare.state(), IntentState::Admitted);
+    let mut stopped = entry("main", "SOLUSDT");
+    stopped.admit(Some(policy())).expect("its own stop");
+
+    // A stored entry that holds a policy could have been admitted under
+    // it: one without either stop is refused, whatever state it claims.
+    let mut record = serde_json::to_value(&stopped).expect("json");
+    record["kind"]["Entry"]["stop"] = serde_json::Value::Null;
+    for state in ["Admitted", "Expired", "Rejected", "Noop"] {
+        record["state"] = serde_json::json!(state);
+        let read = serde_json::from_value::<ExternalIntent>(record.clone());
+        assert!(read.is_err(), "{state}: a stored entry with no stop at all");
+    }
+    record["state"] = serde_json::json!("Admitted");
+    record["policy"] = serde_json::to_value(policy_with_fallback()).expect("json");
+    assert!(serde_json::from_value::<ExternalIntent>(record).is_ok());
 }
 
 #[test]

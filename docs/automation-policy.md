@@ -244,14 +244,19 @@ place:
 
 ## What an entry is held to
 
-When an entry signal is admitted, the profile's newest policy answers for
-the instrument, as the venue lists it at that moment
-(`PolicyService::entry`). Either the entry is refused, with one of the
-parity matrix's refusals, or it gets a **policy snapshot** that it keeps for
-good.
+When an entry signal is admitted, two things answer for it, in this order.
+First the profile's newest policy answers for the instrument, as the venue
+lists it at that moment (`PolicyService::entry`): either the entry is
+refused, with one of the parity matrix's refusals, or it gets a **policy
+snapshot**. Then the snapshot answers for the entry's stop
+(`PolicySnapshot::stop_for`, asked with the alert's own stop, if it brought
+one). Only an entry both have answered for is admitted, and it keeps its
+snapshot for good: `ExternalIntent::admit` takes no entry that has neither
+a stop of its own nor a fallback in its snapshot.
 
 The refusals, in the order they are looked for; the first that applies is
-the entry's:
+the entry's. The first five are `PolicyService::entry`'s, and `no_stop` is
+`PolicySnapshot::stop_for`'s:
 
 <!-- begin: entry refusals -->
 - `ambiguous_selection`: the instrument is on another product line than the
@@ -341,7 +346,8 @@ The snapshot the policy above gives an entry on `SOLUSDT`:
 - **Which stop an entry uses** (`PolicySnapshot::stop_for`): the alert's own
   stop price comes first and is never replaced by the fallback, even when
   sizing then refuses it; without one, the snapshot's fallback percentage
-  applies; without either the entry is refused, `no_stop`.
+  applies; without either the entry is refused, `no_stop`, and never
+  admitted.
 - **A signal's only say is its own stop.** The account, the risk
   percentage, the leverage, the capital and each switch are read from the
   profile and its policy, and from nowhere else. A payload has no field for
@@ -370,10 +376,16 @@ against a list kept here:
   refused before it is stored** (`PolicyService::change_checked`). A problem
   the policy already had does not block an unrelated change, so an asset the
   venue delisted can still be disabled.
-- **Before a profile may execute**, `PolicyService::check` holds its whole
-  policy to the list. Only what could take an entry is checked: the enabled
-  assets, and the defaults while they are enabled. An empty answer means
-  every such entry would find its instrument, its leverage and its capital.
+- **Before a profile may execute**, `PolicyService::check` holds its policy
+  to the list. It checks what the policy names: each enabled asset, which
+  must be a contract the venue lists, inside the universe, settled as the
+  profile holds it, at a leverage the venue takes, with capital in the asset
+  it settles in; and the defaults, while they are enabled, only for capital
+  in some asset. An empty answer means every enabled asset would find its
+  instrument, its leverage and its capital. It says nothing of an
+  instrument the policy does not name: one that trades on enabled defaults
+  is held to the venue's listing when an entry on it arrives, and refused
+  then by name, `outside_universe` or `no_capital_in_settlement_asset`.
 
 The problems, in the order an asset is looked at; the first that applies is
 the asset's:
@@ -412,7 +424,7 @@ connection nor a credential of its own.
 | `change_checked(…, venue)` | The same, refused when it would enable what the venue does not take |
 | `add_asset(profile, expected, symbol, settings, venue)` | Gives a symbol settings of its own, as the venue lists it |
 | `check(profile, venue)` | The problems that keep the profile from executing, and the revision checked |
-| `entry(profile, instrument)` | The snapshot an entry is admitted under, or its refusal |
+| `entry(profile, instrument)` | The snapshot an entry is admitted under, or why the policy refuses the entry; the entry's stop is then the snapshot's to answer (`stop_for`) |
 
 A change answers the policy it left and whether it made a revision. What a
 call refuses is a `PolicyError`: a profile or a revision the store does not

@@ -87,6 +87,15 @@ impl IntentKind {
             _ => false,
         }
     }
+
+    /// Whether `policy` leaves it a stop to be sized against: an entry's
+    /// own, or the policy's fallback. Only an entry needs one.
+    fn has_stop(&self, policy: Option<&PolicySnapshot>) -> bool {
+        match (self, policy) {
+            (Self::Entry(entry), Some(policy)) => policy.stop_for(entry.stop).is_ok(),
+            _ => true,
+        }
+    }
 }
 
 /// An external intent and its progress: the record a store keeps.
@@ -125,11 +134,21 @@ impl ExternalIntent {
     /// its own profile's policy for its own account and instrument, which
     /// it keeps for good; an exit takes none, since no policy can hold back
     /// a close.
+    ///
+    /// An entry with no stop of its own, under a snapshot that gives no
+    /// fallback, is never admitted: [`PolicySnapshot::stop_for`] refuses it
+    /// as `no_stop`, which is what its caller records it with.
     pub fn admit(&mut self, policy: Option<PolicySnapshot>) -> Result<(), ModelError> {
         if !self.kind.takes(policy.as_ref()) {
             return Err(Self::unadmitted(
                 "a snapshot of its own profile's policy for its account and instrument, for an \
                  entry, and none for an exit",
+            ));
+        }
+        if !self.kind.has_stop(policy.as_ref()) {
+            return Err(Self::unadmitted(
+                "a stop, the alert's own or its policy's fallback; an entry with neither is \
+                 refused as no_stop",
             ));
         }
         self.state = self.state.move_to(IntentState::Admitted)?;

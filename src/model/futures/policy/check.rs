@@ -1,8 +1,10 @@
 //! A policy held against the venue's own instrument list, before its
-//! profile may execute: every asset that could take an entry must be a
-//! contract the venue lists on the profile's product line, inside the
-//! universe, settled in the asset the profile holds it under, with a
-//! leverage the venue accepts and capital to size from.
+//! profile may execute: every asset the policy enables must be a contract
+//! the venue lists on the profile's product line, inside the universe,
+//! settled in the asset the profile holds it under, with a leverage the
+//! venue accepts and capital to size from. An instrument the policy does
+//! not name is not looked at here: one that trades on enabled defaults is
+//! held to its listing when an entry on it arrives.
 
 use super::document::{AssetPolicy, ProfilePolicy};
 use super::line_name;
@@ -101,10 +103,17 @@ fn leverage_fault(leverage: Leverage, filter: &LeverageFilter) -> Option<PolicyP
 impl ProfilePolicy {
     /// Every reason the profile cannot execute as this policy stands, by
     /// the venue's `instruments`: the profile's product line as its adapter
-    /// lists it now. Only what could take an entry is held to the list: the
-    /// enabled assets, in the order of their symbols, and the defaults
-    /// while they are enabled. An empty answer means every such entry
-    /// would find its instrument, its leverage and its capital.
+    /// lists it now. What the policy names is held to the list: the
+    /// enabled assets, in the order of their symbols, and the defaults,
+    /// while they are enabled, only for capital in some asset. An empty
+    /// answer means every enabled asset would find its instrument, its
+    /// leverage and its capital.
+    ///
+    /// It says nothing of an instrument the policy does not name. One that
+    /// trades on enabled defaults is held to its own listing by
+    /// [`ProfilePolicy::entry_snapshot`] when an entry on it arrives, and
+    /// refused then: outside the universe, or without capital in the asset
+    /// it settles in.
     pub fn check(&self, instruments: &[FuturesInstrument]) -> Vec<PolicyProblem> {
         let line = self.exchange();
         let listed = |symbol: &Symbol| {

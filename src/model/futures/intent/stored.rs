@@ -64,13 +64,15 @@ impl TryFrom<ExternalIntentParts> for ExternalIntent {
             (IntentKind::Entry(_), _) => Some(true),
         };
         let policy = parts.policy.as_ref();
-        let own = policy.is_none() || parts.kind.takes(policy);
+        // Whatever policy it holds is one it could have been admitted under.
+        let own = policy.is_none() || (parts.kind.takes(policy) && parts.kind.has_stop(policy));
         if expected.is_some_and(|expected| expected != policy.is_some()) || !own {
             return Err(ModelError::MissingEvidence {
                 machine: "intent",
                 to: parts.state.as_str(),
                 evidence: "the policy snapshot an entry was admitted under, of its own profile, \
-                           account and instrument, and none before admission or for an exit"
+                           account and instrument, with a stop of the entry's own or the \
+                           snapshot's fallback, and none before admission or for an exit"
                     .to_string(),
             });
         }

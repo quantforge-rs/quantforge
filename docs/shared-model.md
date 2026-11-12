@@ -40,7 +40,7 @@ below.
 | Change | Where | Reaches the Python FFI |
 | --- | --- | --- |
 | An automation profile's policy, policy format 1 ([automation-policy.md](automation-policy.md)):<ul><li>`ProfilePolicy`, with its defaults, per-asset settings and capital, and `PolicyRevision`;</li><li>`PolicyChange`, each change the next revision;</li><li>`EffectivePolicy`, `PolicySnapshot` and `EntryStop`;</li><li>`PolicyProblem`, a policy held against a venue's instrument list;</li><li>the units `RiskPercent` and `StopPercent`.</li></ul> | `quantforge::model::futures` | No |
-| An intent is admitted with `ExternalIntent::admit`: an entry under a snapshot of its own profile's policy, which its stored form keeps as `policy`, and an exit under none. `move_to(IntentState::Admitted)` is refused | `quantforge::model::futures` | No |
+| An intent is admitted with `ExternalIntent::admit`: an entry under a snapshot of its own profile's policy, with a stop of its own or the snapshot's fallback, which its stored form keeps as `policy`, and an exit under none. `move_to(IntentState::Admitted)` is refused | `quantforge::model::futures` | No |
 | `PolicyStore`, the storage port for profiles and every revision of their policies, on both backends from schema 9 ([storage-schema.md](storage-schema.md#keeping-policies)) | `quantforge::PolicyStore` | No |
 | `PolicyService`, the first part of `automation`: what a command or an executor keeps a policy through | `quantforge::automation` | No |
 

@@ -315,7 +315,8 @@ impl<'a> PolicyService<'a> {
     /// profile's newest revision, or the refusal the entry is recorded
     /// with. `instrument` is the venue's listing, read now. Nothing of a
     /// signal reaches this: its only say is its own stop, which
-    /// [`PolicySnapshot::stop_for`] weighs against the fallback.
+    /// [`PolicySnapshot::stop_for`] answers for next, with `no_stop` for an
+    /// entry that has neither stop; only then is the entry admitted.
     pub fn entry(
         &self,
         profile: &ProfileId,

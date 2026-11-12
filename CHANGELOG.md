@@ -167,7 +167,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - the database schema is version 9: the first command a store is opened with adds the `automation_profiles` and `policy_revisions` tables, on SQLite and on PostgreSQL, and keeps every row; back the store up first, since a release before this one refuses it afterwards (`docs/upgrading.md`)
-- `model::futures::ExternalIntent` is admitted with `admit`, which takes an entry's policy snapshot and none for an exit, and no longer with `move_to(IntentState::Admitted)`; its stored form has a new field, `policy`, which an entry holds from its admission on
+- `model::futures::ExternalIntent` is admitted with `admit`, which takes an entry's policy snapshot and none for an exit, and refuses an entry that has neither a stop of its own nor a fallback in the snapshot, and no longer with `move_to(IntentState::Admitted)`; its stored form has a new field, `policy`, which an entry holds from its admission on
 - the database schema is version 8: the first command a store is opened with adds the `job_logs` table, on SQLite and on PostgreSQL, and keeps every row; back the store up first, since a release before this one refuses it afterwards (`docs/upgrading.md`)
 - `JobStore` has two new required methods, `store_job_log` and `job_log`, which a store implemented outside QuantForge must add
 - `server::JobWorker::run` and `server::WorkerPool::execute` are handed the job's `JobLog` as a third argument, which a worker implemented outside QuantForge must take, and `server::JobLimits` has a new field, `log`
