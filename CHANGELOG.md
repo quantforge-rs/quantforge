@@ -245,6 +245,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- a resumed `trade run` warmed its strategy on the bars that closed while it was stopped and then delivered them again, so the first of them was judged against later prices and its signal could be lost; it now warms up only on bars through its saved cursor
 - reading a stored decimal that a `Decimal` cannot hold exactly, with more than 28 decimal places, was silently rounded on SQLite; candles and closed trades now refuse it with the text named, as every backend does
 - refreshing a market's segments failed on a stored candle whose trade count was above 9223372036854775807, so no later window of that market was packed again; such a count is now packed as stored, as the segment format allows
 
