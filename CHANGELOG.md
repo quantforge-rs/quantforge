@@ -260,6 +260,10 @@ All notable changes to this project will be documented in this file.
 - `Symbol` deserialization now validates and normalizes (trim, uppercase, reject empty) exactly like `Symbol::new`, closing the bypass on `state_json`/`raw_json` reloads
 - zero-valued exchange filter limits (Binance renders "no constraint" as `0.00000000`, as its testnet does for `MARKET_LOT_SIZE`) are treated as absent rules, so quantity rounding falls back to `LOT_SIZE` instead of receiving a zero step
 
+### Security
+
+- exchange and PostgreSQL connections refuse certificate paths through the distrusted emSign intermediates, whose keys are public (RUSTSEC-2026-0381, RUSTSEC-2026-0382): the lockfile now takes `rustls` 0.23.46, `rustls-webpki` 0.103.16 and `webpki-roots` 1.0.11, which also fix RUSTSEC-2026-0285 and the name-constraint advisories
+
 ## [0.2.0] - 2026-03-21
 
 ### Changed
