@@ -36,7 +36,7 @@ struct Step {
 
 /// The chain, in order. Each step's DDL is the text the build that
 /// introduced it wrote, which never changes again.
-const STEPS: [Step; 7] = [
+const STEPS: [Step; 8] = [
     Step {
         to: 1,
         apply: step_1_candles,
@@ -64,6 +64,10 @@ const STEPS: [Step; 7] = [
     Step {
         to: 7,
         apply: step_7_job_results,
+    },
+    Step {
+        to: 8,
+        apply: step_8_job_logs,
     },
 ];
 
@@ -219,6 +223,11 @@ fn step_6_jobs(transaction: &Transaction<'_>) -> Result<(), StorageError> {
 /// Schema 7 (QUA-356): the results of the jobs that succeeded.
 fn step_7_job_results(transaction: &Transaction<'_>) -> Result<(), StorageError> {
     batch(transaction, jobs::RESULTS_DDL)
+}
+
+/// Schema 8 (QUA-355): what is kept of each job's log.
+fn step_8_job_logs(transaction: &Transaction<'_>) -> Result<(), StorageError> {
+    batch(transaction, jobs::LOGS_DDL)
 }
 
 fn mark_every_window(transaction: &Transaction<'_>) -> Result<(), StorageError> {

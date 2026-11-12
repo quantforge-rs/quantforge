@@ -261,6 +261,19 @@ impl JobStore for AnyStore {
         delegate!(self, store => store.load_result(hash))
     }
 
+    fn store_job_log(
+        &self,
+        job_id: &JobId,
+        log_json: &str,
+        stored_at_ms: TimestampMs,
+    ) -> Result<bool, StorageError> {
+        delegate!(self, store => store.store_job_log(job_id, log_json, stored_at_ms))
+    }
+
+    fn job_log(&self, job_id: &JobId) -> Result<Option<String>, StorageError> {
+        delegate!(self, store => store.job_log(job_id))
+    }
+
     fn cancel_job(
         &self,
         job_id: &JobId,

@@ -5,7 +5,7 @@
 //! parameter; each answers a report, holds its worker until it is killed,
 //! runs into a limit, or stops the worker. One, `backtest`, runs the engine
 //! on a strategy built into QuantForge, so that the tests have a job that
-//! ends as a real one will.
+//! ends as a real one will, and one, `log`, writes to the job's log.
 
 use std::io::Write;
 use std::net::{SocketAddr, TcpStream};
@@ -14,11 +14,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
+mod given;
+mod talk;
+
+use self::given::{digest, expect};
 use super::backtest::{self, Ended};
 use super::frames::{Finished, JobFrame, ResultText};
 use super::isolation::{self, Posture};
+use super::report::Reporter;
 use crate::model::Candle;
 use crate::protocol::{ErrorBody, ErrorCode};
 use crate::sdk::BuiltInStrategyConfig;
@@ -60,23 +64,45 @@ impl Seen {
     }
 }
 
-/// Runs the workload the job's bundle names.
-pub(super) fn run(job: &JobFrame, candles: &[Candle], seen: &Seen, posture: &Posture) -> Ended {
+/// Runs the workload the job's bundle names, which says what it says while
+/// it runs through `reporter`.
+pub(super) fn run(
+    job: &JobFrame,
+    candles: &[Candle],
+    seen: &Seen,
+    posture: &Posture,
+    reporter: &mut Reporter<'_>,
+) -> Ended {
     let number = |name: &str| job.params.get(name).and_then(Value::as_u64);
-    if job.params.get("workload").and_then(Value::as_str) == Some("backtest") {
-        let periods = |name: &str, default: u64| {
-            usize::try_from(number(name).unwrap_or(default)).unwrap_or(usize::MAX)
-        };
-        return sma_cross(job, candles, periods("fast", 2), periods("slow", 3));
+    match job.params.get("workload").and_then(Value::as_str) {
+        Some("backtest") => {
+            let periods = |name: &str, default: u64| {
+                usize::try_from(number(name).unwrap_or(default)).unwrap_or(usize::MAX)
+            };
+            sma_cross(
+                job,
+                candles,
+                periods("fast", 2),
+                periods("slow", 3),
+                reporter,
+            )
+        }
+        Some("log") => Ended::Said(talk::write(job, candles, reporter)),
+        _ => Ended::Said(workload(job, candles, seen, posture)),
     }
-    Ended::Said(workload(job, candles, seen, posture))
 }
 
 /// A backtest of the SMA cross built into QuantForge, of `fast` and `slow`
 /// bars, under the job's settings.
-fn sma_cross(job: &JobFrame, candles: &[Candle], fast: usize, slow: usize) -> Ended {
+fn sma_cross(
+    job: &JobFrame,
+    candles: &[Candle],
+    fast: usize,
+    slow: usize,
+    reporter: &mut Reporter<'_>,
+) -> Ended {
     match (BuiltInStrategyConfig::SmaCross { fast, slow }).build() {
-        Ok(mut strategy) => backtest::run(job, candles, strategy.as_mut()),
+        Ok(mut strategy) => backtest::run(job, candles, strategy.as_mut(), reporter),
         Err(error) => Ended::Said(Finished::Failed {
             error: ErrorBody {
                 code: ErrorCode::InvalidRequest,
@@ -168,45 +194,6 @@ fn report(value: &Value) -> Finished {
             media_type: "application/json".to_string(),
             text: value.to_string(),
         }],
-    }
-}
-
-/// The SHA-256 of the candles as text, one line each, every decimal with
-/// its scale: what reaches the worker exactly hashes the same.
-fn digest(candles: &[Candle]) -> String {
-    let mut hash = Sha256::new();
-    for candle in candles {
-        hash.update(format!(
-            "{} {} {} {} {} {} {} {:?}\n",
-            candle.open_time_ms,
-            candle.close_time_ms,
-            candle.open,
-            candle.high,
-            candle.low,
-            candle.close,
-            candle.volume,
-            candle.trades
-        ));
-    }
-    hex::encode(hash.finalize())
-}
-
-/// Succeeds when the candles hash to `expected`, and fails saying what they
-/// hash to otherwise.
-fn expect(candles: &[Candle], expected: &str) -> Finished {
-    let actual = digest(candles);
-    if actual == expected {
-        return report(&json!({ "bars": candles.len(), "digest": actual }));
-    }
-    Finished::Failed {
-        error: ErrorBody {
-            code: ErrorCode::InvalidRequest,
-            message: format!(
-                "the {} candles hash to {actual}, not {expected}",
-                candles.len()
-            ),
-            supported: None,
-        },
     }
 }
 

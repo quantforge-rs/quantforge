@@ -43,7 +43,7 @@ use wait::Waits;
 /// earlier schema forward in place (`docs/storage-schema.md`); a database
 /// is never deleted for a schema change. Only a database from a newer
 /// build is refused, as [`StorageError::SchemaUnsupported`].
-pub const SCHEMA_VERSION: u32 = 7;
+pub const SCHEMA_VERSION: u32 = 8;
 
 // Indentation inside this literal is load-bearing: SQLite records the exact
 // statement text in `sqlite_master`, so reformatting it would change the

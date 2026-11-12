@@ -156,6 +156,19 @@ pub enum Step {
         hash: String,
         expect: Option<String>,
     },
+    StoreJobLog {
+        job_id: String,
+        log_json: String,
+        at: i64,
+        #[serde(default)]
+        expect: Option<bool>,
+        #[serde(default)]
+        refused: Option<Refusal>,
+    },
+    JobLog {
+        job_id: String,
+        expect: Option<String>,
+    },
     SubmitJob {
         job: NewJobText,
         #[serde(default)]

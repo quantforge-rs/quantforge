@@ -295,12 +295,23 @@ pub const JOBS: TransferTable = TransferTable {
     max_batch: None,
 };
 
+/// What is kept of each job's log, by the job's ID in byte order. A row
+/// holds a whole log, so a batch holds few.
+pub const JOB_LOGS: TransferTable = TransferTable {
+    name: "job_logs",
+    columns: &[text("job_id"), text("log_json"), integer("stored_at_ms")],
+    key: "job_id",
+    by_market: false,
+    numbered: false,
+    max_batch: Some(4),
+};
+
 /// The tables a transfer copies, in the order it copies them: a run before
 /// its journals, a segment before the index entry naming it, candles before
 /// the marks on their windows, a bundle before the jobs that run it, a
-/// result before the job that lists it. Each part of a target is whole when
-/// read.
-pub const TRANSFER_TABLES: [TransferTable; 10] = [
+/// result before the job that lists it, a job before its log. Each part of
+/// a target is whole when read.
+pub const TRANSFER_TABLES: [TransferTable; 11] = [
     CANDLES,
     BOT_RUNS,
     ORDER_EVENTS,
@@ -311,6 +322,7 @@ pub const TRANSFER_TABLES: [TransferTable; 10] = [
     BUNDLES,
     JOB_RESULTS,
     JOBS,
+    JOB_LOGS,
 ];
 
 /// The tables every store keeps for itself, which a transfer never copies:
@@ -352,6 +364,7 @@ mod tests {
         assert_eq!(SEGMENTS.batch_rows(10), 10);
         assert_eq!(BUNDLES.batch_rows(5000), 2);
         assert_eq!(JOB_RESULTS.batch_rows(5000), 2);
+        assert_eq!(JOB_LOGS.batch_rows(5000), 4);
         assert_eq!(CANDLES.batch_rows(5000), 5000);
         assert_eq!(CANDLES.batch_rows(0), 1);
     }

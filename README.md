@@ -338,6 +338,12 @@ A job that succeeds keeps its result in the store with it:
 are, `metrics.json`, and `trades.arrow` and `equity.arrow`, Arrow files with
 every decimal as its exact text
 ([result spec](https://github.com/quantforge-rs/quantforge/blob/main/docs/result-spec.md)).
+What a job writes while it runs, and how far it has come, is its log:
+`GET /v1/backtests/{job_id}/logs` answers it a page at a time, or, asked as
+a WebSocket, as a stream that sends what the log holds and then each line
+as the job writes it, to the job's end. The server keeps the newest 10,000
+lines and 1 MiB of text of each job's log, counts what it leaves out, and
+stores the log with the job once the job has ended.
 Jobs run `--job-concurrency` at a time, half the CPU cores unless set, each
 in a worker process of its own: started ahead of the job, held to
 `--job-cpu-secs`, `--job-memory-mib` and `--job-wall-secs`, given nothing

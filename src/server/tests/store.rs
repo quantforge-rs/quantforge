@@ -25,6 +25,7 @@ fn routes() -> Vec<String> {
         format!("/v1/segments/sha256:{}", "0".repeat(64)),
         "/v1/backtests".to_string(),
         format!("/v1/backtests/{}", "0".repeat(32)),
+        format!("/v1/backtests/{}/logs", "0".repeat(32)),
     ]
 }
 

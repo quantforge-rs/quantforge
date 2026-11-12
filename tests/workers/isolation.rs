@@ -15,7 +15,7 @@ use std::time::Duration;
 use quantforge::server::{Cancel, Guard, WORKER_COMMAND};
 use serde_json::{Value, json};
 
-use crate::support::{Pool, candles, given_env, input, report, roomy, until, worker_env};
+use crate::support::{Pool, candles, given_env, input, report, roomy, unread, until, worker_env};
 
 /// The guard's reason, when it does not hold.
 fn unenforced(guard: &Guard) -> Option<&str> {
@@ -95,7 +95,7 @@ fn a_job_reads_neither_another_jobs_scratch_directory_nor_any_file_outside_its_o
     let job = held.job_id.to_string();
     let cancel = Cancel::new();
     std::thread::scope(|scope| {
-        let holding = scope.spawn(|| pool.pool.execute(held, &cancel));
+        let holding = scope.spawn(|| pool.pool.execute(held, &cancel, &unread()));
         pool.worker_of(&job);
         let other = until("the held job's file", || {
             held_file(pool.pool.scratch_root(), &job)
@@ -263,7 +263,7 @@ fn a_worker_refuses_a_server_of_another_build() {
     let said = String::from_utf8_lossy(&output.stderr);
     assert!(
         said.contains(&format!(
-            "the server is quantforge 0.0.0 frames 0, and this worker quantforge {} frames 2; a \
+            "the server is quantforge 0.0.0 frames 0, and this worker quantforge {} frames 3; a \
              worker runs only for a server of its own build",
             env!("CARGO_PKG_VERSION")
         )),
@@ -286,7 +286,7 @@ fn alone(dir: &Path, params: Value) -> Value {
     stdin
         .write_all(&frame(&json!({
             "type": "setup",
-            "build": format!("quantforge {} frames 2", env!("CARGO_PKG_VERSION")),
+            "build": format!("quantforge {} frames 3", env!("CARGO_PKG_VERSION")),
             "mode": {"kind": "synthetic", "runtime": {"engine": "0.3.0", "python": "3.12", "packages": {}}},
             "cpu_secs": 60,
             "memory_bytes": 1_u64 << 31,
@@ -377,7 +377,7 @@ fn a_worker_whose_server_goes_away_mid_job_exits() {
     stdin
         .write_all(&frame(&json!({
             "type": "setup",
-            "build": format!("quantforge {} frames 2", env!("CARGO_PKG_VERSION")),
+            "build": format!("quantforge {} frames 3", env!("CARGO_PKG_VERSION")),
             "mode": {"kind": "synthetic", "runtime": {"engine": "0.3.0", "python": "3.12", "packages": {}}},
             "cpu_secs": 60,
             "memory_bytes": 1_u64 << 31,
@@ -435,7 +435,7 @@ fn a_worker_given_no_job_exits_once_its_input_ends() {
     stdin
         .write_all(&frame(&json!({
             "type": "setup",
-            "build": format!("quantforge {} frames 2", env!("CARGO_PKG_VERSION")),
+            "build": format!("quantforge {} frames 3", env!("CARGO_PKG_VERSION")),
             "mode": {"kind": "no_runtime"},
             "cpu_secs": 60,
             "memory_bytes": 1_u64 << 31,

@@ -16,6 +16,7 @@
 //! | `GET /v1/backtests/{job_id}` | `200`, where a job stands |
 //! | `GET /v1/backtests` | `200`, the jobs, the last submitted first |
 //! | `POST /v1/backtests/{job_id}/cancel` | `200`, a job, cancelled |
+//! | `GET /v1/backtests/{job_id}/logs` | `200`, the lines of a job's log after a cursor, and its progress; asked as a WebSocket, `101` and the log followed to its end |
 //! | `GET /v1/backtests/{job_id}/result` | `200`, a succeeded job's metrics and where its result files are |
 //! | `GET /v1/backtests/{job_id}/result/{file}` | `200`, one result file, `metrics.json`, `trades.arrow` or `equity.arrow`, which the client's cache may keep for a year; or `304` |
 //!
@@ -81,7 +82,10 @@ use crate::protocol::bundle::BundleLimits;
 use crate::protocol::{MIN_SUPPORTED, PROTO_VERSION, ProtoVersion, ServerVersion};
 
 pub use history::{DEFAULT_MAX_SPAN_BARS, DEFAULT_MAX_TIP_BARS, History, HistoryLimits};
-pub use jobs::{Cancel, JobInput, JobLimits, JobWorker, Jobs, NoRuntime, WorkerOutcome};
+pub use jobs::{
+    Cancel, DEFAULT_LOG_BYTES, DEFAULT_LOG_LINE_BYTES, DEFAULT_LOG_LINES, JobInput, JobLimits,
+    JobLog, JobWorker, Jobs, LogLimits, NoRuntime, WorkerOutcome,
+};
 pub use results::{BacktestOutput, ResultFile};
 pub use store::{ServedStore, ServerStore, StoreLimits};
 pub use workers::{
@@ -179,6 +183,10 @@ fn router(history: History, jobs: Jobs) -> Router {
             .route(
                 &format!("/{version}/backtests/{{job_id}}/cancel"),
                 post(jobs::cancel),
+            )
+            .route(
+                &format!("/{version}/backtests/{{job_id}}/logs"),
+                get(jobs::logs),
             )
             .route(
                 &format!("/{version}/backtests/{{job_id}}/result"),

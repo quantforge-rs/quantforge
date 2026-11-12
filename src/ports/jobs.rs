@@ -11,7 +11,8 @@ use crate::model::{BundleHash, JobId, JobOutcome, JobRecord, NewJob, ResultHash,
 /// phase, or from queued or running straight to cancelled, and each move is
 /// one guarded change, so a job never leaves a final phase and is never
 /// claimed twice. A succeeded job's results are stored in the change that
-/// ends it, each once under its name, and never changed.
+/// ends it, each once under its name, and never changed; what a server
+/// kept of a job's log is stored once, under the job.
 pub trait JobStore: Send + Sync {
     /// Stores a bundle's canonical tar under its name. Answers whether it
     /// was new: a bundle stored again changes nothing.
@@ -57,6 +58,21 @@ pub trait JobStore: Send + Sync {
     ///
     /// [`StoredResult::data`]: crate::model::StoredResult::data
     fn load_result(&self, hash: &ResultHash) -> Result<Option<Vec<u8>>, StorageError>;
+
+    /// Stores what a server kept of a job's log, as the server's JSON,
+    /// under the job. Answers whether it was new: a job's log is stored
+    /// once, and one stored again changes nothing. Refuses a job the store
+    /// does not hold.
+    fn store_job_log(
+        &self,
+        job_id: &JobId,
+        log_json: &str,
+        stored_at_ms: TimestampMs,
+    ) -> Result<bool, StorageError>;
+
+    /// A job's log as it was stored, or `None` when none was: the job
+    /// never ran, wrote nothing, or ran in a server that was killed.
+    fn job_log(&self, job_id: &JobId) -> Result<Option<String>, StorageError>;
 
     /// Cancels a queued or running job, and answers its record: cancelled,
     /// or unchanged when it had already ended. `None` when there is no such

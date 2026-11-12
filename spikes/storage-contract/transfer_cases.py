@@ -93,6 +93,7 @@ TABLES = [
         "seq",
         False,
     ),
+    ("job_logs", ["job_id", "log_json", "stored_at_ms"], "job_id", False),
 ]
 
 # --- The canonical text of docs/storage-migration.md --------------------------
@@ -488,6 +489,34 @@ JOBS = [
     job(10, "b" * 32, "queued", BUNDLES[1], T + 70_000),
 ]
 
+def log_line(seq, level, message):
+    return {"seq": seq, "at_ms": T + 31_000 + seq, "level": level, "message": message}
+
+
+def job_log(job_row, dropped, lines, progress, stored):
+    """What a server kept of a job's log, as the JSON it stores: the lines
+    are numbered from one past the dropped ones."""
+    log = {"dropped_lines": dropped, "lines": lines}
+    if progress is not None:
+        log["progress"] = {"bars_done": progress[0], "bars_total": progress[1]}
+    return {"job_id": job_row["job_id"],
+            "log_json": json.dumps(log, separators=(",", ":"), ensure_ascii=False),
+            "stored_at_ms": stored}
+
+
+# The logs of the two jobs that ran to an end of their own: one whole, with
+# text that is not ASCII, and one that dropped its first lines and was cut
+# off by a cancel. Their job IDs compare byte by byte.
+JOB_LOGS = [
+    job_log(JOBS[0], 0,
+            [log_line(1, "info", "started on 币安人生USDT"),
+             log_line(2, "warning", "tab\tand \"quotes\"")],
+            (3, 3), T + 32_000),
+    job_log(JOBS[2], 7,
+            [log_line(8, "error", "the last line before the cancel")],
+            (1, 3), T + 52_000),
+]
+
 ROWS = {
     "candles": CANDLES,
     "bot_runs": BOT_RUNS,
@@ -499,6 +528,7 @@ ROWS = {
     "bundles": BUNDLES,
     "job_results": JOB_RESULTS,
     "jobs": JOBS,
+    "job_logs": JOB_LOGS,
 }
 
 # --- What a verification reads ------------------------------------------------

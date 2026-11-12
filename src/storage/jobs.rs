@@ -77,6 +77,13 @@ pub(crate) fn already_recorded(job_id: &JobId) -> StorageError {
     StorageError::InvalidArgument(format!("job {job_id} is already recorded"))
 }
 
+/// A log is stored for a job the store holds.
+pub(crate) fn no_job(job_id: &JobId) -> StorageError {
+    StorageError::InvalidArgument(format!(
+        "the store holds no job {job_id}; a log is stored for a job it holds"
+    ))
+}
+
 /// A job runs a bundle the store holds.
 pub(crate) fn no_bundle(hash: &BundleHash) -> StorageError {
     StorageError::InvalidArgument(format!(

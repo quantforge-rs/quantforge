@@ -172,6 +172,8 @@ pub(in crate::server) async fn cancel(
     match record.phase {
         JobPhase::Cancelled => {
             jobs.signal(&job_id);
+            // A stream that waits for the job, queued until now, ends.
+            jobs.moved();
             Ok(fresh(Json(status(&record)?)))
         }
         JobPhase::Succeeded | JobPhase::Failed => Err(Refusal::conflict(format!(

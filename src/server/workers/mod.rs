@@ -27,7 +27,11 @@
 //!
 //! A backtest that ran to its end sends its server its summary and the
 //! rows of its trades and its equity curve, never files: the server checks
-//! every row as it reads it, and writes the result files itself.
+//! every row as it reads it, and writes the result files itself. While a
+//! job runs, its worker sends each line the job writes to its log and how
+//! many bars it has run; the server keeps the newest lines within the
+//! log's limits, and never holds more than a few of a worker's frames at
+//! once, so a job that writes without end fills no memory of the server's.
 //!
 //! - `pool`: the workers a server keeps, and a job's run on one.
 //! - `config`: what a pool starts with, and what a run answers.
@@ -37,6 +41,7 @@
 //! - `scratch`: the scratch directories.
 //! - `child`: the worker's side.
 //! - `backtest`: the engine's run over a job's candles, in the worker.
+//! - `report`: what a job says to its server while it runs.
 //! - `isolation`: the limits and sandbox a worker puts on itself.
 //! - `synthetic`: workloads the tests run in place of a strategy.
 
@@ -48,6 +53,7 @@ mod isolation;
 mod job;
 mod pool;
 mod process;
+mod report;
 mod scratch;
 mod synthetic;
 

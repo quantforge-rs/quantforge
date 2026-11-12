@@ -12,6 +12,7 @@ use super::backtest::Ended;
 use super::config::WorkerMode;
 use super::frames::{self, Finished, FromWorker, MOST_TO_WORKER, ROWS_PER_FRAME, ToWorker};
 use super::isolation::{self, Limits};
+use super::report::Reporter;
 use super::synthetic::{self, Seen};
 use crate::model::Candle;
 use crate::protocol::stream::Bar;
@@ -63,7 +64,7 @@ pub enum WorkerError {
 pub fn run_worker<R, W>(input: R, output: W) -> Result<(), WorkerError>
 where
     R: Read + Send + 'static,
-    W: Write,
+    W: Write + Send,
 {
     #[cfg(unix)]
     shed_descriptors()?;
@@ -114,9 +115,11 @@ where
     };
     let candles = read_candles(&mut input, job.bars)?;
     watch(input)?;
+    // What the job says while it runs goes out as it says it.
+    let mut reporter = Reporter::new(&mut output);
     let ended = match (&mode, &seen) {
         (WorkerMode::Synthetic { .. }, Some(seen)) => {
-            synthetic::run(&job, &candles, seen, &posture)
+            synthetic::run(&job, &candles, seen, &posture, &mut reporter)
         }
         _ => Ended::Said(Finished::Failed {
             error: ErrorBody {

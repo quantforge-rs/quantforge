@@ -2,24 +2,30 @@
 //! SQLite and, where `QUANTFORGE_TEST_POSTGRES_URL` names a server, on
 //! PostgreSQL: a job runs on exactly the candles its server read for it, a
 //! crash fails only its own job, every job gets a worker of its own, a
-//! worker sees nothing of the store its server holds open, and a backtest
-//! run in a worker is downloaded as the files a local run writes. Each
-//! scenario is one generic body, run once per backend.
+//! worker sees nothing of the store its server holds open, a backtest run
+//! in a worker is downloaded as the files a local run writes, and what a
+//! job writes is followed while its worker runs and replayed from the
+//! store afterwards. Each scenario is one generic body, run once per
+//! backend.
 
 use std::any::Any;
 use std::net::SocketAddr;
 use std::time::Duration;
 
+use futures_util::StreamExt;
 use quantforge::protocol::ContentHash;
 use quantforge::protocol::bundle::Bundle;
 use quantforge::server::{
-    self, History, HistoryLimits, JobLimits, Jobs, ServedStore, ServerStore, StoreLimits,
-    WorkerPool,
+    self, History, HistoryLimits, JobLimits, Jobs, LogLimits, ServedStore, ServerStore,
+    StoreLimits, WorkerPool,
 };
 use quantforge::{CandleStore, ExchangeId, Interval, MarketId, SqliteStore, Symbol};
 use serde_json::{Value, json};
 use tempfile::TempDir;
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 use crate::support::{
     MINUTE, Pool, T, bundle, candles, digest, given_env, input, report, roomy, until, worker_env,
@@ -87,6 +93,7 @@ async fn serve<B: Backend>(backend: &B, pool: &WorkerPool, concurrency: usize) -
         JobLimits {
             concurrency,
             max_span_bars: server::DEFAULT_MAX_SPAN_BARS,
+            log: LogLimits::default(),
         },
     );
     jobs.start().await.expect("a started queue");
@@ -350,6 +357,182 @@ async fn a_backtest_run_in_a_worker_downloads_as_a_local_runs_files<B: Backend>(
     }
 }
 
+type LogStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
+
+/// Opens the job's log stream, from the line after `after`.
+async fn follow(address: SocketAddr, job: &str, after: u64) -> LogStream {
+    let url = format!("ws://{address}/v1/backtests/{job}/logs?after={after}");
+    let (stream, _) = tokio_tungstenite::connect_async(url)
+        .await
+        .expect("a log stream");
+    stream
+}
+
+/// The stream's next frame, or `None` once the server closed it as it
+/// closes the stream of a job that has ended.
+async fn next_frame(stream: &mut LogStream) -> Option<Value> {
+    loop {
+        let message = tokio::time::timeout(Duration::from_secs(30), stream.next())
+            .await
+            .expect("the stream says something within thirty seconds");
+        match message {
+            Some(Ok(Message::Text(text))) => {
+                return Some(serde_json::from_str(text.as_str()).expect("a frame"));
+            }
+            Some(Ok(Message::Close(close))) => {
+                assert_eq!(close.map(|close| close.code), Some(CloseCode::Normal));
+                return None;
+            }
+            Some(Ok(_)) => {}
+            other => panic!("a log stream ended with {other:?}"),
+        }
+    }
+}
+
+/// Every frame of a stream to its close.
+async fn frames(mut stream: LogStream) -> Vec<Value> {
+    let mut frames = Vec::new();
+    while let Some(frame) = next_frame(&mut stream).await {
+        frames.push(frame);
+    }
+    frames
+}
+
+/// One page of the job's log.
+async fn page(address: SocketAddr, job: &str, query: &str) -> Value {
+    let response = client()
+        .get(format!("http://{address}/v1/backtests/{job}/logs{query}"))
+        .send()
+        .await
+        .expect("a response");
+    assert_eq!(response.status(), 200, "{query}");
+    response.json().await.expect("a page")
+}
+
+/// What a job writes in a real worker is followed while the worker runs,
+/// line by line with the job's progress, and replayed from the store once
+/// the job has ended, by the server that ran it and by another on its
+/// store; a job that writes more than a log keeps leaves the newest lines
+/// and a count of the rest in the store.
+async fn a_jobs_log_is_followed_while_its_worker_runs_and_replayed_from_the_store<B: Backend>(
+    backend: &B,
+) {
+    backend
+        .store()
+        .upsert_candles(&market(), &candles(20))
+        .expect("the candles");
+    let pool = Pool::start(1, roomy());
+    let address = serve(backend, &pool.pool, 1).await;
+    let all_done = json!({"type": "progress", "bars_done": 20, "bars_total": 20});
+
+    // A job that writes twelve lines, a moment apart, and then holds until
+    // it is stopped: whatever its stream sends, it sends while the job runs.
+    let talk = "workload = \"log\"\nlines = 12\npause_ms = 25\nhold = true";
+    let job = submit(address, &upload(address, &bundle(talk)).await, 19).await;
+    let mut stream = follow(address, &job, 0).await;
+    let (mut lines, mut progress) = (Vec::new(), Vec::new());
+    while lines.len() < 12 || progress.last() != Some(&all_done) {
+        let frame = next_frame(&mut stream).await.expect("a frame of a job");
+        match frame["type"].as_str() {
+            Some("line") => lines.push(frame),
+            Some("progress") => progress.push(frame),
+            _ => panic!("a running job's stream sent {frame}"),
+        }
+    }
+    let running: Value = client()
+        .get(format!("http://{address}/v1/backtests/{job}"))
+        .send()
+        .await
+        .expect("a response")
+        .json()
+        .await
+        .expect("a status");
+    assert_eq!(running["state"]["kind"], "running", "followed live");
+    for (line, n) in lines.iter().zip(1_u64..) {
+        let level = ["debug", "info", "warning", "error"][(n as usize - 1) % 4];
+        assert_eq!(
+            (&line["seq"], &line["level"], &line["message"]),
+            (&json!(n), &json!(level), &json!(format!("line {n} of 12")))
+        );
+    }
+    let done: Vec<u64> = progress
+        .iter()
+        .map(|frame| frame["bars_done"].as_u64().expect("a count"))
+        .collect();
+    assert!(done.windows(2).all(|pair| pair[0] < pair[1]), "{done:?}");
+
+    // Stopped by its client: the stream ends with the job, and what the
+    // job wrote is kept with it.
+    let cancelled = client()
+        .post(format!("http://{address}/v1/backtests/{job}/cancel"))
+        .send()
+        .await
+        .expect("a response");
+    assert_eq!(cancelled.status(), 200);
+    assert_eq!(next_frame(&mut stream).await, Some(json!({"type": "end"})));
+    assert_eq!(next_frame(&mut stream).await, None);
+    assert_eq!(ended(address, &job).await["kind"], "cancelled");
+
+    // Replayed afterwards, each line as it was sent while the job ran,
+    // from the server that ran the job and from another on its store.
+    let mut expected = lines.clone();
+    expected.extend([all_done.clone(), json!({"type": "end"})]);
+    let listed: Vec<Value> = lines
+        .iter()
+        .map(|line| {
+            let mut line = line.clone();
+            line.as_object_mut().expect("a line").remove("type");
+            line
+        })
+        .collect();
+    let other = serve(backend, &pool.pool, 1).await;
+    for address in [address, other] {
+        assert_eq!(frames(follow(address, &job, 0).await).await, expected);
+        assert_eq!(
+            frames(follow(address, &job, 9).await).await,
+            expected[9..],
+            "from a cursor"
+        );
+        let read = page(address, &job, "").await;
+        assert_eq!(read["lines"], Value::Array(listed.clone()));
+        assert_eq!(read["progress"], json!({"bars_done": 20, "bars_total": 20}));
+        assert_eq!(
+            (&read["next_after"], &read["complete"]),
+            (&json!(12), &json!(true))
+        );
+    }
+
+    // A job that writes three times what a log keeps, and succeeds.
+    let flood = "workload = \"log\"\nlines = 30000\nbytes = 100";
+    let job = submit(address, &upload(address, &bundle(flood)).await, 19).await;
+    let state = ended(address, &job).await;
+    assert_eq!(state["kind"], "succeeded", "{state}");
+    let first = page(other, &job, "?limit=1").await;
+    assert_eq!(first["dropped_lines"], 20_000);
+    assert_eq!(first["lines"][0]["seq"], 20_001);
+    assert_eq!(first["complete"], false);
+    let sent = frames(follow(other, &job, 29_998).await).await;
+    assert_eq!(sent.len(), 4, "{sent:?}");
+    assert_eq!(
+        (&sent[0]["seq"], &sent[1]["seq"]),
+        (&json!(29_999), &json!(30_000))
+    );
+    let last = sent[1]["message"].as_str().expect("text");
+    assert!(last.starts_with("line 30000 of 30000..."), "{last}");
+    assert_eq!(last.len(), 100);
+    assert_eq!(sent[2..], [all_done, json!({"type": "end"})]);
+    let whole = frames(follow(address, &job, 0).await).await;
+    assert_eq!(
+        whole.len(),
+        10_003,
+        "what was dropped, the lines kept, and the end"
+    );
+    assert_eq!(
+        whole[0],
+        json!({"type": "truncated", "dropped_lines": 20_000})
+    );
+}
+
 /// A worker gets no environment and no descriptor of the server's while
 /// the server holds its store open.
 async fn a_worker_sees_nothing_of_the_store_its_server_holds_open<B: Backend>(backend: &B) {
@@ -393,6 +576,7 @@ on_each_backend!(
     every_job_gets_a_worker_of_its_own,
     a_worker_sees_nothing_of_the_store_its_server_holds_open,
     a_backtest_run_in_a_worker_downloads_as_a_local_runs_files,
+    a_jobs_log_is_followed_while_its_worker_runs_and_replayed_from_the_store,
 );
 
 #[cfg(feature = "postgres")]

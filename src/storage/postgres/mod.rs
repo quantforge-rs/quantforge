@@ -38,6 +38,7 @@ mod control;
 mod copying;
 mod coverage;
 mod durability;
+mod job_logs;
 mod jobs;
 mod journal;
 mod migrate;
@@ -52,6 +53,7 @@ mod transfer;
 use std::fmt;
 use std::time::Duration;
 
+use tokio_postgres::types::{FromSql, Type};
 use tracing::info;
 
 use crate::ports::StorageError;
@@ -112,6 +114,23 @@ impl PostgresStore {
     pub fn ping(&self) -> Result<(), StorageError> {
         self.bridge.execute(Effect::Read, |client| {
             Box::pin(async move { client.batch_execute("SELECT 1").await })
+        })
+    }
+
+    /// The one column `statement` selects of the row its one parameter,
+    /// the text `key`, names: `None` when the store holds no such row.
+    fn keyed<T>(&self, statement: &'static str, key: String) -> Result<Option<T>, StorageError>
+    where
+        T: for<'a> FromSql<'a> + Send + 'static,
+    {
+        self.bridge.execute(Effect::Read, move |client| {
+            Box::pin(async move {
+                client
+                    .query_typed_opt(statement, &[(&key, Type::TEXT)])
+                    .await?
+                    .map(|row| row.try_get(0))
+                    .transpose()
+            })
         })
     }
 }

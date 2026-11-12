@@ -33,7 +33,7 @@ T = 1_792_454_400_000
 # 29 decimal places: more than a Decimal holds.
 INEXACT = "1.00000000000000000000000000001"
 # The schema every backend creates; a new store logs one step to it from 0.
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 WINDOW_BARS = 1440
 STEP_MS = {
     "1s": 1_000,
@@ -241,6 +241,7 @@ class Model:
         self.environment = None  # the store's binding
         self.bundles = {}  # name -> bytes
         self.results = {}  # name -> what the store keeps of a result
+        self.logs = {}  # job ID -> what a server kept of the job's log, as text
         self.jobs = []  # records, in submission order
 
     # Candles.
@@ -356,6 +357,18 @@ class Model:
 
     def load_result(self, name):
         return self.results.get(name)
+
+    def store_job_log(self, job_id, text):
+        """Whether it was new, and why it was refused, if it was."""
+        if self.find_job(job_id) is None:
+            return None, refusal(f"the store holds no job {job_id}")
+        if job_id in self.logs:
+            return False, None
+        self.logs[job_id] = text
+        return True, None
+
+    def job_log(self, job_id):
+        return self.logs.get(job_id)
 
     def cancel_job(self, job_id, at):
         job = self.find_job(job_id)
@@ -647,6 +660,14 @@ class Scenario:
 
     def load_result(self, name):
         self.step("load_result", hash=name, expect=self.model.load_result(name))
+
+    def store_job_log(self, job_id, text, at):
+        stored, refused = self.model.store_job_log(job_id, text)
+        answer = {"refused": refused} if refused else {"expect": stored}
+        self.step("store_job_log", job_id=job_id, log_json=text, at=at, **answer)
+
+    def job_log(self, job_id):
+        self.step("job_log", job_id=job_id, expect=self.model.job_log(job_id))
 
     def cancel_job(self, job_id, at):
         self.step("cancel_job", job_id=job_id, at=at, expect=self.model.cancel_job(job_id, at))
@@ -1609,6 +1630,45 @@ def jobs_scenarios():
     s.finish_job(job_id(2), succeeded_with(again, result(RESULT_B)), T + 400)
     s.load_result(first["hash"])
     s.load_result(bundle_name(RESULT_B))
+    s.jobs(10)
+    out.append(s)
+
+    # A log as a server writes one, and text that is no JSON at all: a store
+    # keeps either as given.
+    log_a = '{"dropped_lines":2,"lines":[{"seq":3,"at_ms":1792454400003,"level":"info","message":"币安人生 ✓ tab\\t and \\"quotes\\""}],"progress":{"bars_done":3,"bars_total":4}}'
+    log_b = "not JSON: a store never reads a log \u2603"
+
+    s = Scenario("jobs.log_stored_once", "a job's log is stored once under the job, kept as the text given, and read back; a job with none reads nothing, a log stored again changes nothing, and a store opened again still holds it")
+    s.store_bundle(BUNDLE_A)
+    for n in (1, 2):
+        s.submit_job(new_job(n, BUNDLE_A))
+    s.job_log(job_id(1))
+    s.claim_job(T + 100)
+    s.store_job_log(job_id(1), log_a, T + 200)
+    s.job_log(job_id(1))
+    s.store_job_log(job_id(1), log_b, T + 300)
+    s.job_log(job_id(1))
+    s.job_log(job_id(2))
+    s.job(job_id(1))
+    s.reopen()
+    s.job_log(job_id(1))
+    s.job_log(job_id(2))
+    out.append(s)
+
+    s = Scenario("jobs.log_of_any_job_held", "a log is stored for a job wherever it stands, queued, running, ended or cancelled, and changes nothing else of it; one for a job the store does not hold is refused")
+    s.store_bundle(BUNDLE_A)
+    for n in (1, 2, 3, 4):
+        s.submit_job(new_job(n, BUNDLE_A))
+    s.cancel_job(job_id(1), T + 100)
+    s.claim_job(T + 200)
+    s.finish_job(job_id(2), SUCCEEDED, T + 300)
+    s.claim_job(T + 400)
+    for n in (1, 2, 3, 4):
+        s.store_job_log(job_id(n), log_b + f" {n}", T + 500 + n)
+    s.store_job_log(job_id(9), log_a, T + 600)
+    s.job_log(job_id(9))
+    for n in (1, 2, 3, 4):
+        s.job_log(job_id(n))
     s.jobs(10)
     out.append(s)
 

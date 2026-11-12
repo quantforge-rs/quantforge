@@ -8,8 +8,8 @@ use quantforge::protocol::bundle::{Bundle, BundleLimits, Runtime};
 use quantforge::protocol::jobs::{self, JobSubmission};
 use quantforge::protocol::{ErrorBody, ErrorCode};
 use quantforge::server::{
-    Cancel, Execution, JobInput, PoolConfig, WORKER_COMMAND, WorkerLimits, WorkerMode,
-    WorkerOutcome, WorkerPool, WorkerProgram,
+    Cancel, Execution, JobInput, JobLog, LogLimits, PoolConfig, WORKER_COMMAND, WorkerLimits,
+    WorkerMode, WorkerOutcome, WorkerPool, WorkerProgram,
 };
 use quantforge::{Candle, JobId, TimestampMs};
 use rust_decimal::Decimal;
@@ -70,7 +70,15 @@ impl Pool {
 
     /// Runs `input` to its end.
     pub(crate) fn run(&self, input: JobInput) -> Execution {
-        self.pool.execute(input, &Cancel::new())
+        self.pool.execute(input, &Cancel::new(), &unread())
+    }
+
+    /// Runs `input` to its end, and answers what it wrote to a log that
+    /// keeps `limits` of it.
+    pub(crate) fn run_logged(&self, input: JobInput, limits: LogLimits) -> (Execution, JobLog) {
+        let log = JobLog::new(limits);
+        let execution = self.pool.execute(input, &Cancel::new(), &log);
+        (execution, log)
     }
 
     /// The job's worker, once it runs one, waiting up to ten seconds.
@@ -89,6 +97,11 @@ impl Drop for Pool {
     fn drop(&mut self) {
         self.pool.stop();
     }
+}
+
+/// A log for a job whose log no test reads.
+pub(crate) fn unread() -> JobLog {
+    JobLog::new(LogLimits::default())
 }
 
 /// `check`'s answer once it has one, or a failed test after ten seconds.

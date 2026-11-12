@@ -19,7 +19,7 @@ use super::process::{self, Worker};
 use super::scratch::ScratchRoot;
 use crate::protocol::bundle::Runtime;
 use crate::protocol::{ErrorBody, ErrorCode};
-use crate::server::jobs::{Cancel, JobInput, JobWorker, WorkerOutcome};
+use crate::server::jobs::{Cancel, JobInput, JobLog, JobWorker, WorkerOutcome};
 
 /// How long a worker may take to start and say it is ready.
 const READY_PATIENCE: Duration = Duration::from_secs(10);
@@ -141,15 +141,16 @@ impl WorkerPool {
 
     /// Runs the job on a worker of its own, which is killed once the job
     /// ends, and starts another in its place. Blocks until the job ends, or
-    /// soon after `cancel` is sent.
-    pub fn execute(&self, input: JobInput, cancel: &Cancel) -> Execution {
+    /// soon after `cancel` is sent. What the job says while it runs goes
+    /// into `log`.
+    pub fn execute(&self, input: JobInput, cancel: &Cancel, log: &JobLog) -> Execution {
         let job = input.job_id.to_string();
         let (running, mut worker) = match self.take(&job, cancel) {
             Ok(taken) => taken,
             Err(outcome) => return Execution { outcome, pid: None },
         };
         let pid = worker.process.pid;
-        let outcome = job::run(&mut worker, input, cancel, &self.inner.config.limits);
+        let outcome = job::run(&mut worker, input, cancel, &self.inner.config.limits, log);
         worker.process.retire();
         drop(worker);
         drop(running);
@@ -330,8 +331,8 @@ impl JobWorker for WorkerPool {
         self.inner.runtime.clone()
     }
 
-    fn run(&self, input: JobInput, cancel: &Cancel) -> WorkerOutcome {
-        self.execute(input, cancel).outcome
+    fn run(&self, input: JobInput, cancel: &Cancel, log: &JobLog) -> WorkerOutcome {
+        self.execute(input, cancel, log).outcome
     }
 }
 

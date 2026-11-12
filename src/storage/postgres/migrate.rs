@@ -37,7 +37,7 @@ pub(super) struct Step {
 }
 
 /// The chain, in order. A step's DDL never changes once a build ran it.
-pub(super) const STEPS: [Step; 3] = [
+pub(super) const STEPS: [Step; 4] = [
     Step {
         to: 5,
         apply: step_5_schema,
@@ -49,6 +49,10 @@ pub(super) const STEPS: [Step; 3] = [
     Step {
         to: 7,
         apply: step_7_job_results,
+    },
+    Step {
+        to: 8,
+        apply: step_8_job_logs,
     },
 ];
 
@@ -262,4 +266,9 @@ fn step_6_jobs<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
 /// Schema 7 (QUA-356): the results of the jobs that succeeded.
 fn step_7_job_results<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
     Box::pin(async move { transaction.batch_execute(schema::SCHEMA_7).await })
+}
+
+/// Schema 8 (QUA-355): what is kept of each job's log.
+fn step_8_job_logs<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
+    Box::pin(async move { transaction.batch_execute(schema::SCHEMA_8).await })
 }
