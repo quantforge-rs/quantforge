@@ -1,6 +1,6 @@
 # The storage schema
 
-**Schema 7.** Every QuantForge store holds the same tables under one schema
+**Schema 8.** Every QuantForge store holds the same tables under one schema
 version, on SQLite and on PostgreSQL. This page is the contract between
 them: the identities their rows carry, the record a store keeps
 about itself and the activation contract behind it, who owns which tables
@@ -11,7 +11,7 @@ hold every backend to the identities. [upgrading.md](upgrading.md) is the
 operator's side of the same contract.
 
 <!-- begin: schema version -->
-7
+8
 <!-- end: schema version -->
 
 ## Contents
@@ -159,6 +159,7 @@ story exist yet.
 | `store_control`, `schema_migrations` | QUA-37 | schema 5 |
 | `bundles`, `jobs` | QUA-358 (ALG-509) | schema 6 |
 | `job_results` | QUA-356 (ALG-511) | schema 7 |
+| `job_logs` | QUA-355 (ALG-512) | schema 8 |
 | Asset defaults, risk capital and per-asset policies | ALG-735 | a later schema |
 | The signal inbox, intents, protection and the event outbox | ALG-738 | a later schema |
 | Notifications | ALG-749 | a later schema |
@@ -215,6 +216,7 @@ untouched (`StorageError::SchemaUnsupported`).
 | 4 → 5 | QUA-37 | The identity columns of `bot_runs` (every existing run `legacy`, its `state_json` copied to `legacy_state_json`); `order_events` and `closed_trades` rebuilt with text IDs, every row and its `seq` copied, `raw_json` copied to `legacy_raw_json`; the numeric IDs inside `state_json` and `raw_json` rewritten as strings; `store_control` with a fresh ID, no environment, `inactive`, epoch 0; `schema_migrations`. |
 | 5 → 6 | QUA-358 | `bundles` and `jobs`: the bundles a server was sent, and its jobs. |
 | 6 → 7 | QUA-356 | `job_results`: the result files of the jobs that succeed. Every job an earlier build recorded stays as it was; none of them has a file, since no earlier build kept one. |
+| 7 → 8 | QUA-355 | `job_logs`: what is kept of each job's log. No job an earlier build recorded has one, since no earlier build kept any. |
 
 ## The chain on PostgreSQL
 
@@ -238,6 +240,7 @@ committed, and the waiting process would apply the step again.
 | 0 → 5 | QUA-125 | Every table of schema 5, as [below](#postgresql-ddl), and the store's control record: a fresh ID, no environment, `inactive`, epoch 0. A database without a schema runs the whole chain in one pass, logged as one step from 0. |
 | 5 → 6 | QUA-358 | `bundles` and `jobs`, as [below](#schema-6-on-postgresql); `segments.hash` and `bot_runs.run_id` collated `"C"`. |
 | 6 → 7 | QUA-356 | `job_results`, as [below](#schema-7-on-postgresql), its names collated `"C"` from the start. |
+| 7 → 8 | QUA-355 | `job_logs`, as [below](#schema-8-on-postgresql), its job IDs collated `"C"` from the start. |
 
 Refused untouched, before anything is created:
 
@@ -471,6 +474,12 @@ CREATE TABLE job_results (
   data BLOB NOT NULL,
   stored_at_ms INTEGER NOT NULL
 );
+
+CREATE TABLE job_logs (
+  job_id TEXT PRIMARY KEY,
+  log_json TEXT NOT NULL,
+  stored_at_ms INTEGER NOT NULL
+);
 ```
 <!-- end: sqlite schema -->
 
@@ -684,6 +693,20 @@ CREATE TABLE job_results (
 ```
 <!-- end: postgres step 7 -->
 
+### Schema 8 on PostgreSQL
+
+The step after schema 7, `SCHEMA_8`, held to this text the same way:
+
+<!-- begin: postgres step 8 -->
+```sql
+CREATE TABLE job_logs (
+  job_id TEXT COLLATE "C" PRIMARY KEY,
+  log_json TEXT NOT NULL,
+  stored_at_ms BIGINT NOT NULL
+);
+```
+<!-- end: postgres step 8 -->
+
 ## Segments on PostgreSQL
 
 The segment tables are SQLite's, and so is the protocol over them, which
@@ -793,6 +816,27 @@ shared suite's `jobs` group holds both backends to the same answers
 - **A result is stored once and never changed.** Two jobs that produce the
   same file share its row, the bytes stored first stay, and no release
   deletes a result: a job lists it, and a job is never deleted.
+- **A job's log is stored once, when its run ends.** While a job runs, the
+  server that runs it keeps the job's log in memory, within its limits;
+  when the run ends, however it ends, what the server kept is written as
+  one row of `job_logs`, under the job's ID, and never changed: a log
+  stored again changes nothing. `log_json` is the server's JSON, which a
+  store keeps and returns and never reads:
+  `{"dropped_lines":N,"lines":[…],"progress":{"bars_done":…,"bars_total":…}}`,
+  the lines as the protocol's `LogLine`s, numbered one after another from
+  `N + 1`, the newest the server kept, with `N` the count of older lines it
+  dropped, and `progress` left out when the job never said. A job that
+  wrote nothing has no row, and neither has one whose server was killed
+  before its run ended: its lines went with the server's memory. A log is
+  refused for a job the store does not hold. Its row is written before the job's
+  end is, so a store that says a job succeeded or failed holds the job's
+  log already, and the server that ran the job tells whoever follows the
+  log that it has ended only after both. A cancel is the exception: it is
+  written as it is asked, while the job's worker is still being stopped, so
+  a job can be `cancelled` for a moment before its log is stored, and the
+  server that ran it answers from memory until then. A server killed
+  between the two writes leaves a `running` job whose log is stored
+  already: the next start fails the job, and its log stays.
 - **One server runs a store's queue.** A server that starts fails every job
   its store holds as `running`, as a server that was killed leaves them,
   with `internal` and the reason; a server that stops fails the jobs it

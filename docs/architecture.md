@@ -102,6 +102,8 @@ src/
 │   │   ├── mod.rs              the job surface and JobId
 │   │   ├── submission.rs       JobSubmission: the bundle's hash, the candles, the backtest settings
 │   │   ├── status.rs           JobStatus, JobState, and the references to a job's results
+│   │   ├── logs.rs             LogLine, JobProgress, LogQuery and LogPage: a job's log, read a page at a time
+│   │   ├── log_stream.rs       LogFrame: the frames of the WebSocket stream that follows a job's log
 │   │   └── result.rs           JobResult and ResultLink: a succeeded job's metrics, and where its files are
 │   ├── results/                what a job produces: its metrics, trades and equity curve as files
 │   │   ├── mod.rs              the result contract: files, columns, types, decimals; ResultKind, ResultError
@@ -218,6 +220,7 @@ src/
 │   │   ├── candles.rs          CandleStore: batches unnested into one upsert that marks changed windows
 │   │   ├── coverage.rs         the markets the candle table holds, each found in two indexed steps
 │   │   ├── jobs.rs             JobStore: guarded statements, a claim skipping what another holds locked
+│   │   ├── job_logs.rs         a job's log: stored once under its job's ID, behind the copy guard, and read back
 │   │   ├── journal.rs          RunJournalStore: one statement per call, run IDs in byte order
 │   │   ├── control.rs          StoreControl: the store's record, its binding and legacy-run adoption
 │   │   ├── transfer.rs         a transfer's reads in byte order, batches that skip what it holds, the record
@@ -292,23 +295,37 @@ src/
     │   ├── mod.rs              the queue's state, its start after a restart, and its stop
     │   ├── routes.rs           the upload, submission, status, list and cancel routes
     │   ├── submission.rs       what an upload and a submission must pass before anything is stored
-    │   ├── queue.rs            the dispatcher, a job's input read from the store, and its end written
+    │   ├── queue.rs            the dispatcher, a job's input read from the store, and its log and its end written
     │   ├── status.rs           a job's record as the protocol shows it
     │   ├── results.rs          the result routes: a succeeded job's metrics and files, each checked before it goes
+    │   ├── follow.rs           the log route: a page of a job's log, or the WebSocket stream that follows it to its end
+    │   ├── follow/             its unit tests, beside it for the line budget
+    │   │   └── tests.rs        a stream that pings its client while it has nothing to send
+    │   ├── log.rs              JobLog and LogLimits: a job's log while it runs, never more of it than its limits
+    │   ├── log/                its unit tests, beside it for the line budget
+    │   │   └── tests.rs        numbering and cursors, what a log drops and how it says so, its end and its stored form
     │   └── worker.rs           JobWorker: what runs a job, its cancel, and the worker with no runtime
     ├── workers/                the processes that run jobs, one per job, and what each may reach
     │   ├── mod.rs              the boundary, and what each operating system enforces of it
     │   ├── pool.rs             WorkerPool: workers started ahead of jobs, each killed after its one job
     │   ├── config.rs           what a pool starts with, and what a job's run on it answers
-    │   ├── job.rs              one job's run: its bundle in scratch, its frames sent, its limits watched
+    │   ├── job.rs              one job's run: its bundle in scratch, its frames sent, its limits watched, what it says logged
     │   ├── job/                its unit tests, beside it for the line budget
-    │   │   └── tests.rs        a backtest's rows kept while they fit the job, and written as its files
+    │   │   └── tests.rs        a backtest's rows and a job's lines as they are taken, and a frame no worker sends
     │   ├── process.rs          a worker's process: started bare, killed with its group, why it stopped
+    │   ├── process/            its unit tests, beside it for the line budget
+    │   │   └── tests.rs        how a worker's stop is read, and frames read only a few ahead of the server
     │   ├── frames.rs           what a server and its workers say: length-prefixed JSON frames
+    │   ├── frames/             its unit tests, beside it for the line budget
+    │   │   └── tests.rs        a frame as bytes, read back as written or refused, and the JSON of what a worker says
     │   ├── scratch.rs          the scratch directories: owner-only, removed with their worker
     │   ├── child.rs            the worker's side: setup, its limits and sandbox, the job, its end
-    │   ├── backtest.rs         the engine's run over a job's candles in the worker, and its result as rows
+    │   ├── report.rs           Reporter: a job's lines and progress, said as frames while it runs
+    │   ├── backtest.rs         the engine's run over a job's candles in the worker, its progress, and its result as rows
     │   ├── synthetic.rs        the tests' workloads, which run into each limit in place of a strategy
+    │   ├── synthetic/          the workloads with a file of their own
+    │   │   ├── given.rs        a digest of the candles a job was given, and the workload that expects one
+    │   │   └── talk.rs         the workload that writes to its log as much and as fast as it is asked
     │   └── isolation/          the limits and sandbox a worker puts on itself as it starts
     │       ├── mod.rs          Posture and Guard: what held, and why not; the server closed to workers
     │       ├── unix.rs         rlimits: CPU time and address space, and no core dumps
@@ -317,12 +334,13 @@ src/
     └── tests/                  the routes in process, over a real SQLite store
         ├── mod.rs              the fixtures, health, version, unknown paths and methods
         ├── shutdown.rs         the shutdown that finishes a request in progress
-        ├── faulty.rs           a store that fails, stalls or runs out of time on demand
+        ├── faulty.rs           a store that fails, stalls, runs out of time or holds a log back on demand
         ├── history.rs          ranges read back exactly, empty answers, queries without category
         ├── markets.rs          every stored market, in order, with its span
         ├── queries.rs          the queries refused before the store is asked anything
-        ├── queue.rs            a job that waits out a busy store as it starts
+        ├── queue.rs            a job that waits out a busy store as it starts, and a log stored before its end is said
         ├── results.rs          a result the store holds damaged, lost or unlisted, never sent
+        ├── logs.rs             the log route's refusals, a stored log that reads as none, and a client that talks
         ├── segments.rs         stored bytes, 304s, unknown hashes, and damaged copies never sent
         ├── store.rs            storage failures named to no client, and the turns at the store
         ├── jobs.rs             uploads stored once, and every upload refused before it is stored
@@ -340,7 +358,10 @@ worker, the backtest `engine` and the `sdk` strategy it runs, whose result
 it writes as the protocol's result files; `serve run`
 opens the store, binds the address, and hands it both, with the pool of
 worker processes that run jobs, each a process of this binary that sees
-nothing of the store, one per job ([worker-isolation.md](worker-isolation.md)). The engines reach the exchange
+nothing of the store, one per job ([worker-isolation.md](worker-isolation.md)).
+What a job writes while it runs reaches the server as frames from its
+worker, is kept in a log bounded per job, followed by clients over a
+WebSocket or a page at a time, and stored with the job at its end. The engines reach the exchange
 and storage adapters only through the `ports` traits; the binary chooses
 which adapters to pass in, building the connectors of the exchange that
 `--exchange` names through `exchange::connect`, and opening the store that
@@ -389,17 +410,18 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   `version.txt` for `--version`
 - `tests/backtest_engine.rs`, `tests/candle_validation.rs`,
   `tests/candle_batch.rs`, `tests/decimal_float.rs`,
-  `tests/live_engine.rs`, and `tests/backtest_jobs.rs`: library
+  `tests/live_engine.rs`, and `tests/backtest_jobs/`: library
   integration tests; the live engine's dry runs and resume checks, and the
-  job queue's lifecycle with a scripted worker, run on SQLite and, with
+  job queue's lifecycle with a scripted worker, a job's log followed,
+  replayed and flooded among it (`logs.rs`), run on SQLite and, with
   `QUANTFORGE_TEST_POSTGRES_URL`, on PostgreSQL
 - `tests/workers/`: the job workers of
   [worker-isolation.md](worker-isolation.md), this build's binary started as
   `quantforge worker` and running the synthetic workloads: each limit run
   into and named, crashes, kills and cancels, scratch directories, the
   network and the environment a worker gets, recycling, a backtest run in a
-  worker and the result files its rows become, and jobs through the queue
-  on each backend
+  worker and the result files its rows become, what a job writes to its log
+  and a job that floods it, and jobs through the queue on each backend
 - `tests/results/`: a job's result files against
   [result-spec.md](result-spec.md): the shared cases of
   `tests/fixtures/result_cases.json`, the spec held to the code, and an

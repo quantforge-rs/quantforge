@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use quantforge::protocol::ErrorCode;
 use quantforge::server::{Cancel, WorkerLimits, WorkerOutcome};
 
-use crate::support::{Pool, candles, digest, failure, input, kill, report, roomy};
+use crate::support::{Pool, candles, digest, failure, input, kill, report, roomy, unread};
 
 /// How long a job that runs into a limit may take beyond it to end, however
 /// busy the machine.
@@ -174,7 +174,7 @@ fn a_cancel_kills_the_worker_and_ends_the_run_at_once() {
     let job = held.job_id.to_string();
     let cancel = Cancel::new();
     std::thread::scope(|scope| {
-        let run = scope.spawn(|| pool.pool.execute(held, &cancel));
+        let run = scope.spawn(|| pool.pool.execute(held, &cancel, &unread()));
         let pid = pool.worker_of(&job);
         let sent = Instant::now();
         cancel.cancel();
@@ -270,7 +270,7 @@ fn a_worker_that_starts_for_a_job_as_its_pool_stops_runs_nothing() {
     let (first, second, third) = std::thread::scope(|scope| {
         // The first job takes the only worker, so the second starts one of
         // its own, which waits.
-        let first = scope.spawn(|| pool.execute(held, &cancel));
+        let first = scope.spawn(|| pool.execute(held, &cancel, &unread()));
         until("the first job to run", || {
             let running = pool.running();
             running
@@ -278,14 +278,23 @@ fn a_worker_that_starts_for_a_job_as_its_pool_stops_runs_nothing() {
                 .any(|job| job.job_id == held_job)
                 .then_some(())
         });
-        let second = scope
-            .spawn(|| pool.execute(input(r#"workload = "report""#, candles(1)), &Cancel::new()));
+        let second = scope.spawn(|| {
+            pool.execute(
+                input(r#"workload = "report""#, candles(1)),
+                &Cancel::new(),
+                &unread(),
+            )
+        });
         until("the second job's worker to wait", || {
             waiting.exists().then_some(())
         });
         let stopped = scope.spawn(|| pool.stop());
         // A third job is answered only once the pool is stopping.
-        let third = pool.execute(input(r#"workload = "report""#, candles(1)), &Cancel::new());
+        let third = pool.execute(
+            input(r#"workload = "report""#, candles(1)),
+            &Cancel::new(),
+            &unread(),
+        );
         std::fs::write(&go, b"").expect("go");
         let second = second.join().expect("the second job's run");
         cancel.cancel();

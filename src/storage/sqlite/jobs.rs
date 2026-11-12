@@ -12,7 +12,7 @@ use crate::model::{
 };
 use crate::ports::{JobStore, StorageError};
 use crate::storage::jobs::{
-    COLUMNS, JobRow, already_recorded, no_bundle, outcome_columns, outcome_results,
+    COLUMNS, JobRow, already_recorded, no_bundle, no_job, outcome_columns, outcome_results,
 };
 
 // Indentation inside this literal is load-bearing: SQLite records the exact
@@ -49,6 +49,15 @@ pub(super) const RESULTS_DDL: &str = r#"
                   hash TEXT PRIMARY KEY,
                   size_bytes INTEGER NOT NULL,
                   data BLOB NOT NULL,
+                  stored_at_ms INTEGER NOT NULL
+                );
+"#;
+
+// Indentation inside this literal is load-bearing, as above.
+pub(super) const LOGS_DDL: &str = r#"
+                CREATE TABLE IF NOT EXISTS job_logs (
+                  job_id TEXT PRIMARY KEY,
+                  log_json TEXT NOT NULL,
                   stored_at_ms INTEGER NOT NULL
                 );
 "#;
@@ -245,6 +254,54 @@ impl JobStore for SqliteStore {
             .query_row(
                 "SELECT data FROM job_results WHERE hash = ?1",
                 [hash.to_string()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(failed)
+    }
+
+    fn store_job_log(
+        &self,
+        job_id: &JobId,
+        log_json: &str,
+        stored_at_ms: TimestampMs,
+    ) -> Result<bool, StorageError> {
+        let connection = self.open()?;
+        let stored = connection
+            .execute(
+                r#"
+                INSERT INTO job_logs(job_id, log_json, stored_at_ms)
+                SELECT ?1, ?2, ?3
+                WHERE EXISTS (SELECT 1 FROM jobs WHERE job_id = ?1)
+                ON CONFLICT(job_id) DO NOTHING
+                "#,
+                params![job_id.as_str(), log_json, stored_at_ms],
+            )
+            .map_err(commit_failed)?;
+        if stored > 0 {
+            return Ok(true);
+        }
+        // Nothing written: the job has its log already, or there is no job.
+        let known: bool = connection
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM jobs WHERE job_id = ?1)",
+                [job_id.as_str()],
+                |row| row.get(0),
+            )
+            .map_err(failed)?;
+        if known {
+            Ok(false)
+        } else {
+            Err(no_job(job_id))
+        }
+    }
+
+    fn job_log(&self, job_id: &JobId) -> Result<Option<String>, StorageError> {
+        let connection = self.open()?;
+        connection
+            .query_row(
+                "SELECT log_json FROM job_logs WHERE job_id = ?1",
+                [job_id.as_str()],
                 |row| row.get(0),
             )
             .optional()

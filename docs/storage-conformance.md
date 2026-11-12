@@ -235,8 +235,9 @@ bundle is stored once under its name; a job moves from queued to running to
 one final phase, or straight to cancelled, each move one guarded change, so a
 claim never takes a job twice and nothing changes an ended job; a succeeded
 job's results are stored in the change that ends it, each once under its
-name. The scenarios use any bytes and names: checking a bundle or a result
-against its name is the server's.
+name; and what a server kept of a job's log is stored once, under the job.
+The scenarios use any bytes, names and text: checking a bundle or a result
+against its name, and reading a log, is the server's.
 
 <!-- begin: jobs -->
 - `jobs.bundle_stored_once`: a bundle is stored once under its name, every
@@ -265,6 +266,12 @@ against its name is the server's.
 - `jobs.result_stored_once`: a result two jobs produce is stored once under
   its name: the second job ends with its results listed, and the bytes stored
   first stay
+- `jobs.log_stored_once`: a job's log is stored once under the job, kept as
+  the text given, and read back; a job with none reads nothing, a log stored
+  again changes nothing, and a store opened again still holds it
+- `jobs.log_of_any_job_held`: a log is stored for a job wherever it stands,
+  queued, running, ended or cancelled, and changes nothing else of it; one for
+  a job the store does not hold is refused
 - `jobs.reopened`: a store opened again keeps every job as it stood, and
   claims on in order
 - `jobs.claims_racing`: stores claiming at once from many queued jobs claim

@@ -635,6 +635,25 @@
           null
         ]
       ]
+    },
+    "job_logs": {
+      "columns": [
+        "job_id",
+        "log_json",
+        "stored_at_ms"
+      ],
+      "rows": [
+        [
+          "00000000000000000000000000000001",
+          "{\"dropped_lines\":0,\"lines\":[{\"seq\":1,\"at_ms\":1792454431001,\"level\":\"info\",\"message\":\"started on 币安人生USDT\"},{\"seq\":2,\"at_ms\":1792454431002,\"level\":\"warning\",\"message\":\"tab\\tand \\\"quotes\\\"\"}],\"progress\":{\"bars_done\":3,\"bars_total\":3}}",
+          1792454432000
+        ],
+        [
+          "0123456789abcdef0123456789abcdef",
+          "{\"dropped_lines\":7,\"lines\":[{\"seq\":8,\"at_ms\":1792454431008,\"level\":\"error\",\"message\":\"the last line before the cancel\"}],\"progress\":{\"bars_done\":1,\"bars_total\":3}}",
+          1792454452000
+        ]
+      ]
     }
   },
   "scopes": [
@@ -773,6 +792,14 @@
       "first": 1,
       "last": 10,
       "checksum": "sha256:89ac6b08ab8064485e8f7e45686c6fbf0b48808d784391f3b3b327b6a46af196"
+    },
+    {
+      "table": "job_logs",
+      "market": null,
+      "rows": 2,
+      "first": null,
+      "last": null,
+      "checksum": "sha256:9efb2ac9e7e1e3ee54b74c71acad3015574f5dbda938ced4e6603d31b7462de4"
     }
   ],
   "worked_example": {

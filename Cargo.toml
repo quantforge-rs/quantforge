@@ -40,7 +40,8 @@ postgres = [
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
+# ws: the log stream of a backtest job, the server's first WebSocket route.
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio", "ws"] }
 clap = { version = "4", features = ["derive", "env"] }
 deadpool-postgres = { version = "0.14", optional = true }
 hex = "0.4"
@@ -83,6 +84,9 @@ seccompiler = "0.5"
 
 [dev-dependencies]
 assert_cmd = "2"
+# Reads and writes a WebSocket stream in the log stream's tests; in the
+# lock already.
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 http-body-util = "0.1"
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
@@ -91,6 +95,10 @@ predicates = "3"
 serde_json = { version = "1", features = ["raw_value"] }
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync"] }
+# The WebSocket client of the log stream's tests: the tungstenite axum's ws
+# feature already brings, so no package joins the lock for them.
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "handshake"] }
+tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
 
 [profile.release]
 lto = "thin"

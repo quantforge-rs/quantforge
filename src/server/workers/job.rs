@@ -2,9 +2,11 @@
 //! directory, the job's frames sent on a thread of their own, so that a
 //! worker that stops reading never holds the server up, and the worker
 //! watched until it says how the job ended, its wall-clock time runs out,
-//! the job is cancelled, or it stops. A backtest's rows are read as they
-//! come, each checked, and written as the job's result files here: a
-//! worker runs a job's code, so no file is ever taken from one.
+//! the job is cancelled, or it stops. What the job says while it runs, the
+//! lines of its log and its progress, goes into the job's log as it comes,
+//! which keeps no more of it than its limits. A backtest's rows are read
+//! as they come, each checked, and written as the job's result files here:
+//! a worker runs a job's code, so no file is ever taken from one.
 
 use std::io;
 use std::process::ChildStdin;
@@ -21,10 +23,11 @@ use super::frames::{
 };
 use super::process::{self, Process, Stop, Worker};
 use super::scratch;
+use crate::protocol::jobs::LogLevel;
 use crate::protocol::results::{EquityRow, Metrics, TradeRow};
 use crate::protocol::{ErrorBody, ErrorCode};
 use crate::server::history::bar;
-use crate::server::jobs::{Cancel, JobInput, WorkerOutcome};
+use crate::server::jobs::{Cancel, JobInput, JobLog, WorkerOutcome};
 use crate::server::results::{BacktestOutput, ResultFile};
 
 /// How often a run looks at its cancel and its clock while it waits.
@@ -36,12 +39,14 @@ const GRACE: Duration = Duration::from_secs(1);
 /// How long the end of a stopped worker's standard error may take to come.
 const LAST_WORDS: Duration = Duration::from_millis(500);
 
-/// Runs the job on `worker`, which is killed by the time this returns.
+/// Runs the job on `worker`, which is killed by the time this returns,
+/// writing what the job says into `log`.
 pub(super) fn run(
     worker: &mut Worker,
     input: JobInput,
     cancel: &Cancel,
     limits: &WorkerLimits,
+    log: &JobLog,
 ) -> WorkerOutcome {
     let job = input.job_id.to_string();
     let bars = input.candles.len();
@@ -67,7 +72,7 @@ pub(super) fn run(
         }
     };
     let wall = Duration::from_secs(limits.wall_secs);
-    let ran = match watch(process, cancel, wall, bars) {
+    let ran = match watch(process, cancel, wall, bars, log) {
         Watched::Finished(Finished::Backtest { metrics }, rows) => {
             backtest(metrics, rows, bars).unwrap_or_else(|why| garbled(&job, &why))
         }
@@ -166,27 +171,25 @@ enum Watched {
 /// cancelled, the worker stops, or `limit` has passed: measured from now,
 /// never as an instant that far ahead, which may not exist. A backtest's
 /// rows are kept as they come, never more of either kind than the job has
-/// bars.
-fn watch(process: &Process, cancel: &Cancel, limit: Duration, bars: usize) -> Watched {
+/// bars, and what the job says goes into `log`, which bounds it: the
+/// worker's count of bars is held to the job's.
+fn watch(
+    process: &Process,
+    cancel: &Cancel,
+    limit: Duration,
+    bars: usize,
+    log: &JobLog,
+) -> Watched {
     let started = Instant::now();
     let mut rows = Rows::default();
     loop {
         let wait = limit.saturating_sub(started.elapsed()).min(POLL);
         match process.frames.recv_timeout(wait) {
-            Ok(Ok(FromWorker::Finished { outcome })) => return Watched::Finished(outcome, rows),
-            Ok(Ok(FromWorker::Trades { rows: more })) => {
-                if let Err(why) = rows.trades(more, bars) {
-                    return Watched::Garbled(why);
-                }
-            }
-            Ok(Ok(FromWorker::Equity { rows: more })) => {
-                if let Err(why) = rows.equity(more, bars) {
-                    return Watched::Garbled(why);
-                }
-            }
-            Ok(Ok(FromWorker::Ready { .. })) => {
-                return Watched::Garbled("it said it was ready a second time".to_string());
-            }
+            Ok(Ok(frame)) => match take(frame, &mut rows, bars, log) {
+                Ok(Some(outcome)) => return Watched::Finished(outcome, rows),
+                Ok(None) => {}
+                Err(why) => return Watched::Garbled(why),
+            },
             Ok(Err(error)) => return Watched::Garbled(error.to_string()),
             Err(RecvTimeoutError::Disconnected) => return Watched::Stopped,
             Err(RecvTimeoutError::Timeout) => {}
@@ -198,6 +201,38 @@ fn watch(process: &Process, cancel: &Cancel, limit: Duration, bars: usize) -> Wa
             return Watched::OutOfTime;
         }
     }
+}
+
+/// Takes one frame of a running job of `bars` bars: a line or the job's
+/// progress into `log`, a backtest's rows into `rows`. Answers how the job
+/// ended, once a frame says, or why the frame is none a worker of this
+/// build sends.
+fn take(
+    frame: FromWorker,
+    rows: &mut Rows,
+    bars: usize,
+    log: &JobLog,
+) -> Result<Option<Finished>, String> {
+    match frame {
+        FromWorker::Finished { outcome } => return Ok(Some(outcome)),
+        // A level with no name could never be sent on to a client.
+        FromWorker::Log {
+            level: LogLevel::Unrecognized,
+            ..
+        } => return Err("it wrote a line at a level this build does not know".to_string()),
+        FromWorker::Log {
+            level,
+            message,
+            dropped_bytes,
+        } => log.line_cut(level, &message, dropped_bytes),
+        FromWorker::Progress { bars_done } => {
+            log.progress(bars_done, u64::try_from(bars).unwrap_or(u64::MAX));
+        }
+        FromWorker::Trades { rows: more } => rows.trades(more, bars)?,
+        FromWorker::Equity { rows: more } => rows.equity(more, bars)?,
+        FromWorker::Ready { .. } => return Err("it said it was ready a second time".to_string()),
+    }
+    Ok(None)
 }
 
 /// The end of a job whose worker's output ended before it said how the

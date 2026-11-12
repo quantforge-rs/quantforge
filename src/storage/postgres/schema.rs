@@ -19,7 +19,7 @@ pub(super) const LOCK_KEY: i64 = 0x5146_5343_4845_4D41;
 
 /// The tables of the current schema. A database holding any of them but no
 /// recorded version is not a QuantForge store, and `init` refuses it.
-pub(super) const TABLES: [&str; 13] = [
+pub(super) const TABLES: [&str; 14] = [
     "meta",
     "candles",
     "bot_runs",
@@ -33,6 +33,7 @@ pub(super) const TABLES: [&str; 13] = [
     "bundles",
     "jobs",
     "job_results",
+    "job_logs",
 ];
 
 /// Schema 5, where PostgreSQL starts: the tables of SQLite's schema 5,
@@ -196,6 +197,16 @@ CREATE TABLE job_results (
   hash TEXT COLLATE "C" PRIMARY KEY,
   size_bytes BIGINT NOT NULL,
   data BYTEA NOT NULL,
+  stored_at_ms BIGINT NOT NULL
+);
+"#;
+
+/// Schema 8 (QUA-355): what is kept of each job's log, under the job's ID,
+/// which a transfer reads in byte order.
+pub(super) const SCHEMA_8: &str = r#"
+CREATE TABLE job_logs (
+  job_id TEXT COLLATE "C" PRIMARY KEY,
+  log_json TEXT NOT NULL,
   stored_at_ms BIGINT NOT NULL
 );
 "#;

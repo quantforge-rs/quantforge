@@ -1,5 +1,6 @@
 //! What runs a job: a worker the server hands each job's input, read for it
-//! from the store, and the signal a cancel sends it. A worker never sees the
+//! from the store, the signal a cancel sends it, and the log it writes
+//! what the job says into. A worker never sees the
 //! store, its URL or its credentials: the server parent reads and writes
 //! everything a job needs.
 
@@ -7,6 +8,7 @@ use std::fmt;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+use super::log::JobLog;
 use crate::model::Candle;
 use crate::protocol::bundle::{Bundle, Runtime};
 use crate::protocol::jobs::{JobId, JobSubmission};
@@ -99,8 +101,10 @@ pub trait JobWorker: Send + Sync {
     /// Runs one job to its end, on a thread of its own, and returns soon
     /// after `cancel` is sent: a server that stops sends it to every job
     /// and waits for each run to return, and so does the process as it
-    /// exits.
-    fn run(&self, input: JobInput, cancel: &Cancel) -> WorkerOutcome;
+    /// exits. While the job runs, the worker writes the lines the job
+    /// writes and how far it has come into `log`, which the job's clients
+    /// follow.
+    fn run(&self, input: JobInput, cancel: &Cancel, log: &JobLog) -> WorkerOutcome;
 }
 
 /// The worker of a server that cannot run Python bundles yet: it offers no
@@ -113,7 +117,7 @@ impl JobWorker for NoRuntime {
         None
     }
 
-    fn run(&self, _input: JobInput, _cancel: &Cancel) -> WorkerOutcome {
+    fn run(&self, _input: JobInput, _cancel: &Cancel, _log: &JobLog) -> WorkerOutcome {
         WorkerOutcome::Failed(ErrorBody {
             code: ErrorCode::Unavailable,
             message: NO_RUNTIME.to_string(),

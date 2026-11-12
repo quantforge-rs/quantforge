@@ -7,7 +7,7 @@
 use anyhow::Result;
 
 pub(crate) fn run() -> Result<()> {
-    quantforge::server::run_worker(std::io::stdin(), std::io::stdout().lock())?;
+    quantforge::server::run_worker(std::io::stdin(), std::io::stdout())?;
     Ok(())
 }
 

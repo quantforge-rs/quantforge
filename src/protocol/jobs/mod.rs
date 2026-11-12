@@ -4,9 +4,9 @@
 //! It is the only kind of job: the strategies built into QuantForge are not
 //! offered remotely. A client uploads its bundle, which is named by its
 //! [`ContentHash`](super::ContentHash); submits a [`JobSubmission`]; reads
-//! the job's [`JobStatus`] until the job has finished; and then fetches
-//! what it produced: a [`JobResult`], and the files it lists, which
-//! [`results`](super::results) specifies.
+//! the job's [`JobStatus`] until the job has finished, or follows its log
+//! as it runs; and then fetches what it produced: a [`JobResult`], and the
+//! files it lists, which [`results`](super::results) specifies.
 //!
 //! # Routes
 //!
@@ -17,6 +17,7 @@
 //! | `GET /v1/backtests/{job_id}` | | `200` and the job's [`JobStatus`] |
 //! | `GET /v1/backtests` | | `200` and a [`JobList`], newest first: at most `limit` jobs, a query parameter of 1 to 1,000, 100 when it is left out |
 //! | `POST /v1/backtests/{job_id}/cancel` | | `200` and the job's [`JobStatus`], cancelled |
+//! | `GET /v1/backtests/{job_id}/logs` | | `200` and a [`LogPage`]: the lines of the job's log after the query's cursor, and its progress. Asked as a WebSocket: `101`, then a stream of [`LogFrame`]s that follows the log to its end |
 //! | `GET /v1/backtests/{job_id}/result` | | `200` and the job's [`JobResult`]: its metrics, and each result file's hash, size and path |
 //! | `GET /v1/backtests/{job_id}/result/metrics.json` | | `200` and the job's metrics: a [`Metrics`](super::results::Metrics), as JSON |
 //! | `GET /v1/backtests/{job_id}/result/trades.arrow` | | `200` and the job's closed trades, as an Arrow IPC file |
@@ -27,7 +28,7 @@
 //!
 //! | Status and code | When |
 //! | --- | --- |
-//! | 400 `invalid_request` | An upload not sent as `application/x-tar`, larger than any bundle within the server's limits, whose bytes hash to another name, that is not exactly a canonical tar, breaks the [bundle spec], or cannot run on this server: from the third on, the message is the bundle's refusal, each problem's message verbatim. A submission that is not in its canonical form, whose settings are out of range, whose market without `category` is ambiguous, whose range spans more bars than the server runs one job on, that names a bundle the server does not hold or cannot run, or whose range is not within the bars the server stores, from the first to the last |
+//! | 400 `invalid_request` | A log query whose `after` or `limit` is not a number, or whose `limit` is not from 1 to 1,000; a WebSocket request for a log that is not a well-formed upgrade. An upload not sent as `application/x-tar`, larger than any bundle within the server's limits, whose bytes hash to another name, that is not exactly a canonical tar, breaks the [bundle spec], or cannot run on this server: from the third on, the message is the bundle's refusal, each problem's message verbatim. A submission that is not in its canonical form, whose settings are out of range, whose market without `category` is ambiguous, whose range spans more bars than the server runs one job on, that names a bundle the server does not hold or cannot run, or whose range is not within the bars the server stores, from the first to the last |
 //! | 404 `not_found` | No job of that ID; a result file of another name |
 //! | 409 `conflict` | Cancelling a job that has finished; asking for the result of a job that has not succeeded, which the message says is queued, running, failed or cancelled |
 //! | 503 `unavailable` | The server's store could not answer in time; `Retry-After` says how many seconds to wait |
@@ -55,6 +56,47 @@
 //!
 //! A server without a worker runtime fails every job as it starts, with
 //! `unavailable`.
+//!
+//! # A job's log
+//!
+//! A job's log is what the job wrote while it ran, line by line, and how
+//! far it has come. The server numbers a job's lines from 1 as it takes
+//! them ([`LogLine::seq`]) and stamps each with its own clock, so a line's
+//! number is a cursor: `after=<seq>` asks for what follows that line.
+//!
+//! - **A page.** `GET /v1/backtests/{job_id}/logs`, with a [`LogQuery`] as
+//!   its query string, answers a [`LogPage`]: the lines after the cursor,
+//!   oldest first, the job's [`JobProgress`], and the cursor to ask with
+//!   next. A client asks again until the page says it is
+//!   [`complete`](LogPage::complete).
+//! - **A stream.** The same path asked as a WebSocket upgrade is answered
+//!   with [`LogFrame`]s: a `line` for each line after the cursor, first the
+//!   ones the server already holds and then each new one as the job writes
+//!   it; a `progress` whenever the job has come further than the server
+//!   last said; and `end` once the job has ended and its last line was
+//!   sent, after which the server closes the connection. A stream of a
+//!   queued job stays open, and starts with the job. A server pings a
+//!   stream it has had nothing to send on for a while. A client sends
+//!   nothing but what WebSocket itself asks of it, such as the answer to
+//!   a ping, and one that lost its connection asks again with the number
+//!   of the last line it received.
+//! - **Bounds.** A server keeps the newest lines of a job that writes more
+//!   than it keeps, and the start of a line longer than it keeps of one:
+//!   this one 10,000 lines and 1 MiB of text a job, and 8 KiB a line. What
+//!   it left out is counted, never passed over in silence: a page's
+//!   [`dropped_lines`](LogPage::dropped_lines), a stream's `truncated`
+//!   frame, and a line's [`dropped_bytes`](LogLine::dropped_bytes).
+//! - **Afterwards.** A job's log is kept with the job once the job has
+//!   ended, however it ended. The server stores it before it says
+//!   `complete` or `end`, so the server that ran the job and every server
+//!   that runs on its store afterwards answer both ways with the same
+//!   lines. The log of a job that never started is empty, and that of a
+//!   job whose server was killed while it ran is lost with the server:
+//!   only a job whose run ends has its log kept.
+//!
+//! A server that stops closes the stream of a job that has not ended with
+//! WebSocket's close code 1001 and no `end`. A stream the server cannot go
+//! on with ends with an `error` frame.
 //!
 //! # A job's result
 //!
@@ -85,6 +127,8 @@
 //!
 //! [bundle spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md>
 
+mod log_stream;
+mod logs;
 mod result;
 mod status;
 mod submission;
@@ -95,6 +139,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{ProtocolError, opaque_id};
 
+pub use log_stream::LogFrame;
+pub use logs::{JobProgress, LOG_PAGE_LINES, LogLevel, LogLine, LogPage, LogQuery};
 pub use result::{JobResult, ResultLink};
 pub use status::{JobList, JobState, JobStatus, ResultRef};
 pub use submission::{BacktestSettings, BundleReceipt, DataSelection, JobSubmission};

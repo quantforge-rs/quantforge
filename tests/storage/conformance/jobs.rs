@@ -68,6 +68,26 @@ pub fn step<S: JobStore + ?Sized>(store: &S, step: &Step) -> bool {
             let loaded = store.load_result(&name).expect("load").map(hex::encode);
             assert_eq!(&loaded, expect, "result {name}");
         }
+        Step::StoreJobLog {
+            job_id: id,
+            log_json,
+            at,
+            expect,
+            refused,
+        } => {
+            let outcome = store.store_job_log(&job_id(id), log_json, *at);
+            match (refused, expect) {
+                (Some(refused), None) => expect_refused(outcome, refused, "store a log"),
+                (None, Some(expect)) => {
+                    assert_eq!(&outcome.expect("store a log"), expect, "the log of {id}");
+                }
+                other => panic!("a log is stored or refused, not {other:?}"),
+            }
+        }
+        Step::JobLog { job_id: id, expect } => {
+            let found = store.job_log(&job_id(id)).expect("a log");
+            assert_eq!(&found, expect, "the log of {id}");
+        }
         Step::SubmitJob { job, refused } => {
             let outcome = store.submit_job(&job.new_job());
             match refused {

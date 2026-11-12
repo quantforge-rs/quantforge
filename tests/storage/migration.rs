@@ -5,7 +5,9 @@
 //! integer venue IDs, and a segment with its hash. Schema 5's is a store the
 //! build before job storage migrated, bound and adopted a run in, dumped;
 //! schema 6's is that store opened by the build before job results, with
-//! bundles and jobs written through that build's job store.
+//! bundles and jobs written through that build's job store; and schema 7's
+//! is that one opened by the build before job logs, its queue driven on
+//! until a job succeeded with its result files.
 
 use quantforge::storage::sqlite::SCHEMA_VERSION;
 use quantforge::{
@@ -330,7 +332,7 @@ fn a_schema_5_store_gains_the_job_tables_and_keeps_every_row() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 2, "two steps logged");
+                assert_eq!(after.len(), rows_before.len() + 3, "three steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -341,7 +343,7 @@ fn a_schema_5_store_gains_the_job_tables_and_keeps_every_row() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7)]);
+    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8)]);
     let migrated = store.store_identity().expect("identity");
     assert_eq!(migrated.store_id, identity.store_id, "the same store");
     assert_eq!(migrated.environment, identity.environment);
@@ -378,12 +380,12 @@ fn a_schema_5_store_gains_the_job_tables_and_keeps_every_row() {
     assert_eq!((claimed.job_id, claimed.phase), (job_id, JobPhase::Running));
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 3);
+    assert_eq!(store.migrations().expect("log").len(), 4);
 }
 
-/// Schema 6 held bundles and jobs and no result of any: the step to
-/// schema 7 keeps every row, the jobs in their order and phases, and gives
-/// the store the table a job's results are kept in from then on.
+/// Schema 6 held bundles and jobs and no result of any: the steps from it
+/// keep every row, the jobs in their order and phases, and give the store
+/// the table a job's results are kept in from then on.
 #[test]
 fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
     let fresh_dir = tempfile::tempdir().expect("tempdir");
@@ -398,7 +400,7 @@ fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
     assert_eq!(everything(&store, "bundles").len(), 2);
     assert_eq!(everything(&store, "jobs").len(), 5);
 
-    CandleStore::init(&store).expect("schema 7");
+    CandleStore::init(&store).expect("the current schema");
 
     assert_eq!(version(&store), SCHEMA_VERSION);
     assert_eq!(shape(&store), shape(&fresh), "not the fresh schema");
@@ -414,7 +416,7 @@ fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 1, "one step logged");
+                assert_eq!(after.len(), rows_before.len() + 2, "two steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -425,7 +427,7 @@ fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7)]);
+    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8)]);
     assert_eq!(
         everything(&store, "job_results"),
         Vec::<Vec<Option<String>>>::new()
@@ -496,7 +498,121 @@ fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
     assert_eq!(store.claim_job(DAY_TWO + 3).expect("a claim"), None);
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 3);
+    assert_eq!(store.migrations().expect("log").len(), 4);
+}
+
+/// Schema 7 held jobs with their result files and no log of any: the step
+/// to schema 8 keeps every row, each result's bytes included, and gives the
+/// store the table a job's log is kept in from then on.
+#[test]
+fn a_schema_7_store_gains_the_logs_table_and_keeps_every_result() {
+    let fresh_dir = tempfile::tempdir().expect("tempdir");
+    let fresh = SqliteStore::new(fresh_dir.path().join("market.sqlite"));
+    CandleStore::init(&fresh).expect("fresh");
+    let (_tempdir, store) = load(7);
+    assert_eq!(version(&store), 7);
+    let mut kept = tables(&store);
+    assert!(!kept.iter().any(|table| table == "job_logs"));
+    kept.push("sqlite_sequence".to_string());
+    let before: Vec<_> = kept.iter().map(|table| everything(&store, table)).collect();
+    assert_eq!(everything(&store, "jobs").len(), 7);
+    let results = everything(&store, "job_results");
+    assert_eq!(results.len(), 3, "a succeeded job's three files");
+
+    CandleStore::init(&store).expect("schema 8");
+
+    assert_eq!(version(&store), SCHEMA_VERSION);
+    assert_eq!(shape(&store), shape(&fresh), "not the fresh schema");
+    for (table, rows_before) in kept.iter().zip(&before) {
+        let after = everything(&store, table);
+        match table.as_str() {
+            "meta" => assert_eq!(
+                after,
+                [[
+                    Some("schema_version".to_string()),
+                    Some(SCHEMA_VERSION.to_string())
+                ]]
+            ),
+            "schema_migrations" => {
+                assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
+                assert_eq!(after.len(), rows_before.len() + 1, "one step logged");
+            }
+            _ => assert_eq!(&after, rows_before, "{table}"),
+        }
+    }
+    let steps: Vec<(u32, u32)> = store
+        .migrations()
+        .expect("log")
+        .iter()
+        .map(|step| (step.from_version, step.to_version))
+        .collect();
+    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8)]);
+    assert_eq!(
+        everything(&store, "job_logs"),
+        Vec::<Vec<Option<String>>>::new()
+    );
+
+    // The job that succeeded with files still lists them, and the store
+    // still hands each out, byte for byte as it was kept.
+    let succeeded = store
+        .job(&JobId::new("b".repeat(32)).expect("a job id"))
+        .expect("a read")
+        .expect("the job");
+    assert_eq!(succeeded.phase, JobPhase::Succeeded);
+    let listed: serde_json::Value =
+        serde_json::from_str(succeeded.results_json.as_deref().expect("a list")).expect("JSON");
+    let listed = listed.as_array().expect("three results");
+    let names: Vec<&str> = listed
+        .iter()
+        .filter_map(|result| result["name"].as_str())
+        .collect();
+    assert_eq!(names, ["metrics", "trades", "equity"]);
+    for result in listed {
+        let hash = result["hash"].as_str().expect("a hash");
+        let name: ResultHash = hash.parse().expect("a result hash");
+        let stored = store
+            .load_result(&name)
+            .expect("a read")
+            .expect("the result");
+        let row = results
+            .iter()
+            .find(|row| row[0].as_deref() == Some(hash))
+            .expect("its row before the step");
+        assert_eq!(Some(hex::encode(&stored)), row[2], "{hash}");
+    }
+    // No job of that store has a log: no build before this one kept one.
+    for job in store.jobs(10).expect("the jobs") {
+        assert_eq!(store.job_log(&job.job_id).expect("a read"), None);
+    }
+
+    // From now on a job's log is kept, once, under a job the store holds.
+    let log =
+        r#"{"dropped_lines":0,"lines":[{"seq":1,"at_ms":1,"level":"info","message":"kept"}]}"#;
+    assert!(
+        store
+            .store_job_log(&succeeded.job_id, log, DAY_TWO)
+            .expect("a log")
+    );
+    assert!(
+        !store
+            .store_job_log(&succeeded.job_id, "another", DAY_TWO + 1)
+            .expect("a log stored again")
+    );
+    assert_eq!(
+        store.job_log(&succeeded.job_id).expect("a read").as_deref(),
+        Some(log)
+    );
+    let unknown = JobId::generate();
+    let refused = store
+        .store_job_log(&unknown, log, DAY_TWO)
+        .expect_err("no such job");
+    assert!(
+        matches!(&refused, StorageError::InvalidArgument(why) if why.starts_with(&format!("the store holds no job {unknown}"))),
+        "{refused}"
+    );
+
+    CandleStore::init(&store).expect("second init");
+    assert_eq!(store.migrations().expect("log").len(), 4);
 }
 
 #[test]
@@ -517,6 +633,7 @@ fn a_fresh_store_logs_one_step_from_zero_and_is_the_documented_schema() {
             "bundles",
             "candles",
             "closed_trades",
+            "job_logs",
             "job_results",
             "jobs",
             "meta",

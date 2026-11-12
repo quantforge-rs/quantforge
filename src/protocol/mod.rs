@@ -11,7 +11,8 @@
 //!
 //! # Surfaces
 //!
-//! - [`jobs`]: remote backtests of a Python strategy bundle, over HTTP.
+//! - [`jobs`]: remote backtests of a Python strategy bundle, over HTTP, and
+//!   a job's log, read a page at a time or followed over a WebSocket.
 //! - [`results`]: what a job produces: its metrics, its trades and its
 //!   equity curve, as the files a client downloads; a table's bytes are
 //!   the [result spec].
@@ -79,6 +80,9 @@
 //!   the versions it speaks, and the server's [`stream::Welcome`] names the
 //!   newest one both sides speak ([`VersionRange::negotiate`]), or an `error`
 //!   frame refuses the session.
+//! - A job's log stream is a WebSocket opened at an HTTP path, which names
+//!   its version like any other: it has no handshake of its own, and the
+//!   server refuses a version it does not speak before it upgrades.
 //!
 //! A few shapes are the same in every version, so that peers of any two
 //! versions can still tell each other where they stand: the `hello` frame's

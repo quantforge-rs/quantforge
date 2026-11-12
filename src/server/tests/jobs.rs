@@ -42,7 +42,7 @@ impl JobWorker for Admitting {
         Some(self.0.clone())
     }
 
-    fn run(&self, input: JobInput, _cancel: &Cancel) -> WorkerOutcome {
+    fn run(&self, input: JobInput, _cancel: &Cancel, _log: &JobLog) -> WorkerOutcome {
         panic!("job {} ran, but the queue never started", input.job_id)
     }
 }
@@ -56,6 +56,7 @@ pub(super) fn jobs_of<W: JobWorker + 'static>(bed: &Bed, worker: W, max_span_bar
         JobLimits {
             concurrency: 1,
             max_span_bars,
+            log: LogLimits::default(),
         },
     )
 }

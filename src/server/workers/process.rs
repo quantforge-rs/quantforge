@@ -8,7 +8,7 @@
 use std::io::{self, BufReader, Read};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -21,6 +21,11 @@ use crate::protocol::bundle::Runtime;
 /// The most bytes kept of what a worker writes to its standard error: its
 /// last, which say why it stopped.
 const STDERR_KEPT: usize = 64 << 10;
+
+/// How many of a worker's frames wait to be taken at most. A worker that
+/// writes faster than its server takes waits on its pipe: however much a
+/// job says, the server holds this many frames of it and no more.
+const FRAMES_AHEAD: usize = 8;
 
 /// What a Rust process prints as it aborts for want of memory.
 #[cfg(unix)]
@@ -82,7 +87,7 @@ pub(super) fn start(
     let (stdin, stdout, stderr) = (child.stdin.take(), child.stdout.take(), child.stderr.take());
     let kept = Arc::new(Mutex::new(Vec::new()));
     let (stderr_ended, stderr_done) = mpsc::channel();
-    let (sender, frames) = mpsc::channel();
+    let (sender, frames) = frames_ahead();
     let mut process = Process {
         child,
         pid,
@@ -121,10 +126,8 @@ pub(super) fn start(
                 runtime,
             })
         }
-        Ok(Ok(
-            FromWorker::Finished { .. } | FromWorker::Trades { .. } | FromWorker::Equity { .. },
-        )) => Err(io::Error::other(
-            "the worker said a job finished before it was ready",
+        Ok(Ok(_)) => Err(io::Error::other(
+            "the worker spoke of a job before it was ready",
         )),
         Ok(Err(error)) => Err(error),
         Err(RecvTimeoutError::Timeout) => Err(io::Error::new(
@@ -160,11 +163,20 @@ fn own_group(command: &mut Command) {
     }
 }
 
+/// Where a worker's frames wait until its server takes them: room for
+/// `FRAMES_AHEAD`, so that whoever reads them in waits once it is full.
+fn frames_ahead() -> (
+    SyncSender<io::Result<FromWorker>>,
+    Receiver<io::Result<FromWorker>>,
+) {
+    mpsc::sync_channel(FRAMES_AHEAD)
+}
+
 /// Reads the worker's frames as they come, until its output ends or a
 /// frame cannot be read, and sends each on.
 fn read_frames(
     stdout: impl Read + Send + 'static,
-    sender: mpsc::Sender<io::Result<FromWorker>>,
+    sender: SyncSender<io::Result<FromWorker>>,
 ) -> io::Result<()> {
     std::thread::Builder::new()
         .name("worker-frames".to_string())
@@ -338,36 +350,4 @@ fn signal_name(signal: i32) -> &'static str {
 }
 
 #[cfg(all(test, unix))]
-mod tests {
-    use super::*;
-    use std::os::unix::process::ExitStatusExt;
-
-    fn signalled(signal: rustix::process::Signal) -> ExitStatus {
-        ExitStatus::from_raw(signal.as_raw())
-    }
-
-    #[test]
-    fn how_a_worker_stopped_names_the_limit_it_ran_into() {
-        use rustix::process::Signal;
-        assert_eq!(why(signalled(Signal::XCPU), ""), Stop::Cpu);
-        assert_eq!(
-            why(
-                signalled(Signal::ABORT),
-                "memory allocation of 16777216 bytes failed\n"
-            ),
-            Stop::Memory
-        );
-        assert_eq!(
-            why(signalled(Signal::ABORT), "thread 'main' panicked"),
-            Stop::Crash("it was stopped by signal 6 (SIGABRT)".to_string())
-        );
-        assert_eq!(
-            why(signalled(Signal::KILL), ""),
-            Stop::Crash("it was stopped by signal 9 (SIGKILL)".to_string())
-        );
-        assert_eq!(
-            why(ExitStatus::from_raw(3 << 8), ""),
-            Stop::Crash("it exited with status 3".to_string())
-        );
-    }
-}
+mod tests;

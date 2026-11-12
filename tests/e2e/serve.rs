@@ -307,6 +307,43 @@ mod signals {
     }
 
     #[test]
+    fn serve_run_closes_the_log_stream_of_a_job_that_has_not_ended_as_it_stops() {
+        use tungstenite::Message;
+        use tungstenite::protocol::frame::coding::CloseCode;
+        use tungstenite::stream::MaybeTlsStream;
+
+        let bed = TestBed::new();
+        let mut served = Served::start(&bed);
+        // A job that runs nowhere: its stream has nothing to say, and waits.
+        let job = crate::jobs::left_running(&bed);
+        let url = format!("ws://{}/v1/backtests/{job}/logs", served.address);
+        let (mut socket, _) = tungstenite::connect(url).expect("a log stream");
+        if let MaybeTlsStream::Plain(tcp) = socket.get_mut() {
+            tcp.set_read_timeout(Some(PATIENCE))
+                .expect("a bound on each read");
+        }
+
+        served.signal("TERM");
+        assert_eq!(served.next("shutdown"), "SIGTERM");
+        // Told that the server is going, with no end: the job has none.
+        let close = loop {
+            match socket.read().expect("the server's close") {
+                Message::Close(close) => break close.expect("a close that says why"),
+                Message::Ping(_) => {}
+                other => panic!("a stream of a job that runs nowhere sent {other:?}"),
+            }
+        };
+        assert_eq!(close.code, CloseCode::Away);
+        assert_eq!(
+            close.reason.as_str(),
+            "the server is stopping; ask again once it is back"
+        );
+        assert!(served.wait().success());
+        assert_eq!(served.next("stopped"), "requests in progress finished");
+        assert_eq!(served.stderr(), "");
+    }
+
+    #[test]
     fn a_second_signal_stops_serve_run_without_waiting() {
         let bed = TestBed::new();
         let mut served = Served::start(&bed);

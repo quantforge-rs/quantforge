@@ -40,6 +40,7 @@ are those of the [DDL](storage-schema.md#sqlite-ddl).
 - `bundles`: by `code_hash`, byte by byte
 - `job_results`: by `hash`, byte by byte
 - `jobs`: by `seq`, a number the store gave
+- `job_logs`: by `job_id`, byte by byte
 <!-- end: transfer tables -->
 
 Nothing is parsed or rewritten on the way: a decimal keeps its exact text

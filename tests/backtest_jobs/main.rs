@@ -5,8 +5,9 @@
 //! at once, a restart that fails the jobs that ran and runs the queued
 //! ones, a stop, a server with no runtime, and a succeeded job's result,
 //! downloaded file by file from the server that ran it and from the next
-//! one on its store. Each scenario is one generic body, run once per
-//! backend.
+//! one on its store; and, in `logs`, a job's log, followed while the job
+//! runs, replayed once it has ended, and bounded whatever the job writes.
+//! Each scenario is one generic body, run once per backend.
 
 use quantforge::protocol::bundle::{Bundle, BundleLimits, Runtime};
 use quantforge::protocol::jobs::{JobResult, ResultRef};
@@ -15,8 +16,8 @@ use quantforge::protocol::results::{
 };
 use quantforge::protocol::{ContentHash, ErrorBody, ErrorCode};
 use quantforge::server::{
-    self, BacktestOutput, Cancel, History, HistoryLimits, JobInput, JobLimits, JobWorker, Jobs,
-    NoRuntime, ResultFile, ServedStore, ServerStore, StoreLimits, WorkerOutcome,
+    self, BacktestOutput, Cancel, History, HistoryLimits, JobInput, JobLimits, JobLog, JobWorker,
+    Jobs, LogLimits, NoRuntime, ResultFile, ServedStore, ServerStore, StoreLimits, WorkerOutcome,
 };
 use quantforge::{
     BacktestConfig, BacktestEngine, BacktestResult, BuiltInStrategyConfig, BundleHash, Candle,
@@ -167,6 +168,8 @@ struct Script {
     began: Vec<(String, Vec<Candle>)>,
     /// What each job answers once told, by job.
     told: HashMap<String, WorkerOutcome>,
+    /// The log of each job that began, by job.
+    logs: HashMap<String, JobLog>,
     /// Runs that have not returned yet, and the most there ever were.
     running: usize,
     most: usize,
@@ -207,6 +210,15 @@ impl Scripted {
         self.script().told.insert(job.to_string(), outcome);
     }
 
+    /// The log of a job that has begun, which its run writes into.
+    fn log(&self, job: &str) -> JobLog {
+        self.script()
+            .logs
+            .get(job)
+            .expect("a job that began")
+            .clone()
+    }
+
     fn began(&self) -> Vec<String> {
         self.script()
             .began
@@ -230,10 +242,11 @@ impl JobWorker for Scripted {
         Some(runtime())
     }
 
-    fn run(&self, input: JobInput, cancel: &Cancel) -> WorkerOutcome {
+    fn run(&self, input: JobInput, cancel: &Cancel, log: &JobLog) -> WorkerOutcome {
         let job = input.job_id.to_string();
         {
             let mut script = self.script();
+            script.logs.insert(job.clone(), log.clone());
             script.began.push((job.clone(), input.candles));
             script.running += 1;
             script.most = script.most.max(script.running);
@@ -274,6 +287,16 @@ async fn jobs<B: Backend, W: JobWorker + 'static>(
     worker: W,
     concurrency: usize,
 ) -> (ServerStore, Jobs) {
+    jobs_keeping(backend, worker, concurrency, LogLimits::default()).await
+}
+
+/// [`jobs`], keeping `log` of each job's log.
+async fn jobs_keeping<B: Backend, W: JobWorker + 'static>(
+    backend: &B,
+    worker: W,
+    concurrency: usize,
+    log: LogLimits,
+) -> (ServerStore, Jobs) {
     let store = ServerStore::new(backend.store(), StoreLimits::default());
     let jobs = Jobs::new(
         store.clone(),
@@ -281,6 +304,7 @@ async fn jobs<B: Backend, W: JobWorker + 'static>(
         JobLimits {
             concurrency,
             max_span_bars: server::DEFAULT_MAX_SPAN_BARS,
+            log,
         },
     );
     jobs.start().await.expect("a started queue");
@@ -855,6 +879,7 @@ async fn a_restart_fails_the_jobs_that_ran_and_runs_the_queued_ones<B: Backend>(
         JobLimits {
             concurrency: 1,
             max_span_bars: server::DEFAULT_MAX_SPAN_BARS,
+            log: LogLimits::default(),
         },
     );
     assert_eq!(jobs.start().await.expect("a started queue"), 1);
@@ -965,9 +990,12 @@ on_each_backend!(
     a_succeeded_jobs_result_is_downloaded_and_outlives_its_server,
 );
 
+// After the macro: the scenarios in it run on each backend too.
+mod logs;
+
 #[cfg(feature = "postgres")]
 #[allow(dead_code, reason = "the storage tests use the rest of it")]
-#[path = "storage/postgres/server.rs"]
+#[path = "../storage/postgres/server.rs"]
 mod server_helpers;
 
 /// The store on a database of its own on the server

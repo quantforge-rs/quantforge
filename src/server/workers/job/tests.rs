@@ -1,8 +1,26 @@
-//! A backtest's rows as the server takes them from a worker: kept only
-//! while they fit the job, and written as the job's three files here.
+//! What the server takes from a worker while a job runs: a backtest's
+//! rows, kept only while they fit the job and written as the job's three
+//! files here, and what the job says, which goes into its log; a frame no
+//! worker of this build sends ends the job.
 
 use super::*;
 use crate::protocol::results::{decode_equity, decode_trades};
+use crate::server::jobs::LogLimits;
+
+/// A frame as a worker's output holds it.
+fn frame(json: &str) -> FromWorker {
+    serde_json::from_str(json).expect("a frame")
+}
+
+/// What `log` holds, as it would be stored.
+fn held(log: &JobLog) -> serde_json::Value {
+    let stored = log.stored_json().expect("a log something was written to");
+    let mut held: serde_json::Value = serde_json::from_str(&stored).expect("json");
+    for line in held["lines"].as_array_mut().expect("lines") {
+        line.as_object_mut().expect("a line").remove("at_ms");
+    }
+    held
+}
 
 fn trade(index: i64) -> TradeRow {
     TradeRow {
@@ -116,4 +134,67 @@ fn a_worker_cannot_send_more_rows_than_its_job_has_bars() {
         Err("it sent more than 3 equity rows".to_string())
     );
     assert_eq!((kept.trades.len(), kept.equity.len()), (3, 3), "none kept");
+}
+
+#[test]
+fn what_a_running_job_says_goes_into_its_log_and_its_bars_are_held_to_the_jobs() {
+    let log = JobLog::new(LogLimits {
+        max_line_bytes: 8,
+        ..LogLimits::default()
+    });
+    let mut rows = Rows::default();
+    for said in [
+        r#"{"type":"progress","bars_done":0}"#,
+        r#"{"type":"log","level":"warning","message":"short"}"#,
+        // Cut by the worker, and again by a log that keeps eight bytes.
+        r#"{"type":"log","level":"debug","message":"a long line","dropped_bytes":100}"#,
+        r#"{"type":"progress","bars_done":7}"#,
+        // A worker cannot say that it ran more bars than the job has.
+        r#"{"type":"progress","bars_done":18446744073709551615}"#,
+    ] {
+        let ended = take(frame(said), &mut rows, 10, &log).expect("a frame of a running job");
+        assert!(ended.is_none(), "{said}");
+    }
+    assert_eq!(
+        held(&log),
+        serde_json::json!({
+            "dropped_lines": 0,
+            "lines": [
+                {"seq": 1, "level": "warning", "message": "short"},
+                {"seq": 2, "level": "debug", "message": "a long l", "dropped_bytes": 103},
+            ],
+            "progress": {"bars_done": 10, "bars_total": 10},
+        })
+    );
+    assert!(rows.is_empty());
+
+    let finished = r#"{"type":"finished","outcome":{"kind":"succeeded","results":[]}}"#;
+    let ended = take(frame(finished), &mut rows, 10, &log).expect("the end");
+    assert!(matches!(ended, Some(Finished::Succeeded { .. })));
+}
+
+#[test]
+fn a_frame_no_worker_of_this_build_sends_ends_the_job_and_leaves_its_log_alone() {
+    let log = JobLog::new(LogLimits::default());
+    let mut rows = Rows::default();
+    for (said, why) in [
+        (
+            // Read as a level with no name, which no client could be sent.
+            r#"{"type":"log","level":"trace","message":"forged"}"#,
+            "it wrote a line at a level this build does not know",
+        ),
+        (
+            r#"{"type":"ready","build":"b","pid":1,"posture":{"cpu":{"state":"enforced","by":"x"},"memory":{"state":"enforced","by":"x"},"network":{"state":"enforced","by":"x"},"files":{"state":"enforced","by":"x"}},"runtime":null}"#,
+            "it said it was ready a second time",
+        ),
+        (
+            r#"{"type":"equity","rows":[{"open_time_ms":0,"equity":"1"},{"open_time_ms":1,"equity":"1"}]}"#,
+            "it sent more than 1 equity rows",
+        ),
+    ] {
+        let refused = take(frame(said), &mut rows, 1, &log).expect_err("no frame of a job");
+        assert_eq!(refused, why);
+    }
+    assert_eq!(log.stored_json(), None, "nothing was written to the log");
+    assert!(rows.is_empty());
 }

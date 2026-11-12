@@ -1,8 +1,9 @@
 //! The dispatcher and a job's run. The dispatcher claims the job submitted
 //! first whenever a slot is free; a run reads the job's input from the
 //! store, hands it to the worker on a thread of its own, and writes how it
-//! ended, a succeeded job's result files in the same change. A cancelled
-//! job's end is the cancel: the store already says so.
+//! ended, a succeeded job's result files in the same change, and then what
+//! is kept of its log. A cancelled job's end is the cancel: the store
+//! already says so.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,6 +12,7 @@ use tokio::sync::OwnedSemaphorePermit;
 use tracing::{error, info, warn};
 
 use super::Jobs;
+use super::log::JobLog;
 use super::worker::{Cancel, JobInput, NO_RUNTIME, WorkerOutcome};
 use crate::model::{Candle, JobId, JobOutcome, JobPhase, JobRecord, StoredResult, now_utc_ms};
 use crate::ports::CandleQuery;
@@ -103,11 +105,13 @@ enum Ended {
     Stopped,
 }
 
-/// Runs one claimed job to its end, holding `slot` until that is written.
+/// Runs one claimed job to its end, holding `slot` until that and its log
+/// are written. The job's log stays here, for whoever follows it, until
+/// the store holds it.
 async fn run(jobs: Jobs, record: JobRecord, slot: OwnedSemaphorePermit) {
     let job_id = record.job_id.clone();
-    let cancel = jobs.register(&job_id);
-    let outcome = match execute(&jobs, record, &cancel).await {
+    let (cancel, log) = jobs.register(&job_id);
+    let outcome = match execute(&jobs, record, &cancel, &log).await {
         Ended::Finished(outcome) => Some(outcome),
         // A client's cancel is written already; the server's stop is not.
         Ended::Stopped if *jobs.inner.stopping.borrow() => {
@@ -115,15 +119,42 @@ async fn run(jobs: Jobs, record: JobRecord, slot: OwnedSemaphorePermit) {
         }
         Ended::Stopped => None,
     };
+    // The job's run is over, and its log takes no more. The log is stored
+    // before the job's end is, so that whoever reads the end from the store
+    // finds the log there too; and whoever follows the log here is told
+    // that it has ended only once the store holds it and says how the job
+    // did.
+    log.close();
+    keep_log(&jobs, &job_id, &log).await;
     if let Some(outcome) = outcome {
         finish(&jobs, &job_id, outcome).await;
     }
+    log.end();
     jobs.unregister(&job_id);
     drop(slot);
 }
 
-/// Reads the job's input and runs it on the worker.
-async fn execute(jobs: &Jobs, record: JobRecord, cancel: &Cancel) -> Ended {
+/// Stores what is kept of a job's log, when anything was written to it. A
+/// log that cannot be stored is lost with the server's memory of it.
+async fn keep_log(jobs: &Jobs, job_id: &JobId, log: &JobLog) {
+    let Some(log_json) = log.stored_json() else {
+        return;
+    };
+    let (id, log_json) = (job_id.clone(), Arc::new(log_json));
+    let stored = patiently(jobs, move |store| {
+        store
+            .store_job_log(&id, &log_json, now_utc_ms())
+            .map_err(|failure| Refusal::storage("storing a job's log", failure))
+    })
+    .await;
+    if let Err(refusal) = stored {
+        error!(job = %job_id, error = %refusal.message, "a job's log could not be stored, and is lost");
+    }
+}
+
+/// Reads the job's input and runs it on the worker, which writes what the
+/// job says into `log`.
+async fn execute(jobs: &Jobs, record: JobRecord, cancel: &Cancel, log: &JobLog) -> Ended {
     let Some(runtime) = jobs.inner.worker.runtime() else {
         return Ended::Finished(failed(ErrorCode::Unavailable, NO_RUNTIME));
     };
@@ -133,9 +164,9 @@ async fn execute(jobs: &Jobs, record: JobRecord, cancel: &Cancel) -> Ended {
         Err(ended) => return ended,
     };
     let worker = Arc::clone(&jobs.inner.worker);
-    let signal = cancel.clone();
+    let (signal, said) = (cancel.clone(), log.clone());
     // The files are packed for the store on the worker's thread too.
-    let ran = tokio::task::spawn_blocking(move || match worker.run(input, &signal) {
+    let ran = tokio::task::spawn_blocking(move || match worker.run(input, &signal, &said) {
         WorkerOutcome::Succeeded(files) => Ran::Succeeded(succeeded(&files)),
         WorkerOutcome::Failed(error) => Ran::Failed(error),
         WorkerOutcome::Cancelled => Ran::Cancelled,

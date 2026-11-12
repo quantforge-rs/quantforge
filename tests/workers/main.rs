@@ -6,7 +6,9 @@
 //! nothing of the store its server holds, with a SQLite parent and, where
 //! `QUANTFORGE_TEST_POSTGRES_URL` names a server, a PostgreSQL one. A
 //! backtest run in a worker answers the result files a local run writes,
-//! and a server keeps and serves them from either store.
+//! and a server keeps and serves them from either store. What a job writes
+//! while it runs reaches its log, within the log's limits however much it
+//! writes, and a client follows it from either store.
 //!
 //! - `support`: the pool, bundles naming a workload, jobs, and reports.
 //! - `limits`: CPU time, memory and wall-clock time, crashes, kills and
@@ -14,10 +16,12 @@
 //! - `isolation`: scratch directories, the network, the environment and
 //!   descriptors a worker gets, recycling, and the worker command itself.
 //! - `results`: a backtest in a worker, and the files its rows become.
+//! - `logs`: what a job writes to its log, a line too long, and a flood.
 //! - `backends`: jobs through the queue to real workers on each backend.
 
 mod backends;
 mod isolation;
 mod limits;
+mod logs;
 mod results;
 mod support;

@@ -1,8 +1,9 @@
 //! The queue in process: a job whose store is out of time as it starts
-//! waits for the store rather than fail, and a stop that races the
-//! dispatcher leaves the queued job queued. The races are stepped on one
-//! thread, which runs a spawned task only when the test yields to it.
-//! `tests/backtest_jobs.rs` runs the rest of a job's life on both backends.
+//! waits for the store rather than fail, a job's log is in the store
+//! before its end is, and a stop that races the dispatcher leaves the
+//! queued job queued. The races are stepped on one thread, which runs a
+//! spawned task only when the test yields to it.
+//! `tests/backtest_jobs/` runs the rest of a job's life on both backends.
 
 use std::future::poll_fn;
 use std::pin::Pin;
@@ -14,6 +15,7 @@ use super::*;
 use crate::model::{BundleHash, JobId, JobPhase, NewJob};
 use crate::ports::JobStore;
 use crate::protocol::bundle::Runtime;
+use crate::protocol::jobs::LogLevel;
 
 /// A worker that notes how many candles each job got, and succeeds.
 #[derive(Default)]
@@ -24,15 +26,29 @@ impl JobWorker for Counting {
         Some(runtime("3.12"))
     }
 
-    fn run(&self, input: JobInput, _cancel: &Cancel) -> WorkerOutcome {
+    fn run(&self, input: JobInput, _cancel: &Cancel, _log: &JobLog) -> WorkerOutcome {
         self.0.lock().expect("the counts").push(input.candles.len());
+        WorkerOutcome::Succeeded(Vec::new())
+    }
+}
+
+/// A worker that writes a line to each job's log, and succeeds.
+struct Talking;
+
+impl JobWorker for Talking {
+    fn runtime(&self) -> Option<Runtime> {
+        Some(runtime("3.12"))
+    }
+
+    fn run(&self, _input: JobInput, _cancel: &Cancel, log: &JobLog) -> WorkerOutcome {
+        log.line(LogLevel::Warning, "ran");
         WorkerOutcome::Succeeded(Vec::new())
     }
 }
 
 /// Queues a backtest of the tests' bundle on ten `1m` candles from `T`,
 /// straight into the bed's store, and answers its ID.
-fn queued(bed: &Bed) -> JobId {
+pub(super) fn queued(bed: &Bed) -> JobId {
     let candles: Vec<Candle> = (0..10).map(|i| candle(T + i * MINUTE, "1", None)).collect();
     bed.store
         .upsert_candles(&market(Category::Spot), &candles)
@@ -76,6 +92,7 @@ fn one_at_a_time(bed: &Bed) -> (ServerStore, Jobs) {
         JobLimits {
             concurrency: 1,
             max_span_bars: DEFAULT_MAX_SPAN_BARS,
+            log: LogLimits::default(),
         },
     );
     (store, jobs)
@@ -125,6 +142,7 @@ async fn a_job_whose_store_is_out_of_time_as_it_starts_waits_for_it() {
         JobLimits {
             concurrency: 1,
             max_span_bars: DEFAULT_MAX_SPAN_BARS,
+            log: LogLimits::default(),
         },
     );
     assert_eq!(jobs.start().await.expect("a started queue"), 0);
@@ -140,6 +158,107 @@ async fn a_job_whose_store_is_out_of_time_as_it_starts_waits_for_it() {
     .await;
     assert_eq!(ended.phase, JobPhase::Succeeded, "{ended:?}");
     assert_eq!(*counts.lock().expect("the counts"), [10]);
+}
+
+#[tokio::test]
+async fn a_jobs_log_is_in_the_store_before_its_end_is() {
+    let bed = Bed::new();
+    let job_id = queued(&bed);
+    // A store that refuses a job's end while it holds no log of the job:
+    // whoever reads a job's end from the store finds its log there too.
+    bed.connection()
+        .execute_batch(
+            "CREATE TRIGGER log_first BEFORE UPDATE OF state ON jobs
+             WHEN NEW.state IN ('succeeded', 'failed')
+               AND NOT EXISTS (SELECT 1 FROM job_logs WHERE job_id = NEW.job_id)
+             BEGIN SELECT RAISE(ABORT, 'the end of a job before its log'); END;",
+        )
+        .expect("the trigger");
+    let jobs = Jobs::new(
+        bed.server_store(),
+        Talking,
+        JobLimits {
+            concurrency: 1,
+            max_span_bars: DEFAULT_MAX_SPAN_BARS,
+            log: LogLimits::default(),
+        },
+    );
+    assert_eq!(jobs.start().await.expect("a started queue"), 0);
+    let ended = within("the job's end", async {
+        loop {
+            let job = bed.store.job(&job_id).expect("a read").expect("the job");
+            if job.phase.is_final() {
+                return job;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await;
+    assert_eq!(ended.phase, JobPhase::Succeeded, "{ended:?}");
+    let log = bed.store.job_log(&job_id).expect("a read").expect("a log");
+    let log: Value = serde_json::from_str(&log).expect("json");
+    assert_eq!(log["lines"][0]["message"], "ran");
+    assert_eq!(log["lines"][0]["level"], "warning");
+}
+
+#[tokio::test]
+async fn a_log_has_not_ended_for_its_readers_until_the_store_holds_it_and_the_jobs_end() {
+    let bed = Bed::new();
+    let job_id = queued(&bed);
+    let (began, begun) = mpsc::channel();
+    let (release, released) = mpsc::channel::<()>();
+    let held = Faulty::holding_logs(bed.store.within(Duration::from_secs(2)), began, released);
+    let jobs = Jobs::new(
+        served(held),
+        Talking,
+        JobLimits {
+            concurrency: 1,
+            max_span_bars: DEFAULT_MAX_SPAN_BARS,
+            log: LogLimits::default(),
+        },
+    );
+    let address = start_with(bed.history(), jobs.clone()).await;
+    assert_eq!(jobs.start().await.expect("a started queue"), 0);
+    // The job has run, and its log is on its way into the store.
+    tokio::task::spawn_blocking(move || begun.recv_timeout(Duration::from_secs(10)))
+        .await
+        .expect("the wait")
+        .expect("the log's write began");
+
+    let read = |path: String| async move {
+        let response = client()
+            .get(format!("http://{address}{path}"))
+            .send()
+            .await
+            .expect("a response");
+        assert_eq!(response.status(), 200, "{path}");
+        response.json::<Value>().await.expect("json")
+    };
+    // Every line is there to read, and nothing says yet that the log has
+    // ended or how the job did: neither is in the store.
+    let page = read(format!("/v1/backtests/{job_id}/logs")).await;
+    assert_eq!(page["lines"][0]["message"], "ran");
+    assert_eq!(page["complete"], false, "{page}");
+    let status = read(format!("/v1/backtests/{job_id}")).await;
+    assert_eq!(status["state"]["kind"], "running", "{status}");
+    assert_eq!(bed.store.job_log(&job_id).expect("a read"), None);
+
+    drop(release);
+    let page = within("the log's end", async {
+        loop {
+            let page = read(format!("/v1/backtests/{job_id}/logs")).await;
+            if page["complete"] == true {
+                return page;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await;
+    assert_eq!(page["lines"][0]["message"], "ran");
+    // Said only once both are written.
+    let status = read(format!("/v1/backtests/{job_id}")).await;
+    assert_eq!(status["state"]["kind"], "succeeded", "{status}");
+    assert!(bed.store.job_log(&job_id).expect("a read").is_some());
 }
 
 #[tokio::test(flavor = "current_thread")]

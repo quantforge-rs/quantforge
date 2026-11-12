@@ -148,16 +148,7 @@ impl JobStore for PostgresStore {
     }
 
     fn load_bundle(&self, hash: &BundleHash) -> Result<Option<Vec<u8>>, StorageError> {
-        let hash = hash.to_string();
-        self.bridge.execute(Effect::Read, move |client| {
-            Box::pin(async move {
-                client
-                    .query_typed_opt(LOAD_BUNDLE, &[(&hash, Type::TEXT)])
-                    .await?
-                    .map(|row| row.try_get(0))
-                    .transpose()
-            })
-        })
+        self.keyed(LOAD_BUNDLE, hash.to_string())
     }
 
     fn submit_job(&self, job: &NewJob) -> Result<(), StorageError> {
@@ -304,16 +295,20 @@ impl JobStore for PostgresStore {
     }
 
     fn load_result(&self, hash: &ResultHash) -> Result<Option<Vec<u8>>, StorageError> {
-        let hash = hash.to_string();
-        self.bridge.execute(Effect::Read, move |client| {
-            Box::pin(async move {
-                client
-                    .query_typed_opt(LOAD_RESULT, &[(&hash, Type::TEXT)])
-                    .await?
-                    .map(|row| row.try_get(0))
-                    .transpose()
-            })
-        })
+        self.keyed(LOAD_RESULT, hash.to_string())
+    }
+
+    fn store_job_log(
+        &self,
+        job_id: &JobId,
+        log_json: &str,
+        stored_at_ms: TimestampMs,
+    ) -> Result<bool, StorageError> {
+        self.store_log(job_id, log_json, stored_at_ms)
+    }
+
+    fn job_log(&self, job_id: &JobId) -> Result<Option<String>, StorageError> {
+        self.load_log(job_id)
     }
 
     fn cancel_job(

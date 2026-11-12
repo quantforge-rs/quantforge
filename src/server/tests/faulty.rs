@@ -1,5 +1,6 @@
 //! A store that fails, or stalls until released, or lists its markets
-//! backwards, or finds itself out of time for its first candle reads, on
+//! backwards, or finds itself out of time for its first candle reads or
+//! for some reads of a job, or holds back the write of a job's log, on
 //! demand, and otherwise answers as the store it wraps: for what no real
 //! store does on cue.
 
@@ -22,6 +23,11 @@ pub(super) struct Faulty<S> {
     backwards: bool,
     /// Candle reads still to find the store out of time.
     busy_loads: Mutex<usize>,
+    /// A stall for the call that stores a job's log, and no other.
+    log_stall: Option<Stall>,
+    /// Reads of a job still to be answered, and then those still to find
+    /// the store out of time.
+    busy_jobs: Mutex<(usize, usize)>,
 }
 
 /// A stall: a call says it began, then waits until released.
@@ -38,6 +44,8 @@ impl<S> Faulty<S> {
             stall: None,
             backwards: false,
             busy_loads: Mutex::new(0),
+            log_stall: None,
+            busy_jobs: Mutex::new((0, 0)),
         }
     }
 
@@ -74,19 +82,47 @@ impl<S> Faulty<S> {
         }
     }
 
+    /// After `spared` reads of a job, the next `count` find the store out of
+    /// time.
+    pub(super) fn busy_jobs(inner: S, spared: usize, count: usize) -> Self {
+        Self {
+            busy_jobs: Mutex::new((spared, count)),
+            ..Self::wrapping(inner)
+        }
+    }
+
+    /// Storing a job's log says it began, then waits until released; every
+    /// other call answers at once.
+    pub(super) fn holding_logs(inner: S, began: Sender<()>, release: Receiver<()>) -> Self {
+        Self {
+            log_stall: Some(Stall {
+                began: Mutex::new(began),
+                release: Mutex::new(release),
+            }),
+            ..Self::wrapping(inner)
+        }
+    }
+
     fn fault(&self) -> Result<(), StorageError> {
         if let Some(stall) = &self.stall {
-            let _ = stall.began.lock().expect("the stall").send(());
-            let _ = stall
-                .release
-                .lock()
-                .expect("the stall")
-                .recv_timeout(Duration::from_secs(10));
+            stall.wait();
         }
         match self.failure {
             Some(failure) => Err(failure()),
             None => Ok(()),
         }
+    }
+}
+
+impl Stall {
+    /// Says that a call began, and waits until it is released.
+    fn wait(&self) {
+        let _ = self.began.lock().expect("the stall").send(());
+        let _ = self
+            .release
+            .lock()
+            .expect("the stall")
+            .recv_timeout(Duration::from_secs(10));
     }
 }
 
@@ -187,6 +223,15 @@ impl<S: JobStore> JobStore for Faulty<S> {
 
     fn job(&self, job_id: &JobId) -> Result<Option<JobRecord>, StorageError> {
         self.fault()?;
+        {
+            let mut left = self.busy_jobs.lock().expect("the busy reads");
+            if left.0 > 0 {
+                left.0 -= 1;
+            } else if left.1 > 0 {
+                left.1 -= 1;
+                return Err(StorageError::Unavailable("busy".to_string()));
+            }
+        }
         self.inner.job(job_id)
     }
 
@@ -213,6 +258,24 @@ impl<S: JobStore> JobStore for Faulty<S> {
     fn load_result(&self, hash: &ResultHash) -> Result<Option<Vec<u8>>, StorageError> {
         self.fault()?;
         self.inner.load_result(hash)
+    }
+
+    fn store_job_log(
+        &self,
+        job_id: &JobId,
+        log_json: &str,
+        stored_at_ms: TimestampMs,
+    ) -> Result<bool, StorageError> {
+        self.fault()?;
+        if let Some(stall) = &self.log_stall {
+            stall.wait();
+        }
+        self.inner.store_job_log(job_id, log_json, stored_at_ms)
+    }
+
+    fn job_log(&self, job_id: &JobId) -> Result<Option<String>, StorageError> {
+        self.fault()?;
+        self.inner.job_log(job_id)
     }
 
     fn cancel_job(

@@ -4,15 +4,16 @@
 //! range in `history`, the market list in `markets`, the queries refused in
 //! `queries`, the segment route in `segments`, uploads in `jobs`, the other
 //! job routes in `submissions`, a result the store holds damaged in
-//! `results`, a busy store at a job's start and a stop racing the
-//! dispatcher in `queue`, and storage failures and the turns at the store
-//! in `store`, over the store of `faulty`. Literal venue names
-//! live in this file only: `tests/exchange_boundary.rs` reads the others as
-//! code.
+//! `results`, the log route's refusals in `logs`, a busy store at a job's
+//! start and a stop racing the dispatcher in `queue`, and storage failures
+//! and the turns at the store in `store`, over the store of `faulty`.
+//! Literal venue names live in this file only: `tests/exchange_boundary.rs`
+//! reads the others as code.
 
 mod faulty;
 mod history;
 mod jobs;
+mod logs;
 mod markets;
 mod queries;
 mod queue;
@@ -84,6 +85,7 @@ fn idle(history: &History) -> Jobs {
         JobLimits {
             concurrency: 1,
             max_span_bars: DEFAULT_MAX_SPAN_BARS,
+            log: LogLimits::default(),
         },
     )
 }

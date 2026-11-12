@@ -14,8 +14,8 @@ use crate::cli::context::AppContext;
 use anyhow::{Context, Result, bail};
 use clap::Args;
 use quantforge::server::{
-    self, Guard, History, HistoryLimits, JobLimits, Jobs, PoolConfig, ServerStore, StoreLimits,
-    WorkerLimits, WorkerMode, WorkerPool, WorkerProgram,
+    self, Guard, History, HistoryLimits, JobLimits, Jobs, LogLimits, PoolConfig, ServerStore,
+    StoreLimits, WorkerLimits, WorkerMode, WorkerPool, WorkerProgram,
 };
 use quantforge::{StorageSettings, StoreOwner};
 use std::net::SocketAddr;
@@ -152,6 +152,7 @@ pub(crate) async fn handle_serve_run(ctx: &AppContext, args: ServeRunArgs) -> Re
         JobLimits {
             concurrency: job_concurrency,
             max_span_bars: args.max_span_bars,
+            log: LogLimits::default(),
         },
     );
     // Installed before the address is printed: a signal sent as soon as it

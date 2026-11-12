@@ -167,6 +167,20 @@ miscounts the trades, and writes the job's result files itself
 ([result-spec.md](result-spec.md)). So what a client downloads is always
 exactly a result file, whatever the job's code did to its worker.
 
+While a job runs its worker sends what the job says: a `log` frame for each
+line it writes, with the line's level, and `progress` frames with how many
+of its bars the job has run. A worker cuts a line longer than 64 KiB to its
+start and says by how much. The server keeps each job's lines in a log of
+its own, which holds the newest 10,000 lines, 1 MiB of text in all and
+8 KiB of any one line, and counts what it leaves out; it holds the count of
+bars a worker sends to the job's own; and it reads no more than eight frames
+ahead of what it has taken, so a job that writes without end waits on its
+own output and takes no more of the server's memory than a job that writes
+nothing. A line at a level the server has no name for ends the job, as
+every frame no worker of its build sends does. Clients follow the log while
+the job runs, and the server stores it with the job once the job has ended:
+the [job protocol](../src/protocol/jobs/mod.rs) says how they read it.
+
 ## Testing it
 
 The tests in `tests/workers/` start this build's binary as a worker in a
@@ -175,4 +189,6 @@ memory, sleep, crash, leave state behind, and try to read files, open
 connections and leave their process group, so that each limit and guard is
 run into before any user code runs in a worker; one runs the engine on a
 strategy built into QuantForge, so that a job ends with a result as a real
-one will. `serve run` never starts its workers in that mode.
+one will; and one writes to its log, a few lines or many times what a log
+keeps, as fast as its worker takes them. `serve run` never starts its
+workers in that mode.
