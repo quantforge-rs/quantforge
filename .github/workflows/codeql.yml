@@ -16,8 +16,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # branch protection requires this check by name (docs/ci.md): it is named
+  # after the job, whichever runner the job runs on
   analyze:
-    runs-on: ubuntu-latest
+    # the 8-core linux runner among the organization's larger runners
+    runs-on: ubuntu-latest-l
     permissions:
       # upload code scanning results
       security-events: write
