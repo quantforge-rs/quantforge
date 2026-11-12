@@ -201,8 +201,8 @@ cargo run -- backtest --symbol BTCUSDT --interval 1m --fee-bps 0
 cargo run -- backtest --symbol ETHUSDT --interval 1h --fast 12 --slow 48
 ```
 
-- A decision made on one bar fills at the **next bar's open**, so a fill
-  never uses a price the strategy had not seen.
+- A decision made on one bar fills at the **next bar's open**, a price the
+  strategy had not seen when it decided: there is no look-ahead.
 - Every fill pays `--fee-bps` basis points, and a position still open at the
   end is sold at the last close.
 - The strategy needs more than `--slow` candles before it can trade.
@@ -367,14 +367,15 @@ segments, runs and jobs, into one PostgreSQL database (16 to 18):
 export QF_STORAGE=postgres
 export QF_POSTGRES_URL=postgres://USER:PASSWORD@HOST:5432/DATABASE
 
+# coming from SQLite: copy the store in first, while the database is empty,
+# then compare every row
+cargo run -- data migrate --from data/market.sqlite --verify
+
 # every command now reads and writes that database
 cargo run -- store status
 cargo run -- data sync --symbol BTCUSDT --interval 1m \
   --start 2026-11-01T00:00:00Z --end 2026-11-08T00:00:00Z
 cargo run -- backtest --symbol BTCUSDT --interval 1m
-
-# copy an existing SQLite store into it, then compare every row
-cargo run -- data migrate --from data/market.sqlite --verify
 ```
 
 - The password lives only in the URL: keep it in `QF_POSTGRES_URL`, not on
@@ -383,7 +384,9 @@ cargo run -- data migrate --from data/market.sqlite --verify
   creates the schema.
 - A connection to another machine is always verified TLS; `sslrootcert` in
   the URL names one more CA to trust.
-- `data migrate` never changes the SQLite file and can be resumed;
+- `data migrate` refuses a database that already holds rows of its own, so
+  it comes before any other write. It never changes the SQLite file and can
+  be resumed;
   [storage-migration.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/storage-migration.md)
   covers the switch and the way back.
 
