@@ -26,7 +26,9 @@
 //!   exchange-agnostic requests behind them, bot-run state, and the
 //!   timestamp and decimal helpers, including the decimal ↔ float64
 //!   conversions; execution identity, units and refusals; and the futures
-//!   contract of ADR 0002 in [`model::futures`].
+//!   contract of ADR 0002 in [`model::futures`], with the
+//!   [risk sizing](https://github.com/quantforge-rs/quantforge/blob/main/docs/risk-sizing.md)
+//!   that turns an entry's risk budget and stop into a quantity.
 //! - [`ports`] — [`MarketDataConnector`], [`TradingConnector`] and
 //!   [`AccountConnector`] are what an exchange adapter provides, described by
 //!   [`ExchangeCapabilities`]; [`CandleStore`], [`RunJournalStore`] and

@@ -9,9 +9,9 @@ ALG-534. This page tracks each change:
 
 ALG-733 built the Rust side of the identity and the futures contract,
 QUA-37 (ALG-734 in the previous workspace) the storage, the wire's
-`category` and the migrations, and QUA-36 (ALG-735 in the parity matrix) a
-profile's policy and its store. The rest lands with the stories named
-below.
+`category` and the migrations, QUA-36 (ALG-735 in the parity matrix) a
+profile's policy and its store, and QUA-35 (ALG-736) the sizing of an entry
+from it. The rest lands with the stories named below.
 
 ## Changed in Rust by ALG-733
 
@@ -43,6 +43,12 @@ below.
 | An intent is admitted with `ExternalIntent::admit`: an entry under a snapshot of its own profile's policy, with a stop of its own or the snapshot's fallback, which its stored form keeps as `policy`, and an exit under none. `move_to(IntentState::Admitted)` is refused | `quantforge::model::futures` | No |
 | `PolicyStore`, the storage port for profiles and every revision of their policies, on both backends from schema 9 ([storage-schema.md](storage-schema.md#keeping-policies)) | `quantforge::PolicyStore` | No |
 | `PolicyService`, the first part of `automation`: what a command or an executor keeps a policy through | `quantforge::automation` | No |
+
+## Changed by QUA-35
+
+| Change | Where | Reaches the Python FFI |
+| --- | --- | --- |
+| Risk sizing ([risk-sizing.md](risk-sizing.md)), a pure function of what it is handed:<ul><li>`SizingRequest`, everything one sizing reads, with `Freshness`, `Observed` and `UsdIndex`;</li><li>its answers `Sizing`, `SizedEntry` and `SizingRefusal`, with the figures reached;</li><li>`SizingFault`, an input sizing cannot trust, kept apart from the refusals;</li><li>`SubmissionCheck`, a sized entry held to fresh prices, and `FillRisk`, the risk its fills took beside the risk sized;</li><li>`margin_pool`, the pool of an account an entry draws on.</li></ul> | `quantforge::model::futures` | No |
 
 ## Changing next
 
@@ -78,6 +84,6 @@ Decided on 2026-10-22, when ALG-733 was planned:
 - **The product lines.** ALG-733 added them to `ExchangeId`, which ADR 0002's follow-ups gave to ALG-734 (now QUA-37). QUA-37 kept storage, the protocol, the environment binding and the migrations.
 - **Stop ownership.** Deciding which stop covering a position is QuantForge's belongs to ALG-746: the ledger, the owner tag, the epoch, and a second writer. `CoveredStop` checks only the coverage.
 - **A profile's ports.** ALG-767 hands each profile the ports it may use: no entry port and no leverage port while the profile is not armed.
-- **Sizing.** ALG-736 refuses a stop on the wrong side, and converts USD margin pools at the venue's index price.
+- **Sizing.** ALG-736 refuses a stop on the wrong side, and converts USD margin pools at the venue's index price. It is handed that price with its source and time, and an adapter is where it is read.
 - **Registration.** ALG-759 registers Binance's futures lines and decides how `--exchange` selects a category. ALG-693 registers Bybit's lines.
 - **Exit attempts.** Once an exit has retried, its latest attempt decides whether it ended unfilled or rejected; an earlier attempt's order or refusal that executed nothing says nothing, and late evidence that an earlier attempt filled is reported as an invalid transition. ALG-745, which owns the retry loop, records per-attempt outcomes if it needs more than that.
