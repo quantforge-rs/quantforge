@@ -1,6 +1,7 @@
-//! What the store-backed policy tests share: a store of each backend that
-//! can be opened again as a process starting on it would, a venue that
-//! lists a fixture line's instruments, and a clock that ticks.
+//! What the store-backed policy tests share, and the sizing tests with
+//! them (`tests/sizing/`): a store of each backend that can be opened
+//! again as a process starting on it would, a venue that lists what it is
+//! given, and a clock that ticks.
 
 use std::sync::atomic::{AtomicI64, Ordering};
 
@@ -11,8 +12,6 @@ use quantforge::ports::futures::{FuturesCapabilities, FuturesConnector, Instrume
 use quantforge::ports::{Clock, ExchangeError};
 use quantforge::{CandleStore, PolicyStore, SqliteStore, StoreControl};
 use tempfile::TempDir;
-
-use crate::cases::Line;
 
 /// 2026-10-20T00:00:00Z.
 pub(crate) const T: TimestampMs = 1_792_454_400_000;
@@ -136,23 +135,12 @@ impl Clock for Ticking {
     }
 }
 
-/// A venue's instrument connector that lists what a fixture line lists.
+/// A venue's instrument connector that lists what it is given.
 #[derive(Debug)]
 pub(crate) struct Venue {
     pub(crate) exchange: ExchangeId,
     pub(crate) environment: Environment,
     pub(crate) instruments: Vec<FuturesInstrument>,
-}
-
-impl Venue {
-    /// The connector of `line`'s product line on demo.
-    pub(crate) fn of(line: &Line) -> Self {
-        Self {
-            exchange: line.exchange(),
-            environment: Environment::Demo,
-            instruments: line.instruments.clone(),
-        }
-    }
 }
 
 impl FuturesConnector for Venue {

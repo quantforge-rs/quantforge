@@ -5,8 +5,9 @@
 use std::collections::BTreeSet;
 
 use quantforge::model::futures::{
-    AccountKind, AccountingStatus, IntentState, MarginMode, OwnerTag, PROPAGATION_DELAY_MS,
-    PositionMode, ProfileId, ProfileIdentity, ProtectionState, SETTLE_WINDOW_MS, UNIVERSE_RULE,
+    AccountKind, AccountingStatus, DRIFT_LIMIT, IntentState, MarginMode, OwnerTag,
+    PROPAGATION_DELAY_MS, PositionMode, ProfileId, ProfileIdentity, ProtectionState,
+    SETTLE_WINDOW_MS, UNIVERSE_RULE,
 };
 use quantforge::model::{
     AccountRef, Category, Environment, PositionSide, Refusal, StoreActivation, Venue,
@@ -198,4 +199,10 @@ fn the_unknown_outcome_bounds_and_the_universe_rule_are_the_code_constants() {
     );
     assert_eq!(i64::from(signals.settle_window_s) * 1000, SETTLE_WINDOW_MS);
     assert_eq!(matrix.universe.rule_version, UNIVERSE_RULE);
+}
+
+#[test]
+fn the_drift_limit_sizing_refuses_past_is_the_matrixs() {
+    let matrix = model::load_matrix();
+    assert_eq!(matrix.policy.signals.drift_limit, DRIFT_LIMIT.to_string());
 }

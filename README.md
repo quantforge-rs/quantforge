@@ -39,7 +39,7 @@ that it can become the `quantforge-protocol` crate once it is stable.
 
 The public surface is layered as Rust modules, innermost first:
 
-- `model` - normalized market types, validation, the columnar candle batch, the exchange-agnostic requests, timestamp and decimal helpers
+- `model` - normalized market types, validation, the columnar candle batch, the exchange-agnostic requests, timestamp and decimal helpers; and `model::futures`, the futures contract automation is built on, with the [risk sizing](https://github.com/quantforge-rs/quantforge/blob/main/docs/risk-sizing.md) that turns a risk budget, an expected price and a stop into the quantity a venue takes
 - `ports` - the exchange connector and storage traits every adapter implements, and the capability descriptor that says what an exchange supports
 - `exchange` - the connector registry, which names each exchange (`--exchange binance`) and builds its connectors, and one adapter namespace per exchange; `binance` is the only one today, and nothing outside `exchange` names it. `exchange::conformance` writes down what every adapter must do as checks, and the [feature matrix](https://github.com/quantforge-rs/quantforge/blob/main/docs/exchange-feature-matrix.md) shows each exchange's results
 - `storage` - persistence adapters, one namespace per backend, `sqlite` and `postgres`; `settings` and `factory`, which select a backend and open it; and `segments`, the [segment format](https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md) every backend packs a market's closed candles into, window by window, as immutable segments named by their hash

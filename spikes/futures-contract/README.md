@@ -2,9 +2,9 @@
 
 Two scripts back the numbers in
 [ADR 0002](../../docs/adr/0002-automation-architecture.md) and
-[futures-venues.md](../../docs/futures-venues.md), and a third writes the
-shared cases of a profile's policy. All use the Python standard library
-only. Run them with `python3 -I`, which ignores the environment and the
+[futures-venues.md](../../docs/futures-venues.md), one of which also writes
+the shared cases risk sizing is held to, and a third writes the shared
+cases of a profile's policy. All use the Python standard library only. Run them with `python3 -I`, which ignores the environment and the
 current directory, from the repository root.
 
 No script here is built, tested or shipped by the crate: `Cargo.toml`
@@ -46,18 +46,32 @@ to differ from the committed one; the rule is the contract, not the count.
 
 ```bash
 python3 -I spikes/futures-contract/sizing.py --write spikes/futures-contract/sizing-cases.json
+python3 -I spikes/futures-contract/sizing.py --write tests/fixtures/sizing_cases.json
+python3 -I spikes/futures-contract/sizing.py --doc docs/risk-sizing.md
 ```
 
 It computes ADR 0002's sizing, refusal and accounting rules with `Decimal` at
-60 digits, with every rounding mode explicit. The cases cover:
+60 digits, with every rounding mode explicit, and is the independent model
+the Rust sizing is held to ([risk-sizing.md](../../docs/risk-sizing.md)). It
+shares no code with the Rust. Each case hands sizing its inputs in the shared
+model's stored form, what a venue's adapter makes of its instrument metadata,
+its leverage tiers and an account, so the Rust reads the cases as they are.
+The cases cover:
 
-- linear and inverse;
-- LONG and SHORT;
+- linear and inverse, LONG and SHORT, on both venues: every cell of the
+  parity matrix's `futures.sizing`, each sized and each refused;
 - Binance's 100 USD and 10 USD contracts, and Bybit's 1 USD contracts;
-- minimums and maximums;
-- the leverage brackets, in USDT and in the coin;
-- the margin budget;
-- the submission guards;
+- which stop an entry uses, and each stop rounded away from the entry;
+- every limit met exactly and missed by one step: the minimum quantity and
+  notional, the market-order maximum, the bracket's cap, the margin, the
+  wallet and the drift limit;
+- margin pools in the settlement asset and in USD, at the venue's index
+  price;
+- the submission guards, on linear and on inverse contracts;
+- the order refusals are given in, and the order sizing looks for what it
+  cannot trust: an input for something else, too old, missing, ambiguous or
+  invalid;
+- the risk an entry's fills took, beside the risk it was sized with;
 - the PRD's p.9 and p.10 figures. Every p.9 figure but its risk line fits a
   150 USDT budget.
 
@@ -68,23 +82,38 @@ Each result is checked three ways:
   - within budget;
   - one more step would exceed the budget;
   - the stop on the protective side;
-  - the position within its leverage bracket;
-- against the same numbers computed again in exact rational arithmetic
-  (`fractions`), with code that shares nothing with the first computation;
+  - the position within its leverage bracket, and its margin within the pool;
+- against the whole answer worked out again in exact rational arithmetic
+  (`fractions`), with no arithmetic in common with the first computation: the
+  two must agree on every refusal and every figure;
 - for the stops, quantities and linear amounts, against values computed by
   hand.
 
-The script exits non-zero if any check fails. Planted defects in the inverse
-formula, the stop rounding, the fee allowance, the crossed-stop check, the net
-PnL and the choice of leverage bracket each made it fail.
+The script exits non-zero if any check fails. Eighteen planted defects each
+made it fail, among them a one-in-ten-million error in the inverse formula, a
+stop rounded towards the entry, a fee allowance for one leg, a price exactly
+at the stop not counted as crossed, a quantity rounded up, a USD pool left
+unconverted, reservations ignored, an input at its freshness limit called
+stale, the inputs looked at in another order, and a half rounded up instead
+of to even.
 
-[`sizing-cases.json`](sizing-cases.json) holds the cases and their results, for
-ALG-736 to reuse.
+It writes the same cases to two files. [`sizing-cases.json`](sizing-cases.json)
+is the one ADR 0002 links;
+[`tests/fixtures/sizing_cases.json`](../../tests/fixtures/sizing_cases.json) is
+the one `tests/sizing/` replays, on the model and under a policy read back
+from SQLite and PostgreSQL, since `spikes/` is not packaged with the crate. A
+test holds the two to each other. Change a case here, never in a file, and
+write both again; `--doc` then rewrites the lists of
+[risk-sizing.md](../../docs/risk-sizing.md) that repeat the cases, which the
+tests hold to the fixture as well. The file also holds the exact arithmetic a fraction helper
+must answer, which the Rust helper's unit tests read.
 
 The instrument rules in the cases are the 2026-10-22 values from `universe.py`.
 The taker fees are illustrative. Bybit's leverage tiers are its public risk
 limits on 2026-10-22. Binance serves its brackets per account, to signed
-requests only, so the Binance tiers are illustrative too.
+requests only, so the Binance tiers are illustrative too, and so are the names
+of the indexes a USD pool is measured at, which each adapter records as it
+reads them.
 
 ## `policy_cases.py`: a profile's policy
 

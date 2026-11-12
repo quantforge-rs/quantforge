@@ -128,6 +128,9 @@ src/
 │   ├── candle_batch.rs         CandleBatch: candles as columns, the Python interchange
 │   ├── decimal.rs              round_down_to_step and the decimal ↔ float64 conversions
 │   ├── durability.rs           DurabilityReport: the settings a store's commits rely on, read back
+│   ├── exact.rs                Exact: fractions of whole numbers of any size, for the arithmetic that must not round
+│   ├── exact/                  its unit tests, beside it for the line budget
+│   │   └── tests.rs            an independent model's arithmetic answered exactly, and whole numbers held to the machine's own
 │   ├── identity.rs             Environment, InstrumentId, venue ids as text, OperationId, the text_id! macro
 │   ├── interval.rs             Interval: wire form, step duration, parsing
 │   ├── job.rs                  JobId, BundleHash, ResultHash, JobPhase, JobRecord, StoredResult: a remote backtest as a store keeps it
@@ -174,6 +177,15 @@ src/
 │       │   └── tests/          the rest of its unit tests, beside it for the line budget
 │       │       ├── changes.rs  what a change stamps, and the changes a policy refuses
 │       │       └── entries.rs  an entry's refusals in their order, a snapshot's stored form, the venue check
+│       ├── sizing.rs           risk sizing: the rules of ADR 0002 §6, its three answers, and how an amount is reported
+│       ├── sizing/             an entry sized from its policy, the venue's rules and an account snapshot
+│       │   ├── request.rs      SizingRequest: everything one sizing reads, with Freshness, Observed and UsdIndex
+│       │   ├── fault.rs        SizingFault: an input sizing cannot trust, by kind and by input
+│       │   ├── funding.rs      the trust checks in their order, and margin_pool: the pool and the wallet that fund an entry
+│       │   ├── steps.rs        the rules in order: budget, stop, quantity, notional, margin, bracket, pool, wallet
+│       │   ├── figures.rs      Sizing, SizedEntry and SizingRefusal, with every figure reached
+│       │   ├── submission.rs   SizedEntry::at_submission: a crossed stop and risk drift, against fresh prices
+│       │   └── fill.rs         SizedEntry::fill_risk: the risk the fills took, beside the risk sized
 │       ├── protection_state.rs ProtectionState: the futures_position machine, gated on evidence
 │       ├── position.rs         PositionCycle, CloseReason, OperatorRemoval
 │       └── accounting.rs       RealizedPnl and AccountingStatus: net PnL per settlement asset
@@ -381,6 +393,9 @@ its policy service keeps each automation profile's defaults, per-asset
 settings and capital through the `PolicyStore` port, revision by revision,
 checks them against a venue's own instrument list, and hands an entry the
 policy it is admitted under ([automation-policy.md](automation-policy.md)).
+What that entry may buy or sell is `model::futures`' to say, a pure function
+of the policy, the venue's rules and an account snapshot, with no store and
+no clock of its own ([risk-sizing.md](risk-sizing.md)).
 `server` uses
 `protocol`, `model`, the `ports` it reads and writes the store through, the
 segment codec of `storage::segments` to check what it sends, and, in a
@@ -492,6 +507,13 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   part-way; changes racing from one revision; the snapshot an admitted
   entry keeps through later edits and a restart; and the document held to
   the code
+- `tests/sizing/`: risk sizing against [risk-sizing.md](risk-sizing.md): the
+  shared cases of `tests/fixtures/sizing_cases.json`, every venue, family
+  and side, on the model and under a policy read back from SQLite and, with
+  `QUANTFORGE_TEST_POSTGRES_URL`, from PostgreSQL; an admitted entry sized
+  from its snapshot after its profile's policy has changed; each refusal's
+  and fault's words; the rules' promises over generated entries; and the
+  document held to the code
 - `tests/parity/`: the parity matrix in `docs/parity/` — its rules, the cell
   and evidence ledgers, the dated universe list, the rendered `matrix.md`,
   and the code that implements its state machines and vocabularies

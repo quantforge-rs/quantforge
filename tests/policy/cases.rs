@@ -9,10 +9,14 @@ use quantforge::model::futures::{
     AssetEdit, DefaultsEdit, Edit, EffectivePolicy, FuturesInstrument, NewAsset, PolicyChange,
     ProfileIdentity, ProfileLabel, RiskPercent, Sourced, StopFallback, StopPercent,
 };
-use quantforge::model::{Asset, ExchangeId, InstrumentId, Leverage, Money, Price, Symbol};
+use quantforge::model::{
+    Asset, Environment, ExchangeId, InstrumentId, Leverage, Money, Price, Symbol,
+};
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use serde_json::{Value, json};
+
+use crate::support::Venue;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -128,6 +132,17 @@ impl Line {
             .iter()
             .find(|listed| listed.id().symbol.as_str() == symbol)
             .unwrap_or_else(|| panic!("{} lists no {symbol}", self.name))
+    }
+}
+
+impl Venue {
+    /// The connector of `line`'s product line on demo.
+    pub(crate) fn of(line: &Line) -> Self {
+        Self {
+            exchange: line.exchange(),
+            environment: Environment::Demo,
+            instruments: line.instruments.clone(),
+        }
     }
 }
 

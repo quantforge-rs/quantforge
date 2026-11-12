@@ -15,8 +15,9 @@ It implements ADR 0002 §5 and §6 for the requirements
 [automation-requirements.md](automation-requirements.md) lists as OBS-R009,
 OBS-R017, OBS-R025, OBS-R029, OBS-R037 and OBS-R038 with the decisions D07,
 D08 and D13 (the automation PRD (iteration 3), §2.1 on p.4 and §3 to §3.3 on
-pp.5–7). Sizing an entry from a policy is ALG-736's, arming a profile and
-the commands are ALG-750's, and admitting a signal is ALG-743's.
+pp.5–7). Sizing an entry from a policy is [risk-sizing.md](risk-sizing.md)'s
+(ALG-736), arming a profile and the commands are ALG-750's, and admitting a
+signal is ALG-743's.
 
 ## Contents
 
@@ -275,11 +276,11 @@ the entry's. The first five are `PolicyService::entry`'s, and `no_stop` is
 
 These are the policy's own refusals, and they are all the policy decides.
 An entry that passes them is admitted, not yet sized: the sizing rules of
-ADR 0002 §6 (ALG-736) still apply before anything is sent, and the leverage
-is theirs. The snapshot carries the leverage the operator set, and sizing
-holds it to the venue's leverage brackets for the instrument and the
-account: a position no bracket holds at that leverage is refused,
-`above_leverage_bracket`, never shrunk and never sent.
+ADR 0002 §6 ([risk-sizing.md](risk-sizing.md)) still apply before anything
+is sent, and the leverage is theirs. The snapshot carries the leverage the
+operator set, and sizing holds it to the venue's leverage brackets for the
+instrument and the account: a position no bracket holds at that leverage is
+refused, `above_leverage_bracket`, never shrunk and never sent.
 
 <!-- begin: snapshot format -->
 1
@@ -424,7 +425,8 @@ the asset's:
 
 Precision beyond that belongs to an order, not to a setting: quantities,
 ticks, minimums and leverage brackets are applied when an entry is sized
-(ALG-736), from the instrument and the account as they are then. The check
+([risk-sizing.md](risk-sizing.md)), from the instrument and the account as
+they are then. The check
 here reads an instrument's public leverage range, which catches a setting
 no account could use; the brackets an account is really given, some of
 them served only to the account itself, are sizing's to apply.
@@ -529,7 +531,9 @@ restart, and `docs.rs` holds this page.
 - **The commands.** `quantforge` has no policy command yet; ALG-750 puts
   one over the service above.
 - **Sizing.** Turning a snapshot, a price and a stop into a quantity is
-  ALG-736's, from `spikes/futures-contract/sizing-cases.json`.
+  [risk-sizing.md](risk-sizing.md)'s, which takes the snapshot as it was
+  admitted. Calling it for an admitted entry, and sending what it sizes, is
+  the executor's (ALG-745).
 - **Admission and the execution store.** Reading a payload, choosing the
   profile by its route, recording the intent with its snapshot and
   everything after it are ALG-737's, ALG-743's and ALG-738's.

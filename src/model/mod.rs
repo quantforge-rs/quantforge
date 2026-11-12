@@ -12,6 +12,7 @@ pub mod candle;
 pub mod candle_batch;
 pub mod decimal;
 pub mod durability;
+mod exact;
 pub mod futures;
 pub mod identity;
 pub mod interval;

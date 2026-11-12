@@ -2,9 +2,10 @@
 //! whether universe rule 1 keeps it; an account, its settings and its
 //! positions; the orders that enter, close and protect a position; what a
 //! venue reports back; an automation profile's policy, the settings its
-//! entries are sized from; and the records a store keeps: an external
-//! signal's intent with the policy it was admitted under, a position cycle
-//! with its protection, and realized PnL.
+//! entries are sized from; the sizing itself, from a risk budget and a
+//! stop to a quantity the venue takes; and the records a store keeps: an
+//! external signal's intent with the policy it was admitted under, a
+//! position cycle with its protection, and realized PnL.
 //!
 //! Everything here is venue-neutral. A venue's own fields, such as Bybit's
 //! `positionIdx` or Binance's `positionSide`, stay inside its adapter, which
@@ -33,6 +34,7 @@ mod order;
 mod policy;
 mod position;
 mod protection_state;
+mod sizing;
 mod stop;
 
 pub use account::{
@@ -70,6 +72,12 @@ pub use policy::{
 };
 pub use position::{CloseReason, OperatorRemoval, PositionCycle};
 pub use protection_state::ProtectionState;
+pub use sizing::{
+    ACCOUNT_FRESH_MS, AMOUNT_PLACES, DRIFT_LIMIT, FillEstimate, FillRisk, Freshness, MarginNeed,
+    Notional, Observed, PRICES_FRESH_MS, PoolFit, RULES_FRESH_MS, SizedEntry, SizedPosition,
+    SizedStop, Sizing, SizingFault, SizingFaultKind, SizingFigures, SizingInput, SizingRefusal,
+    SizingRequest, SizingWarning, SubmissionCheck, SubmissionRefusal, UsdIndex, margin_pool,
+};
 pub use stop::{
     PriceProtection, StopLookup, StopOrder, StopPlacement, StopRef, StopRequest, StopScope,
     StopStatus, TriggerBasis,
