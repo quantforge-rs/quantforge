@@ -29,16 +29,24 @@ request that changes only documentation can still break the PostgreSQL
 legs, which compare the server's catalog to the DDL in
 [storage-schema.md](storage-schema.md).
 
-`checks (windows-latest)`, the slowest leg, runs on `windows-latest-l`, a
-larger runner of the organization with 8 cores, where the other two legs
-run on GitHub's standard runners. The check keeps its name: the job names
-its checks after the platform (`name: checks (${{ matrix.os }})`), and the
-matrix gives Windows its runner beside it. That runner belongs to the
-organization's `Default Larger Runners` group, which must allow public
-repositories; where it does not, or in a copy of the repository without
-such a runner, the Windows job waits for a runner that never comes. Taking
-the `include` entry out of the matrix puts the leg back on
-`windows-latest`.
+Two jobs run on larger runners of the organization, where every other job
+runs on GitHub's standard runners:
+
+- `checks (windows-latest)`, the slowest leg, runs on `windows-latest-l`,
+  with 8 cores. The check keeps its name: the job names its checks after
+  the platform (`name: checks (${{ matrix.os }})`), and the matrix gives
+  Windows its runner beside it. Taking the `include` entry out of the
+  matrix puts the leg back on `windows-latest`.
+- `analyze`, CodeQL's job in `.github/workflows/codeql.yml`, runs on
+  `ubuntu-latest-m`, with 4 cores and 16 GB of memory. The check is named
+  after the job, so its name does not depend on the runner. Setting
+  `runs-on` back to `ubuntu-latest` puts the job back on the standard
+  runner.
+
+Both runners belong to the organization's `Default Larger Runners` group,
+which must allow public repositories; where it does not, or in a copy of
+the repository without such runners, these jobs wait for a runner that
+never comes.
 
 ## Required checks
 
