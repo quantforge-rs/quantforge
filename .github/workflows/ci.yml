@@ -10,11 +10,19 @@ concurrency:
 
 jobs:
   checks:
+    # branch protection requires these checks by name (docs/ci.md): the name
+    # follows the platform, whichever runner the platform runs on
+    name: checks (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+        # windows, the slowest leg, runs on the organization's larger runner
+        # (8 cores); the other legs run on the runner their name says
+        include:
+          - os: windows-latest
+            runner: windows-latest-l
+    runs-on: ${{ matrix.runner || matrix.os }}
     steps:
       - uses: actions/checkout@v4
       # the size budget runs on the linux leg only (line counts are the same on

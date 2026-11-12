@@ -29,6 +29,17 @@ request that changes only documentation can still break the PostgreSQL
 legs, which compare the server's catalog to the DDL in
 [storage-schema.md](storage-schema.md).
 
+`checks (windows-latest)`, the slowest leg, runs on `windows-latest-l`, a
+larger runner of the organization with 8 cores, where the other two legs
+run on GitHub's standard runners. The check keeps its name: the job names
+its checks after the platform (`name: checks (${{ matrix.os }})`), and the
+matrix gives Windows its runner beside it. That runner belongs to the
+organization's `Default Larger Runners` group, which must allow public
+repositories; where it does not, or in a copy of the repository without
+such a runner, the Windows job waits for a runner that never comes. Taking
+the `include` entry out of the matrix puts the leg back on
+`windows-latest`.
+
 ## Required checks
 
 Branch protection on `main` requires these checks by name, `storage` once a
@@ -55,7 +66,9 @@ branch protection, and a dropped leg cannot leave a required check waiting
 forever. `storage` runs even when a leg failed or was cancelled
 (`if: always()`), because GitHub counts a skipped required check as passed.
 A renamed job is different: every merge waits until its new name replaces
-the old one in branch protection.
+the old one in branch protection. That is why the runner of a `checks` leg
+is changed through the matrix's `runner`, never by changing the `os` its
+check is named after.
 
 ## PostgreSQL
 
