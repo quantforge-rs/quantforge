@@ -273,6 +273,14 @@ the entry's. The first five are `PolicyService::entry`'s, and `no_stop` is
   fallback
 <!-- end: entry refusals -->
 
+These are the policy's own refusals, and they are all the policy decides.
+An entry that passes them is admitted, not yet sized: the sizing rules of
+ADR 0002 §6 (ALG-736) still apply before anything is sent, and the leverage
+is theirs. The snapshot carries the leverage the operator set, and sizing
+holds it to the venue's leverage brackets for the instrument and the
+account: a position no bracket holds at that leverage is refused,
+`above_leverage_bracket`, never shrunk and never sent.
+
 <!-- begin: snapshot format -->
 1
 <!-- end: snapshot format -->
@@ -385,7 +393,9 @@ against a list kept here:
   instrument, its leverage and its capital. It says nothing of an
   instrument the policy does not name: one that trades on enabled defaults
   is held to the venue's listing when an entry on it arrives, and refused
-  then by name, `outside_universe` or `no_capital_in_settlement_asset`.
+  then by name, `outside_universe` or `no_capital_in_settlement_asset`; its
+  leverage, like every entry's, is held to the venue's brackets when the
+  entry is sized.
 
 The problems, in the order an asset is looked at; the first that applies is
 the asset's:
@@ -405,7 +415,10 @@ the asset's:
 
 Precision beyond that belongs to an order, not to a setting: quantities,
 ticks, minimums and leverage brackets are applied when an entry is sized
-(ALG-736), from the instrument and the account as they are then.
+(ALG-736), from the instrument and the account as they are then. The check
+here reads an instrument's public leverage range, which catches a setting
+no account could use; the brackets an account is really given, some of
+them served only to the account itself, are sizing's to apply.
 
 ## The service
 

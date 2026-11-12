@@ -222,6 +222,11 @@ impl ProfilePolicy {
     /// Only entries are held to this. An exit, a stop repair or a
     /// protective close takes no policy, so disabling an asset, or the
     /// defaults, never strands a position that is open.
+    ///
+    /// The leverage is the operator's setting, as it stands. Whether the
+    /// venue's brackets take it for this instrument, account and size is
+    /// sizing's to say (ADR 0002 §6), which refuses what they do not take
+    /// as `above_leverage_bracket`.
     pub fn entry_snapshot(
         &self,
         instrument: &FuturesInstrument,
