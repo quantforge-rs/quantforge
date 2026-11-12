@@ -38,7 +38,7 @@ runs on GitHub's standard runners:
   Windows its runner beside it. Taking the `include` entry out of the
   matrix puts the leg back on `windows-latest`.
 - `analyze`, CodeQL's job in `.github/workflows/codeql.yml`, runs on
-  `ubuntu-latest-m`, with 4 cores and 16 GB of memory. The check is named
+  `ubuntu-latest-l`, with 8 cores and 32 GB of memory. The check is named
   after the job, so its name does not depend on the runner. Setting
   `runs-on` back to `ubuntu-latest` puts the job back on the standard
   runner.
