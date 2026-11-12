@@ -151,6 +151,18 @@ sent is bounded by the drift check [just before
 submission](#just-before-submission), and what it did slip is reported
 [after the fills](#after-the-fills).
 
+Of the leverage, sizing holds one thing: the position must fit the
+account's brackets at it. Whether the venue takes that leverage for the
+instrument at all, its range and its step, is not sizing's to say, and a
+leverage the venue does not take is still sized. It is held where a
+leverage is set: for an asset with settings of its own, when the setting is
+made and whenever the profile is checked
+([automation-policy.md](automation-policy.md#the-venues-say)); and for any
+instrument, one trading on the defaults included, when the leverage is set
+on the venue and read back, before any entry is sent (ADR 0002 §4; ALG-740,
+ALG-762). None of the matrix's refusals names a leverage off the venue's
+step, so an entry is not refused for one before then.
+
 A sized entry carries these figures, and a refusal the ones reached before
 it. The names are the ones the shared cases record them under:
 
@@ -204,7 +216,10 @@ compared, and no amount ever passes through a binary float.
 What is reported is rounded only where it has to be:
 
 - a **stop** keeps its tick's scale, and a **quantity** its step's: a tick
-  of `0.0100` gives a stop of `200.0000`;
+  of `0.0100` gives a stop of `200.0000`. Where no exact decimal holds a
+  value at that scale, as a tick or a step written with more places than it
+  needs can make it, its trailing zeros are dropped; the filled quantity of
+  a fill report keeps the finest scale of its fills on the same terms;
 - every other **amount** is exact where it has no more decimal places than
   the number below, and rounded half to even at that many where it has
   more, as a division's result has to be somewhere; trailing zeros are
@@ -772,6 +787,9 @@ And the reports after the fills:
 - `fill-exactly-the-budget-before-rounding`: A fill that risks
   1,000.0000000000005 USDT of a budget of that much does not exceed it, though
   both are reported as 1,000
+- `fills-written-with-more-places-than-their-sum-can-keep`: Two fills of 5
+  written with 28 decimal places add up to 10, which no exact decimal holds at
+  28 places: it is reported as 10, never as out of range
 - `short-fill-lower-than-expected`: A SHORT filled below E has further to its
   stop
 - `bybit-short-fill`: The Bybit SHORT, filled at two prices

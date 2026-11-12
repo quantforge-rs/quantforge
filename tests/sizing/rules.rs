@@ -424,6 +424,34 @@ fn the_quantity_is_held_to_the_market_order_step_and_limits_not_the_limit_order_
     assert_eq!(sized(&setup.request()), base("4.3"));
 }
 
+/// A tick or a step written with more decimal places than it needs must
+/// not put a stop or a quantity out of reach: 16 on a step of 0.1 written
+/// with 28 places is more than a decimal counts in at 28 places, and is
+/// still 16.
+#[test]
+fn a_grid_written_with_more_places_than_a_decimal_counts_in_still_sizes() {
+    let fixture = fixture();
+    // 150 / 9.37 is 16.008…: 16.0 on a step of 0.1.
+    let mut setup = Setup::of(&fixture, "bybit-linear-short");
+    assert_eq!(sized(&setup.request()).to_string(), "16.0");
+    setup.relist(|spec| {
+        spec.market_step = base("0.1000000000000000000000000000");
+        spec.tick = price("0.0100000000000000000000000000");
+    });
+    let Sizing::Sized(entry) = setup.request().size().expect("an answer") else {
+        panic!("the entry is sized");
+    };
+    assert_eq!(entry.quantity(), base("16"));
+    assert_eq!(entry.quantity().to_string(), "16");
+    // 243.60 at 28 places is past a decimal too, and is still the stop.
+    assert_eq!(entry.stop().price, price("243.6"));
+    assert_eq!(entry.stop().price.to_string(), "243.6");
+    assert_eq!(entry.position().risk.to_string(), "149.92 USDT");
+    // A step it can count in keeps its scale, zeros and all.
+    setup.relist(|spec| spec.market_step = base("0.1000"));
+    assert_eq!(sized(&setup.request()).to_string(), "16.0000");
+}
+
 #[test]
 fn a_quantity_of_nothing_is_below_every_minimum_even_one_of_nothing() {
     let fixture = fixture();

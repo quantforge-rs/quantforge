@@ -146,6 +146,18 @@ impl Natural {
         (remainder == 0).then(|| Self::trimmed(limbs))
     }
 
+    /// The number as a `Decimal`'s mantissa at `scale`, with the trailing
+    /// zeros that scale leaves it dropped, where one holds it.
+    fn shortest(&self, mut scale: u32) -> Option<Decimal> {
+        let mut digits = self.clone();
+        while scale > 0 {
+            let Some(shorter) = digits.tenth() else { break };
+            digits = shorter;
+            scale -= 1;
+        }
+        digits.decimal(scale)
+    }
+
     /// The number as a `Decimal`'s mantissa at `scale`, where one holds it.
     fn decimal(&self, scale: u32) -> Option<Decimal> {
         if self.0.len() > 3 {
@@ -249,8 +261,10 @@ impl Exact {
     }
 
     /// The largest multiple of `grid` at or below the value, in the grid's
-    /// own scale. `None` where the grid is not above zero, or where no
-    /// `Decimal` holds the answer.
+    /// own scale. Where no `Decimal` holds it at that scale, as a grid
+    /// written with more places than it needs can make it, its trailing
+    /// zeros are dropped. `None` where the grid is not above zero, or where
+    /// no `Decimal` holds the answer at all.
     pub(crate) fn floor_on(&self, grid: Decimal) -> Option<Decimal> {
         self.on_grid(grid, false)
     }
@@ -269,9 +283,10 @@ impl Exact {
         if up && !rest.is_zero() {
             count = count.plus(&Natural::of(1));
         }
-        count
-            .times(&Natural::of(grid.mantissa().unsigned_abs()))
+        let on_grid = count.times(&Natural::of(grid.mantissa().unsigned_abs()));
+        on_grid
             .decimal(grid.scale())
+            .or_else(|| on_grid.shortest(grid.scale()))
     }
 
     /// The value rounded half to even at `places`, with trailing zeros
@@ -288,13 +303,7 @@ impl Exact {
         if up {
             count = count.plus(&Natural::of(1));
         }
-        let mut scale = places;
-        while scale > 0 {
-            let Some(shorter) = count.tenth() else { break };
-            count = shorter;
-            scale -= 1;
-        }
-        count.decimal(scale)
+        count.shortest(places)
     }
 }
 

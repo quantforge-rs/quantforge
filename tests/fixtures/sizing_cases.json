@@ -22803,6 +22803,42 @@
       }
     },
     {
+      "id": "fills-written-with-more-places-than-their-sum-can-keep",
+      "note": "Two fills of 5 written with 28 decimal places add up to 10, which no exact decimal holds at 28 places: it is reported as 10, never as out of range",
+      "entry": "bybit-linear-short",
+      "fills": [
+        {
+          "price": "234.23",
+          "quantity": {
+            "Base": "5.0000000000000000000000000000"
+          }
+        },
+        {
+          "price": "234.23",
+          "quantity": {
+            "Base": "5.0000000000000000000000000000"
+          }
+        }
+      ],
+      "expect": {
+        "filled": "10",
+        "expected": "93.7",
+        "actual": "93.7",
+        "deviation": "0",
+        "exceeds_budget": false
+      },
+      "result": {
+        "status": "reported",
+        "filled": "10",
+        "expected": "93.7",
+        "actual": "93.7",
+        "deviation": "0",
+        "budget": "150",
+        "exceeds_budget": false,
+        "past_stop": false
+      }
+    },
+    {
       "id": "short-fill-lower-than-expected",
       "note": "A SHORT filled below E has further to its stop",
       "entry": "linear-short-percent-stop",
@@ -23378,11 +23414,40 @@
       "expect": null
     },
     {
-      "note": "a count the grid's scale cannot hold",
+      "note": "a count the grid's scale cannot hold is held without the zero that scale adds",
       "expr": "79228162514264337593543950335",
       "grid": "0.1",
       "round": "floor",
+      "expect": "79228162514264337593543950335"
+    },
+    {
+      "note": "and not where its last place is no zero",
+      "expr": [
+        "add",
+        "79228162514264337593543950335",
+        "0.3"
+      ],
+      "grid": "0.1",
+      "round": "floor",
       "expect": null
+    },
+    {
+      "note": "two fives written with 28 places are ten, on a grid of that many places",
+      "round": "floor",
+      "expr": [
+        "add",
+        "5.0000000000000000000000000000",
+        "5.0000000000000000000000000000"
+      ],
+      "grid": "0.0000000000000000000000000001",
+      "expect": "10"
+    },
+    {
+      "note": "a step written with 28 places still counts sixteen",
+      "expr": "16.04",
+      "round": "floor",
+      "grid": "0.1000000000000000000000000000",
+      "expect": "16"
     },
     {
       "note": "the largest value on a whole grid",

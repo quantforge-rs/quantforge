@@ -1159,6 +1159,11 @@ FILL_CASES = [
              "both are reported as 1,000",
      "base": "budget-with-more-places-than-reported", "fills": [("85000.0000000000005", "1.000")],
      "expect": {"actual": "1000", "budget": "1000", "deviation": "0", "exceeds_budget": False}},
+    {"id": "fills-written-with-more-places-than-their-sum-can-keep",
+     "note": "Two fills of 5 written with 28 decimal places add up to 10, which no exact decimal holds at 28 "
+             "places: it is reported as 10, never as out of range",
+     "base": "bybit-linear-short", "fills": [("234.23", "5." + "0" * 28), ("234.23", "5." + "0" * 28)],
+     "expect": {"filled": "10", "expected": "93.7", "actual": "93.7", "deviation": "0", "exceeds_budget": False}},
     {"id": "short-fill-lower-than-expected", "note": "A SHORT filled below E has further to its stop",
      "base": "linear-short-percent-stop", "fills": [("84100.00", "0.039")],
      "expect": {"expected": "98.42625", "actual": "99.3408", "deviation": "0.91455", "exceeds_budget": False}},
@@ -1486,9 +1491,12 @@ def fill_risk(inputs, result, fills):
             actual += D(quantity_value(fill["quantity"])) * each
     expected = filled * loss(e)
     budget = D(inputs["snapshot"]["capital"]["amount"]) * D(inputs["snapshot"]["risk_percent"]["value"]) / 100
+    sign, digits, exponent = filled.as_tuple()
+    assert sign == 0 and exponent <= 0, filled
     return {
         "status": "reported",
-        "filled": text(filled),
+        # In the finest scale a fill came in, where the shared model holds it there.
+        "filled": held_on_grid(int("".join(map(str, digits))), -exponent),
         "expected": shown(expected),
         "actual": shown(actual),
         "deviation": shown(actual - expected),
@@ -1655,7 +1663,7 @@ def fill_risk_exactly(inputs, result, fills):
     places = max(scale_of(quantity_value(fill["quantity"])) for fill in fills)
     return {
         "status": "reported",
-        "filled": scaled(int(filled * 10 ** places), places),
+        "filled": held_on_grid(int(filled * 10 ** places), places),
         "expected": exactly(expected),
         "actual": exactly(actual),
         "deviation": exactly(actual - expected),
@@ -1800,6 +1808,18 @@ def held(mantissa, scale):
     return scaled(mantissa, scale) if abs(mantissa) < MANTISSA_LIMIT else None
 
 
+def held_on_grid(mantissa, scale):
+    """A value on a grid: in the grid's own scale where the shared model holds
+    it there, else with its trailing zeros dropped. A grid written with more
+    places than it needs must not put a value out of reach."""
+    kept = held(mantissa, scale)
+    if kept is not None:
+        return kept
+    while scale and mantissa % 10 == 0:
+        mantissa, scale = mantissa // 10, scale - 1
+    return held(mantissa, scale)
+
+
 def arithmetic_vector(vector):
     """`vector` with the answer it must get."""
     answered = dict(vector)
@@ -1823,7 +1843,7 @@ def arithmetic_vector(vector):
         else:
             count = math.floor(value / fr(grid)) if vector["round"] == "floor" else math.ceil(value / fr(grid))
             scale = scale_of(grid)
-            answered["expect"] = held(count * int(fr(grid) * 10 ** scale), scale)
+            answered["expect"] = held_on_grid(count * int(fr(grid) * 10 ** scale), scale)
     return answered
 
 
@@ -1899,7 +1919,14 @@ def arithmetic_vectors():
         {"note": "a grid that is not a power of ten", "expr": "1.3", "grid": "0.25", "round": "floor"},
         {"note": "the same, upwards", "expr": "1.3", "grid": "0.25", "round": "ceil"},
         {"note": "a grid of nothing has no steps", "expr": "1", "grid": "0", "round": "floor"},
-        {"note": "a count the grid's scale cannot hold", "expr": LARGEST, "grid": "0.1", "round": "floor"},
+        {"note": "a count the grid's scale cannot hold is held without the zero that scale adds", "expr": LARGEST,
+         "grid": "0.1", "round": "floor"},
+        {"note": "and not where its last place is no zero", "expr": ["add", LARGEST, "0.3"], "grid": "0.1",
+         "round": "floor"},
+        {"note": "two fives written with 28 places are ten, on a grid of that many places", "round": "floor",
+         "expr": ["add", "5." + "0" * 28, "5." + "0" * 28], "grid": SMALLEST},
+        {"note": "a step written with 28 places still counts sixteen", "expr": "16.04", "round": "floor",
+         "grid": "0.1" + "0" * 27},
         {"note": "the largest value on a whole grid", "expr": LARGEST, "grid": "1", "round": "floor"},
         {"note": "scale does not change a value", "compare": ["1.10", "1.1"]},
         {"note": "a third is less than 0.3334", "compare": [third, "0.3334"]},
