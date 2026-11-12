@@ -21,6 +21,8 @@
 //! - `jobs`: `JobStore`, each change one guarded statement, a claim
 //!   skipping what another claim holds locked.
 //! - `journal`: `RunJournalStore`, one statement per call.
+//! - `policies`: `PolicyStore`, a profile with its first revision in one
+//!   transaction, and each later revision one guarded insert.
 //! - `control`: `StoreControl`, the store's record and legacy runs.
 //! - `segments`: `SegmentStore`, each window and plan read in one snapshot
 //!   and written back only over the revision it read.
@@ -42,6 +44,7 @@ mod job_logs;
 mod jobs;
 mod journal;
 mod migrate;
+mod policies;
 mod runner;
 mod schema;
 mod segments;

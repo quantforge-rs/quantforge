@@ -148,6 +148,11 @@ fn jobs() {
 }
 
 #[test]
+fn policies() {
+    conformance::policies::<Sqlite>();
+}
+
+#[test]
 fn durability() {
     conformance::durability::<Sqlite>();
 }

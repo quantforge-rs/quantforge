@@ -143,7 +143,9 @@ src/
 │   ├── timestamp.rs            TimestampMs, now_utc_ms, RFC 3339 conversions
 │   ├── transfer/               what a transfer between two stores carries
 │   │   ├── mod.rs              a row's values, their canonical text, the market, the target's record
-│   │   └── tables.rs           the tables a transfer copies, in copy order, and those each store keeps
+│   │   ├── tables.rs           the tables a transfer copies, in copy order, and those each store keeps
+│   │   └── tables/             its unit tests, beside it for the line budget
+│   │       └── tests.rs        a table's header, its key, and how many of its rows a batch holds
 │   ├── units.rs                Price, BaseQty, Contracts, Quantity, FaceValue, Leverage, PositionSide
 │   └── futures/                the futures contract of ADR 0002, used through its module
 │       ├── mod.rs              the contract's two rules, and the re-exports
@@ -157,7 +159,21 @@ src/
 │       ├── ledger.rs           funding, fee and PnL records, closed-PnL summaries, TimeWindow
 │       ├── events.rs           an account's private events
 │       ├── intent_state.rs     IntentState: the signal_intent machine, gated on evidence
-│       ├── intent.rs           ExternalIntent: a signal's versioned record, and §9's bounds
+│       ├── intent.rs           ExternalIntent: a signal's versioned record, the policy it was admitted under, and §9's bounds
+│       ├── intent/             the record read back from a store, and its unit tests
+│       │   ├── stored.rs       what a stored intent must hold to be read back, an admitted entry's policy among it
+│       │   └── tests.rs        admission under an entry's own policy and an exit's none, and the stored records refused
+│       ├── policy.rs           an automation profile's policy: RiskPercent, StopPercent, ProfileLabel, PolicyRevision
+│       ├── policy/             the policy as a document, its changes, and what an entry is held to
+│       │   ├── document.rs     ProfilePolicy: defaults, per-asset settings and capital, one whole document per revision
+│       │   ├── change.rs       PolicyChange: each change makes the next revision, stamped on what it changed
+│       │   ├── effective.rs    EffectivePolicy: what an instrument trades on, and where each setting came from
+│       │   ├── snapshot.rs     PolicySnapshot: what an admitted entry carries, the stop it uses, why an entry is refused
+│       │   ├── check.rs        PolicyProblem: a policy held against the venue's own instrument list
+│       │   ├── tests.rs        the units, the revisions, and the stored form of a policy
+│       │   └── tests/          the rest of its unit tests, beside it for the line budget
+│       │       ├── changes.rs  what a change stamps, and the changes a policy refuses
+│       │       └── entries.rs  an entry's refusals in their order, a snapshot's stored form, the venue check
 │       ├── protection_state.rs ProtectionState: the futures_position machine, gated on evidence
 │       ├── position.rs         PositionCycle, CloseReason, OperatorRemoval
 │       └── accounting.rs       RealizedPnl and AccountingStatus: net PnL per settlement asset
@@ -166,6 +182,7 @@ src/
 │   ├── clock.rs                Clock, the injected time source, and SystemClock
 │   ├── storage.rs              CandleStore, SegmentStore, RunJournalStore, StoreControl, StorageError
 │   ├── jobs.rs                 JobStore: a server's bundles, jobs and their results, each move of a job one guarded change
+│   ├── policy.rs               PolicyStore: automation profiles and every revision of their policies, appended
 │   ├── transfer.rs             TransferSource, TransferSnapshot, TransferTarget: a store's rows for a copy
 │   └── futures.rs              futures ports by capability, FuturesCapabilities, FuturesConnectors
 ├── exchange/                   the connector registry, one adapter per exchange, and the conformance suite
@@ -203,6 +220,7 @@ src/
 │   ├── common.rs               what both backends share: exact decimal reads, a candle's window
 │   ├── runs.rs                 what both backends' journals share: identity columns, state, adoption
 │   ├── jobs.rs                 what both backends' job stores share: a job's columns, outcomes, refusals
+│   ├── policies.rs             what both backends' policy stores share: a profile's columns, a stored policy, refusals
 │   ├── refresh.rs              what both backends' segment stores share: the refresh loop, packing, a plan
 │   ├── races.rs                the shared cases' races, stepped through any backend's read and write-back
 │   ├── retry.rs                retry_conflicts: running a transaction again, within the caller's budget
@@ -221,6 +239,7 @@ src/
 │   │   ├── coverage.rs         the markets the candle table holds, each found in two indexed steps
 │   │   ├── jobs.rs             JobStore: guarded statements, a claim skipping what another holds locked
 │   │   ├── job_logs.rs         a job's log: stored once under its job's ID, behind the copy guard, and read back
+│   │   ├── policies.rs         PolicyStore: a profile and its first revision in one transaction, each later one a guarded insert
 │   │   ├── journal.rs          RunJournalStore: one statement per call, run IDs in byte order
 │   │   ├── control.rs          StoreControl: the store's record, its binding and legacy-run adoption
 │   │   ├── transfer.rs         a transfer's reads in byte order, batches that skip what it holds, the record
@@ -235,7 +254,8 @@ src/
 │   │       ├── durability.rs   real failures in their categories, bounded calls, weak servers
 │   │       ├── migrate.rs      the chain over steps no build has: an upgrade, a failure, stores together
 │   │       ├── scratch.rs      a database of its own for a test
-│   │       └── segments.rs     the races, a write-back waiting on a lock, reads that stay one snapshot
+│   │       ├── segments.rs     the races, a write-back waiting on a lock, reads that stay one snapshot
+│   │       └── steps.rs        each real step from the schema before it: every row kept, its tables added
 │   ├── segments/               segment format 1: a window of candles, packed and named by its hash
 │   │   ├── mod.rs              windows, compression, the hash, opening a fetched segment, SegmentError
 │   │   └── payload.rs          the payload: candles as columns, exact decimal text, strict decoding
@@ -248,6 +268,7 @@ src/
 │       ├── snapshot.rs         SqliteSnapshot: a store read-only from one snapshot, the source of a transfer
 │       ├── candles.rs          candle table and the CandleStore implementation; marks changed windows
 │       ├── jobs.rs             bundles and jobs: their DDL and JobStore, each move one statement
+│       ├── policies.rs         profiles and policy revisions: their DDL and PolicyStore, each revision one guarded insert
 │       ├── journal.rs          run table, run identity, and RunJournalStore; the journal DDL of every schema
 │       ├── journal/            the journals beside a run's state, and its identity columns
 │       │   ├── identity.rs     a RunIdentity written to and read from its four columns
@@ -284,6 +305,9 @@ src/
 │       ├── execution/          its unit tests, beside it for the line budget
 │       │   └── tests.rs        dry-run fills, rounding, notional and dust rules
 │       └── state.rs            run identity: create, resume, and resume checks
+├── automation/                 automation on external signals, of which the policy service is the first part
+│   ├── mod.rs                  what the module is for, and the re-exports
+│   └── policy.rs               PolicyService: profiles, changes checked with the venue, and an entry's policy
 └── server/                     the HTTP server other instances connect to
     ├── mod.rs                  serve: the routes, and the shutdown that finishes requests in progress
     ├── store.rs                ServerStore: the store the routes and the queue share, and the turns at it
@@ -347,11 +371,17 @@ src/
         └── submissions.rs      submissions queued or refused, and statuses, the list and cancels
 ```
 
-After `cli/` come the eight library modules: `protocol` first, which stands
+After `cli/` come the nine library modules: `protocol` first, which stands
 apart and uses no other module, then the six layers innermost first, as in
-the `src/lib.rs` docs, then `server`. `model` uses no other module, `ports`
-uses `model`, `exchange` and `storage` use `model` and `ports`, `sdk` uses
-`model`, and `engine` uses `model`, `ports`, and `sdk`. `server` uses
+the `src/lib.rs` docs, then `automation` and `server`. `model` uses no other
+module, `ports` uses `model`, `exchange` and `storage` use `model` and
+`ports`, `sdk` uses `model`, and `engine` uses `model`, `ports`, and `sdk`.
+`automation` uses `model` and `ports`, as an engine does, and no strategy:
+its policy service keeps each automation profile's defaults, per-asset
+settings and capital through the `PolicyStore` port, revision by revision,
+checks them against a venue's own instrument list, and hands an entry the
+policy it is admitted under ([automation-policy.md](automation-policy.md)).
+`server` uses
 `protocol`, `model`, the `ports` it reads and writes the store through, the
 segment codec of `storage::segments` to check what it sends, and, in a
 worker, the backtest `engine` and the `sdk` strategy it runs, whose result
@@ -433,8 +463,9 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   `tests/fixtures/storage_conformance_cases.json`, run on the SQLite store
   and through `AnyStore`; the schema chain from every earlier schema in
   `tests/fixtures/sqlite/`; every group on PostgreSQL, an isolated database
-  per fixture, then again through `AnyStore`, and the journal and
-  store-record groups once more under a linguistic collation; the schema
+  per fixture, then again through `AnyStore`, and the journal,
+  store-record, candle and policy groups once more under a linguistic
+  collation; the schema
   `init` creates, its refusals, exact round trips, the candle store's writes
   raced against a refresh's write-back, writers appending to one run at
   once, and the query plans of
@@ -453,6 +484,14 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
 - `tests/futures_contract.rs`: the futures contract end to end against a
   hand-written fake venue: every port implemented outside the crate, and
   intents and positions that move only on the venue's evidence
+- `tests/policy/`: an automation profile's policy against
+  [automation-policy.md](automation-policy.md): the shared cases of
+  `tests/fixtures/policy_cases.json` on all four futures product lines,
+  through the model and through the policy service on SQLite and, with
+  `QUANTFORGE_TEST_POSTGRES_URL`, on PostgreSQL, each store opened again
+  part-way; changes racing from one revision; the snapshot an admitted
+  entry keeps through later edits and a restart; and the document held to
+  the code
 - `tests/parity/`: the parity matrix in `docs/parity/` — its rules, the cell
   and evidence ledgers, the dated universe list, the rendered `matrix.md`,
   and the code that implements its state machines and vocabularies

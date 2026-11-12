@@ -13,6 +13,7 @@ mod durability;
 mod migrate;
 mod scratch;
 mod segments;
+mod steps;
 
 use super::bridge::{Bridge, Effect};
 use super::runner::{RunError, Runner};

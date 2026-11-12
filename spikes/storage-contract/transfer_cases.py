@@ -3,8 +3,9 @@
 of the Rust code under test.
 
 A store's tables as rows of plain values: candles of three product lines on
-two venues, a run journal with every identity source, and segments with
-their index and dirty marks. Then, for every table and every market of a
+two venues, a run journal with every identity source, segments with their
+index and dirty marks, a server's bundles and jobs with their results and
+logs, and automation profiles with every revision of their policies. Then, for every table and every market of a
 market table, what a verification reads from either store: the number of
 rows, the first and last value of an integer key, and the checksum of the
 canonical text docs/storage-migration.md defines. A worked example shows the
@@ -94,6 +95,19 @@ TABLES = [
         False,
     ),
     ("job_logs", ["job_id", "log_json", "stored_at_ms"], "job_id", False),
+    (
+        "automation_profiles",
+        ["profile_id", "venue", "environment", "account_kind", "account_id", "category",
+         "owner_tag", "created_at_ms"],
+        "profile_id",
+        False,
+    ),
+    (
+        "policy_revisions",
+        ["seq", "profile_id", "revision", "changed_at_ms", "policy_json"],
+        "seq",
+        False,
+    ),
 ]
 
 # --- The canonical text of docs/storage-migration.md --------------------------
@@ -517,6 +531,88 @@ JOB_LOGS = [
             (1, 3), T + 52_000),
 ]
 
+# --- Automation profiles and the revisions of their policies ------------------
+
+# The store is bound to testnet, so its profiles are testnet's: four of them
+# on one venue, whose IDs compare byte by byte ("main-2" before "main0"
+# before "main_3"), which no linguistic collation does.
+ACCOUNT_KINDS = {"venue": "Venue", "key_fingerprint": "KeyFingerprint"}
+# A made-up key fingerprint: sixteen hex digits, plain enough that a secret
+# scanner does not take a fixture's fingerprint for a key.
+FINGERPRINT = "00000000000000a1"
+
+
+def profile(profile_id, category, kind, account_id, tag, created):
+    return {"profile_id": profile_id, "venue": "bybit", "environment": "testnet",
+            "account_kind": kind, "account_id": account_id, "category": category,
+            "owner_tag": tag, "created_at_ms": created}
+
+
+def defaults(revision, enabled=False, risk=None, stop=None, leverage=None):
+    return {"enabled": enabled, "risk_percent": risk, "stop_percent": stop,
+            "leverage": leverage, "revision": revision}
+
+
+def asset(line, symbol, settle, revision, enabled, risk=None, stop="Inherit", leverage=None):
+    return {"instrument": {"exchange": line, "symbol": symbol, "settle": settle},
+            "enabled": enabled, "risk_percent": risk, "stop": stop, "leverage": leverage,
+            "revision": revision}
+
+
+def capital(amount, code, revision):
+    return {"amount": {"amount": amount, "asset": code}, "revision": revision}
+
+
+def policy(seq, row, revision, changed, settings, label=None, assets=(), funds=()):
+    """One revision of a profile's policy as a store keeps it: the whole
+    document, in policy format 1's spelling, every decimal as text with its
+    scale."""
+    document = {
+        "format": 1,
+        "identity": {
+            "id": row["profile_id"],
+            "account_ref": {
+                "venue": row["venue"].capitalize(),
+                "environment": row["environment"].capitalize(),
+                "venue_account_id": {ACCOUNT_KINDS[row["account_kind"]]: row["account_id"]},
+            },
+            "category": row["category"].capitalize(),
+            "owner_tag": row["owner_tag"],
+        },
+        "revision": revision,
+        "label": label,
+        "defaults": settings,
+        "assets": list(assets),
+        "capital": list(funds),
+    }
+    return {"seq": seq, "profile_id": row["profile_id"], "revision": revision,
+            "changed_at_ms": changed,
+            "policy_json": json.dumps(document, separators=(",", ":"), ensure_ascii=False)}
+
+
+MAIN = profile("main", "linear", "venue", "71002233", "k3x9p2", T + 100_000)
+MAIN_2 = profile("main-2", "inverse", "key_fingerprint", FINGERPRINT, "a1b2c3",
+                 T + 101_000)
+MAIN0 = profile("main0", "linear", "venue", "71002234", "zzzzzz", T + 103_000)
+MAIN_3 = profile("main_3", "inverse", "venue", "71002233", "000000", T + 105_000)
+AUTOMATION_PROFILES = [MAIN, MAIN_2, MAIN0, MAIN_3]
+
+MAIN_DEFAULTS = defaults(2, True, "1", "3.50", "5")
+MAIN_SOL = asset("BybitLinear", "SOLUSDT", "USDT", 3, True, risk="0.5", stop="Off")
+# Every revision of every policy, in the order they were appended, which
+# runs across the profiles; the numbering has gaps, which a copy keeps.
+POLICY_REVISIONS = [
+    policy(1, MAIN, 1, T + 100_000, defaults(1)),
+    policy(2, MAIN_2, 1, T + 101_000, defaults(1)),
+    policy(3, MAIN, 2, T + 102_000, MAIN_DEFAULTS),
+    policy(5, MAIN0, 1, T + 103_000, defaults(1)),
+    policy(6, MAIN, 3, T + 104_000, MAIN_DEFAULTS, assets=[MAIN_SOL]),
+    policy(7, MAIN_3, 1, T + 105_000, defaults(1)),
+    policy(8, MAIN_2, 2, T + 106_000, defaults(1), label="inverse ž \"coin\""),
+    policy(11, MAIN, 4, T + 107_000, MAIN_DEFAULTS, assets=[MAIN_SOL],
+           funds=[capital("15000.00", "USDT", 4)]),
+]
+
 ROWS = {
     "candles": CANDLES,
     "bot_runs": BOT_RUNS,
@@ -529,6 +625,8 @@ ROWS = {
     "job_results": JOB_RESULTS,
     "jobs": JOBS,
     "job_logs": JOB_LOGS,
+    "automation_profiles": AUTOMATION_PROFILES,
+    "policy_revisions": POLICY_REVISIONS,
 }
 
 # --- What a verification reads ------------------------------------------------

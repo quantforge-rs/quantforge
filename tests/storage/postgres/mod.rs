@@ -310,6 +310,15 @@ fn jobs() {
 }
 
 #[test]
+fn policies() {
+    if server_url().is_none() {
+        eprintln!("skipping: {VARIABLE} is unset");
+        return;
+    }
+    conformance::policies::<Postgres>();
+}
+
+#[test]
 fn durability() {
     if server_url().is_none() {
         eprintln!("skipping: {VARIABLE} is unset");

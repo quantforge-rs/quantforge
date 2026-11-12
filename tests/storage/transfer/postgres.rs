@@ -12,14 +12,17 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use quantforge::model::futures::{
+    OwnerTag, PolicyChange, ProfileId, ProfileIdentity, ProfileLabel, ProfilePolicy,
+};
 use quantforge::model::{
-    IdentitySource, RunIdentity, TRANSFER_TABLES, TransferMarket, TransferRow, TransferTable,
-    TransferValue,
+    AccountRef, Category, IdentitySource, RunIdentity, TRANSFER_TABLES, TransferMarket,
+    TransferRow, TransferTable, TransferValue, Venue, VenueAccountId,
 };
 use quantforge::storage::sqlite::SqliteSnapshot;
 use quantforge::{
     AnyStore, CandleQuery, CandleStore, ClosedTrade, CopyStart, EngineError, Environment,
-    ExchangeOrder, MarketId, RunJournalStore, SegmentStore, SqliteStore, StorageError,
+    ExchangeOrder, MarketId, PolicyStore, RunJournalStore, SegmentStore, SqliteStore, StorageError,
     StoreActivation, StoreControl, StoreFactory, StoreId, StoreIdentity, TransferBegun,
     TransferConfig, TransferEngine, TransferRecord, TransferSource, TransferState, TransferTarget,
 };
@@ -257,6 +260,102 @@ fn every_port_reads_the_copy_as_it_reads_the_source() {
     assert_ne!(ours.store_id, theirs.store_id);
     assert_eq!(ours.activation, StoreActivation::Inactive);
     assert_eq!(ours.activation_epoch.0, 0);
+}
+
+/// The fixture's text of `profile`'s policy at `revision`.
+fn fixture_policy(cases: &Cases, profile: &str, revision: u64) -> String {
+    let revision = i64::try_from(revision).expect("a revision");
+    cases
+        .table("policy_revisions")
+        .rows
+        .iter()
+        .find_map(|row| match (&row[1], &row[2], &row[4]) {
+            (
+                TransferValue::Text(id),
+                TransferValue::Integer(number),
+                TransferValue::Text(text),
+            ) if id == profile && *number == revision => Some(text.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("the fixture has no revision {revision} of {profile}"))
+}
+
+#[test]
+fn every_profile_and_every_revision_of_its_policy_reads_from_the_copy_as_from_the_source() {
+    // On a linguistic collation, which would list the profiles otherwise.
+    let Some(bed) = Bed::new(LINGUISTIC) else {
+        return;
+    };
+    bed.copy(3);
+    let source = SqliteStore::new(&bed.path);
+    let target = &bed.target;
+    let profiles = target.profiles().expect("target profiles");
+    assert_eq!(profiles, source.profiles().expect("source profiles"));
+    let ids: Vec<&str> = profiles.iter().map(|held| held.id().as_str()).collect();
+    assert_eq!(ids, ["main", "main-2", "main0", "main_3"], "byte by byte");
+
+    let mut revisions = 0;
+    for identity in &profiles {
+        let id = identity.id();
+        let stamps = target.policy_revisions(id).expect("target stamps");
+        assert_eq!(
+            stamps,
+            source.policy_revisions(id).expect("source stamps"),
+            "{id}"
+        );
+        for stamp in &stamps {
+            let held = target
+                .profile_policy_at(id, stamp.revision)
+                .expect("a read")
+                .expect("the revision");
+            let theirs = source
+                .profile_policy_at(id, stamp.revision)
+                .expect("a read");
+            assert_eq!(Some(&held), theirs.as_ref(), "{id} {}", stamp.revision);
+            assert_eq!(held.identity(), identity, "{id}");
+            // The oracle's document is, byte for byte, the one this build
+            // writes of the policy it reads from it.
+            assert_eq!(
+                held.to_stored().expect("json"),
+                fixture_policy(&bed.cases, id.as_str(), stamp.revision.get()),
+                "{id} {}",
+                stamp.revision
+            );
+            revisions += 1;
+        }
+        assert_eq!(
+            target.profile_policy(id).expect("the newest"),
+            source.profile_policy(id).expect("the newest"),
+            "{id}"
+        );
+    }
+    assert_eq!(revisions, bed.cases.table("policy_revisions").rows.len());
+
+    // A change made on the copy is the profile's next revision, numbered
+    // past every row copied, whichever profile they belong to.
+    let main = ProfileId::new("main").expect("a profile id");
+    let newest = target
+        .profile_policy(&main)
+        .expect("a read")
+        .expect("main's");
+    assert_eq!(newest.revision().get(), 4);
+    let label = ProfileLabel::new("on the copy").expect("a label");
+    let next = newest
+        .apply(&PolicyChange::Label(Some(label)))
+        .expect("a change the policy takes")
+        .expect("a change that changes it");
+    assert!(
+        target
+            .save_policy(&next, 1_792_454_600_000)
+            .expect("a save")
+    );
+    assert_eq!(bed.count("SELECT max(seq) FROM policy_revisions"), "12");
+    assert_eq!(bed.count("SELECT count(*) FROM policy_revisions"), "9");
+    assert_eq!(
+        target.profile_policy(&main).expect("a read"),
+        Some(next),
+        "the copy's own revision"
+    );
 }
 
 #[test]
@@ -527,6 +626,38 @@ fn every_write_to_a_target_whose_copy_is_unfinished_is_refused_until_it_finishes
         "INSERT INTO segment_dirty (exchange, symbol, interval, window_start_ms) \
          VALUES ('binance_spot', 'BTCUSDT', '1m', 1792454400000)",
     );
+    // And a profile with its first revision, as the copy will bring them:
+    // a change to it must find the copy unfinished, not the profile missing.
+    let profile = |name: &str, account: &str, tag: &str| {
+        let account = VenueAccountId::issued(account).expect("an account id");
+        ProfilePolicy::new(
+            ProfileIdentity::new(
+                ProfileId::new(name).expect("a profile id"),
+                AccountRef::new(Venue::Bybit, Environment::Testnet, account).expect("an account"),
+                Category::Linear,
+                OwnerTag::new(tag).expect("an owner tag"),
+            )
+            .expect("an identity"),
+        )
+    };
+    let held = profile("held", "71002298", "held00");
+    query(
+        &bed.database.url,
+        "INSERT INTO automation_profiles VALUES \
+         ('held', 'bybit', 'testnet', 'venue', '71002298', 'linear', 'held00', 1)",
+    );
+    query(
+        &bed.database.url,
+        &format!(
+            "INSERT INTO policy_revisions(profile_id, revision, changed_at_ms, policy_json) \
+             VALUES ('held', 1, 1, '{}')",
+            held.to_stored().expect("json")
+        ),
+    );
+    assert_eq!(
+        store.profile_policy(held.identity().id()).expect("a read"),
+        Some(held.clone())
+    );
     let before = counts(&bed);
 
     let upserted = store.upsert_candles(&spot, std::slice::from_ref(&candle));
@@ -542,12 +673,28 @@ fn every_write_to_a_target_whose_copy_is_unfinished_is_refused_until_it_finishes
     let adoption = store.adopt_run("run-legacy", &adopted, None);
     assert_refused("adopt_run", adoption, source);
     assert_refused("refresh_segments", store.refresh_segments(&spot), source);
+    // A profile of the store's own environment, which the copy's beginning
+    // bound it to, and the next revision of the one the store holds.
+    let created = profile("late", "71002299", "late00");
+    assert_refused("create_profile", store.create_profile(&created, 1), source);
+    let label = ProfileLabel::new("late").expect("a label");
+    let changed = held
+        .apply(&PolicyChange::Label(Some(label)))
+        .expect("a change the policy takes")
+        .expect("a change that changes it");
+    assert_refused("save_policy", store.save_policy(&changed, 2), source);
     assert_eq!(counts(&bed), before);
 
     query(
         &bed.database.url,
         &format!("DELETE FROM segment_dirty WHERE {window}"),
     );
+    for table in ["policy_revisions", "automation_profiles"] {
+        query(
+            &bed.database.url,
+            &format!("DELETE FROM {table} WHERE profile_id = 'held'"),
+        );
+    }
     assert_eq!(bed.copy(1).start, CopyStart::Resumed);
     store
         .append_order_event("run-a", &order)

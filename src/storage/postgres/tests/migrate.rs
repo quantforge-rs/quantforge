@@ -1,17 +1,17 @@
-//! The schema chain against a real database: each real step from the
-//! schema before it, and chains no build has, with a step past the last
-//! that upgrades a seeded store, one that fails half-way, and one slow
-//! enough that stores starting together must wait on the lock. Each
-//! test works in a scratch database of its own on the server
+//! The schema chain against a real database: chains no build has, with a
+//! step past the last that upgrades a seeded store, one that fails
+//! half-way, and one slow enough that stores starting together must wait on
+//! the lock. Each test works in a scratch database of its own on the server
 //! `QUANTFORGE_TEST_POSTGRES_URL` names, dropped when the test ends, and
 //! skips without the variable. Two tests need no database: the chain's
-//! shape, and its DDL held to the doc.
+//! shape, and its DDL held to the doc. `steps.rs` takes each real step
+//! from the schema before it, with the seeds and helpers kept here.
 
 use super::database::{DATABASE, database_url};
 use super::scratch::{Scratch, rows};
 use super::*;
 use crate::storage::postgres::migrate::{STEPS, Step, StepWork, ensure_current_with};
-use crate::storage::postgres::schema::{SCHEMA_5, SCHEMA_6, SCHEMA_7, SCHEMA_8};
+use crate::storage::postgres::schema::{SCHEMA_5, SCHEMA_6, SCHEMA_7, SCHEMA_8, SCHEMA_9};
 use crate::storage::sqlite::SCHEMA_VERSION;
 use std::sync::Barrier;
 use tokio_postgres::Transaction;
@@ -56,6 +56,7 @@ fn the_schema_is_the_ddl_the_doc_shows() {
         ("postgres step 6", SCHEMA_6),
         ("postgres step 7", SCHEMA_7),
         ("postgres step 8", SCHEMA_8),
+        ("postgres step 9", SCHEMA_9),
     ] {
         let run: Vec<&str> = run.trim_matches('\n').lines().collect();
         assert_eq!(run, shown(name), "{name}");
@@ -63,7 +64,7 @@ fn the_schema_is_the_ddl_the_doc_shows() {
 }
 
 /// Adds a table and a column, and fills the table from rows already there.
-fn step_9_notes<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
+fn step_10_notes<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
     Box::pin(async move {
         transaction
             .batch_execute(
@@ -76,7 +77,7 @@ fn step_9_notes<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
 }
 
 /// Creates a table and writes a row, then fails.
-fn step_9_fails<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
+fn step_10_fails<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
     Box::pin(async move {
         transaction
             .batch_execute(
@@ -90,7 +91,7 @@ fn step_9_fails<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
 
 /// Takes long enough that every store starting together reaches the lock
 /// while one holds it.
-fn step_9_slow<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
+fn step_10_slow<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
     Box::pin(async move {
         transaction
             .batch_execute("SELECT pg_sleep(0.3); CREATE TABLE notes (note TEXT);")
@@ -98,33 +99,29 @@ fn step_9_slow<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
     })
 }
 
-/// The real chain, then a step 9 that `apply` takes.
-const fn with_step_9(apply: for<'t> fn(&'t Transaction<'t>) -> StepWork<'t>) -> [Step; 5] {
+/// The real chain, then a step 10 that `apply` takes.
+const fn with_step_10(apply: for<'t> fn(&'t Transaction<'t>) -> StepWork<'t>) -> [Step; 6] {
     [
         STEPS[0],
         STEPS[1],
         STEPS[2],
         STEPS[3],
-        Step { to: 9, apply },
+        STEPS[4],
+        Step { to: 10, apply },
     ]
 }
 
-const UPGRADE: [Step; 5] = with_step_9(step_9_notes);
-const FAILING: [Step; 5] = with_step_9(step_9_fails);
-const SLOW: [Step; 5] = with_step_9(step_9_slow);
-
-/// The chain as schema 5 knew it, as schema 6 did, and as schema 7 did.
-const SCHEMA_5_CHAIN: [Step; 1] = [STEPS[0]];
-const SCHEMA_6_CHAIN: [Step; 2] = [STEPS[0], STEPS[1]];
-const SCHEMA_7_CHAIN: [Step; 3] = [STEPS[0], STEPS[1], STEPS[2]];
+const UPGRADE: [Step; 6] = with_step_10(step_10_notes);
+const FAILING: [Step; 6] = with_step_10(step_10_fails);
+const SLOW: [Step; 6] = with_step_10(step_10_slow);
 
 /// The scratch database, or `None` to skip.
-fn scratch() -> Option<Scratch> {
+pub(super) fn scratch() -> Option<Scratch> {
     database_url(DATABASE).map(|url| Scratch::create(&url))
 }
 
 /// The first value of every row of `sql`.
-fn column(store: &PostgresStore, sql: &str) -> Vec<String> {
+pub(super) fn column(store: &PostgresStore, sql: &str) -> Vec<String> {
     rows(store, sql)
         .into_iter()
         .map(|row| {
@@ -136,19 +133,19 @@ fn column(store: &PostgresStore, sql: &str) -> Vec<String> {
         .collect()
 }
 
-fn version(store: &PostgresStore) -> Vec<String> {
+pub(super) fn version(store: &PostgresStore) -> Vec<String> {
     column(store, "SELECT value FROM meta WHERE key = 'schema_version'")
 }
 
 /// The migration log, as `to<-from` pairs.
-fn log(store: &PostgresStore) -> Vec<String> {
+pub(super) fn log(store: &PostgresStore) -> Vec<String> {
     column(
         store,
         "SELECT version || '<-' || from_version FROM schema_migrations ORDER BY version",
     )
 }
 
-fn tables(store: &PostgresStore) -> Vec<String> {
+pub(super) fn tables(store: &PostgresStore) -> Vec<String> {
     column(
         store,
         "SELECT CAST(tablename AS TEXT) FROM pg_tables WHERE schemaname = current_schema() \
@@ -159,7 +156,7 @@ fn tables(store: &PostgresStore) -> Vec<String> {
 /// One row in every table of schema 5, at the edges a step must keep:
 /// decimal text with its scale, the `i64` extremes, a trade count stored
 /// wrapped, a legacy run, and a blob holding every byte value.
-const SEED: &str = r#"
+pub(super) const SEED: &str = r#"
 INSERT INTO candles VALUES
   ('bybit_spot', 'BTCUSDT', '1m', -9223372036854775808, -9223372036854715809,
    '1.10', '1.1', '0.00000000', '79228162514264337593543950335', '-0.5', -1),
@@ -192,25 +189,33 @@ INSERT INTO segment_dirty(exchange, symbol, interval, window_start_ms) VALUES
 "#;
 
 /// A bundle and a job, the rows schema 6 adds.
-const SEED_6: &str = r#"
+pub(super) const SEED_6: &str = r#"
 INSERT INTO bundles VALUES ('sha256:' || repeat('cd', 32), 3, '\x000102', 1792454400000);
 INSERT INTO jobs(job_id, state, bundle_hash, request_json, submitted_at_ms, started_at_ms) VALUES
   (repeat('a', 32), 'running', 'sha256:' || repeat('cd', 32), '{}', 1792454400000, 1792454401000);
 "#;
 
 /// A result, the row schema 7 adds.
-const SEED_7: &str = r#"
+pub(super) const SEED_7: &str = r#"
 INSERT INTO job_results VALUES ('sha256:' || repeat('ef', 32), 3, '\x000102', 1792454400000);
 "#;
 
 /// A job's log, the row schema 8 adds.
-const SEED_8: &str = r#"
+pub(super) const SEED_8: &str = r#"
 INSERT INTO job_logs VALUES (repeat('a', 32), '{"dropped_lines":0,"lines":[]}', 1792454400000);
+"#;
+
+/// A profile and the first revision of its policy, the rows schema 9 adds.
+pub(super) const SEED_9: &str = r#"
+INSERT INTO automation_profiles VALUES
+  ('main', 'bybit', 'demo', 'venue', '12345', 'linear', 'k3x9p2', 1792454400000);
+INSERT INTO policy_revisions(profile_id, revision, changed_at_ms, policy_json) VALUES
+  ('main', 1, 1792454400000, '{"format":1}');
 "#;
 
 /// Every row of every table but the version's own, as the text of the
 /// columns it has now, with the query that read it.
-fn snapshot(store: &PostgresStore) -> Vec<(String, Vec<Vec<Option<String>>>)> {
+pub(super) fn snapshot(store: &PostgresStore) -> Vec<(String, Vec<Vec<Option<String>>>)> {
     tables(store)
         .into_iter()
         .filter(|table| table != "meta" && table != "schema_migrations")
@@ -240,7 +245,7 @@ fn snapshot(store: &PostgresStore) -> Vec<(String, Vec<Vec<Option<String>>>)> {
 }
 
 /// The same queries again.
-fn reread(
+pub(super) fn reread(
     store: &PostgresStore,
     before: &[(String, Vec<Vec<Option<String>>>)],
 ) -> Vec<(String, Vec<Vec<Option<String>>>)> {
@@ -250,137 +255,36 @@ fn reread(
         .collect()
 }
 
-/// The collation of `table.column`.
-fn collation(store: &PostgresStore, table: &str, column: &str) -> Vec<String> {
-    self::column(
-        store,
-        &format!(
-            "SELECT CAST(collation_name AS TEXT) FROM information_schema.columns \
-             WHERE table_schema = current_schema() AND table_name = '{table}' \
-             AND column_name = '{column}'"
-        ),
-    )
-}
-
-#[test]
-fn schema_6_keeps_every_row_of_schema_5_and_collates_the_keys_a_transfer_reads() {
-    let Some(scratch) = scratch() else {
-        return;
-    };
-    let store = scratch.store();
-    ensure_current_with(&store.bridge, &SCHEMA_5_CHAIN, 5, "scratch").expect("schema 5");
-    rows(&store, SEED);
-    let before = snapshot(&store);
-    assert!(before.iter().all(|(_, found)| !found.is_empty()), "seeded");
-    assert_eq!(collation(&store, "segments", "hash"), ["NULL"]);
-
-    ensure_current_with(&store.bridge, &SCHEMA_6_CHAIN, 6, "scratch").expect("schema 6");
-    assert_eq!(reread(&store, &before), before);
-    assert_eq!(version(&store), ["6"]);
-    assert_eq!(log(&store), ["5<-0", "6<-5"]);
-    for (table, key) in [
-        ("segments", "hash"),
-        ("bot_runs", "run_id"),
-        ("bundles", "code_hash"),
-    ] {
-        assert_eq!(collation(&store, table, key), ["C"], "{table}.{key}");
-    }
-    assert!(tables(&store).contains(&"jobs".to_string()));
-    rows(&store, SEED_6);
-
-    // Run again, it finds the work done.
-    ensure_current_with(&store.bridge, &SCHEMA_6_CHAIN, 6, "scratch").expect("a repeat");
-    assert_eq!(log(&store), ["5<-0", "6<-5"]);
-}
-
-#[test]
-fn schema_7_keeps_every_row_of_schema_6_and_adds_the_results_table() {
-    let Some(scratch) = scratch() else {
-        return;
-    };
-    let store = scratch.store();
-    ensure_current_with(&store.bridge, &SCHEMA_6_CHAIN, 6, "scratch").expect("schema 6");
-    rows(&store, SEED);
-    rows(&store, SEED_6);
-    let before = snapshot(&store);
-    assert!(before.iter().all(|(_, found)| !found.is_empty()), "seeded");
-    assert!(!tables(&store).contains(&"job_results".to_string()));
-
-    ensure_current_with(&store.bridge, &SCHEMA_7_CHAIN, 7, "scratch").expect("schema 7");
-    assert_eq!(reread(&store, &before), before);
-    assert_eq!(version(&store), ["7"]);
-    assert_eq!(log(&store), ["6<-0", "7<-6"]);
-    assert_eq!(collation(&store, "job_results", "hash"), ["C"]);
-    rows(&store, SEED_7);
-    assert_eq!(
-        column(&store, "SELECT encode(data, 'hex') FROM job_results"),
-        ["000102"]
-    );
-
-    // Run again, it finds the work done.
-    ensure_current_with(&store.bridge, &SCHEMA_7_CHAIN, 7, "scratch").expect("a repeat");
-    assert_eq!(log(&store), ["6<-0", "7<-6"]);
-}
-
-#[test]
-fn schema_8_keeps_every_row_of_schema_7_and_adds_the_logs_table() {
-    let Some(scratch) = scratch() else {
-        return;
-    };
-    let store = scratch.store();
-    ensure_current_with(&store.bridge, &SCHEMA_7_CHAIN, 7, "scratch").expect("schema 7");
-    rows(&store, SEED);
-    rows(&store, SEED_6);
-    rows(&store, SEED_7);
-    let before = snapshot(&store);
-    assert!(before.iter().all(|(_, found)| !found.is_empty()), "seeded");
-    assert!(!tables(&store).contains(&"job_logs".to_string()));
-
-    store.init().expect("schema 8");
-    assert_eq!(reread(&store, &before), before);
-    assert_eq!(version(&store), ["8"]);
-    assert_eq!(log(&store), ["7<-0", "8<-7"]);
-    assert_eq!(collation(&store, "job_logs", "job_id"), ["C"]);
-    rows(&store, SEED_8);
-    assert_eq!(
-        column(&store, "SELECT log_json FROM job_logs"),
-        [r#"{"dropped_lines":0,"lines":[]}"#]
-    );
-
-    // Run again, it finds the work done.
-    store.init().expect("a repeat");
-    assert_eq!(log(&store), ["7<-0", "8<-7"]);
-}
-
 #[test]
 fn an_upgrade_keeps_every_row_it_found() {
     let Some(scratch) = scratch() else {
         return;
     };
     let store = scratch.store();
-    store.init().expect("schema 8");
+    store.init().expect("schema 9");
     rows(&store, SEED);
     rows(&store, SEED_6);
     rows(&store, SEED_7);
     rows(&store, SEED_8);
+    rows(&store, SEED_9);
     let before = snapshot(&store);
     assert!(before.iter().all(|(_, found)| !found.is_empty()), "seeded");
 
-    ensure_current_with(&store.bridge, &UPGRADE, 9, "scratch").expect("the upgrade");
+    ensure_current_with(&store.bridge, &UPGRADE, 10, "scratch").expect("the upgrade");
     assert_eq!(reread(&store, &before), before);
     let added = "SELECT CAST(column_name AS TEXT) FROM information_schema.columns WHERE \
                  table_schema = current_schema() AND table_name = 'candles' AND column_name = 'note'";
     assert_eq!(column(&store, added), ["note"]);
-    assert_eq!(version(&store), ["9"]);
-    assert_eq!(log(&store), ["8<-0", "9<-8"]);
+    assert_eq!(version(&store), ["10"]);
+    assert_eq!(log(&store), ["9<-0", "10<-9"]);
     assert_eq!(
         column(&store, "SELECT note FROM notes ORDER BY run_id"),
         ["stopped", "running"]
     );
 
     // Run again, it finds the work done.
-    ensure_current_with(&store.bridge, &UPGRADE, 9, "scratch").expect("a repeat");
-    assert_eq!(log(&store), ["8<-0", "9<-8"]);
+    ensure_current_with(&store.bridge, &UPGRADE, 10, "scratch").expect("a repeat");
+    assert_eq!(log(&store), ["9<-0", "10<-9"]);
 }
 
 #[test]
@@ -390,7 +294,7 @@ fn a_failed_step_leaves_a_fresh_database_empty_and_the_lock_free() {
     };
     let store = scratch.store();
     let failed =
-        ensure_current_with(&store.bridge, &FAILING, 9, "scratch").expect_err("division by zero");
+        ensure_current_with(&store.bridge, &FAILING, 10, "scratch").expect_err("division by zero");
     assert!(matches!(failed, StorageError::Other(_)), "{failed:?}");
     assert_eq!(
         tables(&store),
@@ -399,9 +303,9 @@ fn a_failed_step_leaves_a_fresh_database_empty_and_the_lock_free() {
     );
 
     // Nothing holds the lock: the real chain runs at once.
-    store.init().expect("schema 8");
-    assert_eq!(version(&store), ["8"]);
-    assert_eq!(log(&store), ["8<-0"]);
+    store.init().expect("schema 9");
+    assert_eq!(version(&store), ["9"]);
+    assert_eq!(log(&store), ["9<-0"]);
 }
 
 #[test]
@@ -410,15 +314,16 @@ fn a_failed_upgrade_leaves_the_store_at_its_version_with_its_rows() {
         return;
     };
     let store = scratch.store();
-    store.init().expect("schema 8");
+    store.init().expect("schema 9");
     rows(&store, SEED);
     rows(&store, SEED_6);
     rows(&store, SEED_7);
     rows(&store, SEED_8);
+    rows(&store, SEED_9);
     let (before, tables_before) = (snapshot(&store), tables(&store));
 
     let failed =
-        ensure_current_with(&store.bridge, &FAILING, 9, "scratch").expect_err("division by zero");
+        ensure_current_with(&store.bridge, &FAILING, 10, "scratch").expect_err("division by zero");
     let StorageError::Other(source) = &failed else {
         panic!("{failed:?}");
     };
@@ -427,12 +332,12 @@ fn a_failed_upgrade_leaves_the_store_at_its_version_with_its_rows() {
         .and_then(tokio_postgres::Error::code);
     assert_eq!(code, Some(&SqlState::DIVISION_BY_ZERO), "{failed:?}");
     assert_eq!(tables(&store), tables_before, "the step's table is gone");
-    assert_eq!(version(&store), ["8"]);
-    assert_eq!(log(&store), ["8<-0"]);
+    assert_eq!(version(&store), ["9"]);
+    assert_eq!(log(&store), ["9<-0"]);
     assert_eq!(reread(&store, &before), before);
 
-    ensure_current_with(&store.bridge, &UPGRADE, 9, "scratch").expect("a working step");
-    assert_eq!(log(&store), ["8<-0", "9<-8"]);
+    ensure_current_with(&store.bridge, &UPGRADE, 10, "scratch").expect("a working step");
+    assert_eq!(log(&store), ["9<-0", "10<-9"]);
 }
 
 #[test]
@@ -440,10 +345,10 @@ fn stores_starting_together_apply_each_step_once() {
     let Some(url) = database_url(DATABASE) else {
         return;
     };
-    for from_schema_8 in [false, true] {
+    for from_schema_9 in [false, true] {
         let scratch = Scratch::create(&url);
-        if from_schema_8 {
-            scratch.store().init().expect("schema 8");
+        if from_schema_9 {
+            scratch.store().init().expect("schema 9");
         }
         // Connected before the barrier, so they reach the chain together,
         // and each waits for the chain's lock past its own lock budget.
@@ -456,7 +361,7 @@ fn stores_starting_together_apply_each_step_once() {
                     let barrier = &barrier;
                     scope.spawn(move || {
                         barrier.wait();
-                        ensure_current_with(&store.bridge, &SLOW, 9, "scratch")
+                        ensure_current_with(&store.bridge, &SLOW, 10, "scratch")
                     })
                 })
                 .collect();
@@ -468,12 +373,12 @@ fn stores_starting_together_apply_each_step_once() {
         for outcome in &outcomes {
             assert!(outcome.is_ok(), "{outcome:?}");
         }
-        let expected = if from_schema_8 {
-            vec!["8<-0", "9<-8"]
+        let expected = if from_schema_9 {
+            vec!["9<-0", "10<-9"]
         } else {
-            vec!["9<-0"]
+            vec!["10<-0"]
         };
-        assert_eq!(log(&stores[0]), expected, "from schema 8: {from_schema_8}");
+        assert_eq!(log(&stores[0]), expected, "from schema 9: {from_schema_9}");
         assert_eq!(
             column(
                 &stores[0],

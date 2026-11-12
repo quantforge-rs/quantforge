@@ -9,6 +9,9 @@
 
 use std::time::Duration;
 
+use crate::model::futures::{
+    PolicyRevision, PolicyStamp, ProfileId, ProfileIdentity, ProfilePolicy,
+};
 use crate::model::{
     BotRunState, BundleHash, Candle, ClosedTrade, DurabilityReport, Environment, ExchangeOrder,
     ExecutionMode, JobId, JobOutcome, JobRecord, LegacyRun, MarketCoverage, MarketId, NewJob,
@@ -16,8 +19,8 @@ use crate::model::{
     StoreIdentity, TimestampMs,
 };
 use crate::ports::{
-    CandleQuery, CandleStore, JobStore, RunJournalStore, SegmentStore, StorageError, StoreControl,
-    TransferTarget,
+    CandleQuery, CandleStore, JobStore, PolicyStore, RunJournalStore, SegmentStore, StorageError,
+    StoreControl, TransferTarget,
 };
 use crate::storage::SqliteStore;
 #[cfg(feature = "postgres")]
@@ -288,5 +291,43 @@ impl JobStore for AnyStore {
         finished_at_ms: TimestampMs,
     ) -> Result<usize, StorageError> {
         delegate!(self, store => store.fail_running_jobs(failure_json, finished_at_ms))
+    }
+}
+
+impl PolicyStore for AnyStore {
+    fn create_profile(
+        &self,
+        policy: &ProfilePolicy,
+        created_at_ms: TimestampMs,
+    ) -> Result<(), StorageError> {
+        delegate!(self, store => store.create_profile(policy, created_at_ms))
+    }
+
+    fn profiles(&self) -> Result<Vec<ProfileIdentity>, StorageError> {
+        delegate!(self, store => store.profiles())
+    }
+
+    fn profile_policy(&self, profile: &ProfileId) -> Result<Option<ProfilePolicy>, StorageError> {
+        delegate!(self, store => store.profile_policy(profile))
+    }
+
+    fn profile_policy_at(
+        &self,
+        profile: &ProfileId,
+        revision: PolicyRevision,
+    ) -> Result<Option<ProfilePolicy>, StorageError> {
+        delegate!(self, store => store.profile_policy_at(profile, revision))
+    }
+
+    fn policy_revisions(&self, profile: &ProfileId) -> Result<Vec<PolicyStamp>, StorageError> {
+        delegate!(self, store => store.policy_revisions(profile))
+    }
+
+    fn save_policy(
+        &self,
+        policy: &ProfilePolicy,
+        changed_at_ms: TimestampMs,
+    ) -> Result<bool, StorageError> {
+        delegate!(self, store => store.save_policy(policy, changed_at_ms))
     }
 }

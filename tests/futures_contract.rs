@@ -14,12 +14,13 @@ use quantforge::model::futures::{
     CloseReason, ContractKind, CoveredStop, EntryIntent, EntryOrder, ExitIntent, Exposure,
     ExternalIntent, FeeRates, FuturesFill, FuturesInstrument, FuturesOrder, FuturesOrderStatus,
     InstrumentSettings, InstrumentSpec, IntentKind, IntentState, LedgerRecord, LeverageBracket,
-    Liquidation, LiquidationGap, MarginMode, NotPlacedEvidence, OperatorRemoval, OrderAck,
-    OrderAttempt, OrderLeg, OrderLookup, OrderLookupGuarantee, OrderOrigin, OwnerTag,
-    PositionCycle, PositionCycleId, PositionKey, PositionMode, PositionSnapshot, PriceProtection,
-    PriceSnapshot, PrivateEvent, ProfileId, ProtectionState, RecordSource, RecordedStop, SignalId,
-    StopLookup, StopOrder, StopPlacement, StopRef, StopRequest, StopScope, StopStatus, TimeWindow,
-    TradingStatus, TriggerBasis,
+    Liquidation, LiquidationGap, MarginMode, NewAsset, NotPlacedEvidence, OperatorRemoval,
+    OrderAck, OrderAttempt, OrderLeg, OrderLookup, OrderLookupGuarantee, OrderOrigin, OwnerTag,
+    PolicyChange, PolicySnapshot, PositionCycle, PositionCycleId, PositionKey, PositionMode,
+    PositionSnapshot, PriceProtection, PriceSnapshot, PrivateEvent, ProfileId, ProfileIdentity,
+    ProfilePolicy, ProtectionState, RecordSource, RecordedStop, RiskPercent, SignalId,
+    StopFallback, StopLookup, StopOrder, StopPlacement, StopRef, StopRequest, StopScope,
+    StopStatus, TimeWindow, TradingStatus, TriggerBasis,
 };
 use quantforge::model::{
     AccountRef, Asset, Category, Environment, ExchangeId, InstrumentId, Leverage, Money,
@@ -151,6 +152,38 @@ fn fill(id: &ClientOrderId) -> FuturesFill {
     }
 }
 
+/// What profile `main` holds SOLUSDT to as the entry is admitted: 1 % of
+/// 15,000 USDT at risk, at 5x, with no fallback stop.
+fn policy() -> PolicySnapshot {
+    let identity = ProfileIdentity::new(
+        ProfileId::new("main").expect("profile"),
+        key().account().clone(),
+        Category::Linear,
+        OwnerTag::new("k3x9p2").expect("owner tag"),
+    )
+    .expect("identity");
+    let changes = [
+        PolicyChange::AddAsset(NewAsset {
+            instrument: instrument(),
+            enabled: true,
+            risk_percent: Some(RiskPercent::new(dec("1")).expect("risk")),
+            stop: StopFallback::Off,
+            leverage: Some(Leverage::new(dec("5")).expect("leverage")),
+        }),
+        PolicyChange::SetCapital(usdt("15000")),
+    ];
+    let mut policy = ProfilePolicy::new(identity);
+    for change in &changes {
+        policy = policy
+            .apply(change)
+            .expect("a change the policy takes")
+            .expect("a change that changes it");
+    }
+    policy
+        .entry_snapshot(&sol(ContractKind::Perpetual))
+        .expect("an entry's policy")
+}
+
 /// An entry for 4.3 SOL long, admitted and sent once as operation 1 at
 /// time 0.
 fn sent_entry() -> (ExternalIntent, ClientOrderId) {
@@ -163,7 +196,7 @@ fn sent_entry() -> (ExternalIntent, ClientOrderId) {
         expected_price: price("234.23"),
         stop: Some(price("200.00")),
     }));
-    intent.move_to(IntentState::Admitted).expect("admitted");
+    intent.admit(Some(policy())).expect("admitted");
     let id = client_id(1, OrderLeg::Entry, 1);
     let attempt = OrderAttempt {
         client_order_id: id.clone(),
@@ -609,7 +642,7 @@ fn admitted_exit() -> ExternalIntent {
         key: key(),
         side: PositionSide::Long,
     }));
-    exit.move_to(IntentState::Admitted).expect("admitted");
+    exit.admit(None).expect("admitted");
     exit
 }
 

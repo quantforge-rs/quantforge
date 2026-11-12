@@ -281,6 +281,58 @@ against its name, and reading a log, is the server's.
   once they can
 <!-- end: jobs -->
 
+### The policy store
+
+`PolicyStore`: automation profiles, each recorded once with the identity it
+was created with, and every revision of their policies, appended one after
+another and never changed ([storage-schema.md](storage-schema.md#keeping-policies)).
+A step gives a policy as its stored document, policy format 1, and an
+answer is held to the stored text, byte for byte. What a policy means, and
+what a change makes of it, is not the store's:
+[automation-policy.md](automation-policy.md) and the cases of
+`tests/fixtures/policy_cases.json` hold that. The scenarios bind the store
+to an environment first, so a backend runs them once its store record
+exists too.
+
+<!-- begin: policies -->
+- `policies.profile_created_once`: a profile is recorded once, with the first
+  revision of its policy; recorded again it is refused, and nothing of the
+  second is kept
+- `policies.owner_tag_of_its_own`: a profile whose owner tag another profile
+  of the store holds is refused, and nothing of it is kept
+- `policies.environment_of_the_store`: a store bound to no environment takes
+  no profile, and a bound one takes only profiles of its own environment
+- `policies.first_revision_comes_with_the_profile`: a profile is created with
+  revision 1 of its policy and no other, and revision 1 is never written again
+- `policies.revisions_appended`: each revision is appended after the one
+  before it, read back by its number word for word, and listed with the time
+  it was given; the newest is the policy in force
+- `policies.one_of_two_from_one_revision`: of two revisions made from the same
+  one the first is stored, and the second changes nothing, however often it is
+  offered
+- `policies.no_revision_skipped`: a revision that does not follow the newest
+  one is not stored
+- `policies.only_its_own_profile`: a policy is stored only for the profile it
+  names: one for a profile the store does not hold is refused, and so is one
+  naming another account, product family or owner tag than the profile was
+  created with
+- `policies.profiles_in_byte_order`: profiles are listed by ID, byte by byte
+- `policies.profiles_apart`: each profile has revisions of its own: a revision
+  of one changes nothing of another
+- `policies.text_kept`: a policy reads back as the text that was stored, every
+  decimal with its scale
+- `policies.reopened`: a store opened again holds every profile and every
+  revision as they stood, and appends on
+- `policies.foreign_document_refused`: a row whose document is another
+  profile's, another revision's or of another format is refused when read, and
+  the rows beside it still read
+- `policies.saves_racing`: stores saving at once from one revision store one
+  policy each round, whole, and the others change nothing
+- `policies.failed_create_changes_nothing`: a profile whose first revision
+  cannot be stored is not recorded, and is created once the store takes the
+  row
+<!-- end: policies -->
+
 ## The fixtures
 
 `tests/fixtures/storage_conformance_cases.json` (format 1) holds:
@@ -292,8 +344,8 @@ against its name, and reading a log, is the server's.
   candles take one line;
 - `runs`, `orders` and `trades`: the records the journal scenarios write,
   every decimal as its exact text;
-- `candles`, `journal`, `segments` and `control`: the scenarios, each an
-  `id`, the statement listed above, and its `steps`;
+- `candles`, `journal`, `segments`, `control`, `jobs` and `policies`: the
+  scenarios, each an `id`, the statement listed above, and its `steps`;
 - `races`: the interleavings each backend steps through itself.
 
 A step is one operation and its answer: a result, or a refusal of a kind
@@ -372,9 +424,10 @@ A backend joins the suite in its own file under `tests/storage/`, the way
    `conformance::journal::<B>()` with `RunJournalStore`,
    `conformance::control::<B>()` with `RunJournalStore` and `StoreControl`,
    `conformance::segments::<B>()` with `CandleStore` and `SegmentStore`,
-   `conformance::jobs::<B>()` with `JobStore`, and
-   `conformance::durability::<B>()` with those and a bounded view of the
-   store (`conformance::Bounded`). The groups are generic over the ports, so
+   `conformance::jobs::<B>()` with `JobStore`,
+   `conformance::policies::<B>()` with `PolicyStore` and `StoreControl`, and
+   `conformance::durability::<B>()` with the candle store, the journal, the
+   store's record and a bounded view of the store (`conformance::Bounded`). The groups are generic over the ports, so
    a backend switches each on as its store lands.
 4. Implement `DirtyWindows` (`src/storage/refresh.rs`) for the store, and
    step through the races in its own unit tests, as
@@ -457,7 +510,9 @@ cargo test --test storage crash::postgres::acknowledged_writes_survive_the_serve
 ```
 
 Every group, race and check passed on PostgreSQL 16.15 on 2026-11-04, and
-the whole suite on 16.15, 17.11 and 18.6 on 2026-11-07.
+the whole suite on 16.15, 17.11 and 18.6 on 2026-11-07. The `policies`
+group, added later, passed on 16.15 and 18.6 on 2026-11-12, under a
+linguistic collation too.
 
 ## The races
 

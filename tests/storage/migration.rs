@@ -7,14 +7,20 @@
 //! schema 6's is that store opened by the build before job results, with
 //! bundles and jobs written through that build's job store; and schema 7's
 //! is that one opened by the build before job logs, its queue driven on
-//! until a job succeeded with its result files.
+//! until a job succeeded with its result files; and schema 8's is that one
+//! opened by the build before automation policies, its queue driven on
+//! until jobs ended with their logs kept.
 
+use quantforge::model::futures::{
+    OwnerTag, PolicyChange, ProfileId, ProfileIdentity, ProfileLabel, ProfilePolicy,
+};
+use quantforge::model::{AccountRef, Category, Venue};
 use quantforge::storage::sqlite::SCHEMA_VERSION;
 use quantforge::{
     BundleHash, CandleStore, Environment, ExchangeId, ExecutionMode, IdentitySource, Interval,
-    JobId, JobOutcome, JobPhase, JobStore, KeyFingerprint, MarketId, NewJob, ResultHash,
-    RunIdentity, RunJournalStore, SegmentStore, SqliteStore, StorageError, StoreActivation,
-    StoreControl, StoredResult, Symbol, VenueAccountId,
+    JobId, JobOutcome, JobPhase, JobStore, KeyFingerprint, MarketId, NewJob, PolicyStore,
+    ResultHash, RunIdentity, RunJournalStore, SegmentStore, SqliteStore, StorageError,
+    StoreActivation, StoreControl, StoredResult, Symbol, VenueAccountId,
 };
 use rusqlite::Connection;
 use rusqlite::types::Value;
@@ -332,7 +338,7 @@ fn a_schema_5_store_gains_the_job_tables_and_keeps_every_row() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 3, "three steps logged");
+                assert_eq!(after.len(), rows_before.len() + 4, "four steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -343,7 +349,7 @@ fn a_schema_5_store_gains_the_job_tables_and_keeps_every_row() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8)]);
+    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9)]);
     let migrated = store.store_identity().expect("identity");
     assert_eq!(migrated.store_id, identity.store_id, "the same store");
     assert_eq!(migrated.environment, identity.environment);
@@ -380,7 +386,7 @@ fn a_schema_5_store_gains_the_job_tables_and_keeps_every_row() {
     assert_eq!((claimed.job_id, claimed.phase), (job_id, JobPhase::Running));
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 4);
+    assert_eq!(store.migrations().expect("log").len(), 5);
 }
 
 /// Schema 6 held bundles and jobs and no result of any: the steps from it
@@ -416,7 +422,7 @@ fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 2, "two steps logged");
+                assert_eq!(after.len(), rows_before.len() + 3, "three steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -427,7 +433,7 @@ fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8)]);
+    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9)]);
     assert_eq!(
         everything(&store, "job_results"),
         Vec::<Vec<Option<String>>>::new()
@@ -498,7 +504,7 @@ fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
     assert_eq!(store.claim_job(DAY_TWO + 3).expect("a claim"), None);
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 4);
+    assert_eq!(store.migrations().expect("log").len(), 5);
 }
 
 /// Schema 7 held jobs with their result files and no log of any: the step
@@ -519,7 +525,7 @@ fn a_schema_7_store_gains_the_logs_table_and_keeps_every_result() {
     let results = everything(&store, "job_results");
     assert_eq!(results.len(), 3, "a succeeded job's three files");
 
-    CandleStore::init(&store).expect("schema 8");
+    CandleStore::init(&store).expect("the current schema");
 
     assert_eq!(version(&store), SCHEMA_VERSION);
     assert_eq!(shape(&store), shape(&fresh), "not the fresh schema");
@@ -535,7 +541,7 @@ fn a_schema_7_store_gains_the_logs_table_and_keeps_every_result() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 1, "one step logged");
+                assert_eq!(after.len(), rows_before.len() + 2, "two steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -546,7 +552,7 @@ fn a_schema_7_store_gains_the_logs_table_and_keeps_every_result() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8)]);
+    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9)]);
     assert_eq!(
         everything(&store, "job_logs"),
         Vec::<Vec<Option<String>>>::new()
@@ -612,7 +618,120 @@ fn a_schema_7_store_gains_the_logs_table_and_keeps_every_result() {
     );
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 4);
+    assert_eq!(store.migrations().expect("log").len(), 5);
+}
+
+/// Schema 8 held jobs with their logs and no automation profile: the step
+/// to schema 9 keeps every row, each log's text included, and gives the
+/// store the tables profiles and their policies are kept in from then on.
+#[test]
+fn a_schema_8_store_gains_the_policy_tables_and_keeps_every_log() {
+    let fresh_dir = tempfile::tempdir().expect("tempdir");
+    let fresh = SqliteStore::new(fresh_dir.path().join("market.sqlite"));
+    CandleStore::init(&fresh).expect("fresh");
+    let (_tempdir, store) = load(8);
+    assert_eq!(version(&store), 8);
+    let mut kept = tables(&store);
+    for table in ["automation_profiles", "policy_revisions"] {
+        assert!(!kept.iter().any(|held| held == table), "{table}");
+    }
+    kept.push("sqlite_sequence".to_string());
+    let before: Vec<_> = kept.iter().map(|table| everything(&store, table)).collect();
+    assert_eq!(everything(&store, "jobs").len(), 11);
+    assert_eq!(everything(&store, "job_results").len(), 6);
+    let logs = everything(&store, "job_logs");
+    assert_eq!(logs.len(), 3, "a succeeded, a cancelled and a failed job's");
+
+    CandleStore::init(&store).expect("schema 9");
+
+    assert_eq!(version(&store), SCHEMA_VERSION);
+    assert_eq!(shape(&store), shape(&fresh), "not the fresh schema");
+    for (table, rows_before) in kept.iter().zip(&before) {
+        let after = everything(&store, table);
+        match table.as_str() {
+            "meta" => assert_eq!(
+                after,
+                [[
+                    Some("schema_version".to_string()),
+                    Some(SCHEMA_VERSION.to_string())
+                ]]
+            ),
+            "schema_migrations" => {
+                assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
+                assert_eq!(after.len(), rows_before.len() + 1, "one step logged");
+            }
+            _ => assert_eq!(&after, rows_before, "{table}"),
+        }
+    }
+    let steps: Vec<(u32, u32)> = store
+        .migrations()
+        .expect("log")
+        .iter()
+        .map(|step| (step.from_version, step.to_version))
+        .collect();
+    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9)]);
+    for table in ["automation_profiles", "policy_revisions"] {
+        assert_eq!(
+            everything(&store, table),
+            Vec::<Vec<Option<String>>>::new(),
+            "{table}"
+        );
+    }
+
+    // Each log the earlier build kept reads back through the port, word for
+    // word, under the job it belongs to.
+    for row in &logs {
+        let job_id = JobId::new(row[0].as_deref().expect("a job id")).expect("a job id");
+        assert_eq!(store.job_log(&job_id).expect("a read"), row[1], "{job_id}");
+    }
+
+    // No build before this one recorded a profile. From now on the store
+    // takes profiles of the environment it was bound to, each once, with
+    // every revision of its policy.
+    assert_eq!(store.profiles().expect("profiles"), []);
+    let bound = store.store_identity().expect("identity").environment;
+    assert_eq!(bound, Some(Environment::Testnet));
+    let profile = |environment: Environment| {
+        let account = VenueAccountId::issued("71002233").expect("an account id");
+        ProfilePolicy::new(
+            ProfileIdentity::new(
+                ProfileId::new("main").expect("a profile id"),
+                AccountRef::new(Venue::Bybit, environment, account).expect("an account"),
+                Category::Linear,
+                OwnerTag::new("k3x9p2").expect("an owner tag"),
+            )
+            .expect("an identity"),
+        )
+    };
+    let refused = store
+        .create_profile(&profile(Environment::Demo), DAY_TWO)
+        .expect_err("another environment's profile");
+    assert!(
+        matches!(&refused, StorageError::InvalidArgument(why) if why.starts_with("profile main is for demo, and the store is bound to testnet")),
+        "{refused}"
+    );
+    let created = profile(Environment::Testnet);
+    store.create_profile(&created, DAY_TWO).expect("a profile");
+    let label = ProfileLabel::new("after the upgrade").expect("a label");
+    let changed = created
+        .apply(&PolicyChange::Label(Some(label)))
+        .expect("a change the policy takes")
+        .expect("a change that changes it");
+    assert!(store.save_policy(&changed, DAY_TWO + 1).expect("a save"));
+    assert!(!store.save_policy(&changed, DAY_TWO + 2).expect("a repeat"));
+    assert_eq!(
+        store.profile_policy(created.identity().id()).expect("read"),
+        Some(changed)
+    );
+    assert_eq!(
+        store
+            .profile_policy_at(created.identity().id(), created.revision())
+            .expect("read"),
+        Some(created)
+    );
+
+    CandleStore::init(&store).expect("second init");
+    assert_eq!(store.migrations().expect("log").len(), 5);
 }
 
 #[test]
@@ -629,6 +748,7 @@ fn a_fresh_store_logs_one_step_from_zero_and_is_the_documented_schema() {
     assert_eq!(
         tables(&store),
         [
+            "automation_profiles",
             "bot_runs",
             "bundles",
             "candles",
@@ -638,6 +758,7 @@ fn a_fresh_store_logs_one_step_from_zero_and_is_the_documented_schema() {
             "jobs",
             "meta",
             "order_events",
+            "policy_revisions",
             "schema_migrations",
             "segment_dirty",
             "segment_index",

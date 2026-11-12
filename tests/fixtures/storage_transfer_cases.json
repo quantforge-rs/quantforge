@@ -654,6 +654,127 @@
           1792454452000
         ]
       ]
+    },
+    "automation_profiles": {
+      "columns": [
+        "profile_id",
+        "venue",
+        "environment",
+        "account_kind",
+        "account_id",
+        "category",
+        "owner_tag",
+        "created_at_ms"
+      ],
+      "rows": [
+        [
+          "main",
+          "bybit",
+          "testnet",
+          "venue",
+          "71002233",
+          "linear",
+          "k3x9p2",
+          1792454500000
+        ],
+        [
+          "main-2",
+          "bybit",
+          "testnet",
+          "key_fingerprint",
+          "00000000000000a1",
+          "inverse",
+          "a1b2c3",
+          1792454501000
+        ],
+        [
+          "main0",
+          "bybit",
+          "testnet",
+          "venue",
+          "71002234",
+          "linear",
+          "zzzzzz",
+          1792454503000
+        ],
+        [
+          "main_3",
+          "bybit",
+          "testnet",
+          "venue",
+          "71002233",
+          "inverse",
+          "000000",
+          1792454505000
+        ]
+      ]
+    },
+    "policy_revisions": {
+      "columns": [
+        "seq",
+        "profile_id",
+        "revision",
+        "changed_at_ms",
+        "policy_json"
+      ],
+      "rows": [
+        [
+          1,
+          "main",
+          1,
+          1792454500000,
+          "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Testnet\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+        ],
+        [
+          2,
+          "main-2",
+          1,
+          1792454501000,
+          "{\"format\":1,\"identity\":{\"id\":\"main-2\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Testnet\",\"venue_account_id\":{\"KeyFingerprint\":\"00000000000000a1\"}},\"category\":\"Inverse\",\"owner_tag\":\"a1b2c3\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+        ],
+        [
+          3,
+          "main",
+          2,
+          1792454502000,
+          "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Testnet\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":2,\"label\":null,\"defaults\":{\"enabled\":true,\"risk_percent\":\"1\",\"stop_percent\":\"3.50\",\"leverage\":\"5\",\"revision\":2},\"assets\":[],\"capital\":[]}"
+        ],
+        [
+          5,
+          "main0",
+          1,
+          1792454503000,
+          "{\"format\":1,\"identity\":{\"id\":\"main0\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Testnet\",\"venue_account_id\":{\"Venue\":\"71002234\"}},\"category\":\"Linear\",\"owner_tag\":\"zzzzzz\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+        ],
+        [
+          6,
+          "main",
+          3,
+          1792454504000,
+          "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Testnet\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":3,\"label\":null,\"defaults\":{\"enabled\":true,\"risk_percent\":\"1\",\"stop_percent\":\"3.50\",\"leverage\":\"5\",\"revision\":2},\"assets\":[{\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"enabled\":true,\"risk_percent\":\"0.5\",\"stop\":\"Off\",\"leverage\":null,\"revision\":3}],\"capital\":[]}"
+        ],
+        [
+          7,
+          "main_3",
+          1,
+          1792454505000,
+          "{\"format\":1,\"identity\":{\"id\":\"main_3\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Testnet\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Inverse\",\"owner_tag\":\"000000\"},\"revision\":1,\"label\":null,\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+        ],
+        [
+          8,
+          "main-2",
+          2,
+          1792454506000,
+          "{\"format\":1,\"identity\":{\"id\":\"main-2\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Testnet\",\"venue_account_id\":{\"KeyFingerprint\":\"00000000000000a1\"}},\"category\":\"Inverse\",\"owner_tag\":\"a1b2c3\"},\"revision\":2,\"label\":\"inverse ž \\\"coin\\\"\",\"defaults\":{\"enabled\":false,\"risk_percent\":null,\"stop_percent\":null,\"leverage\":null,\"revision\":1},\"assets\":[],\"capital\":[]}"
+        ],
+        [
+          11,
+          "main",
+          4,
+          1792454507000,
+          "{\"format\":1,\"identity\":{\"id\":\"main\",\"account_ref\":{\"venue\":\"Bybit\",\"environment\":\"Testnet\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"category\":\"Linear\",\"owner_tag\":\"k3x9p2\"},\"revision\":4,\"label\":null,\"defaults\":{\"enabled\":true,\"risk_percent\":\"1\",\"stop_percent\":\"3.50\",\"leverage\":\"5\",\"revision\":2},\"assets\":[{\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"enabled\":true,\"risk_percent\":\"0.5\",\"stop\":\"Off\",\"leverage\":null,\"revision\":3}],\"capital\":[{\"amount\":{\"amount\":\"15000.00\",\"asset\":\"USDT\"},\"revision\":4}]}"
+        ]
+      ]
     }
   },
   "scopes": [
@@ -800,6 +921,22 @@
       "first": null,
       "last": null,
       "checksum": "sha256:9efb2ac9e7e1e3ee54b74c71acad3015574f5dbda938ced4e6603d31b7462de4"
+    },
+    {
+      "table": "automation_profiles",
+      "market": null,
+      "rows": 4,
+      "first": null,
+      "last": null,
+      "checksum": "sha256:b4e85f00ad6be2aa086d0a11a57434e029acb8de69ba1b2c41c023a058b4bdea"
+    },
+    {
+      "table": "policy_revisions",
+      "market": null,
+      "rows": 8,
+      "first": 1,
+      "last": 11,
+      "checksum": "sha256:eaf258051e355c3819d0e68f80ac10b38d6046e00874367431d54a2215c5971e"
     }
   ],
   "worked_example": {

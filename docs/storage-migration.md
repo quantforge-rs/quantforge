@@ -26,8 +26,9 @@ writes into.
 
 Every row of these tables, in this order, each read in order of its key:
 a run before its journals, a segment's bytes before the index entry that
-names them, candles before the marks on their windows. Each table's columns
-are those of the [DDL](storage-schema.md#sqlite-ddl).
+names them, candles before the marks on their windows, a profile before
+the revisions of its policy. Each table's columns are those of the
+[DDL](storage-schema.md#sqlite-ddl).
 
 <!-- begin: transfer tables -->
 - `candles`: market by market, by `open_time_ms`
@@ -41,15 +42,18 @@ are those of the [DDL](storage-schema.md#sqlite-ddl).
 - `job_results`: by `hash`, byte by byte
 - `jobs`: by `seq`, a number the store gave
 - `job_logs`: by `job_id`, byte by byte
+- `automation_profiles`: by `profile_id`, byte by byte
+- `policy_revisions`: by `seq`, a number the store gave
 <!-- end: transfer tables -->
 
 Nothing is parsed or rewritten on the way: a decimal keeps its exact text
 and scale (`1.10` stays `1.10`, and text no `Decimal` holds is copied as it
 is and refused alike by both stores when read), IDs and sequence numbers
-keep their values, timestamps their milliseconds, run state and order JSON
-their bytes, and a segment its bytes, a replaced one too. A dirty mark keeps
-its revision. The target's own numbering moves past the numbers copied, so
-the next event, trade or mark it writes takes a new one.
+keep their values, timestamps their milliseconds, run state, order JSON and
+policy documents their bytes, and a segment its bytes, a replaced one too.
+A dirty mark keeps its revision. The target's own numbering moves past the
+numbers copied, so the next event, trade, mark, job or policy revision it
+writes takes a new one.
 
 Identities are copied as they are, never guessed: a run keeps the
 environment, account and identity source it recorded; a legacy run stays
@@ -280,8 +284,8 @@ The transfer is versioned twice. `TRANSFER_SCHEMA`, in
 `src/model/transfer/mod.rs`, is the schema whose tables it copies, and a
 source and a target are both at it; `TRANSFER_FORMAT` is the format of the
 canonical text and of the target's record, and a copy begun under another
-format is refused. A story that adds or changes tables, such as ALG-735's
-policies or ALG-738's signal inbox, execution ledger and outbox:
+format is refused. A story that adds or changes tables, such as ALG-738's
+signal inbox, execution ledger and outbox:
 
 - lists each new table in `TRANSFER_TABLES`, in copy order with its key, or
   among the tables each store keeps for itself, and here in the lists

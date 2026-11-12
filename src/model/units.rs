@@ -113,6 +113,8 @@ macro_rules! decimal_unit {
     };
 }
 
+pub(crate) use decimal_unit;
+
 decimal_unit!(
     /// A price in the quote asset, on the instrument's tick. An inverse
     /// instrument quotes USD per coin.

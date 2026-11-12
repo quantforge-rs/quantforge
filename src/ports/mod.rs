@@ -23,11 +23,13 @@ pub mod futures;
 
 mod clock;
 mod jobs;
+mod policy;
 mod storage;
 mod transfer;
 
 pub use clock::{Clock, SystemClock};
 pub use jobs::JobStore;
+pub use policy::PolicyStore;
 pub use storage::{
     CandleQuery, CandleStore, RunJournalStore, SegmentStore, StorageError, StorageErrorKind,
     StoreControl,
