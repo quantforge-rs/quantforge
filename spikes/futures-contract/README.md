@@ -3,8 +3,9 @@
 Two scripts back the numbers in
 [ADR 0002](../../docs/adr/0002-automation-architecture.md) and
 [futures-venues.md](../../docs/futures-venues.md), one of which also writes
-the shared cases risk sizing is held to, and a third writes the shared
-cases of a profile's policy. All use the Python standard library only. Run them with `python3 -I`, which ignores the environment and the
+the shared cases risk sizing is held to, a third writes the shared
+cases of a profile's policy, and a fourth those of a TradingView alert's
+payload. All use the Python standard library only. Run them with `python3 -I`, which ignores the environment and the
 current directory, from the repository root.
 
 No script here is built, tested or shipped by the crate: `Cargo.toml`
@@ -134,3 +135,49 @@ which `tests/policy/` replays through the Rust model and through the policy
 service on SQLite and PostgreSQL. Without `--write` it only runs the model
 and prints the counts. Change a case here, never in the fixture, and write
 the fixture again.
+
+## `signal_cases.py`: a TradingView alert's payload
+
+```bash
+python3 -I spikes/futures-contract/signal_cases.py --write tests/fixtures/signal_cases.json
+python3 -I spikes/futures-contract/signal_cases.py --doc docs/signal-payload.md
+```
+
+An independent model of the alert payload, the contract of
+[signal-payload.md](../../docs/signal-payload.md). It shares no code with
+the Rust. It knows:
+
+- what a body must be to be a signal, and every problem with one that is
+  not, each by its code and its member, in one order;
+- a signal's ID, its canonical payload and its hash;
+- what a signal resolves to for the profile its URL selects, on each of the
+  four futures product lines: the profile and the assertions it is held to,
+  an entry's age, the instrument its ticker names among what the venue
+  lists, and the policy an entry is admitted under, from a small model of a
+  profile's policy;
+- which exit closes which entry's position, which delivery is a repeat and
+  which a conflict, an entry against the side already held, and the
+  receipts.
+
+The cases cover valid and invalid payloads for Binance and Bybit, linear and
+inverse, LONG and SHORT; an entry without a stop where the policy gives a
+fallback and where it gives none; claims of another profile, exchange or
+family; and the same signal ID under two profiles. Each resolution case
+also records every rule its signal breaks, each asked on its own, so that a
+signal that breaks two shows which is looked for first.
+
+It also reads [`signal-schema.json`](../../docs/signal-schema.json) and runs
+it against every case, with a validator of its own for the part of JSON
+Schema that file uses: the schema must accept every signal, and each case
+records what the schema alone says of it. The fixture holds the schema's
+hash, so a test notices a schema the cases were not checked against.
+
+The script exits non-zero if any check fails. It writes
+[`tests/fixtures/signal_cases.json`](../../tests/fixtures/signal_cases.json),
+which `tests/signals/` replays through the protocol, the model and the
+signal service on SQLite and PostgreSQL, and `--doc` rewrites the templates
+and the lists of the contract page that repeat the cases. Without either it
+only runs the model and prints the counts. Change a case here, never in the
+fixture, and write the fixture again. No placeholder was rendered by
+TradingView itself: what its documentation leaves open is listed in
+[futures-venues.md](../../docs/futures-venues.md#unverified-items).

@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use quantforge::model::futures::{
     AccountKind, AccountingStatus, DRIFT_LIMIT, IntentState, MarginMode, OwnerTag,
     PROPAGATION_DELAY_MS, PositionMode, ProfileId, ProfileIdentity, ProtectionState,
-    SETTLE_WINDOW_MS, UNIVERSE_RULE,
+    SETTLE_WINDOW_MS, SIGNAL_FUTURE_ALLOWANCE_MS, SignalAgeLimit, UNIVERSE_RULE,
 };
 use quantforge::model::{
     AccountRef, Category, Environment, PositionSide, Refusal, StoreActivation, Venue,
@@ -205,4 +205,23 @@ fn the_unknown_outcome_bounds_and_the_universe_rule_are_the_code_constants() {
 fn the_drift_limit_sizing_refuses_past_is_the_matrixs() {
     let matrix = model::load_matrix();
     assert_eq!(matrix.policy.signals.drift_limit, DRIFT_LIMIT.to_string());
+}
+
+#[test]
+fn the_age_an_entry_signal_may_have_is_the_matrixs() {
+    let matrix = model::load_matrix();
+    let signals = &matrix.policy.signals;
+    assert_eq!(signals.age_limit_default_s, SignalAgeLimit::DEFAULT.secs());
+    assert_eq!(signals.age_limit_min_s, SignalAgeLimit::MIN_SECS);
+    assert_eq!(signals.age_limit_max_s, SignalAgeLimit::MAX_SECS);
+    assert_eq!(
+        i64::from(signals.future_allowance_s) * 1000,
+        SIGNAL_FUTURE_ALLOWANCE_MS
+    );
+    // A profile's limit is any whole second of the range, and no other.
+    assert!(SignalAgeLimit::new(signals.age_limit_min_s - 1).is_err());
+    assert!(SignalAgeLimit::new(signals.age_limit_max_s + 1).is_err());
+    for secs in signals.age_limit_min_s..=signals.age_limit_max_s {
+        assert!(SignalAgeLimit::new(secs).is_ok(), "{secs}");
+    }
 }

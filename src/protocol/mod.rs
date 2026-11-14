@@ -23,10 +23,15 @@
 //!   them, named by their content hash; a segment's bytes are the
 //!   [segment spec].
 //! - [`stream`]: bars as they close, over a WebSocket.
+//! - [`signal`]: the message of a TradingView alert that a server executes,
+//!   and the receipt its delivery is answered with. It is a format of its
+//!   own, with its own version; the [signal contract] says what a server
+//!   does with one.
 //!
 //! [bundle spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md>
 //! [segment spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md>
 //! [result spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/result-spec.md>
+//! [signal contract]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/signal-payload.md>
 //!
 //! # Encoding
 //!
@@ -99,9 +104,11 @@
 //! Any other change needs a new version: a field removed, renamed, or
 //! retyped, a new required field, or a field whose meaning changes. Unlike
 //! the run state QuantForge stores, which is never read across schema
-//! versions, the wire grows by optional fields. A bundle's manifest is the
-//! exception: it refuses keys it does not know, and grows only by a new
-//! bundle format.
+//! versions, the wire grows by optional fields. Two formats are the
+//! exception. A bundle's manifest refuses keys it does not know, and grows
+//! only by a new bundle format. A [`signal`] refuses members it does not
+//! know, and every value that is not exactly its field's form, and grows
+//! only by a new signal version.
 //!
 //! Version 1 may still change until QuantForge 0.3.0 is released.
 //!
@@ -131,6 +138,7 @@ mod hash;
 pub mod jobs;
 pub mod results;
 pub mod segments;
+pub mod signal;
 pub mod stream;
 mod version;
 
@@ -243,6 +251,13 @@ pub enum ProtocolError {
     InvalidEntry {
         /// The text that was refused.
         input: String,
+        /// What is wrong with it.
+        reason: String,
+    },
+
+    /// A signal receipt that breaks its format.
+    #[error("invalid signal receipt: {reason}")]
+    InvalidSignalReceipt {
         /// What is wrong with it.
         reason: String,
     },

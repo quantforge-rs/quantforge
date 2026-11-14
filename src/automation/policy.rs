@@ -329,7 +329,7 @@ impl<'a> PolicyService<'a> {
 
     /// The venue's instruments, once `venue` is known to be the connector
     /// of the policy's own product line and environment.
-    async fn listed(
+    pub(super) async fn listed(
         &self,
         policy: &ProfilePolicy,
         venue: &dyn InstrumentConnector,

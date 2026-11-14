@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/quantforge-rs/quantforge/blob/main/docs/signal-schema.json",
+  "title": "QuantForge TradingView alert payload, version 1",
+  "description": "The message of a TradingView alert that QuantForge executes: an entry or an exit on one futures instrument, for one automation profile. docs/signal-payload.md is the contract; this schema is its shape. A payload the schema refuses is never a signal. One the schema accepts may still be refused, for what a schema cannot see: a member written twice, a body over 4096 bytes, a day the calendar lacks, a bar time after the fire time, or a price an exact decimal cannot hold.",
+  "oneOf": [
+    { "$ref": "#/$defs/entry" },
+    { "$ref": "#/$defs/exit" }
+  ],
+  "$defs": {
+    "entry": {
+      "title": "An entry alert",
+      "description": "Opens a position on the side it names, sized by the profile's policy from the expected price and the stop.",
+      "type": "object",
+      "required": ["version", "kind", "profile", "source", "ticker", "side", "bar_time", "fire_time", "price"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "kind": {
+          "description": "A constant of the alert: this template enters.",
+          "const": "entry"
+        },
+        "profile": { "$ref": "#/$defs/profile" },
+        "source": { "$ref": "#/$defs/source" },
+        "ticker": { "$ref": "#/$defs/ticker" },
+        "exchange": { "$ref": "#/$defs/exchange" },
+        "category": { "$ref": "#/$defs/category" },
+        "side": { "$ref": "#/$defs/side" },
+        "bar_time": { "$ref": "#/$defs/bar_time" },
+        "fire_time": { "$ref": "#/$defs/fire_time" },
+        "price": {
+          "description": "The expected entry price, in the instrument's quote asset: \"{{close}}\" in a template, in quotes. The position is sized from it.",
+          "$ref": "#/$defs/price"
+        },
+        "stop": {
+          "description": "The absolute stop price, in the instrument's quote asset, when the alert has one, such as \"{{plot_0}}\" in quotes. Left out, the profile's fallback percentage applies; an entry with neither is refused.",
+          "$ref": "#/$defs/price"
+        }
+      }
+    },
+    "exit": {
+      "title": "An exit or take-profit alert",
+      "description": "Closes the position of the side it names that an earlier entry of the same profile opened. It carries no price and no stop.",
+      "type": "object",
+      "required": ["version", "kind", "profile", "source", "ticker", "side", "bar_time", "fire_time"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "$ref": "#/$defs/version" },
+        "kind": {
+          "description": "A constant of the alert: this template exits.",
+          "const": "exit"
+        },
+        "profile": { "$ref": "#/$defs/profile" },
+        "source": { "$ref": "#/$defs/source" },
+        "ticker": { "$ref": "#/$defs/ticker" },
+        "exchange": { "$ref": "#/$defs/exchange" },
+        "category": { "$ref": "#/$defs/category" },
+        "side": { "$ref": "#/$defs/side" },
+        "bar_time": { "$ref": "#/$defs/bar_time" },
+        "fire_time": { "$ref": "#/$defs/fire_time" }
+      }
+    },
+    "version": {
+      "description": "The payload format's version: the number 1, not text.",
+      "type": "integer",
+      "const": 1
+    },
+    "profile": {
+      "description": "The automation profile the alert is for, by the name the operator gave it. It must be the profile the webhook URL selects; it chooses nothing by itself.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$"
+    },
+    "source": {
+      "description": "A constant name for this alert, chosen once by the operator, such as trend. It starts the signal's ID, so two alerts that may fire on one bar need two names.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$"
+    },
+    "ticker": {
+      "description": "\"{{ticker}}\" in a template: TradingView's name of a perpetual, such as SOLUSDT.P, or the venue's own symbol of an asset the profile has settings for. Uppercase, without the exchange before it and without spaces.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "pattern": "^([A-Z0-9._-]|[^\\u0000-\\u00A0\\u1680\\u2000-\\u200F\\u2028-\\u202F\\u205F-\\u206F\\u3000\\uFEFF])+$"
+    },
+    "exchange": {
+      "description": "Optional. \"{{exchange}}\" in a template: the exchange of the chart, such as BYBIT. When given it must be the profile's venue.",
+      "type": "string",
+      "pattern": "^[A-Z0-9_]{1,32}$"
+    },
+    "category": {
+      "description": "Optional. The product family the alert is meant for. When given it must be the profile's.",
+      "enum": ["linear", "inverse"]
+    },
+    "side": {
+      "description": "A constant of the alert: the side an entry opens, or the side an exit closes. Never an order's buy or sell.",
+      "enum": ["long", "short"]
+    },
+    "bar_time": {
+      "description": "\"{{time}}\" in a template: the time of the bar the alert fired on. It ends the signal's ID.",
+      "$ref": "#/$defs/time"
+    },
+    "fire_time": {
+      "description": "\"{{timenow}}\" in a template: when the alert fired. An entry is held to the profile's age limit by it, and an exit closes only a position entered before it.",
+      "$ref": "#/$defs/time"
+    },
+    "time": {
+      "description": "A UTC time to the second, as TradingView renders one: yyyy-MM-ddTHH:mm:ssZ, from 1970 on.",
+      "type": "string",
+      "pattern": "^(19[7-9][0-9]|[2-9][0-9]{3})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"
+    },
+    "price": {
+      "description": "A price above zero as a JSON string of its digits: no sign, no exponent, no separators, at most 28 decimal places.",
+      "type": "string",
+      "maxLength": 30,
+      "pattern": "^(0\\.[0-9]*[1-9][0-9]*|[1-9][0-9]*(\\.[0-9]+)?)$"
+    }
+  }
+}

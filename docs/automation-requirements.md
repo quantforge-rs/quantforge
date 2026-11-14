@@ -137,7 +137,7 @@ from it.
 | ID | Topic | Where ADR 0002 leaves it | ADR 0002 | Stories |
 | --- | --- | --- | --- | --- |
 | D01 | Contracts and the instrument universe | Settled | §3 | ALG-739, ALG-742, ALG-756, ALG-760, ALG-765 |
-| D02 | Signal schema and identity | Its rules are settled; ALG-737 writes the schema | §9 | ALG-737, ALG-743, ALG-767 |
+| D02 | Signal schema and identity | Settled: [signal-payload.md](signal-payload.md) is the schema and its contract | §9 | ALG-737, ALG-743, ALG-767 |
 | D03 | Webhook authentication | The mechanism is settled; ALG-743 and ALG-754 deploy it | §15 | ALG-743, ALG-754 |
 | D04 | The inverse formula and monetary units | Settled | §6 | ALG-733, ALG-736, ALG-742, ALG-760, ALG-765 |
 | D05 | Account, position mode and ownership | Settled | §2, §4, §10 | ALG-733, ALG-744, ALG-756, ALG-759, ALG-760, ALG-764, ALG-767 |

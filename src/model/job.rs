@@ -82,6 +82,7 @@ macro_rules! sha256_name {
         }
     };
 }
+pub(crate) use sha256_name;
 
 sha256_name!(
     /// A bundle's name: the SHA-256 of its canonical tar, written `sha256:`

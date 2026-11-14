@@ -57,13 +57,20 @@
 //!   [`PolicyStore`], checked against the venue's own instrument list, and
 //!   handed to an entry as the policy it is admitted under. The
 //!   [policy contract](https://github.com/quantforge-rs/quantforge/blob/main/docs/automation-policy.md)
-//!   is what a command or an executor is written against.
+//!   is what a command or an executor is written against. Its second part
+//!   is [`automation::SignalService`], which resolves a TradingView alert's
+//!   signal for the profile its webhook URL selected: whose it is, how old,
+//!   which instrument its ticker names, and, for an entry, that policy. The
+//!   [signal contract](https://github.com/quantforge-rs/quantforge/blob/main/docs/signal-payload.md)
+//!   is what an alert is written against.
 //! - [`protocol`] — the versioned wire types of remote backtest jobs,
-//!   candle segments, and the live bar stream, and the strategy bundle a job
-//!   runs; its documentation is the wire specification.
+//!   candle segments, and the live bar stream, the strategy bundle a job
+//!   runs, and the strict payload of a TradingView alert
+//!   ([`protocol::signal`]); its documentation is the wire specification.
 //! - [`server`] — the HTTP server that `quantforge serve run` hosts: its
 //!   routes, the history they serve from the selected store, and how it
-//!   stops ([`server::serve`]).
+//!   stops ([`server::serve`]); and [`server::read_signal`], which reads an
+//!   alert's body into the model's signal.
 //!
 //! # The command tree it answers to
 //!
