@@ -85,7 +85,10 @@ text_id!(
     OwnerTag,
     "owner tag",
     "6 of a-z and 0-9",
-    |text| text.len() == 6 && text.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+    |text| text.len() == 6
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
 );
 
 text_id!(
