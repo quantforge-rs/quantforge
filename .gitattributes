@@ -20,3 +20,6 @@ docs/parity/* text eol=lf
 docs/storage-migration.md text eol=lf
 # The result spec's worked example is compared with the file the code writes.
 docs/result-spec.md text eol=lf
+# The signal schema is hashed by its drift test, which the Python model's
+# record of the file must match.
+docs/signal-schema.json text eol=lf

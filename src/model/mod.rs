@@ -84,6 +84,9 @@ pub enum ModelError {
     #[error("invalid result hash {0:?}: expected sha256: and 64 lowercase hex digits")]
     InvalidResultHash(String),
 
+    #[error("invalid signal hash {0:?}: expected sha256: and 64 lowercase hex digits")]
+    InvalidSignalHash(String),
+
     #[error("invalid rfc3339 timestamp: {0}")]
     InvalidTimestamp(String),
 

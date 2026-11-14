@@ -534,9 +534,11 @@ restart, and `docs.rs` holds this page.
   [risk-sizing.md](risk-sizing.md)'s, which takes the snapshot as it was
   admitted. Calling it for an admitted entry, and sending what it sizes, is
   the executor's (ALG-745).
-- **Admission and the execution store.** Reading a payload, choosing the
-  profile by its route, recording the intent with its snapshot and
-  everything after it are ALG-737's, ALG-743's and ALG-738's.
-- **A venue's own spelling of a ticker in an alert.** A policy holds the
-  venue's symbol; mapping an alert's ticker to it belongs with the payload
-  contract (ALG-737).
+- **Signals.** What an alert's payload is, which instrument its ticker
+  names, and what a signal resolves to for the profile its URL selected are
+  [signal-payload.md](signal-payload.md)'s. `automation::SignalService`
+  reads the newest policy once, and resolves the ticker and the entry's
+  snapshot from that one revision.
+- **Admission and the execution store.** Choosing the profile by its route,
+  recording the intent with its snapshot and everything after it are
+  ALG-743's and ALG-738's.

@@ -34,6 +34,7 @@ mod order;
 mod policy;
 mod position;
 mod protection_state;
+mod signal;
 mod sizing;
 mod stop;
 
@@ -72,6 +73,11 @@ pub use policy::{
 };
 pub use position::{CloseReason, OperatorRemoval, PositionCycle};
 pub use protection_state::ProtectionState;
+pub use signal::{
+    Delivery, ExternalSignal, NamedInstrument, PERPETUAL_SUFFIX, ResolvedSignal,
+    SIGNAL_FUTURE_ALLOWANCE_MS, SignalAction, SignalAgeLimit, SignalHash, SignalRefusal,
+    TickerSpelling,
+};
 pub use sizing::{
     ACCOUNT_FRESH_MS, AMOUNT_PLACES, DRIFT_LIMIT, FillEstimate, FillRisk, Freshness, MarginNeed,
     Notional, Observed, PRICES_FRESH_MS, PoolFit, RULES_FRESH_MS, SizedEntry, SizedPosition,

@@ -10,8 +10,9 @@ ALG-534. This page tracks each change:
 ALG-733 built the Rust side of the identity and the futures contract,
 QUA-37 (ALG-734 in the previous workspace) the storage, the wire's
 `category` and the migrations, QUA-36 (ALG-735 in the parity matrix) a
-profile's policy and its store, and QUA-35 (ALG-736) the sizing of an entry
-from it. The rest lands with the stories named below.
+profile's policy and its store, QUA-35 (ALG-736) the sizing of an entry
+from it, and QUA-207 (ALG-737) the payload of an alert and what its signal
+resolves to. The rest lands with the stories named below.
 
 ## Changed in Rust by ALG-733
 
@@ -49,6 +50,13 @@ from it. The rest lands with the stories named below.
 | Change | Where | Reaches the Python FFI |
 | --- | --- | --- |
 | Risk sizing ([risk-sizing.md](risk-sizing.md)), a pure function of what it is handed:<ul><li>`SizingRequest`, everything one sizing reads, with `Freshness`, `Observed` and `UsdIndex`;</li><li>its answers `Sizing`, `SizedEntry` and `SizingRefusal`, with the figures reached;</li><li>`SizingFault`, an input sizing cannot trust, kept apart from the refusals;</li><li>`SubmissionCheck`, a sized entry held to fresh prices, and `FillRisk`, the risk its fills took beside the risk sized;</li><li>`margin_pool`, the pool of an account an entry draws on.</li></ul> | `quantforge::model::futures` | No |
+
+## Changed by QUA-207
+
+| Change | Where | Reaches the Python FFI |
+| --- | --- | --- |
+| An external signal before it is an intent ([signal-payload.md](signal-payload.md)), each rule a pure function of what it is handed:<ul><li>`ExternalSignal` and `SignalAction`, one alert as it was delivered, with its `SignalHash`;</li><li>`SignalAgeLimit` and `SIGNAL_FUTURE_ALLOWANCE_MS`, how old an entry may be;</li><li>`ProfilePolicy::instrument_named`, the instrument a ticker names, by one of two `TickerSpelling`s;</li><li>`ExternalSignal::resolve`, the `ResolvedSignal` a store records or the `SignalRefusal` it is recorded with;</li><li>`Delivery`, a delivery sent again told from a conflicting one;</li><li>`ExitIntent::closes` and `EntryIntent::against`, a signal against the positions its profile has.</li></ul> | `quantforge::model::futures` | No |
+| The alert's wire form: `Signal`, strict, with its ID, its canonical payload and its hash; `SignalProblems`; and `SignalReceipt` | `quantforge::protocol::signal` | No |
 
 ## Changing next
 

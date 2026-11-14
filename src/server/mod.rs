@@ -55,6 +55,9 @@
 //! - `results`: a job's result as its three files, and as the store keeps
 //!   them.
 //! - `workers`: the processes that run jobs, one per job, and their limits.
+//! - `signal`: a TradingView alert's body read into the model's signal, and
+//!   a refused signal's receipt ([`read_signal`], [`refusal_receipt`]). No
+//!   route answers alerts yet: the webhook route has a story of its own.
 //! - `refusal`: every failed answer, and what a storage failure tells a
 //!   client.
 
@@ -64,6 +67,7 @@ mod refusal;
 mod results;
 mod segment;
 mod selection;
+mod signal;
 mod store;
 #[cfg(test)]
 mod tests;
@@ -87,6 +91,7 @@ pub use jobs::{
     JobLog, JobWorker, Jobs, LogLimits, NoRuntime, WorkerOutcome,
 };
 pub use results::{BacktestOutput, ResultFile};
+pub use signal::{external_signal, read_signal, refusal_receipt};
 pub use store::{ServedStore, ServerStore, StoreLimits};
 pub use workers::{
     DEFAULT_JOB_CPU_SECS, DEFAULT_JOB_MEMORY_MIB, DEFAULT_JOB_WALL_SECS, Execution, Guard,

@@ -16,6 +16,10 @@ Facts here were checked on 2026-10-22 against:
 
 None were checked with signed requests.
 
+The [TradingView section](#tradingview-webhooks) was read again on 2026-11-12,
+for the alert payload of [signal-payload.md](signal-payload.md). Nothing in it
+was tried against a live alert.
+
 ## Product universe
 
 The rule is ADR 0002 §3, rule version 1. The universe is computed from venue
@@ -273,27 +277,42 @@ measure it on each test environment (unverified item 15).
 ## TradingView webhooks
 
 **Requests:**
+- **Body:** a `POST` whose body is the alert's message, whole.
 - **Content type:** `application/json` when the alert message is valid JSON,
   `text/plain` otherwise.
 - **Limits:** a request is cancelled after 3 seconds. Only ports 80 and 443,
   IPv4 only, and only for accounts with two-factor authentication.
 - **Retries:** an HTTP 5xx response other than 504 is resent after 5 s, up to 3
-  times, so a receiver can see 4 deliveries.
+  times, so a receiver can see 4 deliveries. The documentation does not say
+  whether a resend carries the first send's text (item 16).
 
 **Authentication:**
 - TradingView presents a TLS client certificate with subject CN
   `webhook-server@tradingview.com`, which the receiver verifies.
-- There is no signature or custom header.
+- There is no signature or custom header, and the documentation tells users to
+  keep credentials out of the message. So the alert payload carries no secret:
+  the webhook URL does (ADR 0002 §15).
 - Requests come from 52.89.214.238, 34.212.75.30, 54.218.53.128 and 52.32.178.7.
 
-**Placeholders:**
+**Placeholders** the alert templates of
+[signal-payload.md](signal-payload.md#the-alert-templates) use, which any alert
+may:
 
 | Placeholder | Value |
 | --- | --- |
-| `{{timenow}}` | The fire time, UTC, to the second |
-| `{{time}}` | The bar's open time |
-| `{{ticker}}` | The chart symbol, e.g. `BTCUSDT.P` for a Bybit perpetual |
+| `{{timenow}}` | The fire time, UTC, to the second: `yyyy-MM-ddTHH:mm:ssZ` |
+| `{{time}}` | The bar's time, in the same form |
+| `{{ticker}}` | The chart symbol, e.g. `BTCUSDT.P` for a perpetual |
+| `{{exchange}}` | The chart's exchange, e.g. `BYBIT` |
 | `{{close}}` and the other prices | Fixed-point numbers |
+| `{{plot_0}}` to `{{plot_19}}`, `{{plot("name")}}` | A plot's value on the bar, a fixed-point number |
+
+**Placeholders no template uses:** a strategy alert's own, such as
+`{{strategy.order.action}}` (`buy` or `sell`) and
+`{{strategy.market_position}}` (`long`, `flat` or `short`). A payload states
+its kind and its side as constants instead, since an order's action does not
+say whether it opens or closes. A strategy sends its payloads through
+`{{strategy.order.alert_message}}` (item 19).
 
 Messages built with `alert()` do not expand placeholders.
 
@@ -320,6 +339,11 @@ answer, in this table and in its own evidence.
 | 13 | Which Bybit transaction-log type carries inverse funding | Funding comes from whichever type the evidence shows; nothing is counted twice | ALG-764, ALG-747 |
 | 14 | Whether `newOrderRespType=RESULT` still returns fills on Binance | Acknowledgements are never read as fills | ALG-762 |
 | 15 | How long an accepted order can stay invisible to a query by client ID, on each venue, family and environment | ADR 0002 §9's bounds apply, and the ADR says what changes if a venue exceeds them | ALG-740, ALG-762 |
+| 16 | Whether TradingView renders an alert's placeholders again when it resends a delivery: `{{timenow}}`, `{{close}}`, and `{{time}}` at a bar's edge | A signal's ID and payload hash leave the fire time out, so a resend that renders only that again is the same delivery. One that renders a price again is a conflict and is refused, the first standing. One whose bar time moved is a new signal: an entry meets the age limit and the position already held, and an exit can close a position of its side entered since the first send, which errs toward flat | ALG-754 |
+| 17 | The `{{ticker}}` and `{{exchange}}` TradingView renders on each venue's perpetual charts, linear and inverse: the `.P` suffix, `BINANCE`, `BYBIT` | A ticker is the venue's symbol of an asset the profile has settings for, or a listed perpetual's base asset, quote asset and `.P`; anything else is `unknown_ticker`. An `exchange` is optional, and one that is not the venue's name in capitals is `ambiguous_selection`. Nothing is matched loosely | ALG-754 |
+| 18 | What `{{plot_0}}` or `{{plot("name")}}` renders on a bar where the plot has no value | A stop that is not a price above zero refuses the alert as `invalid_value`. Nothing is read as "no stop", which would put the profile's fallback percentage in its place | ALG-754 |
+| 19 | Whether a strategy script can render a payload's ticker, times and prices exactly as the placeholders do, in the text it passes as `alert_message` | The payload is the same and is held to the same rules: a text that differs in any character is refused, or names nothing | ALG-754 |
+| 20 | That `{{time}}` is a bar's opening time on every chart type, and so never later than `{{timenow}}` | A payload whose bar time is after its fire time is refused as `bar_after_fire`: nothing is executed on times that are out of order | ALG-754 |
 
 ## Sources
 
@@ -351,3 +375,4 @@ answer, in this table and in its own evidence.
 - [webhook alerts](https://www.tradingview.com/support/solutions/43000529348-how-to-configure-webhook-alerts/)
 - [webhook authentication](https://www.tradingview.com/support/solutions/43000680459-webhook-authentication/)
 - [resubmission](https://www.tradingview.com/support/solutions/43000735201-webhook-resubmission/)
+- [alert variables](https://www.tradingview.com/support/solutions/43000531021)

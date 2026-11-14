@@ -117,6 +117,16 @@ src/
 │   │   ├── mod.rs              the history routes and their rules; SegmentEntry, the media type, the cache header
 │   │   ├── markets.rs          MarketIndex and MarketEntry: what GET /v1/markets answers
 │   │   └── candles.rs          CandleRangeQuery and CandleRange: what GET /v1/candles asks and answers
+│   ├── signal/                 a TradingView alert's payload, strict, and the receipt that answers it
+│   │   ├── mod.rs              the signal format: its fields, its strictness, a signal's identity; the limits
+│   │   ├── fields.rs           SIGNAL_FIELDS, and the rule each field's value is held to
+│   │   ├── words.rs            SignalKind, SignalSide, SignalCategory: the format's fixed words
+│   │   ├── times.rs            SignalTime: a UTC time as TradingView renders it, read strictly
+│   │   ├── json.rs             a body read down to its members: its size, its depth, each member as written
+│   │   ├── read.rs             a body read as a signal: every member judged, every problem found
+│   │   ├── payload.rs          Signal: what an alert asks, its ID, its canonical payload and its hash
+│   │   ├── problems.rs         SignalProblem, SignalProblemCode, SignalProblems: why a body is no signal
+│   │   └── receipt.rs          SignalReceipt, ReceiptState: where a recorded signal stands, never an order
 │   └── stream/                 bars as they close, over a WebSocket
 │       ├── mod.rs              the session flow, ClientFrame and ServerFrame, Ping and Pong
 │       ├── handshake.rs        Hello and HelloVersions, Welcome, AuthToken, SessionId, SessionLimits
@@ -186,6 +196,16 @@ src/
 │       │   ├── figures.rs      Sizing, SizedEntry and SizingRefusal, with every figure reached
 │       │   ├── submission.rs   SizedEntry::at_submission: a crossed stop and risk drift, against fresh prices
 │       │   └── fill.rs         SizedEntry::fill_risk: the risk the fills took, beside the risk sized
+│       ├── signal.rs           an external signal before it is an intent: ExternalSignal, SignalAgeLimit, Delivery
+│       ├── signal/             a signal resolved for the profile its URL selected, and held against positions
+│       │   ├── hash.rs         SignalHash: the name of a signal's canonical payload
+│       │   ├── ticker.rs       ProfilePolicy::instrument_named: the two spellings a ticker names an instrument by
+│       │   ├── resolve.rs      ExternalSignal::resolve: whose it is, how old, what it names, an entry's policy
+│       │   ├── cycle.rs        ExitIntent::closes and EntryIntent::against: an exit's position, an entry's held side
+│       │   ├── tests.rs        each rule of a signal alone, on one small profile: its age and what it asserts
+│       │   └── tests/          the rest of its unit tests, beside it for the line budget
+│       │       ├── tickers.rs  the two spellings a ticker names an instrument by, and which comes first
+│       │       └── records.rs  a resolved signal, a delivery sent again, an exit's position, an entry's held side
 │       ├── protection_state.rs ProtectionState: the futures_position machine, gated on evidence
 │       ├── position.rs         PositionCycle, CloseReason, OperatorRemoval
 │       └── accounting.rs       RealizedPnl and AccountingStatus: net PnL per settlement asset
@@ -317,9 +337,10 @@ src/
 │       ├── execution/          its unit tests, beside it for the line budget
 │       │   └── tests.rs        dry-run fills, rounding, notional and dust rules
 │       └── state.rs            run identity: create, resume, and resume checks
-├── automation/                 automation on external signals, of which the policy service is the first part
+├── automation/                 automation on external signals: the policy service and the signal service
 │   ├── mod.rs                  what the module is for, and the re-exports
-│   └── policy.rs               PolicyService: profiles, changes checked with the venue, and an entry's policy
+│   ├── policy.rs               PolicyService: profiles, changes checked with the venue, and an entry's policy
+│   └── signal.rs               SignalService: a signal resolved for the profile its URL selected, from its policy
 └── server/                     the HTTP server other instances connect to
     ├── mod.rs                  serve: the routes, and the shutdown that finishes requests in progress
     ├── store.rs                ServerStore: the store the routes and the queue share, and the turns at it
@@ -327,6 +348,7 @@ src/
     ├── selection.rs            a candles query or a job's data read into a market and a range, every value canonical
     ├── segment.rs              the segment route: stored bytes, cached for a year, checked before they go
     ├── results.rs              a job's result as its three files, and as the store keeps and returns them
+    ├── signal.rs               a delivery's body as the model's signal, and a refusal as its receipt
     ├── jobs/                   Jobs: the backtest job routes and the queue behind them
     │   ├── mod.rs              the queue's state, its start after a restart, and its stop
     │   ├── routes.rs           the upload, submission, status, list and cancel routes
@@ -396,6 +418,11 @@ policy it is admitted under ([automation-policy.md](automation-policy.md)).
 What that entry may buy or sell is `model::futures`' to say, a pure function
 of the policy, the venue's rules and an account snapshot, with no store and
 no clock of its own ([risk-sizing.md](risk-sizing.md)).
+Its signal service resolves an alert's signal for the profile its webhook
+URL selected: whose it is, how old, what its ticker names, and, for an
+entry, that policy ([signal-payload.md](signal-payload.md)). The alert's
+wire form is `protocol::signal`, which `server` alone reads and turns into
+the model's signal.
 `server` uses
 `protocol`, `model`, the `ports` it reads and writes the store through, the
 segment codec of `storage::segments` to check what it sends, and, in a
@@ -514,6 +541,15 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   from its snapshot after its profile's policy has changed; each refusal's
   and fault's words; the rules' promises over generated entries; and the
   document held to the code
+- `tests/signals/`: the TradingView alert payload against
+  [signal-payload.md](signal-payload.md): the shared cases of
+  `tests/fixtures/signal_cases.json`, valid and invalid payloads for both
+  venues, families and sides, read by the protocol to the same ID, canonical
+  payload, hash and problems; the alert templates rendered; every signal
+  resolved on the model and through the signal service on SQLite and, with
+  `QUANTFORGE_TEST_POSTGRES_URL`, on PostgreSQL; exits against entries,
+  deliveries sent again and in conflict, the receipts; and the document and
+  [`signal-schema.json`](signal-schema.json) held to the code
 - `tests/parity/`: the parity matrix in `docs/parity/` — its rules, the cell
   and evidence ledgers, the dated universe list, the rendered `matrix.md`,
   and the code that implements its state machines and vocabularies
