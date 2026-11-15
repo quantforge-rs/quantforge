@@ -23,7 +23,10 @@
 //! - `journal`: `RunJournalStore`, one statement per call.
 //! - `policies`: `PolicyStore`, a profile with its first revision in one
 //!   transaction, and each later revision one guarded insert.
-//! - `control`: `StoreControl`, the store's record and legacy runs.
+//! - `control`: `StoreControl`, the store's record, its activation and
+//!   legacy runs.
+//! - `execution`: `ExecutionStore`, each unit one transaction that locks
+//!   what it decides on, with the leases and the pool revisions.
 //! - `segments`: `SegmentStore`, each window and plan read in one snapshot
 //!   and written back only over the revision it read.
 //! - `transfer`: the store's rows for a transfer, read in byte order and
@@ -34,12 +37,14 @@
 //! [`PostgresStore`] connects, answers, creates its schema, and serves
 //! every storage port. A host selects it through `storage::factory`.
 
+mod activation;
 mod bridge;
 mod candles;
 mod control;
 mod copying;
 mod coverage;
 mod durability;
+mod execution;
 mod job_logs;
 mod jobs;
 mod journal;

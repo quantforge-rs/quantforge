@@ -36,16 +36,16 @@ use crate::postgres::{
 const LINGUISTIC: &str = "TEMPLATE template0 LC_COLLATE 'en_US.UTF-8' LC_CTYPE 'en_US.UTF-8'";
 
 /// A seeded source, and a target on a database of its own.
-struct Bed {
+pub(super) struct Bed {
     _dir: TempDir,
-    path: PathBuf,
-    cases: Cases,
-    database: IsolatedDatabase,
-    target: AnyStore,
+    pub(super) path: PathBuf,
+    pub(super) cases: Cases,
+    pub(super) database: IsolatedDatabase,
+    pub(super) target: AnyStore,
 }
 
 impl Bed {
-    fn new(options: &str) -> Option<Self> {
+    pub(super) fn new(options: &str) -> Option<Self> {
         let Some(server) = server_url() else {
             eprintln!("skipping: {VARIABLE} is unset");
             return None;
@@ -66,15 +66,15 @@ impl Bed {
         })
     }
 
-    fn snapshot(&self) -> SqliteSnapshot {
+    pub(super) fn snapshot(&self) -> SqliteSnapshot {
         SqliteSnapshot::open(&self.path).expect("the source")
     }
 
-    fn target(&self) -> &dyn TransferTarget {
+    pub(super) fn target(&self) -> &dyn TransferTarget {
         self.target.transfer_target().expect("a target")
     }
 
-    fn engine<'a>(
+    pub(super) fn engine<'a>(
         &'a self,
         snapshot: &'a SqliteSnapshot,
         target: &'a dyn TransferTarget,
@@ -90,7 +90,7 @@ impl Bed {
         )
     }
 
-    fn copy(&self, batch_rows: usize) -> quantforge::TransferSummary {
+    pub(super) fn copy(&self, batch_rows: usize) -> quantforge::TransferSummary {
         let snapshot = self.snapshot();
         self.engine(&snapshot, self.target(), batch_rows)
             .copy()
@@ -104,7 +104,7 @@ impl Bed {
             .expect("verify")
     }
 
-    fn count(&self, sql: &str) -> String {
+    pub(super) fn count(&self, sql: &str) -> String {
         query(&self.database.url, sql)[0][0]
             .clone()
             .unwrap_or_default()
@@ -398,9 +398,9 @@ fn the_copy_numbers_new_rows_past_the_copied_ones() {
 }
 
 /// The real target, failing its writes once the given number is spent.
-struct Cut<'a> {
-    inner: &'a dyn TransferTarget,
-    writes_left: AtomicUsize,
+pub(super) struct Cut<'a> {
+    pub(super) inner: &'a dyn TransferTarget,
+    pub(super) writes_left: AtomicUsize,
 }
 
 impl TransferSource for Cut<'_> {
@@ -558,7 +558,7 @@ fn a_mismatch_planted_in_the_copy_is_found_and_named() {
 }
 
 /// Each transferred table's row count, in copy order.
-fn counts(bed: &Bed) -> Vec<String> {
+pub(super) fn counts(bed: &Bed) -> Vec<String> {
     TRANSFER_TABLES
         .iter()
         .map(|table| bed.count(&format!("SELECT count(*) FROM {}", table.name)))
@@ -567,7 +567,11 @@ fn counts(bed: &Bed) -> Vec<String> {
 
 /// Asserts that `result` is the refusal of a write to a store holding an
 /// unfinished copy of store `source`.
-fn assert_refused<T: std::fmt::Debug>(write: &str, result: Result<T, StorageError>, source: &str) {
+pub(super) fn assert_refused<T: std::fmt::Debug>(
+    write: &str,
+    result: Result<T, StorageError>,
+    source: &str,
+) {
     match result {
         Err(StorageError::InvalidArgument(reason)) => assert!(
             reason.contains(&format!("holds an unfinished copy of store {source}")),
@@ -582,7 +586,7 @@ fn every_write_to_a_target_whose_copy_is_unfinished_is_refused_until_it_finishes
     let Some(bed) = Bed::new("") else {
         return;
     };
-    // Every row but the last two marks: the target holds runs, journals and
+    // Cut off among the segment marks: the target holds runs, journals and
     // segments, and its copy is unfinished.
     let snapshot = bed.snapshot();
     let cut = Cut {

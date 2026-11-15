@@ -3,15 +3,21 @@
 //! [`database`] runs the rest against a real one, [`migrate`] the schema
 //! chain, over steps no build has, [`candles`] how a batch of candles
 //! becomes one statement, [`segments`] the segment store where only its
-//! own read and write-back can show it, and [`durability`] what a commit
-//! means and how long a call may take. [`scratch`] gives a test a database
-//! of its own.
+//! own read and write-back can show it, [`execution`] what a unit of the
+//! execution store waits for and what it never does, [`lock_order`] the
+//! one order it takes its locks in, and [`durability`] what a commit
+//! means and how long a call may take. [`scratch`] gives a test a
+//! database of its own, and [`seeds`] the rows the chain's tests write
+//! into one.
 
 mod candles;
 mod database;
 mod durability;
+mod execution;
+mod lock_order;
 mod migrate;
 mod scratch;
+mod seeds;
 mod segments;
 mod steps;
 

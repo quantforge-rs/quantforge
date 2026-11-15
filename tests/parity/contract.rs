@@ -1,9 +1,11 @@
 //! The futures contract's types against the matrix: the three state
-//! machines ALG-733 implements, the refusal vocabulary, the axes, and the
-//! policy values the types carry. A name changed on either side fails here.
+//! machines ALG-733 implements, those the execution store's records move
+//! along, the refusal vocabulary, the axes, and the policy values the
+//! types carry. A name changed on either side fails here.
 
 use std::collections::BTreeSet;
 
+use quantforge::model::execution::{DeliveryState, IncidentState, SignalState, SpotReplaceState};
 use quantforge::model::futures::{
     AccountKind, AccountingStatus, DRIFT_LIMIT, IntentState, MarginMode, OwnerTag,
     PROPAGATION_DELAY_MS, PositionMode, ProfileId, ProfileIdentity, ProtectionState,
@@ -109,6 +111,74 @@ fn the_accounting_statuses_are_the_matrix_accounting_machine() {
         AccountingStatus::as_str,
     );
     assert_eq!(code, machine("accounting"));
+}
+
+#[test]
+fn the_spot_replacement_states_are_the_matrix_spot_replace_machine() {
+    let code = code_shape(
+        &SpotReplaceState::ALL,
+        SpotReplaceState::INITIAL,
+        SpotReplaceState::is_terminal,
+        &SpotReplaceState::TRANSITIONS,
+        SpotReplaceState::as_str,
+    );
+    assert_eq!(code, machine("spot_replace"));
+}
+
+#[test]
+fn an_events_delivery_states_are_the_matrix_notification_machine() {
+    let code = code_shape(
+        &DeliveryState::ALL,
+        DeliveryState::INITIAL,
+        DeliveryState::is_terminal,
+        &DeliveryState::TRANSITIONS,
+        DeliveryState::as_str,
+    );
+    assert_eq!(code, machine("notification"));
+}
+
+#[test]
+fn the_incident_states_are_the_matrix_incident_machine() {
+    let code = code_shape(
+        &IncidentState::ALL,
+        IncidentState::INITIAL,
+        IncidentState::is_terminal,
+        &IncidentState::TRANSITIONS,
+        IncidentState::as_str,
+    );
+    assert_eq!(code, machine("incident"));
+}
+
+/// An inbox judges a signal once, and its states are the part of the
+/// matrix's `signal_intent` machine a signal passes before it is an intent
+/// or is done: every state and every move of the inbox is the matrix's,
+/// and every move the matrix has out of `received` is the inbox's, but the
+/// duplicate, which the inbox answers and never stores as a state.
+#[test]
+fn the_inbox_states_are_the_start_of_the_matrix_signal_intent_machine() {
+    let matrix = machine("signal_intent");
+    let name = |state: SignalState| state.as_str().to_string();
+    assert_eq!(name(SignalState::INITIAL), matrix.initial);
+    for state in SignalState::ALL {
+        assert!(matrix.states.contains(&name(state)), "{state}");
+    }
+    let inbox: BTreeSet<(String, String)> = SignalState::TRANSITIONS
+        .iter()
+        .map(|&(from, to)| (name(from), name(to)))
+        .collect();
+    assert_eq!(inbox.len(), SignalState::TRANSITIONS.len(), "no move twice");
+    let from_received: BTreeSet<(String, String)> = matrix
+        .transitions
+        .iter()
+        .filter(|(from, to)| from == "received" && to != "duplicate")
+        .cloned()
+        .collect();
+    assert_eq!(inbox, from_received);
+    assert!(
+        matrix
+            .transitions
+            .contains(&("received".to_string(), "duplicate".to_string()))
+    );
 }
 
 #[test]

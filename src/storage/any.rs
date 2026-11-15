@@ -9,20 +9,27 @@
 
 use std::time::Duration;
 
+use crate::model::execution::{
+    Commit, ExecutionUnit, Fence, Lease, LeaseAnswer, LeaseRequest, NewOperation, OperationRecord,
+    Stored,
+};
 use crate::model::futures::{
-    PolicyRevision, PolicyStamp, ProfileId, ProfileIdentity, ProfilePolicy,
+    PolicyRevision, PolicyStamp, PositionKey, ProfileId, ProfileIdentity, ProfilePolicy,
 };
 use crate::model::{
-    BotRunState, BundleHash, Candle, ClosedTrade, DurabilityReport, Environment, ExchangeOrder,
-    ExecutionMode, JobId, JobOutcome, JobRecord, LegacyRun, MarketCoverage, MarketId, NewJob,
-    ResultHash, RunIdentity, SchemaMigration, SegmentHash, SegmentPlan, SegmentRefresh,
-    StoreIdentity, TimestampMs,
+    BotRunState, BundleHash, Candle, ClosedTrade, ControlEvent, DurabilityReport, Environment,
+    ExchangeOrder, ExecutionMode, JobId, JobOutcome, JobRecord, LegacyRun, MarketCoverage,
+    MarketId, NewJob, ResultHash, RunIdentity, SchemaMigration, SegmentHash, SegmentPlan,
+    SegmentRefresh, StoreIdentity, TimestampMs,
 };
 use crate::ports::{
-    CandleQuery, CandleStore, JobStore, PolicyStore, RunJournalStore, SegmentStore, StorageError,
-    StoreControl, TransferTarget,
+    CandleQuery, CandleStore, ExecutionStore, JobStore, PolicyStore, RunJournalStore, SegmentStore,
+    StorageError, StoreControl, TransferTarget,
 };
 use crate::storage::SqliteStore;
+use crate::storage::execution::execution_reads;
+use crate::storage::execution::read::{Query, RawRow, Rows};
+use crate::storage::execution::tables::PoolKey;
 #[cfg(feature = "postgres")]
 use crate::storage::postgres::PostgresStore;
 use crate::storage::settings::StorageBackend;
@@ -195,6 +202,18 @@ impl StoreControl for AnyStore {
         delegate!(self, store => store.store_identity())
     }
 
+    fn activate(&self, at_ms: TimestampMs) -> Result<StoreIdentity, StorageError> {
+        delegate!(self, store => store.activate(at_ms))
+    }
+
+    fn deactivate(&self, at_ms: TimestampMs) -> Result<StoreIdentity, StorageError> {
+        delegate!(self, store => store.deactivate(at_ms))
+    }
+
+    fn control_events(&self) -> Result<Vec<ControlEvent>, StorageError> {
+        delegate!(self, store => store.control_events())
+    }
+
     fn migrations(&self) -> Result<Vec<SchemaMigration>, StorageError> {
         delegate!(self, store => store.migrations())
     }
@@ -330,4 +349,51 @@ impl PolicyStore for AnyStore {
     ) -> Result<bool, StorageError> {
         delegate!(self, store => store.save_policy(policy, changed_at_ms))
     }
+}
+
+impl Rows for AnyStore {
+    fn rows(&self, query: &Query) -> Result<Vec<RawRow>, StorageError> {
+        delegate!(self, store => store.rows(query))
+    }
+
+    fn pool_rows(&self, pool: &PoolKey, held: &Query) -> Result<(u64, Vec<RawRow>), StorageError> {
+        delegate!(self, store => store.pool_rows(pool, held))
+    }
+}
+
+impl ExecutionStore for AnyStore {
+    fn commit(&self, unit: &ExecutionUnit) -> Result<Commit, StorageError> {
+        delegate!(self, store => store.commit(unit))
+    }
+
+    fn begin_operation(
+        &self,
+        operation: &NewOperation,
+        at_ms: TimestampMs,
+    ) -> Result<Stored<OperationRecord>, StorageError> {
+        delegate!(self, store => store.begin_operation(operation, at_ms))
+    }
+
+    fn acquire_lease(&self, request: &LeaseRequest) -> Result<LeaseAnswer, StorageError> {
+        delegate!(self, store => store.acquire_lease(request))
+    }
+
+    fn renew_lease(
+        &self,
+        fence: &Fence,
+        ttl_ms: i64,
+        now_ms: TimestampMs,
+    ) -> Result<Option<Lease>, StorageError> {
+        delegate!(self, store => store.renew_lease(fence, ttl_ms, now_ms))
+    }
+
+    fn release_lease(&self, fence: &Fence) -> Result<bool, StorageError> {
+        delegate!(self, store => store.release_lease(fence))
+    }
+
+    fn lease(&self, key: &PositionKey) -> Result<Option<Lease>, StorageError> {
+        delegate!(self, store => store.lease(key))
+    }
+
+    execution_reads!();
 }

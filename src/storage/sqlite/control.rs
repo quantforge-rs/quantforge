@@ -7,9 +7,10 @@ use super::errors::{commit_failed, failed};
 use super::{SqliteStore, effective, migrate, to_from_sql_error};
 use crate::model::futures::ActivationEpoch;
 use crate::model::{
-    DurabilityReport, Environment, ExecutionMode, IdentitySource, LegacyRun, RunIdentity,
-    SchemaMigration, StoreActivation, StoreId, StoreIdentity,
+    ControlEvent, DurabilityReport, Environment, ExecutionMode, IdentitySource, LegacyRun,
+    RunIdentity, SchemaMigration, StoreActivation, StoreId, StoreIdentity, TimestampMs,
 };
+use crate::storage::execution::lease::{StoreStanding, VOID_LEASES, activation_change};
 use crate::storage::runs::{
     adopted_state, already_bound, identity_columns, legacy_run, parse_environment, refuse_unadopted,
 };
@@ -84,9 +85,98 @@ pub(super) fn read_identity(connection: &Connection) -> Result<StoreIdentity, St
         .map_err(failed)
 }
 
+impl SqliteStore {
+    /// Moves the store's activation to `to`, with the row of its log, in
+    /// one transaction: of two operators at once, one finds it done. An
+    /// activation voids every lease in the same transaction.
+    fn change_activation(
+        &self,
+        to: StoreActivation,
+        at_ms: TimestampMs,
+    ) -> Result<StoreIdentity, StorageError> {
+        let mut connection = self.open()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(failed)?;
+        let identity = read_identity(&transaction)?;
+        let (after, event) = activation_change(&StoreStanding::of(&identity), to, at_ms)?;
+        transaction
+            .execute(
+                r#"
+                UPDATE store_control
+                SET activation = ?1, activation_epoch = ?2, changed_at_ms = ?3
+                WHERE id = 1
+                "#,
+                params![after.activation.as_str(), after.epoch.0, at_ms],
+            )
+            .map_err(failed)?;
+        transaction
+            .execute(
+                r#"
+                INSERT INTO store_control_events(
+                  from_activation, to_activation, activation_epoch, changed_at_ms
+                )
+                VALUES (?1, ?2, ?3, ?4)
+                "#,
+                params![
+                    event.from.as_str(),
+                    event.to.as_str(),
+                    event.epoch.0,
+                    event.at_ms
+                ],
+            )
+            .map_err(failed)?;
+        if after.activation == StoreActivation::Active {
+            transaction.execute(VOID_LEASES, []).map_err(failed)?;
+        }
+        transaction.commit().map_err(commit_failed)?;
+        Ok(StoreIdentity {
+            activation: after.activation,
+            activation_epoch: after.epoch,
+            ..identity
+        })
+    }
+}
+
 impl StoreControl for SqliteStore {
     fn store_identity(&self) -> Result<StoreIdentity, StorageError> {
         read_identity(&self.open()?)
+    }
+
+    fn activate(&self, at_ms: TimestampMs) -> Result<StoreIdentity, StorageError> {
+        self.change_activation(StoreActivation::Active, at_ms)
+    }
+
+    fn deactivate(&self, at_ms: TimestampMs) -> Result<StoreIdentity, StorageError> {
+        self.change_activation(StoreActivation::Deactivated, at_ms)
+    }
+
+    fn control_events(&self) -> Result<Vec<ControlEvent>, StorageError> {
+        let connection = self.open()?;
+        let mut stmt = connection
+            .prepare(
+                r#"
+                SELECT from_activation, to_activation, activation_epoch, changed_at_ms
+                FROM store_control_events
+                ORDER BY seq ASC
+                "#,
+            )
+            .map_err(failed)?;
+        let rows = stmt
+            .query_map([], |row| {
+                let state = |index: usize| -> rusqlite::Result<StoreActivation> {
+                    StoreActivation::from_str(&row.get::<_, String>(index)?)
+                        .map_err(to_from_sql_error)
+                };
+                Ok(ControlEvent {
+                    from: state(0)?,
+                    to: state(1)?,
+                    epoch: ActivationEpoch(row.get(2)?),
+                    at_ms: row.get(3)?,
+                })
+            })
+            .map_err(failed)?;
+        rows.collect::<Result<_, _>>().map_err(failed)
     }
 
     fn durability(&self) -> Result<DurabilityReport, StorageError> {

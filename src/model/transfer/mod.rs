@@ -8,8 +8,14 @@
 //! A story that adds a table adds it to one list or the other, and the
 //! storage tests fail until it does.
 
+mod execution;
 mod tables;
 
+pub use execution::{
+    EXECUTION_FILLS, EXECUTION_INCIDENTS, EXECUTION_INTENTS, EXECUTION_OPERATIONS,
+    EXECUTION_ORDERS, MARGIN_RESERVATIONS, OUTBOX_EVENTS, POSITION_CYCLES, SIGNAL_DELIVERIES,
+    SIGNAL_INBOX,
+};
 pub use tables::{
     BOT_RUNS, BUNDLES, CANDLES, CLOSED_TRADES, ColumnKind, JOBS, KEPT_BY_EACH_STORE, ORDER_EVENTS,
     SEGMENT_DIRTY, SEGMENT_INDEX, SEGMENTS, TRANSFER_TABLES, TransferColumn, TransferTable,
@@ -25,7 +31,7 @@ pub const TRANSFER_FORMAT: u32 = 1;
 
 /// The schema whose tables [`TRANSFER_TABLES`] lists. A source and a target
 /// are both at it, and a schema step that changes a listed table changes it.
-pub const TRANSFER_SCHEMA: u32 = 9;
+pub const TRANSFER_SCHEMA: u32 = 10;
 
 /// A stored value as both backends hold it: no decimal parsed, no text
 /// normalized. Values of a kind compare as SQLite compares them: integers

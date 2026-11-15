@@ -5,7 +5,8 @@
 //! bot-run state, and the timestamp and decimal helpers they are built
 //! from, including the decimal ↔ float64 conversions. Execution identity,
 //! units and refusals are shared too; the futures contract of ADR 0002
-//! lives in [`futures`].
+//! lives in [`futures`], and the records an execution store keeps of it,
+//! with the unit every write to one is made in, in [`execution`].
 
 pub mod account;
 pub mod candle;
@@ -13,6 +14,7 @@ pub mod candle_batch;
 pub mod decimal;
 pub mod durability;
 mod exact;
+pub mod execution;
 pub mod futures;
 pub mod identity;
 pub mod interval;
@@ -53,12 +55,14 @@ pub use rules::{AssetBalance, SymbolRules};
 pub use run::{BotRunState, ClosedTrade, ExecutionMode, PositionState, RunStatus, TargetPosition};
 pub use segment::{SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh, SegmentTip};
 pub use store::{
-    IdentitySource, LegacyRun, RunIdentity, SchemaMigration, StoreActivation, StoreId,
-    StoreIdentity, describe_account, describe_environment,
+    ControlEvent, IdentitySource, LegacyRun, RunIdentity, SchemaMigration, StoreActivation,
+    StoreId, StoreIdentity, describe_account, describe_environment,
 };
 pub use timestamp::{TimestampMs, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms};
 pub use transfer::{
-    ColumnKind, KEPT_BY_EACH_STORE, TRANSFER_FORMAT, TRANSFER_SCHEMA, TRANSFER_TABLES,
+    ColumnKind, EXECUTION_FILLS, EXECUTION_INCIDENTS, EXECUTION_INTENTS, EXECUTION_OPERATIONS,
+    EXECUTION_ORDERS, KEPT_BY_EACH_STORE, MARGIN_RESERVATIONS, OUTBOX_EVENTS, POSITION_CYCLES,
+    SIGNAL_DELIVERIES, SIGNAL_INBOX, TRANSFER_FORMAT, TRANSFER_SCHEMA, TRANSFER_TABLES,
     TransferColumn, TransferMarket, TransferRecord, TransferRow, TransferState, TransferTable,
     TransferValue,
 };

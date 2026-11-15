@@ -37,6 +37,7 @@ mod ticker;
 
 use super::{PolicyRefusal, ProfileId, SignalId};
 use crate::model::{Category, ModelError, PositionSide, Price, Refusal, TimestampMs};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 pub use hash::SignalHash;
@@ -94,7 +95,7 @@ impl Default for SignalAgeLimit {
 }
 
 /// What a signal asks for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SignalAction {
     /// Open a position, sized at `expected_price` against the alert's own
     /// stop or, without one, the policy's fallback.
@@ -110,7 +111,11 @@ pub enum SignalAction {
 /// is trusted further than that: its profile, its exchange and its family
 /// are claims, and its ticker is text, until [`ExternalSignal::resolve`]
 /// holds them to the profile its URL selected.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// Its serde form is how a store keeps it, never the wire's: a delivery is
+/// read by the payload format, and a signal recorded in an inbox is read
+/// back from this.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExternalSignal {
     /// The signal's ID within its profile, as the payload format builds
     /// it: the same for a delivery sent again.
@@ -140,7 +145,7 @@ pub struct ExternalSignal {
 /// the operator would change. A refusal is an outcome to record, not an
 /// error: the same signal is refused the same way however often it is
 /// delivered.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignalRefusal {
     pub refusal: Refusal,
     pub message: String,
@@ -196,6 +201,15 @@ impl Delivery {
             None => Self::New,
             Some(recorded) if recorded == arrived => Self::Duplicate,
             Some(_) => Self::Conflict,
+        }
+    }
+
+    /// `new`, `duplicate` or `conflict`, as a store records each delivery.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::New => "new",
+            Self::Duplicate => "duplicate",
+            Self::Conflict => "conflict",
         }
     }
 

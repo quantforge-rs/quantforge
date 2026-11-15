@@ -539,6 +539,7 @@ restart, and `docs.rs` holds this page.
   [signal-payload.md](signal-payload.md)'s. `automation::SignalService`
   reads the newest policy once, and resolves the ticker and the entry's
   snapshot from that one revision.
-- **Admission and the execution store.** Choosing the profile by its route,
-  recording the intent with its snapshot and everything after it are
-  ALG-743's and ALG-738's.
+- **Admission and the execution store.** Choosing the profile by its route
+  is ALG-743's. Recording the intent with its snapshot, and everything
+  after it, is the execution store's
+  ([execution-store.md](execution-store.md)).

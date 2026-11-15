@@ -753,7 +753,7 @@ One Cargo package, layered as modules, innermost first:
 | `storage` | the `sqlite` and `postgres` backends, and the [segment format](https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md) both pack candles into |
 | `sdk` | the `Strategy` trait, indicator math, and the built-in SMA crossover |
 | `engine` | the drivers: `backtest`, `data_sync` and `live` |
-| `automation` | execution on external signals; so far the [policy service](https://github.com/quantforge-rs/quantforge/blob/main/docs/automation-policy.md) and the [signal service](https://github.com/quantforge-rs/quantforge/blob/main/docs/signal-payload.md), which no command reaches yet |
+| `automation` | execution on external signals; so far the [policy service](https://github.com/quantforge-rs/quantforge/blob/main/docs/automation-policy.md), the [signal service](https://github.com/quantforge-rs/quantforge/blob/main/docs/signal-payload.md) and the ledger over the [execution store](https://github.com/quantforge-rs/quantforge/blob/main/docs/execution-store.md), which no command reaches yet |
 | `protocol` | the versioned wire types between instances; it uses nothing else in the crate, so that it can become a crate of its own |
 | `server` | what `serve run` hosts: history, the job queue and its workers |
 
@@ -778,7 +778,7 @@ annotates every source file and maps each command to its file.
 | What a job's worker may do | [worker-isolation.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/worker-isolation.md) |
 | Exchanges: what each supports, adding one | [exchange-feature-matrix.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/exchange-feature-matrix.md), [adding-an-exchange.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/adding-an-exchange.md) |
 | Decimals and float64 | [decimal-float-policy.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/decimal-float-policy.md) |
-| Futures automation: decisions, sizing, policies, alert payloads | [ADR 0002](https://github.com/quantforge-rs/quantforge/blob/main/docs/adr/0002-automation-architecture.md), [risk-sizing.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/risk-sizing.md), [automation-policy.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/automation-policy.md), [signal-payload.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/signal-payload.md) |
+| Futures automation: decisions, sizing, policies, alert payloads, the execution store | [ADR 0002](https://github.com/quantforge-rs/quantforge/blob/main/docs/adr/0002-automation-architecture.md), [risk-sizing.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/risk-sizing.md), [automation-policy.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/automation-policy.md), [signal-payload.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/signal-payload.md), [execution-store.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/execution-store.md) |
 | Contributing and CI | [CONTRIBUTING.md](https://github.com/quantforge-rs/quantforge/blob/main/CONTRIBUTING.md), [ci.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/ci.md) |
 | What changed | [CHANGELOG.md](https://github.com/quantforge-rs/quantforge/blob/main/CHANGELOG.md) |
 

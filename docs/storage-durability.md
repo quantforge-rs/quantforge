@@ -4,8 +4,9 @@ What an acknowledgement from a store means, how long a call may take to
 give one, and what a caller does when it doesn't get one. SQLite and
 PostgreSQL mean the same by all of it, so the code above the storage ports
 never asks which backend it has. Webhook admission (ALG-743) and the
-execution ledger (ALG-738) build on this contract; they verify their own
-inbox and fencing semantics on top of it.
+execution store ([execution-store.md](execution-store.md)) build on this
+contract; the store's own inbox and fencing semantics are verified on top
+of it, by the `execution` group of the conformance suite.
 
 ## Contents
 
@@ -238,6 +239,9 @@ request, PostgreSQL's on 16, 17 and 18 ([ci.md](ci.md#postgresql)).
 | A deadlock, a snapshot conflict | A real one on each backend | `conflict`, and a retry goes through on PostgreSQL |
 | A connection ended mid-write, PostgreSQL | `pg_terminate_backend` on a write waiting for a lock | `outcome_unknown`, and the store reconnects |
 | A silently weakened setting | SQLite on a VFS with no shared memory; a PostgreSQL server with `fsync = off` | Refused when enforced, reported otherwise |
+| Application crash in the execution store, both backends, on 2026-11-15 (PostgreSQL 16.15, SQLite 3.46, Linux x86-64) | A writer that takes signals through their whole life dies right after each step in turn, and is killed with `SIGKILL` at no step in particular (`tests/execution/crash.rs`) | Every answered step stored, every stored step whole with its event, and what was left resumed by asking the venue |
+| A unit of the execution store that fails partway, held up, or whose answer is lost, both backends | `execution.failed_unit_changes_nothing`, `execution.waits_are_bounded`, `execution.lost_answer_asked_again` ([storage-conformance.md](storage-conformance.md#the-execution-store)) | Nothing of the unit written; `contention` inside the budget; asked again, the writer learns what its first call left |
+| A unit whose connection ends while it is under way, PostgreSQL | `pg_terminate_backend` on a unit waiting for a table (`src/storage/postgres/tests/execution.rs`) | `outcome_unknown`, nothing half written, and the unit asked again is applied once |
 
 **Not exercised:** an operating system crash, a power loss, a flush that
 fails or lies, a disk filling up at a commit, a stalled synchronous standby,

@@ -9,7 +9,9 @@
 //! is that one opened by the build before job logs, its queue driven on
 //! until a job succeeded with its result files; and schema 8's is that one
 //! opened by the build before automation policies, its queue driven on
-//! until jobs ended with their logs kept.
+//! until jobs ended with their logs kept. Schema 9's, that one opened by
+//! the build before the execution store and given two profiles with their
+//! policies, is held by `migration_execution`.
 
 use quantforge::model::futures::{
     OwnerTag, PolicyChange, ProfileId, ProfileIdentity, ProfileLabel, ProfilePolicy,
@@ -34,7 +36,7 @@ const ONE_BAR: &str = "sha256:9b80ffd85cbcbb3c03e5e7ba06b6ad4a7778e10b4845d7f263
 const DAY_ONE: i64 = 1_792_454_400_000;
 const DAY_TWO: i64 = 1_792_540_800_000;
 
-fn load(version: u32) -> (TempDir, SqliteStore) {
+pub(crate) fn load(version: u32) -> (TempDir, SqliteStore) {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let path = tempdir.path().join("market.sqlite");
     let sql = std::fs::read_to_string(fixture(&format!(
@@ -51,7 +53,7 @@ fn open(store: &SqliteStore) -> Connection {
     Connection::open(store.path()).expect("open")
 }
 
-fn version(store: &SqliteStore) -> u32 {
+pub(crate) fn version(store: &SqliteStore) -> u32 {
     open(store)
         .query_row(
             "SELECT value FROM meta WHERE key = 'schema_version'",
@@ -86,7 +88,7 @@ fn rows(store: &SqliteStore, sql: &str) -> Vec<Vec<Option<String>>> {
     rows.collect::<Result<_, _>>().expect("rows")
 }
 
-fn tables(store: &SqliteStore) -> Vec<String> {
+pub(crate) fn tables(store: &SqliteStore) -> Vec<String> {
     rows(
         store,
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name != 'sqlite_sequence' ORDER BY name",
@@ -98,7 +100,7 @@ fn tables(store: &SqliteStore) -> Vec<String> {
 
 /// The shape of every table and index: what a migrated store must share
 /// with a fresh one.
-fn shape(store: &SqliteStore) -> Vec<(String, Vec<Vec<Option<String>>>)> {
+pub(crate) fn shape(store: &SqliteStore) -> Vec<(String, Vec<Vec<Option<String>>>)> {
     let mut shape = Vec::new();
     for table in tables(store) {
         let columns = rows(
@@ -292,7 +294,7 @@ fn every_earlier_schema_migrates_to_the_current_one_with_its_rows_unchanged() {
 }
 
 /// Every row of `table`, ordered by every column.
-fn everything(store: &SqliteStore, table: &str) -> Vec<Vec<Option<String>>> {
+pub(crate) fn everything(store: &SqliteStore, table: &str) -> Vec<Vec<Option<String>>> {
     let columns = rows(
         store,
         &format!("SELECT count(*) FROM pragma_table_info('{table}')"),
@@ -338,7 +340,7 @@ fn a_schema_5_store_gains_the_job_tables_and_keeps_every_row() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 4, "four steps logged");
+                assert_eq!(after.len(), rows_before.len() + 5, "five steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -349,7 +351,7 @@ fn a_schema_5_store_gains_the_job_tables_and_keeps_every_row() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9)]);
+    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10)]);
     let migrated = store.store_identity().expect("identity");
     assert_eq!(migrated.store_id, identity.store_id, "the same store");
     assert_eq!(migrated.environment, identity.environment);
@@ -386,7 +388,7 @@ fn a_schema_5_store_gains_the_job_tables_and_keeps_every_row() {
     assert_eq!((claimed.job_id, claimed.phase), (job_id, JobPhase::Running));
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 5);
+    assert_eq!(store.migrations().expect("log").len(), 6);
 }
 
 /// Schema 6 held bundles and jobs and no result of any: the steps from it
@@ -422,7 +424,7 @@ fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 3, "three steps logged");
+                assert_eq!(after.len(), rows_before.len() + 4, "four steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -433,7 +435,7 @@ fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9)]);
+    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10)]);
     assert_eq!(
         everything(&store, "job_results"),
         Vec::<Vec<Option<String>>>::new()
@@ -504,7 +506,7 @@ fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
     assert_eq!(store.claim_job(DAY_TWO + 3).expect("a claim"), None);
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 5);
+    assert_eq!(store.migrations().expect("log").len(), 6);
 }
 
 /// Schema 7 held jobs with their result files and no log of any: the step
@@ -541,7 +543,7 @@ fn a_schema_7_store_gains_the_logs_table_and_keeps_every_result() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 2, "two steps logged");
+                assert_eq!(after.len(), rows_before.len() + 3, "three steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -552,7 +554,7 @@ fn a_schema_7_store_gains_the_logs_table_and_keeps_every_result() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9)]);
+    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10)]);
     assert_eq!(
         everything(&store, "job_logs"),
         Vec::<Vec<Option<String>>>::new()
@@ -618,7 +620,7 @@ fn a_schema_7_store_gains_the_logs_table_and_keeps_every_result() {
     );
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 5);
+    assert_eq!(store.migrations().expect("log").len(), 6);
 }
 
 /// Schema 8 held jobs with their logs and no automation profile: the step
@@ -642,7 +644,7 @@ fn a_schema_8_store_gains_the_policy_tables_and_keeps_every_log() {
     let logs = everything(&store, "job_logs");
     assert_eq!(logs.len(), 3, "a succeeded, a cancelled and a failed job's");
 
-    CandleStore::init(&store).expect("schema 9");
+    CandleStore::init(&store).expect("schema 10");
 
     assert_eq!(version(&store), SCHEMA_VERSION);
     assert_eq!(shape(&store), shape(&fresh), "not the fresh schema");
@@ -658,7 +660,7 @@ fn a_schema_8_store_gains_the_policy_tables_and_keeps_every_log() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 1, "one step logged");
+                assert_eq!(after.len(), rows_before.len() + 2, "two steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -669,7 +671,7 @@ fn a_schema_8_store_gains_the_policy_tables_and_keeps_every_log() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9)]);
+    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10)]);
     for table in ["automation_profiles", "policy_revisions"] {
         assert_eq!(
             everything(&store, table),
@@ -731,7 +733,7 @@ fn a_schema_8_store_gains_the_policy_tables_and_keeps_every_log() {
     );
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 5);
+    assert_eq!(store.migrations().expect("log").len(), 6);
 }
 
 #[test]
@@ -753,17 +755,30 @@ fn a_fresh_store_logs_one_step_from_zero_and_is_the_documented_schema() {
             "bundles",
             "candles",
             "closed_trades",
+            "execution_fills",
+            "execution_incidents",
+            "execution_intents",
+            "execution_operations",
+            "execution_orders",
             "job_logs",
             "job_results",
             "jobs",
+            "margin_reservations",
             "meta",
             "order_events",
+            "outbox_events",
             "policy_revisions",
+            "position_cycles",
+            "position_leases",
+            "reservation_pools",
             "schema_migrations",
             "segment_dirty",
             "segment_index",
             "segments",
+            "signal_deliveries",
+            "signal_inbox",
             "store_control",
+            "store_control_events",
         ]
     );
 }

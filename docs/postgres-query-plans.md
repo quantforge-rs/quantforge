@@ -35,7 +35,9 @@ steps of the candle store's walk over its markets on 2026-11-08, when
 QUA-359 added it, against PostgreSQL 16.15 in Docker
 ([ci.md](ci.md#postgresql)'s local servers), as were the job store's
 statements and a transfer's keyset reads later that day, when QUA-358 added
-schema 6. Each query was
+schema 6. The execution store's statements were measured on 2026-11-15,
+when QUA-206 added schema 10, against PostgreSQL 16.15 from prebuilt
+binaries on Linux (x86-64), with the same default settings. Each query was
 explained with literal values, reads with `EXPLAIN (ANALYZE, BUFFERS)` and
 writes without running them.
 The PostgreSQL stores send the same values as parameters of unnamed
@@ -60,7 +62,15 @@ A store some years in:
   segments and index entries, and a dirty mark on every window, as a deep
   backfill leaves them before its refresh;
 - 5,000 bundles and 20,000 jobs over them: 19,800 succeeded, 100 running
-  and 100 queued, as a server some years in holds them.
+  and 100 queued, as a server some years in holds them;
+- an execution store over four profiles' lines and 200 symbols: two
+  profiles of one account's linear line, a profile of the same name on the
+  other venue, and the first account's coin-margined line. 60,000 signals
+  with 80,000 deliveries and as many operations and orders; 54,000 intents,
+  45 of them entries still on their way; 100,000 fills over 20,000 position
+  cycles, 30 of them open; 54,000 reservations, 45 of them held; 5,000
+  incidents, 5 of them open; 200,000 events, 100 of them pending; and a
+  lease row for each of 800 positions.
 
 The data is written twice, each time to a database of its own: market by
 market, as a backfill writes candles, and minute by minute across the
@@ -108,6 +118,33 @@ it, with the indexes its plan uses:
 - `transfer.segments`: `segments_pkey`
 - `transfer.runs`: `bot_runs_pkey`
 - `transfer.bundles`: `bundles_pkey`
+- `execution.signal`: `signal_inbox_venue_category_environment_account_kind_accoun_key`
+- `execution.received_signals`: `idx_signal_inbox_state`
+- `execution.deliveries`: `idx_signal_deliveries_signal`
+- `execution.operation`: `execution_operations_pkey`
+- `execution.operation_by_key`: `execution_operations_venue_category_environment_account_kin_key`
+- `execution.unsettled_replacements`: `idx_execution_operations_replace`
+- `execution.intent`: `execution_intents_venue_category_environment_account_kind_a_key`
+- `execution.entry_slot`: `execution_intents_venue_category_environment_account_kind__key1`
+- `execution.position_intents`: `idx_execution_intents_position`
+- `execution.unsettled_intents`: `idx_execution_intents_state`
+- `execution.order`: `execution_orders_venue_category_environment_account_kind_ac_key`
+- `execution.orders`: `idx_execution_orders_operation`
+- `execution.fill`: `execution_fills_venue_category_environment_account_kind_acc_key`
+- `execution.fills`: `idx_execution_fills_cycle`
+- `execution.cycle`: `position_cycles_pkey`
+- `execution.open_cycle`: `position_cycles_venue_category_environment_account_kind_acc_key`
+- `execution.open_cycles`: `idx_position_cycles_open`
+- `execution.reservation`: `margin_reservations_operation_id_key`
+- `execution.pool`: `idx_margin_reservations_pool`
+- `execution.incident`: `execution_incidents_venue_category_environment_account_kind_key`
+- `execution.open_incidents`: `idx_execution_incidents_state`
+- `execution.event`: `outbox_events_venue_category_environment_account_kind_accou_key`
+- `execution.pending_events`: `idx_outbox_events_delivery`
+- `execution.lease`: `position_leases_pkey`
+- `execution.replace`: `execution_intents_venue_category_environment_account_kind_a_key`
+- `execution.record`: `outbox_events_venue_category_environment_account_kind_accou_key`
+- `transfer.intents`: `execution_intents_pkey`
 <!-- end: queries -->
 
 Both orders gave the same plans. The figures are from the data written
@@ -150,6 +187,43 @@ market by market; where the other order differs, it is in brackets.
 | `transfer.segments` | a transfer's batch of segments, after the last key it read | Index Scan on `segments_pkey` from that key, under the limit | 64 | 6 | 0.03 ms |
 | `transfer.runs` | a transfer's batch of runs | Index Scan on `bot_runs_pkey` from the last key | 500 | 108 | 0.13 ms (0.11) |
 | `transfer.bundles` | a transfer's batch of bundles | Index Scan on `bundles_pkey` from the last key | 2 | 3 | 0.02 ms (0.06) |
+| `execution.signal` | a unit's look for a signal in its profile's inbox, and `signal` | Index Scan on the inbox's key, under `LockRows` | 1 | 8 | 0.07 ms (0.08) |
+| `execution.received_signals` | `received_signals` | Index Scan on `idx_signal_inbox_state`, under the limit | 50 | 5 | 0.04 ms |
+| `execution.deliveries` | `deliveries` | Index Scan on `idx_signal_deliveries_signal` | 1 | 4 | 0.04 ms |
+| `execution.operation` | `operation`, and a unit's look for one | Index Scan on `execution_operations_pkey`, under `LockRows` | 1 | 7 | 0.07 ms (0.06) |
+| `execution.operation_by_key` | `begin_operation`, asked under a key | Index Scan on the operations' key, under `LockRows` | 1 | 8 | 0.09 ms (0.08) |
+| `execution.unsettled_replacements` | `unsettled_replacements` | Index Scan on `idx_execution_operations_replace`, then a sort | 10 | 11 | 0.05 ms |
+| `execution.intent` | `intent`, and a unit's look for one | Index Scan on the intents' key, under `LockRows` | 1 | 8 | 0.08 ms |
+| `execution.entry_slot` | a unit's look for the holder of a position's entry slot | Index Scan on the entry slot's unique key, under `LockRows` | 0 | 8 | 0.06 ms |
+| `execution.position_intents` | `position_intents` | Index Scan on `idx_execution_intents_position`, the states in its condition, then a sort | 0 | 18 | 0.08 ms (0.07) |
+| `execution.unsettled_intents` | `unsettled_intents` | Index Scan on `idx_execution_intents_state`, then a sort | 45 | 16 | 0.07 ms |
+| `execution.order` | `order`, and a unit's look for one | Index Scan on the orders' key, under `LockRows` | 1 | 8 | 0.10 ms (0.09) |
+| `execution.orders` | `orders` | Index Scan on `idx_execution_orders_operation` | 1 | 6 | 0.03 ms (0.05) |
+| `execution.fill` | `fill`, and a unit's look for one | Index Scan on the fills' key, under `LockRows` | 1 | 8 | 0.08 ms (0.07) |
+| `execution.fills` | `fills` | Bitmap Index Scan on `idx_execution_fills_cycle`, then a sort | 5 | 14 | 0.08 ms (0.11) |
+| `execution.cycle` | `cycle`, and a unit's look for one | Index Scan on `position_cycles_pkey`, under `LockRows` | 1 | 7 | 0.06 ms (0.07) |
+| `execution.open_cycle` | `open_cycle`, and a unit's look for the holder of a position's open slot | Index Scan on the open slot's unique key, under `LockRows` | 1 | 10 | 0.09 ms (0.08) |
+| `execution.open_cycles` | `open_cycles` | Index Scan on `idx_position_cycles_open` | 30 | 7 | 0.04 ms |
+| `execution.reservation` | `reservation`, and a unit's look for one | Index Scan on the reservations' key, under `LockRows` | 1 | 10 | 0.08 ms |
+| `execution.pool` | `pool` | Index Scan on `idx_margin_reservations_pool` | 22 | 4 | 0.08 ms (0.06) |
+| `execution.incident` | `incident`, and a unit's look for one | Index Scan on the incidents' key, under `LockRows` | 1 | 7 | 0.08 ms |
+| `execution.open_incidents` | `open_incidents` | Index Scan on `idx_execution_incidents_state` | 5 | 3 | 0.03 ms |
+| `execution.event` | `event`, and a unit's look for one | Index Scan on the events' key, under `LockRows` | 1 | 8 | 0.09 ms (0.10) |
+| `execution.pending_events` | `pending_events` | Index Scan on `idx_outbox_events_delivery`, under the limit | 100 | 6 | 0.06 ms |
+| `execution.lease` | a unit under a lease, and every lease call | Index Scan on `position_leases_pkey`, under `LockRows` | 1 | 4 | 0.05 ms (0.06) |
+| `execution.replace` | a unit replacing a record at the revision it read | Index Scan on the record's key, the revision filtered |  |  |  |
+| `execution.record` | a unit writing a record's first row | One row, conflicts checked on the record's key |  |  |  |
+| `transfer.intents` | a transfer's batch of an execution table, after the last number it read | Index Scan on the table's primary key from that number, under the limit | 256 | 15 | 0.09 ms |
+
+The execution store's keys are unnamed unique constraints, which
+PostgreSQL names from the table and its columns, cut to 63 characters:
+`…_key` is the key a record is found by, and
+`execution_intents_…__key1` the entry slot's. A unit locks every row it
+reads by a key (`LockRows`), and the lists read without locks. What stays
+small however long a store lives is what the lists read: signals not yet
+judged, intents not yet settled, open cycles, held reservations, open
+incidents and pending events are each found through an index that leads
+with their state, so none of them reads the history beside it.
 
 Three plans are worth knowing:
 

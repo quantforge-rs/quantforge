@@ -8,9 +8,9 @@ use std::fmt;
 use thiserror::Error;
 
 use crate::model::{
-    BotRunState, Candle, ClosedTrade, DurabilityReport, Environment, ExchangeOrder, ExecutionMode,
-    LegacyRun, MarketCoverage, MarketId, RunIdentity, SchemaMigration, SegmentHash, SegmentPlan,
-    SegmentRefresh, StoreIdentity, TimestampMs,
+    BotRunState, Candle, ClosedTrade, ControlEvent, DurabilityReport, Environment, ExchangeOrder,
+    ExecutionMode, LegacyRun, MarketCoverage, MarketId, RunIdentity, SchemaMigration, SegmentHash,
+    SegmentPlan, SegmentRefresh, StoreIdentity, TimestampMs,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -224,10 +224,26 @@ pub trait RunJournalStore: Send + Sync {
 /// The store's own record: its identity, the environment it is bound to,
 /// its activation, the schema chain it went through, and the legacy runs
 /// waiting for an operator. `docs/storage-schema.md` is the contract.
-/// Activation moves (`StoreActivation::move_to`) are not persisted here:
-/// ALG-738 adds them, ALG-767 enforces them before arming.
+///
+/// Activation is what gives a store execution authority, and each change
+/// of it is one transaction with the row of the log that records it. A
+/// store grants leases, and applies what is written under them, only
+/// while it is active at the epoch a lease was granted under
+/// ([`crate::ports::ExecutionStore`]); ALG-767 holds arming to the same
+/// record through [`StoreIdentity::authority`].
 pub trait StoreControl: Send + Sync {
     fn store_identity(&self) -> Result<StoreIdentity, StorageError>;
+    /// Activates the store, at a new epoch: one more than it had. Refuses
+    /// a store that is already active, and one bound to no environment.
+    /// Every lease an earlier epoch granted is void from then on.
+    fn activate(&self, at_ms: TimestampMs) -> Result<StoreIdentity, StorageError>;
+    /// Deactivates the store, which keeps its epoch: it grants no lease
+    /// and applies nothing written under one until it is activated again.
+    /// Refuses a store that is not active.
+    fn deactivate(&self, at_ms: TimestampMs) -> Result<StoreIdentity, StorageError>;
+    /// Every change of the store's activation, oldest first. The log is
+    /// the store's own, and no copy or transfer carries it.
+    fn control_events(&self) -> Result<Vec<ControlEvent>, StorageError>;
     /// Every step of the schema chain applied to this store, oldest first.
     fn migrations(&self) -> Result<Vec<SchemaMigration>, StorageError>;
     /// Binds the store to `environment` for life. Refuses a store bound to

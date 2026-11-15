@@ -99,7 +99,8 @@ comes with the time it was read:
 <!-- end: sizing inputs -->
 
 Reservations that several entries race for are not sizing's: it is handed a
-total, and whoever persists reservations arbitrates them (ALG-738).
+total, and the execution store arbitrates them, by the revision of the pool
+they are held against ([execution-store.md](execution-store.md#reservations)).
 
 ## The rules
 
@@ -812,8 +813,9 @@ And the reports after the fills:
   sending it and recording the sizing with the intent are ALG-745's. So is
   what a fault halts and how it is recorded (ALG-745, ALG-748).
 - **Reservations.** Sizing is handed the total already reserved against a
-  pool. Keeping reservations in a store, and deciding between entries that
-  race for the same margin, are ALG-738's.
+  pool. Keeping reservations, and deciding between entries that race for
+  the same margin, are the execution store's
+  ([execution-store.md](execution-store.md#reservations)).
 - **The venues' own figures.** The rules, the brackets, the fee rates, the
   account's pools and the index prices come from each venue's adapter
   (ALG-739 and ALG-740 for Bybit, ALG-759, ALG-760 and ALG-762 for

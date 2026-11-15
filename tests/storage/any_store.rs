@@ -86,6 +86,11 @@ fn policies() {
 }
 
 #[test]
+fn execution() {
+    conformance::execution::run::<Factory>();
+}
+
+#[test]
 fn durability() {
     conformance::durability::<Factory>();
 }

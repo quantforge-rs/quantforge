@@ -1,6 +1,6 @@
 # The storage schema
 
-**Schema 9.** Every QuantForge store holds the same tables under one schema
+**Schema 10.** Every QuantForge store holds the same tables under one schema
 version, on SQLite and on PostgreSQL. This page is the contract between
 them: the identities their rows carry, the record a store keeps
 about itself and the activation contract behind it, who owns which tables
@@ -11,7 +11,7 @@ hold every backend to the identities. [upgrading.md](upgrading.md) is the
 operator's side of the same contract.
 
 <!-- begin: schema version -->
-9
+10
 <!-- end: schema version -->
 
 ## Contents
@@ -29,6 +29,7 @@ operator's side of the same contract.
 - [Keeping segments](#keeping-segments)
 - [Keeping jobs](#keeping-jobs)
 - [Keeping policies](#keeping-policies)
+- [Keeping the execution store](#keeping-the-execution-store)
 - [The shared cases](#the-shared-cases)
 - [Backends and ownership](#backends-and-ownership)
 
@@ -89,7 +90,9 @@ index entry (`segment_index`) gives a name its market and window. The
 
 `store_control` is one row: the store's `store_id`, its `environment`, its
 `activation` and `activation_epoch`. It is the control record that the
-activation contract of ADR 0002 §2 and §5 reads and writes.
+activation contract of ADR 0002 §2 and §5 reads and writes, and
+`store_control_events` is its log: one row for each change of the
+activation, written in the transaction that makes the change.
 
 **States and transitions** (`StoreActivation`, pinned by the parity
 matrix's `states.store`):
@@ -120,9 +123,26 @@ matrix's `states.store`):
 - Exactly one store per account is `active` at a time. Deactivate the
   source before activating the target; reactivation after a rollback
   deactivates the target first.
-- `store status` shows the row. ALG-738 persists the transitions, ALG-767
-  enforces them before arming, and ALG-768 verifies a transfer end to end.
-  Nothing in this release moves a store between these states.
+- `store status` shows the row. `StoreControl::activate` and
+  `StoreControl::deactivate` make the transitions (QUA-206, the matrix's
+  ALG-738), each one transaction with its row of the log; of two operators
+  at once, one finds it done. A store bound to no environment is not
+  activated, and an activation asked of an active store is refused, since
+  each activation is a new epoch. No command asks for them yet: they come
+  with arming and cutover (ALG-750, ALG-767, ALG-768).
+- **What activation gives.** A store grants a lease on a position, and
+  applies what is written under one, only while it is `active` at the
+  epoch the lease was granted under
+  ([Keeping the execution store](#keeping-the-execution-store)). A
+  deactivation stops every executor of the store at its next write, lease
+  or no lease, and a reactivation voids every lease of the earlier epoch.
+  A store that is not active still records: a delivery is noted, and a
+  policy edited, whatever its activation.
+- **What a copy cannot bring.** The leases, the revisions of the margin
+  pools and the activation log are the store's own tables, and no
+  transfer copies them ([storage-migration.md](storage-migration.md)): a
+  target starts with no lease, `inactive`, at epoch 0. `StoreIdentity::
+  authority` is the check ALG-767 holds arming to.
 
 **A transfer's record.** A store a transfer copied into holds, as the
 `meta` row `transfer`, the record of that copy: its format, the source's
@@ -162,7 +182,7 @@ story exist yet.
 | `job_results` | QUA-356 (ALG-511) | schema 7 |
 | `job_logs` | QUA-355 (ALG-512) | schema 8 |
 | `automation_profiles`, `policy_revisions` | QUA-36 (ALG-735) | schema 9 |
-| The signal inbox, intents, protection and the event outbox | ALG-738 | a later schema |
+| `signal_inbox`, `signal_deliveries`, `execution_operations`, `execution_intents`, `execution_orders`, `execution_fills`, `position_cycles`, `margin_reservations`, `execution_incidents`, `outbox_events`, and the store's own `position_leases`, `reservation_pools` and `store_control_events` | QUA-206 (ALG-738) | schema 10 |
 | Notifications | ALG-749 | a later schema |
 | Jobs' provenance: the reproducibility ledger | ALG-516 | a later schema |
 <!-- end: table owners -->
@@ -171,8 +191,8 @@ story exist yet.
 same steps from there on; a step that applies to a backend that never had
 the earlier schema is the whole step's DDL for that backend.
 
-**A later step.** A story that changes the schema, such as ALG-738's
-execution store, ALG-749's notifications, or the provenance of ALG-516:
+**A later step.** A story that changes the schema, such as ALG-749's
+notifications or the provenance of ALG-516:
 
 - adds one step for the next version on both backends in the same change:
   SQLite's to `src/storage/sqlite/migrate.rs`, PostgreSQL's to
@@ -218,6 +238,7 @@ untouched (`StorageError::SchemaUnsupported`).
 | 6 → 7 | QUA-356 | `job_results`: the result files of the jobs that succeed. Every job an earlier build recorded stays as it was; none of them has a file, since no earlier build kept one. |
 | 7 → 8 | QUA-355 | `job_logs`: what is kept of each job's log. No job an earlier build recorded has one, since no earlier build kept any. |
 | 8 → 9 | QUA-36 | `automation_profiles` and `policy_revisions`: automation profiles and every revision of their policies. Both start empty: no earlier build recorded a profile. |
+| 9 → 10 | QUA-206 | The execution store's tables: the signal inbox and its deliveries, the operations, the intents, orders, fills, position cycles, reservations and incidents, the event outbox, and the store's own leases, pool revisions and activation log. All start empty, and the store's record stays as it was: bound or not, and never activated by a step. |
 
 ## The chain on PostgreSQL
 
@@ -243,6 +264,7 @@ committed, and the waiting process would apply the step again.
 | 6 → 7 | QUA-356 | `job_results`, as [below](#schema-7-on-postgresql), its names collated `"C"` from the start. |
 | 7 → 8 | QUA-355 | `job_logs`, as [below](#schema-8-on-postgresql), its job IDs collated `"C"` from the start. |
 | 8 → 9 | QUA-36 | `automation_profiles` and `policy_revisions`, as [below](#schema-9-on-postgresql), their profile IDs collated `"C"` from the start. |
+| 9 → 10 | QUA-206 | The execution store's tables, as [below](#schema-10-on-postgresql). Every table a transfer copies is keyed by a number, so none needs a collation of its own. |
 
 Refused untouched, before anything is created:
 
@@ -299,8 +321,9 @@ resume checks on both.
   (`journal.last_save_wins`), and appends never conflict, each a row of its
   own numbered by a sequence that never reuses a value, so two writers'
   rows interleave and each writer's keep their order. Who may drive is
-  decided above the journal, by the leases and the arming guard of ALG-738
-  and ALG-767.
+  decided above the journal: for a futures position by its lease
+  ([execution-store.md](execution-store.md#leases)), and by the arming
+  guard of ALG-767.
 - **A run belongs to its market and identity.** The latest run is found by
   exchange, symbol, interval and strategy, never across exchanges; a run
   resumed by its ID is checked against the invocation's market, strategy,
@@ -310,14 +333,15 @@ resume checks on both.
   database's collation.
 - **Raw, not semantic.** The journal records what it is given: the same
   order event twice is two rows, and nothing here deduplicates signals or
-  orders. ALG-738's signal inbox, intents and execution ledger do that, in
-  transactions and tables of their own.
+  orders. The [execution store](#keeping-the-execution-store)'s signal
+  inbox, intents and ledger do that, in transactions and tables of their
+  own.
 - **Closed trades keep their Spot meaning.** A `closed_trades` row is a
   Spot round trip as QuantForge 0.2.0 defined it: its `gross_quote_pnl` is
   the exit price less the entry price, times the quantity, with no fee
   taken. A futures position's gross, fees, funding and net result belong to
-  ALG-738's execution ledger, in the accounting types of ALG-733, never to
-  these columns.
+  its cycle in the execution store, in the accounting types of ALG-733,
+  never to these columns.
 
 ## SQLite DDL
 
@@ -501,6 +525,256 @@ CREATE TABLE policy_revisions (
   changed_at_ms INTEGER NOT NULL,
   policy_json TEXT NOT NULL,
   UNIQUE (profile_id, revision)
+);
+
+CREATE TABLE signal_inbox (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  signal_id TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  state TEXT NOT NULL,
+  refusal TEXT,
+  revision INTEGER NOT NULL,
+  signal_json TEXT NOT NULL,
+  received_at_ms INTEGER NOT NULL,
+  judged_at_ms INTEGER,
+  UNIQUE (venue, category, environment, account_kind, account_id, profile_id, signal_id)
+);
+CREATE INDEX idx_signal_inbox_state
+  ON signal_inbox(state, seq);
+
+CREATE TABLE signal_deliveries (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  signal_id TEXT NOT NULL,
+  disposition TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  payload TEXT,
+  fire_time_ms INTEGER NOT NULL,
+  received_at_ms INTEGER NOT NULL
+);
+CREATE INDEX idx_signal_deliveries_signal
+  ON signal_deliveries(venue, category, environment, account_kind, account_id, profile_id, signal_id, seq);
+
+CREATE TABLE execution_operations (
+  operation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT,
+  kind TEXT NOT NULL,
+  operation_key TEXT,
+  symbol TEXT NOT NULL,
+  signal_id TEXT,
+  cycle_id INTEGER,
+  replace_state TEXT,
+  revision INTEGER NOT NULL,
+  operation_json TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  UNIQUE (venue, category, environment, account_kind, account_id, operation_key)
+);
+CREATE INDEX idx_execution_operations_replace
+  ON execution_operations(replace_state, operation_id);
+
+CREATE TABLE execution_intents (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  signal_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  side TEXT NOT NULL,
+  state TEXT NOT NULL,
+  entry_slot INTEGER,
+  operation_id INTEGER,
+  cycle_id INTEGER,
+  revision INTEGER NOT NULL,
+  intent_json TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  UNIQUE (venue, category, environment, account_kind, account_id, profile_id, signal_id),
+  UNIQUE (venue, category, environment, account_kind, account_id, symbol, entry_slot)
+);
+CREATE INDEX idx_execution_intents_state
+  ON execution_intents(state, seq);
+CREATE INDEX idx_execution_intents_position
+  ON execution_intents(venue, category, environment, account_kind, account_id, symbol, state, seq);
+
+CREATE TABLE execution_orders (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT,
+  operation_id INTEGER NOT NULL,
+  client_order_id TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  venue_order_id TEXT,
+  phase TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  order_json TEXT NOT NULL,
+  recorded_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  UNIQUE (venue, category, environment, account_kind, account_id, client_order_id)
+);
+CREATE INDEX idx_execution_orders_operation
+  ON execution_orders(operation_id, seq);
+
+CREATE TABLE execution_fills (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT,
+  symbol TEXT NOT NULL,
+  trade_id TEXT NOT NULL,
+  venue_order_id TEXT NOT NULL,
+  operation_id INTEGER,
+  cycle_id INTEGER,
+  fill_json TEXT NOT NULL,
+  time_ms INTEGER NOT NULL,
+  recorded_at_ms INTEGER NOT NULL,
+  UNIQUE (venue, category, environment, account_kind, account_id, symbol, trade_id)
+);
+CREATE INDEX idx_execution_fills_cycle
+  ON execution_fills(cycle_id, seq);
+
+CREATE TABLE position_cycles (
+  cycle_id INTEGER PRIMARY KEY,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  side TEXT NOT NULL,
+  protection TEXT NOT NULL,
+  open_slot INTEGER,
+  revision INTEGER NOT NULL,
+  cycle_json TEXT NOT NULL,
+  opened_at_ms INTEGER NOT NULL,
+  closed_at_ms INTEGER,
+  updated_at_ms INTEGER NOT NULL,
+  UNIQUE (venue, category, environment, account_kind, account_id, symbol, open_slot)
+);
+CREATE INDEX idx_position_cycles_open
+  ON position_cycles(open_slot, cycle_id);
+
+CREATE TABLE margin_reservations (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  operation_id INTEGER NOT NULL UNIQUE,
+  symbol TEXT NOT NULL,
+  pool TEXT NOT NULL,
+  state TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  reservation_json TEXT NOT NULL,
+  reserved_at_ms INTEGER NOT NULL,
+  released_at_ms INTEGER
+);
+CREATE INDEX idx_margin_reservations_pool
+  ON margin_reservations(venue, environment, account_kind, account_id, pool, state, seq);
+
+CREATE TABLE execution_incidents (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  incident_key TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  symbol TEXT,
+  state TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  incident_json TEXT NOT NULL,
+  opened_at_ms INTEGER NOT NULL,
+  cleared_at_ms INTEGER,
+  UNIQUE (venue, category, environment, account_kind, account_id, incident_key)
+);
+CREATE INDEX idx_execution_incidents_state
+  ON execution_incidents(state, seq);
+
+CREATE TABLE outbox_events (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT,
+  event_key TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  delivery TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  event_json TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  delivery_at_ms INTEGER,
+  UNIQUE (venue, category, environment, account_kind, account_id, event_key)
+);
+CREATE INDEX idx_outbox_events_delivery
+  ON outbox_events(delivery, seq);
+
+CREATE TABLE position_leases (
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  fence INTEGER NOT NULL,
+  holder TEXT,
+  profile_id TEXT,
+  activation_epoch INTEGER,
+  acquired_at_ms INTEGER,
+  expires_at_ms INTEGER,
+  PRIMARY KEY (venue, category, environment, account_kind, account_id, symbol)
+);
+
+CREATE TABLE reservation_pools (
+  venue TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  pool TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  PRIMARY KEY (venue, environment, account_kind, account_id, pool)
+);
+
+CREATE TABLE store_control_events (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_activation TEXT NOT NULL,
+  to_activation TEXT NOT NULL,
+  activation_epoch INTEGER NOT NULL,
+  changed_at_ms INTEGER NOT NULL
 );
 ```
 <!-- end: sqlite schema -->
@@ -757,6 +1031,266 @@ CREATE TABLE policy_revisions (
 ```
 <!-- end: postgres step 9 -->
 
+### Schema 10 on PostgreSQL
+
+The step after schema 9, `SCHEMA_10` in
+`src/storage/postgres/execution/schema.rs`, held to this text the same way.
+Every number is a `BIGINT`, so one parameter type serves them all:
+
+<!-- begin: postgres step 10 -->
+```sql
+CREATE TABLE signal_inbox (
+  seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  signal_id TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  state TEXT NOT NULL,
+  refusal TEXT,
+  revision BIGINT NOT NULL,
+  signal_json TEXT NOT NULL,
+  received_at_ms BIGINT NOT NULL,
+  judged_at_ms BIGINT,
+  UNIQUE (venue, category, environment, account_kind, account_id, profile_id, signal_id)
+);
+CREATE INDEX idx_signal_inbox_state
+  ON signal_inbox(state, seq);
+
+CREATE TABLE signal_deliveries (
+  seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  signal_id TEXT NOT NULL,
+  disposition TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  payload TEXT,
+  fire_time_ms BIGINT NOT NULL,
+  received_at_ms BIGINT NOT NULL
+);
+CREATE INDEX idx_signal_deliveries_signal
+  ON signal_deliveries(venue, category, environment, account_kind, account_id, profile_id, signal_id, seq);
+
+CREATE TABLE execution_operations (
+  operation_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT,
+  kind TEXT NOT NULL,
+  operation_key TEXT,
+  symbol TEXT NOT NULL,
+  signal_id TEXT,
+  cycle_id BIGINT,
+  replace_state TEXT,
+  revision BIGINT NOT NULL,
+  operation_json TEXT NOT NULL,
+  created_at_ms BIGINT NOT NULL,
+  updated_at_ms BIGINT NOT NULL,
+  UNIQUE (venue, category, environment, account_kind, account_id, operation_key)
+);
+CREATE INDEX idx_execution_operations_replace
+  ON execution_operations(replace_state, operation_id);
+
+CREATE TABLE execution_intents (
+  seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  signal_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  side TEXT NOT NULL,
+  state TEXT NOT NULL,
+  entry_slot BIGINT,
+  operation_id BIGINT,
+  cycle_id BIGINT,
+  revision BIGINT NOT NULL,
+  intent_json TEXT NOT NULL,
+  created_at_ms BIGINT NOT NULL,
+  updated_at_ms BIGINT NOT NULL,
+  UNIQUE (venue, category, environment, account_kind, account_id, profile_id, signal_id),
+  UNIQUE (venue, category, environment, account_kind, account_id, symbol, entry_slot)
+);
+CREATE INDEX idx_execution_intents_state
+  ON execution_intents(state, seq);
+CREATE INDEX idx_execution_intents_position
+  ON execution_intents(venue, category, environment, account_kind, account_id, symbol, state, seq);
+
+CREATE TABLE execution_orders (
+  seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT,
+  operation_id BIGINT NOT NULL,
+  client_order_id TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  venue_order_id TEXT,
+  phase TEXT NOT NULL,
+  revision BIGINT NOT NULL,
+  order_json TEXT NOT NULL,
+  recorded_at_ms BIGINT NOT NULL,
+  updated_at_ms BIGINT NOT NULL,
+  UNIQUE (venue, category, environment, account_kind, account_id, client_order_id)
+);
+CREATE INDEX idx_execution_orders_operation
+  ON execution_orders(operation_id, seq);
+
+CREATE TABLE execution_fills (
+  seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT,
+  symbol TEXT NOT NULL,
+  trade_id TEXT NOT NULL,
+  venue_order_id TEXT NOT NULL,
+  operation_id BIGINT,
+  cycle_id BIGINT,
+  fill_json TEXT NOT NULL,
+  time_ms BIGINT NOT NULL,
+  recorded_at_ms BIGINT NOT NULL,
+  UNIQUE (venue, category, environment, account_kind, account_id, symbol, trade_id)
+);
+CREATE INDEX idx_execution_fills_cycle
+  ON execution_fills(cycle_id, seq);
+
+CREATE TABLE position_cycles (
+  cycle_id BIGINT PRIMARY KEY,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  side TEXT NOT NULL,
+  protection TEXT NOT NULL,
+  open_slot BIGINT,
+  revision BIGINT NOT NULL,
+  cycle_json TEXT NOT NULL,
+  opened_at_ms BIGINT NOT NULL,
+  closed_at_ms BIGINT,
+  updated_at_ms BIGINT NOT NULL,
+  UNIQUE (venue, category, environment, account_kind, account_id, symbol, open_slot)
+);
+CREATE INDEX idx_position_cycles_open
+  ON position_cycles(open_slot, cycle_id);
+
+CREATE TABLE margin_reservations (
+  seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  operation_id BIGINT NOT NULL UNIQUE,
+  symbol TEXT NOT NULL,
+  pool TEXT NOT NULL,
+  state TEXT NOT NULL,
+  revision BIGINT NOT NULL,
+  reservation_json TEXT NOT NULL,
+  reserved_at_ms BIGINT NOT NULL,
+  released_at_ms BIGINT
+);
+CREATE INDEX idx_margin_reservations_pool
+  ON margin_reservations(venue, environment, account_kind, account_id, pool, state, seq);
+
+CREATE TABLE execution_incidents (
+  seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  incident_key TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  symbol TEXT,
+  state TEXT NOT NULL,
+  revision BIGINT NOT NULL,
+  incident_json TEXT NOT NULL,
+  opened_at_ms BIGINT NOT NULL,
+  cleared_at_ms BIGINT,
+  UNIQUE (venue, category, environment, account_kind, account_id, incident_key)
+);
+CREATE INDEX idx_execution_incidents_state
+  ON execution_incidents(state, seq);
+
+CREATE TABLE outbox_events (
+  seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  profile_id TEXT,
+  event_key TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  delivery TEXT NOT NULL,
+  revision BIGINT NOT NULL,
+  event_json TEXT NOT NULL,
+  created_at_ms BIGINT NOT NULL,
+  delivery_at_ms BIGINT,
+  UNIQUE (venue, category, environment, account_kind, account_id, event_key)
+);
+CREATE INDEX idx_outbox_events_delivery
+  ON outbox_events(delivery, seq);
+
+CREATE TABLE position_leases (
+  venue TEXT NOT NULL,
+  category TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  fence BIGINT NOT NULL,
+  holder TEXT,
+  profile_id TEXT,
+  activation_epoch BIGINT,
+  acquired_at_ms BIGINT,
+  expires_at_ms BIGINT,
+  PRIMARY KEY (venue, category, environment, account_kind, account_id, symbol)
+);
+
+CREATE TABLE reservation_pools (
+  venue TEXT NOT NULL,
+  environment TEXT NOT NULL,
+  account_kind TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  pool TEXT NOT NULL,
+  revision BIGINT NOT NULL,
+  PRIMARY KEY (venue, environment, account_kind, account_id, pool)
+);
+
+CREATE TABLE store_control_events (
+  seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  from_activation TEXT NOT NULL,
+  to_activation TEXT NOT NULL,
+  activation_epoch BIGINT NOT NULL,
+  changed_at_ms BIGINT NOT NULL
+);
+```
+<!-- end: postgres step 10 -->
+
 ## Segments on PostgreSQL
 
 The segment tables are SQLite's, and so is the protocol over them, which
@@ -954,9 +1488,86 @@ about keeping one.
   ([storage-migration.md](storage-migration.md#a-copy-cut-off-or-run-again)).
 
 Nothing in these tables arms a profile or admits an entry: a policy is a
-setting. The execution store of ALG-738 records each admitted entry with
-the snapshot of the policy it was admitted under, which names the revision
-kept here.
+setting. The [execution store](#keeping-the-execution-store) records each
+admitted entry with the snapshot of the policy it was admitted under, which
+names the revision kept here.
+
+## Keeping the execution store
+
+A store keeps what automated trading was asked, decided and did through
+the `ExecutionStore` port, in the store the operator selected; the shared
+suite's `execution` group holds both backends to the same answers
+([storage-conformance.md](storage-conformance.md#the-execution-store)).
+[execution-store.md](execution-store.md) is the contract: the unit every
+write is made in, the order its checks answer in, leases, activation and
+what is kept for good. This section is what the tables hold.
+
+- **A row is a record's document and the columns it decides.** Each of the
+  nine record tables keeps one JSON document for each record
+  (`signal_json`, `intent_json` and so on), which names its format, with
+  every decimal as exact text. The other columns say again what the
+  document says, to find and to list rows by, and are worked out from the
+  document in one place for both backends. A read refuses a row whose
+  columns and document disagree, or whose document is of another format.
+- **Every row starts with its scope**: `venue`, `category`, `environment`,
+  `account_kind`, `account_id`, and `profile_id` where a profile acts
+  (`account_kind` is `venue` or `key_fingerprint`, as a run's is). Every
+  key that is not a number starts with the account's five columns, so the
+  same signal ID, client order ID, trade ID, incident key and event key on
+  two venues, families or accounts are rows that never meet. A store takes
+  rows of the environment it is bound to, and none before it is bound.
+- **`revision`** is 1 when a record is first written and one more for each
+  replacement. A replacement is one `UPDATE … WHERE revision = <the one
+  read>`, in the transaction that read the row. `execution_fills` and
+  `signal_deliveries` have none: their rows are written once.
+- **The keys a record is found by** are unique: a signal and an intent by
+  the account, the profile and `signal_id`; an order by the account and
+  `client_order_id`; a fill by the account, `symbol` and `trade_id`; an
+  incident and an event by the account and their key; an operation by the
+  account and `operation_key`, where it has one, and always by
+  `operation_id`; a cycle by `cycle_id`; a reservation by `operation_id`.
+- **The store numbers what it writes.** `seq` numbers the rows of a table
+  as they are written, and `execution_operations.operation_id` is the
+  operation's number in every client order ID. `position_cycles.cycle_id`
+  is not numbered by the store: a cycle takes the number of the operation
+  that opened it.
+- **Two slots are unique indexes.** `execution_intents.entry_slot` is 1
+  while an entry is sent and unsettled, and NULL otherwise, and is unique
+  with the position's account and `symbol`; `position_cycles.open_slot` is
+  1 while a cycle is open, the same way. A position therefore holds one
+  unresolved entry and one open cycle, whoever's profile acts on it,
+  whatever a writer intends.
+- **`created_at_ms` and `updated_at_ms`** are the time of the unit that
+  first wrote a row and of the one that last did, by its writer's clock,
+  and `execution_fills.recorded_at_ms` is the first of the two; the other
+  times are the record's own. The store decides nothing by any of them.
+- **Three tables are the store's own**, and no transfer copies them
+  ([storage-migration.md](storage-migration.md#what-is-copied)):
+  `position_leases`, one row for each position ever leased, which keeps the
+  last fence token issued and the lease held now, if one is;
+  `reservation_pools`, the revision of each margin pool that was ever
+  reserved from; and `store_control_events`, the log of the store's
+  activation ([The store's record](#the-stores-record)). An activation
+  clears every lease and keeps each token.
+- **Nothing is deleted.** No call of the port removes a row of any of
+  these tables, and no step of the chain will without saying what it keeps
+  ([execution-store.md](execution-store.md#what-a-store-keeps-for-good)).
+- **On PostgreSQL** a unit is one `READ COMMITTED` transaction. It locks
+  its position's lease row, then takes one transaction's advisory lock for
+  each key it may write a first row under, then locks its pool's row and
+  every row it finds; a row is first written with `ON CONFLICT DO NOTHING`
+  on its key, and a unit whose insert wrote nothing is decided again. The
+  rows it finds are locked, and its tables written, in the order a copy
+  takes the tables, whatever order the unit lists its changes in. A
+  change of activation takes `LOCK TABLE position_leases IN EXCLUSIVE MODE`
+  before the store's record. The advisory locks are keyed by the first
+  eight bytes of the SHA-256 of a table's name and a key's values, in the
+  single-number key space; the schema chain's own lock is the one other
+  key there, and a unit never holds it.
+- **A copy in progress refuses these writes** on PostgreSQL, as it refuses
+  every other ordinary write, a change of activation among them; a lease
+  may still be given back
+  ([storage-migration.md](storage-migration.md#a-copy-cut-off-or-run-again)).
 
 ## The shared cases
 
@@ -969,8 +1580,8 @@ test, and a backend conforms when it stores and returns every case as
 given. The shared storage conformance suite,
 [storage-conformance.md](storage-conformance.md), runs them on every
 backend beside its own scenarios: how candles are written and read, how
-runs and their journals are kept, legacy runs included, and how segments
-are packed and planned.
+runs and their journals are kept, legacy runs included, how segments are
+packed and planned, and what every unit of the execution store comes to.
 
 ## Backends and ownership
 
@@ -990,6 +1601,9 @@ The process that opens a store owns it, its pool and its credentials, for
 its whole life, and no other process receives them (ADR 0001): a CLI
 command, the server's parent process, later the Python reader. A job
 worker never opens a store and never receives its settings; the parent
-reads the candles a job needs and passes them on. The execution store of
-ALG-738 is opened the same way, from the same settings, in the same
-process.
+reads the candles a job needs and passes them on. The execution store is
+one of the selected store's ports, opened the same way, from the same
+settings, in the same process, through the same bridge on PostgreSQL. It
+holds no credential: an account is named by the ID its venue issued or by
+the fingerprint of its key, a profile by its ID, and the inbox records the
+profile a route selected, never the route's token.

@@ -154,9 +154,31 @@ src/
 │   ├── segment.rs              SegmentHash, SegmentRef, SegmentPlan: what the segment store hands out
 │   ├── store.rs                StoreId, StoreActivation, StoreIdentity, RunIdentity, the migration log
 │   ├── timestamp.rs            TimestampMs, now_utc_ms, RFC 3339 conversions
+│   ├── execution/              the execution store's records, and the unit that writes them whole
+│   │   ├── mod.rs              what the module holds, the helpers of every stored form, and the re-exports
+│   │   ├── scope.rs            ExecutionScope: the venue, family, environment, account and profile a record is of
+│   │   ├── signal.rs           SignalRecord, SignalState, SignalDelivery: a signal in its profile's inbox
+│   │   ├── signal/             its unit tests, beside it for the line budget
+│   │   │   └── tests.rs        a delivery sent again, another payload under its ID, a judgment made once
+│   │   ├── intent.rs           IntentRecord: an admitted signal's intent, the operation that carries it out, its cycle
+│   │   ├── operation.rs        OperationRecord, NewOperation, OperationKind, OperationKey: what a store numbers
+│   │   ├── operation/          its unit tests, beside it for the line budget
+│   │   │   └── tests.rs        what an operation may name, and how a replacement moves
+│   │   ├── replacement.rs      Replacement, OrderRef, SpotReplaceState: a Spot amend or cancel-replace
+│   │   ├── order.rs            OrderRecord, OrderPhase, OrderEvidence: an order's identity before it is sent, then what is learned
+│   │   ├── fill.rs             FillRecord: a venue's fill, recorded once
+│   │   ├── cycle.rs            CycleRecord: a position cycle, numbered as the operation that opened it
+│   │   ├── reservation.rs      Reservation, PoolReservations: margin held for an entry, against its pool
+│   │   ├── incident.rs         Incident, Halt, IncidentKind: what halts entries until an operator has looked
+│   │   ├── outbox.rs           OutboxEvent, EventKind, DeliveryState: what is told, and whether it was
+│   │   ├── lease.rs            Lease, Fence, FenceToken, LeaseRequest: who may act on a position
+│   │   ├── record.rs           Record, RecordKind, Stored, Expect: a record of any kind, and what a change expects to find
+│   │   ├── unit.rs             ExecutionUnit, Change, DeliveryWrite, PoolGuard: everything one write changes
+│   │   └── commit.rs           Commit, Stale, Fenced, Found: what a unit came to
 │   ├── transfer/               what a transfer between two stores carries
 │   │   ├── mod.rs              a row's values, their canonical text, the market, the target's record
 │   │   ├── tables.rs           the tables a transfer copies, in copy order, and those each store keeps
+│   │   ├── execution.rs        the execution store's tables, as a transfer copies them
 │   │   └── tables/             its unit tests, beside it for the line budget
 │   │       └── tests.rs        a table's header, its key, and how many of its rows a batch holds
 │   ├── units.rs                Price, BaseQty, Contracts, Quantity, FaceValue, Leverage, PositionSide
@@ -215,6 +237,7 @@ src/
 │   ├── storage.rs              CandleStore, SegmentStore, RunJournalStore, StoreControl, StorageError
 │   ├── jobs.rs                 JobStore: a server's bundles, jobs and their results, each move of a job one guarded change
 │   ├── policy.rs               PolicyStore: automation profiles and every revision of their policies, appended
+│   ├── execution.rs            ExecutionStore: the signal inbox, the ledger, the outbox and the leases, each write one unit
 │   ├── transfer.rs             TransferSource, TransferSnapshot, TransferTarget: a store's rows for a copy
 │   └── futures.rs              futures ports by capability, FuturesCapabilities, FuturesConnectors
 ├── exchange/                   the connector registry, one adapter per exchange, and the conformance suite
@@ -253,6 +276,17 @@ src/
 │   ├── runs.rs                 what both backends' journals share: identity columns, state, adoption
 │   ├── jobs.rs                 what both backends' job stores share: a job's columns, outcomes, refusals
 │   ├── policies.rs             what both backends' policy stores share: a profile's columns, a stored policy, refusals
+│   ├── execution/              what both backends' execution stores share: every unit decided in one place
+│   │   ├── mod.rs              the port's reads as one macro, and an operation asked for again under its key
+│   │   ├── tables.rs           the execution tables: a record's table, its key, and a whole row of it
+│   │   ├── columns.rs          a scope, a position and a pool as their columns, and the note of a delivery
+│   │   ├── rows.rs             every column a record's document decides
+│   │   ├── read.rs             a query both backends run, and every stored row held to its document
+│   │   ├── reads.rs            the port's reads, written once over a backend's rows
+│   │   ├── plan.rs             a unit decided: what a backend reads for it, then what it writes and answers
+│   │   ├── lease.rs            leases, fences and the store's activation, decided
+│   │   └── lease/              its unit tests, beside it for the line budget
+│   │       └── tests.rs        grants, renewals and releases, and each change of activation
 │   ├── refresh.rs              what both backends' segment stores share: the refresh loop, packing, a plan
 │   ├── races.rs                the shared cases' races, stepped through any backend's read and write-back
 │   ├── retry.rs                retry_conflicts: running a transaction again, within the caller's budget
@@ -272,8 +306,14 @@ src/
 │   │   ├── jobs.rs             JobStore: guarded statements, a claim skipping what another holds locked
 │   │   ├── job_logs.rs         a job's log: stored once under its job's ID, behind the copy guard, and read back
 │   │   ├── policies.rs         PolicyStore: a profile and its first revision in one transaction, each later one a guarded insert
+│   │   ├── execution/          ExecutionStore: a unit as one transaction that locks what it decides on
+│   │   │   ├── mod.rs          units, operations and leases through the bridge, and the keys a unit holds before it reads
+│   │   │   ├── schema.rs       the DDL of schema 10
+│   │   │   ├── engine.rs       the statements: a query, a guarded write, a pool's revision, an operation's number
+│   │   │   └── leases.rs       a position's lease row, the store's standing, and the lock an activation takes
 │   │   ├── journal.rs          RunJournalStore: one statement per call, run IDs in byte order
 │   │   ├── control.rs          StoreControl: the store's record, its binding and legacy-run adoption
+│   │   ├── activation.rs       the store's activation: its change, one transaction with its log, and the log read back
 │   │   ├── transfer.rs         a transfer's reads in byte order, batches that skip what it holds, the record
 │   │   ├── copying.rs          the guard that refuses every other write while a copy is unfinished
 │   │   ├── segments/           SegmentStore, by the protocol of docs/storage-schema.md
@@ -284,8 +324,11 @@ src/
 │   │       ├── candles.rs      a batch as one statement: the last duplicate, forced windows, sorted rows
 │   │       ├── database.rs     against a real database: pool bound, deadlines, drop, password, TLS
 │   │       ├── durability.rs   real failures in their categories, bounded calls, weak servers
+│   │       ├── execution.rs    what a unit of the execution store waits for before it reads, and what it never does
+│   │       ├── lock_order.rs   the one order a unit takes its locks in, however it lists its changes
 │   │       ├── migrate.rs      the chain over steps no build has: an upgrade, a failure, stores together
 │   │       ├── scratch.rs      a database of its own for a test
+│   │       ├── seeds.rs        one row in every table of each schema, for the chain's tests to keep
 │   │       ├── segments.rs     the races, a write-back waiting on a lock, reads that stay one snapshot
 │   │       └── steps.rs        each real step from the schema before it: every row kept, its tables added
 │   ├── segments/               segment format 1: a window of candles, packed and named by its hash
@@ -301,6 +344,11 @@ src/
 │       ├── candles.rs          candle table and the CandleStore implementation; marks changed windows
 │       ├── jobs.rs             bundles and jobs: their DDL and JobStore, each move one statement
 │       ├── policies.rs         profiles and policy revisions: their DDL and PolicyStore, each revision one guarded insert
+│       ├── execution/          the execution tables and the ExecutionStore implementation
+│       │   ├── mod.rs          a unit as one immediate transaction: read, decide, write
+│       │   ├── schema.rs       the DDL of schema 10
+│       │   ├── engine.rs       the statements: a query, a guarded write, a pool's revision, an operation's number
+│       │   └── leases.rs       a position's lease row and the store's standing
 │       ├── journal.rs          run table, run identity, and RunJournalStore; the journal DDL of every schema
 │       ├── journal/            the journals beside a run's state, and its identity columns
 │       │   ├── identity.rs     a RunIdentity written to and read from its four columns
@@ -337,10 +385,15 @@ src/
 │       ├── execution/          its unit tests, beside it for the line budget
 │       │   └── tests.rs        dry-run fills, rounding, notional and dust rules
 │       └── state.rs            run identity: create, resume, and resume checks
-├── automation/                 automation on external signals: the policy service and the signal service
+├── automation/                 automation on external signals: the policy service, the signal service and the ledger
 │   ├── mod.rs                  what the module is for, and the re-exports
 │   ├── policy.rs               PolicyService: profiles, changes checked with the venue, and an entry's policy
-│   └── signal.rs               SignalService: a signal resolved for the profile its URL selected, from its policy
+│   ├── signal.rs               SignalService: a signal resolved for the profile its URL selected, from its policy
+│   └── ledger/                 ExecutionLedger: what an executor records in the execution store, each step one unit
+│       ├── mod.rs              the ledger, LedgerError, and a unit applied or answered
+│       ├── admission.rs        a delivery recorded and judged: admitted, rejected, a no-op, a duplicate or a conflict
+│       ├── orders.rs           an attempt recorded before it is sent, and the venue's evidence that settles it
+│       └── resume.rs           an unknown outcome asked of the venue before anything is sent again
 └── server/                     the HTTP server other instances connect to
     ├── mod.rs                  serve: the routes, and the shutdown that finishes requests in progress
     ├── store.rs                ServerStore: the store the routes and the queue share, and the turns at it
@@ -423,6 +476,13 @@ URL selected: whose it is, how old, what its ticker names, and, for an
 entry, that policy ([signal-payload.md](signal-payload.md)). The alert's
 wire form is `protocol::signal`, which `server` alone reads and turns into
 the model's signal.
+Its ledger records what an executor does through the `ExecutionStore`
+port: a delivery with what became of it, an order before it is sent, the
+venue's evidence, and an unknown outcome asked of the venue before anything
+is sent again. Every step is one unit of `model::execution`, which both
+backends decide by the same code in `storage::execution`: a backend reads
+the rows a unit names, and writes what the shared decision hands back
+([execution-store.md](execution-store.md)).
 `server` uses
 `protocol`, `model`, the `ports` it reads and writes the store through, the
 segment codec of `storage::segments` to check what it sends, and, in a
@@ -507,7 +567,8 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   `tests/fixtures/sqlite/`; every group on PostgreSQL, an isolated database
   per fixture, then again through `AnyStore`, and the journal,
   store-record, candle and policy groups once more under a linguistic
-  collation; the schema
+  collation; the execution store's group, its scenarios, records and races
+  read from `tests/fixtures/execution_cases.json`; the schema
   `init` creates, its refusals, exact round trips, the candle store's writes
   raced against a refresh's write-back, writers appending to one run at
   once, and the query plans of
@@ -516,7 +577,9 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   server (`crash.rs`); the documents held to the code; the factory as the
   only way to a store (`boundary.rs`); a store copied from a read-only
   SQLite snapshot into PostgreSQL and verified, held to the checksums of
-  `tests/fixtures/storage_transfer_cases.json` (`transfer/`); and, on
+  `tests/fixtures/storage_transfer_cases.json`, with the execution store's
+  records read back from the copy and none of the source's authority in it
+  (`transfer/`); and, on
   demand, a 100,000-candle batch
   on each backend (`measure.rs`)
 - `tests/exchange_boundary.rs`: keeps every module outside `src/exchange/`
@@ -550,6 +613,17 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   `QUANTFORGE_TEST_POSTGRES_URL`, on PostgreSQL; exits against entries,
   deliveries sent again and in conflict, the receipts; and the document and
   [`signal-schema.json`](signal-schema.json) held to the code
+- `tests/execution/`: the execution store against
+  [execution-store.md](execution-store.md), through the ledger service on
+  SQLite and, with `QUANTFORGE_TEST_POSTGRES_URL`, on PostgreSQL, against a
+  venue that only answers queries: deliveries recorded once, sent again and
+  in conflict; what the store's records refuse an entry and decide for an
+  exit; an order recorded with its reservation before it is sent and
+  settled by evidence; a restart that asks the venue and sends nothing; two
+  workers and a lease that was taken; the same alert on two venues; a
+  writer that dies right after each step of a signal's life, and one killed
+  at no step in particular, with what each left resumed; and the document
+  held to the code, the order of a unit's checks among it
 - `tests/parity/`: the parity matrix in `docs/parity/` — its rules, the cell
   and evidence ledgers, the dated universe list, the rendered `matrix.md`,
   and the code that implements its state machines and vocabularies
@@ -572,8 +646,9 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
 - `tests/fixtures/`: data shared with the Python bindings' tests: the
   decimal ↔ float64 conformance cases of
   [decimal-float-policy.md](decimal-float-policy.md), the shared cases
-  of the bundle, segment and result specs, the storage identity cases, and
-  the SQLite databases of every earlier schema under `sqlite/`
+  of the bundle, segment and result specs, the storage identity cases, the
+  execution store's cases, and the SQLite databases of every earlier schema
+  under `sqlite/`
 - unit tests sit at the bottom of the module they test, in
   `#[cfg(test)] mod tests`, or in a `tests.rs` beside it once they would
   push the file over its line budget (`src/cli/tests.rs`)

@@ -275,6 +275,7 @@ fn the_postgres_ddl_names_the_same_tables_and_columns_in_the_same_order() {
     postgres_ddl.extend(section("postgres step 7"));
     postgres_ddl.extend(section("postgres step 8"));
     postgres_ddl.extend(section("postgres step 9"));
+    postgres_ddl.extend(section("postgres step 10"));
     let (postgres, postgres_indexes) = parse(&postgres_ddl);
     let names = |tables: &[Table]| -> Vec<(String, Vec<String>)> {
         tables
@@ -407,6 +408,25 @@ fn the_conformance_doc_lists_every_scenario_and_check_with_its_statement() {
             (text("id"), text("doc"))
         })
         .collect();
+    // The execution store's scenarios and races are a fixture of their own.
+    let executed = conformance::execution::load();
+    assert!(executed.doc.contains("never by the Rust code under test"));
+    let execution = executed
+        .scenarios
+        .iter()
+        .map(|scenario| (scenario.id.clone(), scenario.doc.clone()))
+        .chain(
+            executed
+                .races
+                .iter()
+                .map(|race| (race.id.clone(), race.doc.clone())),
+        )
+        .chain(
+            conformance::execution_checks::CHECKS
+                .iter()
+                .map(|(id, doc)| (id.to_string(), doc.to_string())),
+        )
+        .collect::<Vec<_>>();
     for (group, expected) in [
         (
             "candles",
@@ -431,6 +451,7 @@ fn the_conformance_doc_lists_every_scenario_and_check_with_its_statement() {
             "policies",
             pairs(&cases.policies, conformance::policies::CHECKS),
         ),
+        ("execution", execution),
     ] {
         for (id, _) in &expected {
             assert!(
