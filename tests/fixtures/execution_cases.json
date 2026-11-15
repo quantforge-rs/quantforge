@@ -646,6 +646,22 @@
       "kind": "reservation",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Inverse\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"coin\"},\"operation\":8,\"instrument\":{\"exchange\":\"BybitInverse\",\"symbol\":\"BTCUSD\",\"settle\":\"BTC\"},\"pool\":{\"Asset\":\"BTC\"},\"margin\":{\"amount\":\"1.0000000000000000000000000001\",\"asset\":\"BTC\"},\"risk\":{\"amount\":\"0.00075000\",\"asset\":\"BTC\"},\"reserved_at_ms\":1792454406000,\"released\":null}"
     },
+    "reservation-11": {
+      "kind": "reservation",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"operation\":9,\"instrument\":{\"exchange\":\"BinanceLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"pool\":{\"Asset\":\"USDT\"},\"margin\":{\"amount\":\"7922816251426433759354395033.5\",\"asset\":\"USDT\"},\"risk\":{\"amount\":\"149.9274\",\"asset\":\"USDT\"},\"reserved_at_ms\":1792454407000,\"released\":null}"
+    },
+    "reservation-12": {
+      "kind": "reservation",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"operation\":10,\"instrument\":{\"exchange\":\"BinanceLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"pool\":{\"Asset\":\"USDT\"},\"margin\":{\"amount\":\"0.5\",\"asset\":\"USDT\"},\"risk\":{\"amount\":\"149.9274\",\"asset\":\"USDT\"},\"reserved_at_ms\":1792454407500,\"released\":null}"
+    },
+    "reservation-13": {
+      "kind": "reservation",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"operation\":11,\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"pool\":\"AccountUsd\",\"margin\":{\"amount\":\"792281625142643375935439503.35\",\"asset\":\"USD\"},\"risk\":{\"amount\":\"149.9274\",\"asset\":\"USDT\"},\"reserved_at_ms\":1792454408000,\"released\":null}"
+    },
+    "reservation-14": {
+      "kind": "reservation",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"operation\":12,\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"pool\":\"AccountUsd\",\"margin\":{\"amount\":\"0.65\",\"asset\":\"USD\"},\"risk\":{\"amount\":\"149.9274\",\"asset\":\"USDT\"},\"reserved_at_ms\":1792454408500,\"released\":null}"
+    },
     "operation-6": {
       "kind": "operation",
       "stored": "{\"format\":1,\"id\":2,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"kind\":\"Close\",\"key\":\"sig/main/1/trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"cycle\":null,\"replacement\":null}"
@@ -738,7 +754,7 @@
       "kind": "order",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"operation\":1,\"client_order_id\":\"qf1-k3x9p2-1-1-e1\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"recorded_at_ms\":1792454404000,\"venue_order_id\":null,\"outcome_unknown\":false,\"refusal\":null,\"evidence\":null}"
     },
-    "reservation-11": {
+    "reservation-15": {
       "kind": "reservation",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"operation\":1,\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"pool\":{\"Asset\":\"USDT\"},\"margin\":{\"amount\":\"205.18548\",\"asset\":\"USDT\"},\"risk\":{\"amount\":\"149.9274\",\"asset\":\"USDT\"},\"reserved_at_ms\":1792454404000,\"released\":null}"
     },
@@ -750,7 +766,7 @@
       "kind": "order",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"operation\":2,\"client_order_id\":\"qf1-zzzzzz-1-2-e1\",\"instrument\":{\"exchange\":\"BinanceLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"recorded_at_ms\":1792454404000,\"venue_order_id\":null,\"outcome_unknown\":false,\"refusal\":null,\"evidence\":null}"
     },
-    "reservation-12": {
+    "reservation-16": {
       "kind": "reservation",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"operation\":2,\"instrument\":{\"exchange\":\"BinanceLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"pool\":{\"Asset\":\"USDT\"},\"margin\":{\"amount\":\"205.18548\",\"asset\":\"USDT\"},\"risk\":{\"amount\":\"149.9274\",\"asset\":\"USDT\"},\"reserved_at_ms\":1792454404000,\"released\":null}"
     },
@@ -1070,7 +1086,7 @@
       "kind": "order",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Inverse\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"coin\"},\"operation\":1,\"client_order_id\":\"qf1-000000-1-1-e1\",\"instrument\":{\"exchange\":\"BybitInverse\",\"symbol\":\"BTCUSD\",\"settle\":\"BTC\"},\"recorded_at_ms\":1792454403000,\"venue_order_id\":null,\"outcome_unknown\":false,\"refusal\":null,\"evidence\":null}"
     },
-    "reservation-13": {
+    "reservation-17": {
       "kind": "reservation",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Inverse\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"coin\"},\"operation\":1,\"instrument\":{\"exchange\":\"BybitInverse\",\"symbol\":\"BTCUSD\",\"settle\":\"BTC\"},\"pool\":{\"Asset\":\"BTC\"},\"margin\":{\"amount\":\"0.00150000\",\"asset\":\"BTC\"},\"risk\":{\"amount\":\"0.00075000\",\"asset\":\"BTC\"},\"reserved_at_ms\":1792454403000,\"released\":null}"
     },
@@ -1206,19 +1222,19 @@
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:4b0ebaa56ab63fec191230c391bc8a870b3b25bca23a7e9f33915ec1ebbff082/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406007,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "reservation-14": {
+    "reservation-18": {
       "kind": "reservation",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"operation\":1,\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"pool\":{\"Asset\":\"USDT\"},\"margin\":{\"amount\":\"100.50\",\"asset\":\"USDT\"},\"risk\":{\"amount\":\"149.9274\",\"asset\":\"USDT\"},\"reserved_at_ms\":1792454402000,\"released\":null}"
     },
-    "reservation-15": {
+    "reservation-19": {
       "kind": "reservation",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"operation\":2,\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"BTCUSDT\",\"settle\":\"USDT\"},\"pool\":{\"Asset\":\"USDT\"},\"margin\":{\"amount\":\"200.50\",\"asset\":\"USDT\"},\"risk\":{\"amount\":\"149.9274\",\"asset\":\"USDT\"},\"reserved_at_ms\":1792454402000,\"released\":null}"
     },
-    "reservation-16": {
+    "reservation-20": {
       "kind": "reservation",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"operation\":3,\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"ETHUSDT\",\"settle\":\"USDT\"},\"pool\":{\"Asset\":\"USDT\"},\"margin\":{\"amount\":\"300.50\",\"asset\":\"USDT\"},\"risk\":{\"amount\":\"149.9274\",\"asset\":\"USDT\"},\"reserved_at_ms\":1792454402000,\"released\":null}"
     },
-    "reservation-17": {
+    "reservation-21": {
       "kind": "reservation",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"operation\":4,\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"XRPUSDT\",\"settle\":\"USDT\"},\"pool\":{\"Asset\":\"USDT\"},\"margin\":{\"amount\":\"400.50\",\"asset\":\"USDT\"},\"risk\":{\"amount\":\"149.9274\",\"asset\":\"USDT\"},\"reserved_at_ms\":1792454402000,\"released\":null}"
     }
@@ -5131,6 +5147,133 @@
             ],
             "total": "1.0015000000000000000000000001"
           }
+        },
+        {
+          "op": "acquire_lease",
+          "position": "binance/SOLUSDT",
+          "profile": "main",
+          "holder": "executor-d",
+          "ttl_ms": 30000,
+          "now_ms": 1792454407000,
+          "expect": {
+            "granted": {
+              "position": "binance/SOLUSDT",
+              "profile": "main",
+              "holder": "executor-d",
+              "fence": 1,
+              "epoch": 1,
+              "acquired_at_ms": 1792454407000,
+              "expires_at_ms": 1792454437000
+            }
+          }
+        },
+        {
+          "op": "commit",
+          "unit": {
+            "at_ms": 1792454407000,
+            "fence": {
+              "position": "binance/SOLUSDT",
+              "holder": "executor-d",
+              "token": 1
+            },
+            "pool": 0,
+            "delivery": null,
+            "changes": [
+              {
+                "record": "reservation-11",
+                "expect": null
+              }
+            ]
+          },
+          "expect": "applied"
+        },
+        {
+          "op": "commit",
+          "unit": {
+            "at_ms": 1792454407500,
+            "fence": {
+              "position": "binance/SOLUSDT",
+              "holder": "executor-d",
+              "token": 1
+            },
+            "pool": 1,
+            "delivery": null,
+            "changes": [
+              {
+                "record": "reservation-12",
+                "expect": null
+              }
+            ]
+          },
+          "expect": "applied"
+        },
+        {
+          "op": "pool",
+          "account": "binance",
+          "pool": {
+            "Asset": "USDT"
+          },
+          "expect": {
+            "revision": 2,
+            "held": [
+              "reservation-11",
+              "reservation-12"
+            ],
+            "total": "7922816251426433759354395034"
+          }
+        },
+        {
+          "op": "commit",
+          "unit": {
+            "at_ms": 1792454408000,
+            "fence": {
+              "position": "bybit/SOLUSDT",
+              "holder": "executor-a",
+              "token": 1
+            },
+            "pool": 0,
+            "delivery": null,
+            "changes": [
+              {
+                "record": "reservation-13",
+                "expect": null
+              }
+            ]
+          },
+          "expect": "applied"
+        },
+        {
+          "op": "commit",
+          "unit": {
+            "at_ms": 1792454408500,
+            "fence": {
+              "position": "bybit/SOLUSDT",
+              "holder": "executor-a",
+              "token": 1
+            },
+            "pool": 1,
+            "delivery": null,
+            "changes": [
+              {
+                "record": "reservation-14",
+                "expect": null
+              }
+            ]
+          },
+          "expect": "applied"
+        },
+        {
+          "op": "pool",
+          "account": "bybit",
+          "pool": "AccountUsd",
+          "expect": {
+            "revision": 2,
+            "held": [
+              "reservation-13",
+              "reservation-14"
+            ],
+            "total": "792281625142643375935439504"
+          }
         }
       ]
     },
@@ -6030,7 +6173,7 @@
                 "expect": null
               },
               {
-                "record": "reservation-11",
+                "record": "reservation-15",
                 "expect": null
               }
             ]
@@ -6089,7 +6232,7 @@
                 "expect": null
               },
               {
-                "record": "reservation-12",
+                "record": "reservation-16",
                 "expect": null
               }
             ]
@@ -6105,7 +6248,7 @@
           "expect": {
             "revision": 1,
             "held": [
-              "reservation-11"
+              "reservation-15"
             ],
             "total": "205.18548"
           }
@@ -6119,7 +6262,7 @@
           "expect": {
             "revision": 1,
             "held": [
-              "reservation-12"
+              "reservation-16"
             ],
             "total": "205.18548"
           }
@@ -8241,7 +8384,7 @@
                 "expect": null
               },
               {
-                "record": "reservation-13",
+                "record": "reservation-17",
                 "expect": null
               }
             ]
@@ -8323,7 +8466,7 @@
           "expect": {
             "revision": 1,
             "held": [
-              "reservation-13"
+              "reservation-17"
             ],
             "total": "0.00150000"
           }
@@ -8332,7 +8475,7 @@
           "op": "reservation",
           "operation": 1,
           "expect": {
-            "record": "reservation-13",
+            "record": "reservation-17",
             "revision": 1
           }
         },
@@ -9095,7 +9238,7 @@
             "delivery": null,
             "changes": [
               {
-                "record": "reservation-14",
+                "record": "reservation-18",
                 "expect": null
               }
             ]
@@ -9114,7 +9257,7 @@
             "delivery": null,
             "changes": [
               {
-                "record": "reservation-15",
+                "record": "reservation-19",
                 "expect": null
               }
             ]
@@ -9133,7 +9276,7 @@
             "delivery": null,
             "changes": [
               {
-                "record": "reservation-16",
+                "record": "reservation-20",
                 "expect": null
               }
             ]
@@ -9152,7 +9295,7 @@
             "delivery": null,
             "changes": [
               {
-                "record": "reservation-17",
+                "record": "reservation-21",
                 "expect": null
               }
             ]

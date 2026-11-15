@@ -1024,18 +1024,29 @@ def shape(unit):
 def exact_sum(amounts):
     """The sum of decimal texts, exact, as text. Python adds decimals to
     28 significant digits unless told otherwise, which would round a total
-    a store holds whole; here an inexact step is an error. So is a total
-    outside what a store's decimals hold, 28 places and 96 bits: no case
-    may be written that a store could only answer rounded."""
+    a store holds whole; here an inexact step is an error.
+
+    A store's decimals hold 96 bits and 28 places. The total is written
+    with as many places as the longest of its amounts where that fits, and
+    otherwise without its trailing zeros, which is still the same number.
+    A total that fits neither way is one a store could only answer
+    rounded, and no case may be written for it."""
+    amounts = [decimal.Decimal(amount) for amount in amounts]
     with decimal.localcontext() as context:
         context.prec = 80
         context.traps[decimal.Inexact] = True
-        total = sum((decimal.Decimal(amount) for amount in amounts), decimal.Decimal(0))
-    sign, digits, exponent = total.as_tuple()
-    mantissa = int("".join(str(digit) for digit in digits))
-    if -exponent > 28 or mantissa >= 2 ** 96:
+        total = sum(amounts, decimal.Decimal(0))
+        places = max([-amount.as_tuple().exponent for amount in amounts] + [0])
+        total = total.quantize(decimal.Decimal(1).scaleb(-places))
+    digits = "".join(str(digit) for digit in total.as_tuple().digits)
+    if int(digits) >= 2 ** 96:
+        # Every trailing zero goes, not only as many as would make it fit.
+        while places > 0 and digits.endswith("0"):
+            digits, places = digits[:-1], places - 1
+    if int(digits) >= 2 ** 96 or places > 28:
         raise ValueError(f"a total of {total} is outside a store's decimals")
-    return format(total, "f")
+    written = decimal.Decimal((0, tuple(int(digit) for digit in digits), -places))
+    return format(written, "f")
 
 
 # --- The store ----------------------------------------------------------------

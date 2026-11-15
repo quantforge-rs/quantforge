@@ -23,7 +23,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from execution_model import (  # noqa: E402
     ACCOUNT, FINGERPRINT, INTENT_TERMINAL, RECORDED_INTENT_STATES, REPLACE_STATES,
     REPLACE_TERMINAL, ROOT, T, Alert, Line, Store, Unit, conflict_event, cycle_record,
-    event_record, fill_record, incident_record, intent_record, judged, moved, operation_record,
+    event_record, exact_sum, fill_record, incident_record, intent_record, judged, moved,
+    operation_record,
     order_record, order_ref, position_of, replacement, reservation_record, scope_columns,
     signal_event, signal_record, snapshot, venue_order,
 )
@@ -840,6 +841,26 @@ def scenarios():
     s.commit(Unit(T + 6_000, changes=[(fine, None)], fence=c, pool=1), "applied")
     assert s.store.pool(COIN.account(), BTC)["total"] == "1.0015000000000000000000000001"
     s.pool(COIN, BTC, (2, 2))
+    # A total keeps the places of its longest amount where a decimal holds
+    # it so. Where it does not, as one tenth past the largest amount with
+    # one place, it is written without its trailing zeros: the same number.
+    d = s.acquire(BINANCE, "SOLUSDT", "executor-d", T + 7_000, "granted")
+    most = reservation_record(BINANCE, 9, "SOLUSDT", "7922816251426433759354395033.5",
+                              "149.9274", T + 7_000)
+    s.commit(Unit(T + 7_000, changes=[(most, None)], fence=d, pool=0), "applied")
+    rest = reservation_record(BINANCE, 10, "SOLUSDT", "0.5", "149.9274", T + 7_500)
+    s.commit(Unit(T + 7_500, changes=[(rest, None)], fence=d, pool=1), "applied")
+    assert s.store.pool(BINANCE.account(), USDT)["total"] == "7922816251426433759354395034"
+    s.pool(BINANCE, USDT, (2, 2))
+    # Every trailing zero goes then, not only as many as would make it fit.
+    cents = reservation_record(BYBIT, 11, "SOLUSDT", "792281625142643375935439503.35",
+                               "149.9274", T + 8_000, pool="AccountUsd")
+    s.commit(Unit(T + 8_000, changes=[(cents, None)], fence=a, pool=0), "applied")
+    more = reservation_record(BYBIT, 12, "SOLUSDT", "0.65", "149.9274", T + 8_500,
+                              pool="AccountUsd")
+    s.commit(Unit(T + 8_500, changes=[(more, None)], fence=a, pool=1), "applied")
+    assert s.store.pool(BYBIT.account(), "AccountUsd")["total"] == "792281625142643375935439504"
+    s.pool(BYBIT, "AccountUsd", (2, 2))
     out.append(s)
 
     s = Scenario(
@@ -1499,7 +1520,36 @@ def transfer_rows():
     return {table: store.table(table) for table in store.rows}
 
 
+def totals_add_up() -> None:
+    """The model's own arithmetic, held to sums worked out by hand before
+    any case is written with it: a total keeps the places of its longest
+    amount where a store's decimal holds it so, loses every trailing zero
+    where it does not, and is refused where it fits neither way."""
+    most = "7922816251426433759354395033.5"
+    for amounts, total in (
+        ([], "0"),
+        (["5", "7"], "12"),
+        (["0.00150000"], "0.00150000"),
+        (["0.00150000", "0.00075000"], "0.00225000"),
+        (["0.50", "0.50"], "1.00"),
+        (["100.00", "0.5"], "100.50"),
+        (["205.18548", "410.1"], "615.28548"),
+        (["0.0000000000000000000000000001"] * 2, "0.0000000000000000000000000002"),
+        (["1.0000000000000000000000000001", "0.00150000"], "1.0015000000000000000000000001"),
+        ([most, "0.5"], "7922816251426433759354395034"),
+        (["792281625142643375935439503.35", "0.65"], "792281625142643375935439504"),
+    ):
+        assert exact_sum(amounts) == total, (amounts, exact_sum(amounts), total)
+    for amounts in ([most, "0.6"], ["79228162514264337593543950335", "1"]):
+        try:
+            exact_sum(amounts)
+        except ValueError:
+            continue
+        raise AssertionError(f"{amounts} add up to no amount a store holds")
+
+
 def main() -> None:
+    totals_add_up()
     cases = scenarios()
     contests = races()
     fixture = {

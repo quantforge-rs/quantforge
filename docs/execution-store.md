@@ -451,6 +451,12 @@ recorded and the other is told the pool has moved, and is sized again
 against what is left. A pool's revision is the store's own: a copy starts
 again at 0, with every reservation the source held still counted.
 
+What is held against a pool is added up exactly. The total is written with
+as many places as the longest of its amounts where a decimal holds it so,
+and without its trailing zeros where it does not; a total that fits neither
+way is refused, and never rounded. A `Decimal`'s own addition rounds what
+does not fit and says nothing, so the total is not added with it.
+
 ## Incidents and the outbox
 
 An **incident** halts entries until an operator has looked: on one
@@ -511,8 +517,12 @@ records, each step one unit.
   position cannot change between this look and the write. An incident,
   which is raised without a lease, still can in the moment between the
   two: the store itself holds a position to one unresolved entry and one
-  open cycle, and not yet to its incidents. An exit is held up by none of
-  it.
+  open cycle, and not yet to its incidents. Deciding the halt inside the
+  unit would close that moment and leave the one after it, between the
+  write and the request to the venue, which no store closes: an incident
+  raised there finds the entry already on its way too. A halt stops what
+  has not been recorded as sent, and both moments are the entry executor's
+  to narrow (ALG-745). An exit is held up by none of it.
 - **`settle`** applies what the venue said of an attempt: the intent moved
   by the evidence, the order's record, each fill not recorded yet, the
   cycle an entry's first fill opens, the reservation released once the

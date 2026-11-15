@@ -3,6 +3,7 @@
 //! 0002 §6).
 
 use super::{ExecutionScope, disagrees, from_stored, not_the_same, to_stored};
+use crate::model::exact::Exact;
 use crate::model::futures::PoolScope;
 use crate::model::{InstrumentId, ModelError, Money, OperationId, TimestampMs};
 use rust_decimal::Decimal;
@@ -295,13 +296,37 @@ pub struct PoolReservations {
 
 impl PoolReservations {
     /// The margin held against the pool, in `unit`: what sizing is handed
-    /// as already reserved.
+    /// as already reserved. The total is exact or there is none: it is
+    /// written with as many places as the longest of its amounts where a
+    /// decimal holds it so, and otherwise without its trailing zeros; a
+    /// total no decimal holds exactly is refused, never rounded, since a
+    /// `Decimal`'s own addition rounds what does not fit and says nothing.
     pub fn total(&self, pool: &PoolScope) -> Result<Money, ModelError> {
         let asset = crate::model::Asset::new(unit_of(pool))?;
-        self.held
-            .iter()
-            .try_fold(Money::new(Decimal::ZERO, asset), |total, held| {
-                total.checked_add(held.margin())
-            })
+        let mut sum = Exact::whole(0);
+        let mut places = 0;
+        for held in &self.held {
+            let margin = held.margin();
+            if margin.asset() != &asset {
+                return Err(ModelError::AssetMismatch {
+                    left: asset.to_string(),
+                    right: margin.asset().to_string(),
+                });
+            }
+            sum = sum.plus(&Exact::magnitude(margin.amount()));
+            places = places.max(margin.amount().scale());
+        }
+        let total = Decimal::try_new(1, places)
+            .ok()
+            .and_then(|grid| sum.floor_on(grid))
+            .ok_or_else(|| ModelError::InvalidAmount {
+                what: "pool total",
+                value: format!("of {} reservations", self.held.len()),
+                rule: "an amount a decimal holds exactly",
+            })?;
+        Ok(Money::new(total, asset))
     }
 }
+
+#[cfg(test)]
+mod tests;

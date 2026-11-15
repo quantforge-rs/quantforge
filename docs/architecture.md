@@ -171,6 +171,8 @@ src/
 │   │   ├── fill.rs             FillRecord: a venue's fill, recorded once
 │   │   ├── cycle.rs            CycleRecord: a position cycle, numbered as the operation that opened it
 │   │   ├── reservation.rs      Reservation, PoolReservations: margin held for an entry, against its pool
+│   │   ├── reservation/        its unit tests, beside it for the line budget
+│   │   │   └── tests.rs        a pool's total: exact, with the places of its longest amount, or refused
 │   │   ├── incident.rs         Incident, Halt, IncidentKind: what halts entries until an operator has looked
 │   │   ├── outbox.rs           OutboxEvent, EventKind, DeliveryState: what is told, and whether it was
 │   │   ├── lease.rs            Lease, Fence, FenceToken, LeaseRequest: who may act on a position
