@@ -111,3 +111,17 @@ def test_cargo_at_the_root_acts_on_the_quantforge_crate_alone(core_crate):
 
 def test_a_build_follows_the_lock_file_as_it_is(pyproject):
     assert pyproject["tool"]["maturin"]["locked"] is True
+
+
+def test_a_test_that_waits_for_good_ends_the_run(pyproject, pytestconfig):
+    # Some tests wait on another thread, which a fault in how the
+    # interpreter is held would leave waiting. pytest ends a run on a
+    # timeout from 9.0 on, so that is the oldest the tests take.
+    settings = pyproject["tool"]["pytest"]["ini_options"]
+    assert settings["faulthandler_exit_on_timeout"] is True
+    assert 0 < settings["faulthandler_timeout"] <= 120
+    assert settings["minversion"] == "9"
+    assert pyproject["dependency-groups"]["test"] == ["pytest>=9"]
+    # And the run these tests are in has the limit.
+    assert pytestconfig.getini("faulthandler_exit_on_timeout") is True
+    assert float(pytestconfig.getini("faulthandler_timeout")) == settings["faulthandler_timeout"]

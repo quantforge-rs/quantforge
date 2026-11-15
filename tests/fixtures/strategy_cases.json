@@ -1,0 +1,3531 @@
+{
+  "format": 1,
+  "failure": "the script fails here",
+  "cases": [
+    {
+      "id": "enter_then_exit",
+      "doc": "The engine's documented example: long on the first bar and flat on the third, each filled at the next bar's open.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "1000",
+        "fee_bps": "0",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "100",
+          "high": "100",
+          "low": "100",
+          "close": "100",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "100",
+          "high": "110",
+          "low": "100",
+          "close": "110",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 120000,
+          "close_time_ms": 179999,
+          "open": "110",
+          "high": "120",
+          "low": "110",
+          "close": "120",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 180000,
+          "close_time_ms": 239999,
+          "open": "125",
+          "high": "125",
+          "low": "125",
+          "close": "125",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "LongAllIn",
+        null,
+        "Flat",
+        null
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 60000,
+          "cash": "0",
+          "position_qty": "10"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 120000,
+          "cash": "0",
+          "position_qty": "10"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 3,
+          "now_ms": 180000,
+          "cash": "1250",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 180000,
+          "cash": "1250",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "1000",
+        "final_equity": "1250",
+        "total_return_pct": "25.00",
+        "trade_count": 1,
+        "max_drawdown_pct": "0",
+        "trades": [
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 60000,
+            "exit_time_ms": 180000,
+            "entry_price": "100",
+            "exit_price": "125",
+            "qty": "10",
+            "gross_quote_pnl": "250",
+            "entry_order_id": null,
+            "exit_order_id": null
+          }
+        ],
+        "equity_curve": [
+          {
+            "open_time_ms": 0,
+            "equity": "1000"
+          },
+          {
+            "open_time_ms": 60000,
+            "equity": "1100"
+          },
+          {
+            "open_time_ms": 120000,
+            "equity": "1200"
+          },
+          {
+            "open_time_ms": 180000,
+            "equity": "1250"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "fees_on_both_fills",
+      "doc": "Ten basis points on the entry and on the exit: the quantity bought is a division the engine rounds, and crosses with every digit it has.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "10000",
+        "fee_bps": "10",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "100",
+          "high": "100.1",
+          "low": "100",
+          "close": "100.1",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "100.1",
+          "high": "103.37",
+          "low": "100.1",
+          "close": "103.37",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 120000,
+          "close_time_ms": 179999,
+          "open": "103.37",
+          "high": "107.5",
+          "low": "103.37",
+          "close": "107.5",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 180000,
+          "close_time_ms": 239999,
+          "open": "107.9",
+          "high": "107.9",
+          "low": "106",
+          "close": "106",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "LongAllIn",
+        null,
+        "Flat",
+        null
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "10000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "10000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 60000,
+          "cash": "0.000000000000000000000000010",
+          "position_qty": "99.800299600499400699200899"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 120000,
+          "cash": "0.000000000000000000000000010",
+          "position_qty": "99.800299600499400699200899"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 3,
+          "now_ms": 180000,
+          "cash": "10757.683874566991450108333225",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 180000,
+          "cash": "10757.683874566991450108333225",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "10000",
+        "final_equity": "10757.683874566991450108333225",
+        "total_return_pct": "7.5768387456699145010833322500",
+        "trade_count": 1,
+        "max_drawdown_pct": "0",
+        "trades": [
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 60000,
+            "exit_time_ms": 180000,
+            "entry_price": "100.1",
+            "exit_price": "107.9",
+            "qty": "99.800299600499400699200899",
+            "gross_quote_pnl": "757.683874566991450108333225",
+            "entry_order_id": null,
+            "exit_order_id": null
+          }
+        ],
+        "equity_curve": [
+          {
+            "open_time_ms": 0,
+            "equity": "10000"
+          },
+          {
+            "open_time_ms": 60000,
+            "equity": "10316.356969703623050276396930"
+          },
+          {
+            "open_time_ms": 120000,
+            "equity": "10728.532207053685575164096642"
+          },
+          {
+            "open_time_ms": 180000,
+            "equity": "10757.683874566991450108333225"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "closed_out_at_the_end",
+      "doc": "A position still open after the last bar is sold at that bar's close, fee included, before on_finish is called.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "5000",
+        "fee_bps": "25",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "50",
+          "high": "50",
+          "low": "50",
+          "close": "50",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "50",
+          "high": "55",
+          "low": "50",
+          "close": "55",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 120000,
+          "close_time_ms": 179999,
+          "open": "55",
+          "high": "60.5",
+          "low": "55",
+          "close": "60.5",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "LongAllIn",
+        null,
+        null
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "5000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "5000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 60000,
+          "cash": "0.000000000000000000000000110",
+          "position_qty": "99.75062344139650872817955112"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 120000,
+          "cash": "0.000000000000000000000000110",
+          "position_qty": "99.75062344139650872817955112"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 120000,
+          "cash": "6019.8254364089775561097256858",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "5000",
+        "final_equity": "6019.8254364089775561097256858",
+        "total_return_pct": "20.396508728179551122194513720",
+        "trade_count": 1,
+        "max_drawdown_pct": "0",
+        "trades": [
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 60000,
+            "exit_time_ms": 179999,
+            "entry_price": "50",
+            "exit_price": "60.5",
+            "qty": "99.75062344139650872817955112",
+            "gross_quote_pnl": "1019.8254364089775561097256858",
+            "entry_order_id": null,
+            "exit_order_id": null
+          }
+        ],
+        "equity_curve": [
+          {
+            "open_time_ms": 0,
+            "equity": "5000"
+          },
+          {
+            "open_time_ms": 60000,
+            "equity": "5486.2842892768079800498753117"
+          },
+          {
+            "open_time_ms": 120000,
+            "equity": "6034.9127182044887780548628429"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "left_open_at_the_end",
+      "doc": "Without close-out the position is only valued at the last close: on_finish is handed it still held, and no trade is recorded.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "5000",
+        "fee_bps": "25",
+        "close_out_at_end": false
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "50",
+          "high": "50",
+          "low": "50",
+          "close": "50",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "50",
+          "high": "55",
+          "low": "50",
+          "close": "55",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 120000,
+          "close_time_ms": 179999,
+          "open": "55",
+          "high": "60.5",
+          "low": "55",
+          "close": "60.5",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "LongAllIn",
+        null,
+        null
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "5000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "5000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 60000,
+          "cash": "0.000000000000000000000000110",
+          "position_qty": "99.75062344139650872817955112"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 120000,
+          "cash": "0.000000000000000000000000110",
+          "position_qty": "99.75062344139650872817955112"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 120000,
+          "cash": "0.000000000000000000000000110",
+          "position_qty": "99.75062344139650872817955112"
+        }
+      ],
+      "result": {
+        "initial_cash": "5000",
+        "final_equity": "6034.9127182044887780548628429",
+        "total_return_pct": "20.698254364089775561097256860",
+        "trade_count": 0,
+        "max_drawdown_pct": "0",
+        "trades": [],
+        "equity_curve": [
+          {
+            "open_time_ms": 0,
+            "equity": "5000"
+          },
+          {
+            "open_time_ms": 60000,
+            "equity": "5486.2842892768079800498753117"
+          },
+          {
+            "open_time_ms": 120000,
+            "equity": "6034.9127182044887780548628429"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "no_decision",
+      "doc": "A strategy that never decides is called for every bar and stays flat.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "1000",
+        "fee_bps": "10",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "100",
+          "high": "101",
+          "low": "100",
+          "close": "101",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "101",
+          "high": "101",
+          "low": "99",
+          "close": "99",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 120000,
+          "close_time_ms": 179999,
+          "open": "99",
+          "high": "104",
+          "low": "99",
+          "close": "104",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        null,
+        null,
+        null
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 60000,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 120000,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 120000,
+          "cash": "1000",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "1000",
+        "final_equity": "1000",
+        "total_return_pct": "0",
+        "trade_count": 0,
+        "max_drawdown_pct": "0",
+        "trades": [],
+        "equity_curve": [
+          {
+            "open_time_ms": 0,
+            "equity": "1000"
+          },
+          {
+            "open_time_ms": 60000,
+            "equity": "1000"
+          },
+          {
+            "open_time_ms": 120000,
+            "equity": "1000"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "the_held_position_asked_for_again",
+      "doc": "Asking for the position already held changes nothing: long while long, and flat while flat.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "1000",
+        "fee_bps": "0",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "10",
+          "high": "10",
+          "low": "10",
+          "close": "10",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "10",
+          "high": "11",
+          "low": "10",
+          "close": "11",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 120000,
+          "close_time_ms": 179999,
+          "open": "11",
+          "high": "12",
+          "low": "11",
+          "close": "12",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 180000,
+          "close_time_ms": 239999,
+          "open": "12",
+          "high": "13",
+          "low": "12",
+          "close": "13",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 240000,
+          "close_time_ms": 299999,
+          "open": "13",
+          "high": "14",
+          "low": "13",
+          "close": "14",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 300000,
+          "close_time_ms": 359999,
+          "open": "14",
+          "high": "15",
+          "low": "14",
+          "close": "15",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "Flat",
+        "LongAllIn",
+        "LongAllIn",
+        "Flat",
+        "Flat",
+        null
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 60000,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 120000,
+          "cash": "0",
+          "position_qty": "90.90909090909090909090909091"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 3,
+          "now_ms": 180000,
+          "cash": "0",
+          "position_qty": "90.90909090909090909090909091"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 4,
+          "now_ms": 240000,
+          "cash": "1181.8181818181818181818181818",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 5,
+          "now_ms": 300000,
+          "cash": "1181.8181818181818181818181818",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 300000,
+          "cash": "1181.8181818181818181818181818",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "1000",
+        "final_equity": "1181.8181818181818181818181818",
+        "total_return_pct": "18.181818181818181818181818180",
+        "trade_count": 1,
+        "max_drawdown_pct": "0",
+        "trades": [
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 120000,
+            "exit_time_ms": 240000,
+            "entry_price": "11",
+            "exit_price": "13",
+            "qty": "90.90909090909090909090909091",
+            "gross_quote_pnl": "181.8181818181818181818181818",
+            "entry_order_id": null,
+            "exit_order_id": null
+          }
+        ],
+        "equity_curve": [
+          {
+            "open_time_ms": 0,
+            "equity": "1000"
+          },
+          {
+            "open_time_ms": 60000,
+            "equity": "1000"
+          },
+          {
+            "open_time_ms": 120000,
+            "equity": "1090.9090909090909090909090909"
+          },
+          {
+            "open_time_ms": 180000,
+            "equity": "1181.8181818181818181818181818"
+          },
+          {
+            "open_time_ms": 240000,
+            "equity": "1181.8181818181818181818181818"
+          },
+          {
+            "open_time_ms": 300000,
+            "equity": "1181.8181818181818181818181818"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "a_decision_on_the_last_bar",
+      "doc": "A decision on the last bar has no next open to fill at, and never fills.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "1000",
+        "fee_bps": "0",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "100",
+          "high": "100",
+          "low": "100",
+          "close": "100",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "100",
+          "high": "110",
+          "low": "100",
+          "close": "110",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        null,
+        "LongAllIn"
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 60000,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 60000,
+          "cash": "1000",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "1000",
+        "final_equity": "1000",
+        "total_return_pct": "0",
+        "trade_count": 0,
+        "max_drawdown_pct": "0",
+        "trades": [],
+        "equity_curve": [
+          {
+            "open_time_ms": 0,
+            "equity": "1000"
+          },
+          {
+            "open_time_ms": 60000,
+            "equity": "1000"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "one_bar",
+      "doc": "One candle: on_start, one on_bar and on_finish, all at its open time.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "1000",
+        "fee_bps": "0",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "100",
+          "high": "105",
+          "low": "100",
+          "close": "105",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "LongAllIn"
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "1000",
+        "final_equity": "1000",
+        "total_return_pct": "0",
+        "trade_count": 0,
+        "max_drawdown_pct": "0",
+        "trades": [],
+        "equity_curve": [
+          {
+            "open_time_ms": 0,
+            "equity": "1000"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "two_round_trips",
+      "doc": "In, out, in and out again: the second entry spends what the first trade left.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "1000",
+        "fee_bps": "5",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "20",
+          "high": "20",
+          "low": "20",
+          "close": "20",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "20",
+          "high": "25",
+          "low": "20",
+          "close": "25",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 120000,
+          "close_time_ms": 179999,
+          "open": "25",
+          "high": "25",
+          "low": "24",
+          "close": "24",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 180000,
+          "close_time_ms": 239999,
+          "open": "24",
+          "high": "30",
+          "low": "24",
+          "close": "30",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 240000,
+          "close_time_ms": 299999,
+          "open": "32",
+          "high": "32",
+          "low": "31",
+          "close": "31",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 300000,
+          "close_time_ms": 359999,
+          "open": "31",
+          "high": "31",
+          "low": "31",
+          "close": "31",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "LongAllIn",
+        "Flat",
+        "LongAllIn",
+        "Flat",
+        null,
+        null
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 60000,
+          "cash": "0.0000000000000000000000000043",
+          "position_qty": "49.97501249375312343828085957"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 120000,
+          "cash": "1248.7506246876561719140429785",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 3,
+          "now_ms": 180000,
+          "cash": "-0.0000000000000000000000000243",
+          "position_qty": "52.005273391956362315260827024"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 4,
+          "now_ms": 240000,
+          "cash": "1663.3366641683322922913022916",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 5,
+          "now_ms": 300000,
+          "cash": "1663.3366641683322922913022916",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 300000,
+          "cash": "1663.3366641683322922913022916",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "1000",
+        "final_equity": "1663.3366641683322922913022916",
+        "total_return_pct": "66.333666416833229229130229160",
+        "trade_count": 2,
+        "max_drawdown_pct": "0.050000000000000000000",
+        "trades": [
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 60000,
+            "exit_time_ms": 120000,
+            "entry_price": "20",
+            "exit_price": "25",
+            "qty": "49.97501249375312343828085957",
+            "gross_quote_pnl": "248.7506246876561719140429785",
+            "entry_order_id": null,
+            "exit_order_id": null
+          },
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 180000,
+            "exit_time_ms": 240000,
+            "entry_price": "24",
+            "exit_price": "32",
+            "qty": "52.005273391956362315260827024",
+            "gross_quote_pnl": "414.5860394806761203772593131",
+            "entry_order_id": null,
+            "exit_order_id": null
+          }
+        ],
+        "equity_curve": [
+          {
+            "open_time_ms": 0,
+            "equity": "1000"
+          },
+          {
+            "open_time_ms": 60000,
+            "equity": "1249.3753123438280859570214892"
+          },
+          {
+            "open_time_ms": 120000,
+            "equity": "1248.7506246876561719140429785"
+          },
+          {
+            "open_time_ms": 180000,
+            "equity": "1560.1582017586908694578248107"
+          },
+          {
+            "open_time_ms": 240000,
+            "equity": "1663.3366641683322922913022916"
+          },
+          {
+            "open_time_ms": 300000,
+            "equity": "1663.3366641683322922913022916"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "decimals_as_they_are_written",
+      "doc": "Prices and a volume with trailing zeros, eight decimal places and none, and a trade count the exchange did not report: each reaches the strategy as it was given.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "10000.00",
+        "fee_bps": "7.5",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 1700000000000,
+          "close_time_ms": 1700000059999,
+          "open": "81940.01000000",
+          "high": "81990.5",
+          "low": "81900",
+          "close": "81955.25",
+          "volume": "0.17235000",
+          "trades": null
+        },
+        {
+          "open_time_ms": 1700000060000,
+          "close_time_ms": 1700000119999,
+          "open": "81955.25000000",
+          "high": "82010.00000001",
+          "low": "81955.25",
+          "close": "82001.10",
+          "volume": "12",
+          "trades": 412
+        },
+        {
+          "open_time_ms": 1700000120000,
+          "close_time_ms": 1700000179999,
+          "open": "82001.1",
+          "high": "82001.1",
+          "low": "81700.00",
+          "close": "81750.50000000",
+          "volume": "0",
+          "trades": 0
+        },
+        {
+          "open_time_ms": 1700000180000,
+          "close_time_ms": 1700000239999,
+          "open": "81750.5",
+          "high": "81800",
+          "low": "81749.99999999",
+          "close": "81777.77777777",
+          "volume": "3.5",
+          "trades": 18446744073709551615
+        }
+      ],
+      "decisions": [
+        "LongAllIn",
+        null,
+        "Flat",
+        null
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 1700000000000,
+          "cash": "10000.00",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 1700000000000,
+          "cash": "10000.00",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 1700000060000,
+          "cash": "-0.0000000000000000000000022400",
+          "position_qty": "0.1219263637263556842451408094"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 1700000120000,
+          "cash": "-0.0000000000000000000000022400",
+          "position_qty": "0.1219263637263556842451408094"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 3,
+          "now_ms": 1700000180000,
+          "cash": "9960.065541913081784608721949",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 1700000180000,
+          "cash": "9960.065541913081784608721949",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "10000.00",
+        "final_equity": "9960.065541913081784608721949",
+        "total_return_pct": "-0.3993445808691821539127805100",
+        "trade_count": 1,
+        "max_drawdown_pct": "0.3993445808691821539127805100",
+        "trades": [
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 1700000060000,
+            "exit_time_ms": 1700000180000,
+            "entry_price": "81955.25000000",
+            "exit_price": "81750.5",
+            "qty": "0.1219263637263556842451408094",
+            "gross_quote_pnl": "-39.934458086918215391278051",
+            "entry_order_id": null,
+            "exit_order_id": null
+          }
+        ],
+        "equity_curve": [
+          {
+            "open_time_ms": 1700000000000,
+            "equity": "10000.00"
+          },
+          {
+            "open_time_ms": 1700000060000,
+            "equity": "9998.095944561265099354216024"
+          },
+          {
+            "open_time_ms": 1700000120000,
+            "equity": "9967.541197811440364882383737"
+          },
+          {
+            "open_time_ms": 1700000180000,
+            "equity": "9960.065541913081784608721949"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "bars_in_the_order_given",
+      "doc": "The candles are not checked: out of order and one of them twice, they are replayed as given, and now_ms follows each bar's own open time.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "1000",
+        "fee_bps": "0",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 120000,
+          "close_time_ms": 179999,
+          "open": "100",
+          "high": "100",
+          "low": "100",
+          "close": "100",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "50",
+          "high": "50",
+          "low": "50",
+          "close": "50",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "50",
+          "high": "50",
+          "low": "50",
+          "close": "50",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "200",
+          "high": "200",
+          "low": "200",
+          "close": "200",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "LongAllIn",
+        null,
+        "Flat",
+        null
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 120000,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 120000,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 0,
+          "cash": "0",
+          "position_qty": "20"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 0,
+          "cash": "0",
+          "position_qty": "20"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 3,
+          "now_ms": 60000,
+          "cash": "4000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 60000,
+          "cash": "4000",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "1000",
+        "final_equity": "4000",
+        "total_return_pct": "300",
+        "trade_count": 1,
+        "max_drawdown_pct": "0",
+        "trades": [
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 0,
+            "exit_time_ms": 60000,
+            "entry_price": "50",
+            "exit_price": "200",
+            "qty": "20",
+            "gross_quote_pnl": "3000",
+            "entry_order_id": null,
+            "exit_order_id": null
+          }
+        ],
+        "equity_curve": [
+          {
+            "open_time_ms": 120000,
+            "equity": "1000"
+          },
+          {
+            "open_time_ms": 0,
+            "equity": "1000"
+          },
+          {
+            "open_time_ms": 0,
+            "equity": "1000"
+          },
+          {
+            "open_time_ms": 60000,
+            "equity": "4000"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "another_market",
+      "doc": "Another venue's Spot line, another symbol and eight-hour bars: every context names the market of the run, and a trade its symbol.",
+      "market": {
+        "exchange": "bybit_spot",
+        "symbol": "ETHUSDT",
+        "interval": "8h"
+      },
+      "config": {
+        "initial_cash": "2500",
+        "fee_bps": "10",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 28799999,
+          "open": "2000",
+          "high": "2010",
+          "low": "2000",
+          "close": "2010",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 28800000,
+          "close_time_ms": 57599999,
+          "open": "2010",
+          "high": "2100",
+          "low": "2010",
+          "close": "2100",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 57600000,
+          "close_time_ms": 86399999,
+          "open": "2100",
+          "high": "2100",
+          "low": "2050",
+          "close": "2050",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "LongAllIn",
+        "Flat",
+        null
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "2500",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "2500",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 28800000,
+          "cash": "-0.0000000000000000000000000976",
+          "position_qty": "1.2425385559713917922873146754"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 57600000,
+          "cash": "2606.7216365723828410395574574",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 57600000,
+          "cash": "2606.7216365723828410395574574",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "2500",
+        "final_equity": "2606.7216365723828410395574574",
+        "total_return_pct": "4.268865462895313641582298300",
+        "trade_count": 1,
+        "max_drawdown_pct": "0.100000000000000000000",
+        "trades": [
+          {
+            "symbol": "ETHUSDT",
+            "entry_time_ms": 28800000,
+            "exit_time_ms": 57600000,
+            "entry_price": "2010",
+            "exit_price": "2100",
+            "qty": "1.2425385559713917922873146754",
+            "gross_quote_pnl": "106.7216365723828410395574574",
+            "entry_order_id": null,
+            "exit_order_id": null
+          }
+        ],
+        "equity_curve": [
+          {
+            "open_time_ms": 0,
+            "equity": "2500"
+          },
+          {
+            "open_time_ms": 28800000,
+            "equity": "2609.3309675399227638033608182"
+          },
+          {
+            "open_time_ms": 57600000,
+            "equity": "2606.7216365723828410395574574"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "bars_before_1970",
+      "doc": "Open times below zero are times like any other.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "1000",
+        "fee_bps": "0",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": -120000,
+          "close_time_ms": -60001,
+          "open": "4",
+          "high": "4",
+          "low": "4",
+          "close": "4",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": -60000,
+          "close_time_ms": -1,
+          "open": "4",
+          "high": "5",
+          "low": "4",
+          "close": "5",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "5",
+          "high": "8",
+          "low": "5",
+          "close": "8",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "LongAllIn",
+        "Flat",
+        null
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": -120000,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": -120000,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": -60000,
+          "cash": "0",
+          "position_qty": "250"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 0,
+          "cash": "1250",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "1250",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "1000",
+        "final_equity": "1250",
+        "total_return_pct": "25.00",
+        "trade_count": 1,
+        "max_drawdown_pct": "0",
+        "trades": [
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": -60000,
+            "exit_time_ms": 0,
+            "entry_price": "4",
+            "exit_price": "5",
+            "qty": "250",
+            "gross_quote_pnl": "250",
+            "entry_order_id": null,
+            "exit_order_id": null
+          }
+        ],
+        "equity_curve": [
+          {
+            "open_time_ms": -120000,
+            "equity": "1000"
+          },
+          {
+            "open_time_ms": -60000,
+            "equity": "1250"
+          },
+          {
+            "open_time_ms": 0,
+            "equity": "1250"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "an_entry_at_no_price",
+      "doc": "An entry that would fill at an open of zero is skipped, and the strategy is handed its cash untouched.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "1000",
+        "fee_bps": "10",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "100",
+          "high": "100",
+          "low": "100",
+          "close": "100",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "0",
+          "high": "50",
+          "low": "0",
+          "close": "50",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 120000,
+          "close_time_ms": 179999,
+          "open": "50",
+          "high": "50",
+          "low": "50",
+          "close": "50",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "LongAllIn",
+        null,
+        null
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 60000,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 120000,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 120000,
+          "cash": "1000",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "1000",
+        "final_equity": "1000",
+        "total_return_pct": "0",
+        "trade_count": 0,
+        "max_drawdown_pct": "0",
+        "trades": [],
+        "equity_curve": [
+          {
+            "open_time_ms": 0,
+            "equity": "1000"
+          },
+          {
+            "open_time_ms": 60000,
+            "equity": "1000"
+          },
+          {
+            "open_time_ms": 120000,
+            "equity": "1000"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "sixty_bars",
+      "doc": "Sixty bars of a price that swings, entered and left every nine bars at 7.5 basis points: six trades a decision ends, and a seventh closed out at the end.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "2500",
+        "fee_bps": "7.5",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "100.00",
+          "high": "107.37",
+          "low": "100.00",
+          "close": "107.37",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "107.37",
+          "high": "114.74",
+          "low": "107.37",
+          "close": "114.74",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 120000,
+          "close_time_ms": 179999,
+          "open": "114.74",
+          "high": "121.11",
+          "low": "114.74",
+          "close": "121.11",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 180000,
+          "close_time_ms": 239999,
+          "open": "121.11",
+          "high": "121.11",
+          "low": "105.48",
+          "close": "105.48",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 240000,
+          "close_time_ms": 299999,
+          "open": "105.48",
+          "high": "112.85",
+          "low": "105.48",
+          "close": "112.85",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 300000,
+          "close_time_ms": 359999,
+          "open": "112.85",
+          "high": "119.22",
+          "low": "112.85",
+          "close": "119.22",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 360000,
+          "close_time_ms": 419999,
+          "open": "119.22",
+          "high": "119.22",
+          "low": "103.59",
+          "close": "103.59",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 420000,
+          "close_time_ms": 479999,
+          "open": "103.59",
+          "high": "110.96",
+          "low": "103.59",
+          "close": "110.96",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 480000,
+          "close_time_ms": 539999,
+          "open": "110.96",
+          "high": "117.33",
+          "low": "110.96",
+          "close": "117.33",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 540000,
+          "close_time_ms": 599999,
+          "open": "117.33",
+          "high": "117.33",
+          "low": "101.70",
+          "close": "101.70",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 600000,
+          "close_time_ms": 659999,
+          "open": "101.70",
+          "high": "108.07",
+          "low": "101.70",
+          "close": "108.07",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 660000,
+          "close_time_ms": 719999,
+          "open": "108.07",
+          "high": "115.44",
+          "low": "108.07",
+          "close": "115.44",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 720000,
+          "close_time_ms": 779999,
+          "open": "115.44",
+          "high": "122.81",
+          "low": "115.44",
+          "close": "122.81",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 780000,
+          "close_time_ms": 839999,
+          "open": "122.81",
+          "high": "122.81",
+          "low": "106.18",
+          "close": "106.18",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 840000,
+          "close_time_ms": 899999,
+          "open": "106.18",
+          "high": "113.55",
+          "low": "106.18",
+          "close": "113.55",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 900000,
+          "close_time_ms": 959999,
+          "open": "113.55",
+          "high": "120.92",
+          "low": "113.55",
+          "close": "120.92",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 960000,
+          "close_time_ms": 1019999,
+          "open": "120.92",
+          "high": "120.92",
+          "low": "104.29",
+          "close": "104.29",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1020000,
+          "close_time_ms": 1079999,
+          "open": "104.29",
+          "high": "111.66",
+          "low": "104.29",
+          "close": "111.66",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1080000,
+          "close_time_ms": 1139999,
+          "open": "111.66",
+          "high": "118.03",
+          "low": "111.66",
+          "close": "118.03",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1140000,
+          "close_time_ms": 1199999,
+          "open": "118.03",
+          "high": "118.03",
+          "low": "102.40",
+          "close": "102.40",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1200000,
+          "close_time_ms": 1259999,
+          "open": "102.40",
+          "high": "109.77",
+          "low": "102.40",
+          "close": "109.77",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1260000,
+          "close_time_ms": 1319999,
+          "open": "109.77",
+          "high": "116.14",
+          "low": "109.77",
+          "close": "116.14",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1320000,
+          "close_time_ms": 1379999,
+          "open": "116.14",
+          "high": "116.14",
+          "low": "100.51",
+          "close": "100.51",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1380000,
+          "close_time_ms": 1439999,
+          "open": "100.51",
+          "high": "107.88",
+          "low": "100.51",
+          "close": "107.88",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1440000,
+          "close_time_ms": 1499999,
+          "open": "107.88",
+          "high": "114.25",
+          "low": "107.88",
+          "close": "114.25",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1500000,
+          "close_time_ms": 1559999,
+          "open": "114.25",
+          "high": "121.62",
+          "low": "114.25",
+          "close": "121.62",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1560000,
+          "close_time_ms": 1619999,
+          "open": "121.62",
+          "high": "121.62",
+          "low": "105.99",
+          "close": "105.99",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1620000,
+          "close_time_ms": 1679999,
+          "open": "105.99",
+          "high": "112.36",
+          "low": "105.99",
+          "close": "112.36",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1680000,
+          "close_time_ms": 1739999,
+          "open": "112.36",
+          "high": "119.73",
+          "low": "112.36",
+          "close": "119.73",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1740000,
+          "close_time_ms": 1799999,
+          "open": "119.73",
+          "high": "119.73",
+          "low": "103.10",
+          "close": "103.10",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1800000,
+          "close_time_ms": 1859999,
+          "open": "103.10",
+          "high": "110.47",
+          "low": "103.10",
+          "close": "110.47",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1860000,
+          "close_time_ms": 1919999,
+          "open": "110.47",
+          "high": "117.84",
+          "low": "110.47",
+          "close": "117.84",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1920000,
+          "close_time_ms": 1979999,
+          "open": "117.84",
+          "high": "117.84",
+          "low": "101.21",
+          "close": "101.21",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 1980000,
+          "close_time_ms": 2039999,
+          "open": "101.21",
+          "high": "108.58",
+          "low": "101.21",
+          "close": "108.58",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2040000,
+          "close_time_ms": 2099999,
+          "open": "108.58",
+          "high": "115.95",
+          "low": "108.58",
+          "close": "115.95",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2100000,
+          "close_time_ms": 2159999,
+          "open": "115.95",
+          "high": "122.32",
+          "low": "115.95",
+          "close": "122.32",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2160000,
+          "close_time_ms": 2219999,
+          "open": "122.32",
+          "high": "122.32",
+          "low": "106.69",
+          "close": "106.69",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2220000,
+          "close_time_ms": 2279999,
+          "open": "106.69",
+          "high": "113.06",
+          "low": "106.69",
+          "close": "113.06",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2280000,
+          "close_time_ms": 2339999,
+          "open": "113.06",
+          "high": "120.43",
+          "low": "113.06",
+          "close": "120.43",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2340000,
+          "close_time_ms": 2399999,
+          "open": "120.43",
+          "high": "120.43",
+          "low": "104.80",
+          "close": "104.80",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2400000,
+          "close_time_ms": 2459999,
+          "open": "104.80",
+          "high": "111.17",
+          "low": "104.80",
+          "close": "111.17",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2460000,
+          "close_time_ms": 2519999,
+          "open": "111.17",
+          "high": "118.54",
+          "low": "111.17",
+          "close": "118.54",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2520000,
+          "close_time_ms": 2579999,
+          "open": "118.54",
+          "high": "118.54",
+          "low": "102.91",
+          "close": "102.91",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2580000,
+          "close_time_ms": 2639999,
+          "open": "102.91",
+          "high": "109.28",
+          "low": "102.91",
+          "close": "109.28",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2640000,
+          "close_time_ms": 2699999,
+          "open": "109.28",
+          "high": "116.65",
+          "low": "109.28",
+          "close": "116.65",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2700000,
+          "close_time_ms": 2759999,
+          "open": "116.65",
+          "high": "116.65",
+          "low": "100.02",
+          "close": "100.02",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2760000,
+          "close_time_ms": 2819999,
+          "open": "100.02",
+          "high": "107.39",
+          "low": "100.02",
+          "close": "107.39",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2820000,
+          "close_time_ms": 2879999,
+          "open": "107.39",
+          "high": "114.76",
+          "low": "107.39",
+          "close": "114.76",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2880000,
+          "close_time_ms": 2939999,
+          "open": "114.76",
+          "high": "121.13",
+          "low": "114.76",
+          "close": "121.13",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 2940000,
+          "close_time_ms": 2999999,
+          "open": "121.13",
+          "high": "121.13",
+          "low": "105.50",
+          "close": "105.50",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 3000000,
+          "close_time_ms": 3059999,
+          "open": "105.50",
+          "high": "112.87",
+          "low": "105.50",
+          "close": "112.87",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 3060000,
+          "close_time_ms": 3119999,
+          "open": "112.87",
+          "high": "119.24",
+          "low": "112.87",
+          "close": "119.24",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 3120000,
+          "close_time_ms": 3179999,
+          "open": "119.24",
+          "high": "119.24",
+          "low": "103.61",
+          "close": "103.61",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 3180000,
+          "close_time_ms": 3239999,
+          "open": "103.61",
+          "high": "110.98",
+          "low": "103.61",
+          "close": "110.98",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 3240000,
+          "close_time_ms": 3299999,
+          "open": "110.98",
+          "high": "117.35",
+          "low": "110.98",
+          "close": "117.35",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 3300000,
+          "close_time_ms": 3359999,
+          "open": "117.35",
+          "high": "117.35",
+          "low": "101.72",
+          "close": "101.72",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 3360000,
+          "close_time_ms": 3419999,
+          "open": "101.72",
+          "high": "108.09",
+          "low": "101.72",
+          "close": "108.09",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 3420000,
+          "close_time_ms": 3479999,
+          "open": "108.09",
+          "high": "115.46",
+          "low": "108.09",
+          "close": "115.46",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 3480000,
+          "close_time_ms": 3539999,
+          "open": "115.46",
+          "high": "122.83",
+          "low": "115.46",
+          "close": "122.83",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 3540000,
+          "close_time_ms": 3599999,
+          "open": "122.83",
+          "high": "122.83",
+          "low": "106.20",
+          "close": "106.20",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        null,
+        "LongAllIn",
+        null,
+        null,
+        null,
+        null,
+        "Flat",
+        null,
+        null,
+        null,
+        "LongAllIn",
+        null,
+        null,
+        null,
+        null,
+        "Flat",
+        null,
+        null,
+        null,
+        "LongAllIn",
+        null,
+        null,
+        null,
+        null,
+        "Flat",
+        null,
+        null,
+        null,
+        "LongAllIn",
+        null,
+        null,
+        null,
+        null,
+        "Flat",
+        null,
+        null,
+        null,
+        "LongAllIn",
+        null,
+        null,
+        null,
+        null,
+        "Flat",
+        null,
+        null,
+        null,
+        "LongAllIn",
+        null,
+        null,
+        null,
+        null,
+        "Flat",
+        null,
+        null,
+        null,
+        "LongAllIn",
+        null,
+        null,
+        null,
+        null
+      ],
+      "fails": null,
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "2500",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "2500",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 60000,
+          "cash": "2500",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 120000,
+          "cash": "0.0000000000000000000000000404",
+          "position_qty": "21.772062098623870688581959904"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 3,
+          "now_ms": 180000,
+          "cash": "0.0000000000000000000000000404",
+          "position_qty": "21.772062098623870688581959904"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 4,
+          "now_ms": 240000,
+          "cash": "0.0000000000000000000000000404",
+          "position_qty": "21.772062098623870688581959904"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 5,
+          "now_ms": 300000,
+          "cash": "0.0000000000000000000000000404",
+          "position_qty": "21.772062098623870688581959904"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 6,
+          "now_ms": 360000,
+          "cash": "0.0000000000000000000000000404",
+          "position_qty": "21.772062098623870688581959904"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 7,
+          "now_ms": 420000,
+          "cash": "2253.6763868618494295567325726",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 8,
+          "now_ms": 480000,
+          "cash": "2253.6763868618494295567325726",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 9,
+          "now_ms": 540000,
+          "cash": "2253.6763868618494295567325726",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 10,
+          "now_ms": 600000,
+          "cash": "2253.6763868618494295567325726",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 11,
+          "now_ms": 660000,
+          "cash": "0.0000000000000000000000000064",
+          "position_qty": "20.838228891594461640183599439"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 12,
+          "now_ms": 720000,
+          "cash": "0.0000000000000000000000000064",
+          "position_qty": "20.838228891594461640183599439"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 13,
+          "now_ms": 780000,
+          "cash": "0.0000000000000000000000000064",
+          "position_qty": "20.838228891594461640183599439"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 14,
+          "now_ms": 840000,
+          "cash": "0.0000000000000000000000000064",
+          "position_qty": "20.838228891594461640183599439"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 15,
+          "now_ms": 900000,
+          "cash": "0.0000000000000000000000000064",
+          "position_qty": "20.838228891594461640183599439"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 16,
+          "now_ms": 960000,
+          "cash": "2517.8688185934235998048525936",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 17,
+          "now_ms": 1020000,
+          "cash": "2517.8688185934235998048525936",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 18,
+          "now_ms": 1080000,
+          "cash": "2517.8688185934235998048525936",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 19,
+          "now_ms": 1140000,
+          "cash": "2517.8688185934235998048525936",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 20,
+          "now_ms": 1200000,
+          "cash": "-0.0000000000000000000000000162",
+          "position_qty": "24.570135080266202689826893439"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 21,
+          "now_ms": 1260000,
+          "cash": "-0.0000000000000000000000000162",
+          "position_qty": "24.570135080266202689826893439"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 22,
+          "now_ms": 1320000,
+          "cash": "-0.0000000000000000000000000162",
+          "position_qty": "24.570135080266202689826893439"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 23,
+          "now_ms": 1380000,
+          "cash": "-0.0000000000000000000000000162",
+          "position_qty": "24.570135080266202689826893439"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 24,
+          "now_ms": 1440000,
+          "cash": "-0.0000000000000000000000000162",
+          "position_qty": "24.570135080266202689826893439"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 25,
+          "now_ms": 1500000,
+          "cash": "2805.0325794707233470697380335",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 26,
+          "now_ms": 1560000,
+          "cash": "2805.0325794707233470697380335",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 27,
+          "now_ms": 1620000,
+          "cash": "2805.0325794707233470697380335",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 28,
+          "now_ms": 1680000,
+          "cash": "2805.0325794707233470697380335",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 29,
+          "now_ms": 1740000,
+          "cash": "-0.0000000000000000000000000700",
+          "position_qty": "23.410426640645285242363542081"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 30,
+          "now_ms": 1800000,
+          "cash": "-0.0000000000000000000000000700",
+          "position_qty": "23.410426640645285242363542081"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 31,
+          "now_ms": 1860000,
+          "cash": "-0.0000000000000000000000000700",
+          "position_qty": "23.410426640645285242363542081"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 32,
+          "now_ms": 1920000,
+          "cash": "-0.0000000000000000000000000700",
+          "position_qty": "23.410426640645285242363542081"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 33,
+          "now_ms": 1980000,
+          "cash": "-0.0000000000000000000000000700",
+          "position_qty": "23.410426640645285242363542081"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 34,
+          "now_ms": 2040000,
+          "cash": "2539.9976965477841228121215241",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 35,
+          "now_ms": 2100000,
+          "cash": "2539.9976965477841228121215241",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 36,
+          "now_ms": 2160000,
+          "cash": "2539.9976965477841228121215241",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 37,
+          "now_ms": 2220000,
+          "cash": "2539.9976965477841228121215241",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 38,
+          "now_ms": 2280000,
+          "cash": "-0.0000000000000000000000000540",
+          "position_qty": "22.449090093342642255988192158"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 39,
+          "now_ms": 2340000,
+          "cash": "-0.0000000000000000000000000540",
+          "position_qty": "22.449090093342642255988192158"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 40,
+          "now_ms": 2400000,
+          "cash": "-0.0000000000000000000000000540",
+          "position_qty": "22.449090093342642255988192158"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 41,
+          "now_ms": 2460000,
+          "cash": "-0.0000000000000000000000000540",
+          "position_qty": "22.449090093342642255988192158"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 42,
+          "now_ms": 2520000,
+          "cash": "-0.0000000000000000000000000540",
+          "position_qty": "22.449090093342642255988192158"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 43,
+          "now_ms": 2580000,
+          "cash": "2308.5031846097618960778220463",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 44,
+          "now_ms": 2640000,
+          "cash": "2308.5031846097618960778220463",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 45,
+          "now_ms": 2700000,
+          "cash": "2308.5031846097618960778220463",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 46,
+          "now_ms": 2760000,
+          "cash": "2308.5031846097618960778220463",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 47,
+          "now_ms": 2820000,
+          "cash": "0.0000000000000000000000000056",
+          "position_qty": "21.480334340079858590811729142"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 48,
+          "now_ms": 2880000,
+          "cash": "0.0000000000000000000000000056",
+          "position_qty": "21.480334340079858590811729142"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 49,
+          "now_ms": 2940000,
+          "cash": "0.0000000000000000000000000056",
+          "position_qty": "21.480334340079858590811729142"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 50,
+          "now_ms": 3000000,
+          "cash": "0.0000000000000000000000000056",
+          "position_qty": "21.480334340079858590811729142"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 51,
+          "now_ms": 3060000,
+          "cash": "0.0000000000000000000000000056",
+          "position_qty": "21.480334340079858590811729142"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 52,
+          "now_ms": 3120000,
+          "cash": "2559.3940804110889966146142900",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 53,
+          "now_ms": 3180000,
+          "cash": "2559.3940804110889966146142900",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 54,
+          "now_ms": 3240000,
+          "cash": "2559.3940804110889966146142900",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 55,
+          "now_ms": 3300000,
+          "cash": "2559.3940804110889966146142900",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 56,
+          "now_ms": 3360000,
+          "cash": "0.0000000000000000000000000786",
+          "position_qty": "25.14231196845276970913787025"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 57,
+          "now_ms": 3420000,
+          "cash": "0.0000000000000000000000000786",
+          "position_qty": "25.14231196845276970913787025"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 58,
+          "now_ms": 3480000,
+          "cash": "0.0000000000000000000000000786",
+          "position_qty": "25.14231196845276970913787025"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 59,
+          "now_ms": 3540000,
+          "cash": "0.0000000000000000000000000786",
+          "position_qty": "25.14231196845276970913787025"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 3540000,
+          "cash": "2668.1109459013968800031089893",
+          "position_qty": "0"
+        }
+      ],
+      "result": {
+        "initial_cash": "2500",
+        "final_equity": "2668.1109459013968800031089893",
+        "total_return_pct": "6.7244378360558752001243595700",
+        "trade_count": 7,
+        "max_drawdown_pct": "20.584709175143068995693875560",
+        "trades": [
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 120000,
+            "exit_time_ms": 420000,
+            "entry_price": "114.74",
+            "exit_price": "103.59",
+            "qty": "21.772062098623870688581959904",
+            "gross_quote_pnl": "-246.3236131381505704432674274",
+            "entry_order_id": null,
+            "exit_order_id": null
+          },
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 660000,
+            "exit_time_ms": 960000,
+            "entry_price": "108.07",
+            "exit_price": "120.92",
+            "qty": "20.838228891594461640183599439",
+            "gross_quote_pnl": "264.1924317315741702481200210",
+            "entry_order_id": null,
+            "exit_order_id": null
+          },
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 1200000,
+            "exit_time_ms": 1500000,
+            "entry_price": "102.40",
+            "exit_price": "114.25",
+            "qty": "24.570135080266202689826893439",
+            "gross_quote_pnl": "287.1637608772997472648854399",
+            "entry_order_id": null,
+            "exit_order_id": null
+          },
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 1740000,
+            "exit_time_ms": 2040000,
+            "entry_price": "119.73",
+            "exit_price": "108.58",
+            "qty": "23.410426640645285242363542081",
+            "gross_quote_pnl": "-265.0348829229392242576165094",
+            "entry_order_id": null,
+            "exit_order_id": null
+          },
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 2280000,
+            "exit_time_ms": 2580000,
+            "entry_price": "113.06",
+            "exit_price": "102.91",
+            "qty": "22.449090093342642255988192158",
+            "gross_quote_pnl": "-231.4945119380222267342994778",
+            "entry_order_id": null,
+            "exit_order_id": null
+          },
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 2820000,
+            "exit_time_ms": 3120000,
+            "entry_price": "107.39",
+            "exit_price": "119.24",
+            "qty": "21.480334340079858590811729142",
+            "gross_quote_pnl": "250.8908958013271005367922437",
+            "entry_order_id": null,
+            "exit_order_id": null
+          },
+          {
+            "symbol": "BTCUSDT",
+            "entry_time_ms": 3360000,
+            "exit_time_ms": 3599999,
+            "entry_price": "101.72",
+            "exit_price": "106.20",
+            "qty": "25.14231196845276970913787025",
+            "gross_quote_pnl": "108.7168654903078833884946993",
+            "entry_order_id": null,
+            "exit_order_id": null
+          }
+        ],
+        "equity_curve": [
+          {
+            "open_time_ms": 0,
+            "equity": "2500"
+          },
+          {
+            "open_time_ms": 60000,
+            "equity": "2500"
+          },
+          {
+            "open_time_ms": 120000,
+            "equity": "2636.8144407643369790941611640"
+          },
+          {
+            "open_time_ms": 180000,
+            "equity": "2296.5171101628458802316251307"
+          },
+          {
+            "open_time_ms": 240000,
+            "equity": "2456.9772078297038072064741752"
+          },
+          {
+            "open_time_ms": 300000,
+            "equity": "2595.6652433979378634927412598"
+          },
+          {
+            "open_time_ms": 360000,
+            "equity": "2255.3679127964467646302052265"
+          },
+          {
+            "open_time_ms": 420000,
+            "equity": "2253.6763868618494295567325726"
+          },
+          {
+            "open_time_ms": 480000,
+            "equity": "2253.6763868618494295567325726"
+          },
+          {
+            "open_time_ms": 540000,
+            "equity": "2253.6763868618494295567325726"
+          },
+          {
+            "open_time_ms": 600000,
+            "equity": "2253.6763868618494295567325726"
+          },
+          {
+            "open_time_ms": 660000,
+            "equity": "2405.5651432456646517427947192"
+          },
+          {
+            "open_time_ms": 720000,
+            "equity": "2559.1428901767158340309478471"
+          },
+          {
+            "open_time_ms": 780000,
+            "equity": "2212.6031437094999369546945884"
+          },
+          {
+            "open_time_ms": 840000,
+            "equity": "2366.1808906405511192428477163"
+          },
+          {
+            "open_time_ms": 900000,
+            "equity": "2519.7586375716023015310008442"
+          },
+          {
+            "open_time_ms": 960000,
+            "equity": "2517.8688185934235998048525936"
+          },
+          {
+            "open_time_ms": 1020000,
+            "equity": "2517.8688185934235998048525936"
+          },
+          {
+            "open_time_ms": 1080000,
+            "equity": "2517.8688185934235998048525936"
+          },
+          {
+            "open_time_ms": 1140000,
+            "equity": "2517.8688185934235998048525936"
+          },
+          {
+            "open_time_ms": 1200000,
+            "equity": "2697.0637277608210692622980928"
+          },
+          {
+            "open_time_ms": 1260000,
+            "equity": "2853.5754882221167803964954040"
+          },
+          {
+            "open_time_ms": 1320000,
+            "equity": "2469.5442769175560323545010596"
+          },
+          {
+            "open_time_ms": 1380000,
+            "equity": "2650.6261724591179461785252642"
+          },
+          {
+            "open_time_ms": 1440000,
+            "equity": "2807.1379329204136573127225754"
+          },
+          {
+            "open_time_ms": 1500000,
+            "equity": "2805.0325794707233470697380335"
+          },
+          {
+            "open_time_ms": 1560000,
+            "equity": "2805.0325794707233470697380335"
+          },
+          {
+            "open_time_ms": 1620000,
+            "equity": "2805.0325794707233470697380335"
+          },
+          {
+            "open_time_ms": 1680000,
+            "equity": "2805.0325794707233470697380335"
+          },
+          {
+            "open_time_ms": 1740000,
+            "equity": "2413.6149866505289084876811885"
+          },
+          {
+            "open_time_ms": 1800000,
+            "equity": "2586.1498309920846607239004936"
+          },
+          {
+            "open_time_ms": 1860000,
+            "equity": "2758.6846753336404129601197987"
+          },
+          {
+            "open_time_ms": 1920000,
+            "equity": "2369.3692802997093193796140939"
+          },
+          {
+            "open_time_ms": 1980000,
+            "equity": "2541.9041246412650716158333991"
+          },
+          {
+            "open_time_ms": 2040000,
+            "equity": "2539.9976965477841228121215241"
+          },
+          {
+            "open_time_ms": 2100000,
+            "equity": "2539.9976965477841228121215241"
+          },
+          {
+            "open_time_ms": 2160000,
+            "equity": "2539.9976965477841228121215241"
+          },
+          {
+            "open_time_ms": 2220000,
+            "equity": "2539.9976965477841228121215241"
+          },
+          {
+            "open_time_ms": 2280000,
+            "equity": "2703.5439199412544068886579815"
+          },
+          {
+            "open_time_ms": 2340000,
+            "equity": "2352.6646417823089084275625381"
+          },
+          {
+            "open_time_ms": 2400000,
+            "equity": "2495.6653456769015395982073221"
+          },
+          {
+            "open_time_ms": 2460000,
+            "equity": "2661.1151396648368130248402983"
+          },
+          {
+            "open_time_ms": 2520000,
+            "equity": "2310.2358615058913145637448549"
+          },
+          {
+            "open_time_ms": 2580000,
+            "equity": "2308.5031846097618960778220463"
+          },
+          {
+            "open_time_ms": 2640000,
+            "equity": "2308.5031846097618960778220463"
+          },
+          {
+            "open_time_ms": 2700000,
+            "equity": "2308.5031846097618960778220463"
+          },
+          {
+            "open_time_ms": 2760000,
+            "equity": "2308.5031846097618960778220463"
+          },
+          {
+            "open_time_ms": 2820000,
+            "equity": "2465.0831688675645718815540363"
+          },
+          {
+            "open_time_ms": 2880000,
+            "equity": "2601.9128986138732711050247510"
+          },
+          {
+            "open_time_ms": 2940000,
+            "equity": "2266.1752728784250813306374245"
+          },
+          {
+            "open_time_ms": 3000000,
+            "equity": "2424.4853369648136391449198683"
+          },
+          {
+            "open_time_ms": 3060000,
+            "equity": "2561.3150667111223383683905829"
+          },
+          {
+            "open_time_ms": 3120000,
+            "equity": "2559.3940804110889966146142900"
+          },
+          {
+            "open_time_ms": 3180000,
+            "equity": "2559.3940804110889966146142900"
+          },
+          {
+            "open_time_ms": 3240000,
+            "equity": "2559.3940804110889966146142900"
+          },
+          {
+            "open_time_ms": 3300000,
+            "equity": "2559.3940804110889966146142900"
+          },
+          {
+            "open_time_ms": 3360000,
+            "equity": "2717.6325006700598778607123954"
+          },
+          {
+            "open_time_ms": 3420000,
+            "equity": "2902.9313398775567906170584992"
+          },
+          {
+            "open_time_ms": 3480000,
+            "equity": "3088.2301790850537033734046029"
+          },
+          {
+            "open_time_ms": 3540000,
+            "equity": "2670.1135310496841431104418207"
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "id": "fails_in_on_start",
+      "doc": "A failure in on_start ends the run before any bar.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "1000",
+        "fee_bps": "0",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "100",
+          "high": "100",
+          "low": "100",
+          "close": "100",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "100",
+          "high": "100",
+          "low": "100",
+          "close": "100",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 120000,
+          "close_time_ms": 179999,
+          "open": "100",
+          "high": "100",
+          "low": "100",
+          "close": "100",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "LongAllIn",
+        null,
+        null
+      ],
+      "fails": {
+        "callback": "on_start",
+        "bar": null
+      },
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        }
+      ],
+      "result": null,
+      "error": "the script fails here"
+    },
+    {
+      "id": "fails_in_on_bar",
+      "doc": "A failure on the second bar, with a position just entered, ends the run there: no bar follows, nothing is closed out, and on_finish is not called.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "1000",
+        "fee_bps": "0",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "100",
+          "high": "100",
+          "low": "100",
+          "close": "100",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "100",
+          "high": "100",
+          "low": "100",
+          "close": "100",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 120000,
+          "close_time_ms": 179999,
+          "open": "100",
+          "high": "100",
+          "low": "100",
+          "close": "100",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "LongAllIn",
+        null,
+        null
+      ],
+      "fails": {
+        "callback": "on_bar",
+        "bar": 1
+      },
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 60000,
+          "cash": "0",
+          "position_qty": "10"
+        }
+      ],
+      "result": null,
+      "error": "the script fails here"
+    },
+    {
+      "id": "fails_in_on_finish",
+      "doc": "A failure in on_finish, after every bar and the close-out, still fails the run: there is no result.",
+      "market": {
+        "exchange": "binance_spot",
+        "symbol": "BTCUSDT",
+        "interval": "1m"
+      },
+      "config": {
+        "initial_cash": "1000",
+        "fee_bps": "0",
+        "close_out_at_end": true
+      },
+      "candles": [
+        {
+          "open_time_ms": 0,
+          "close_time_ms": 59999,
+          "open": "100",
+          "high": "100",
+          "low": "100",
+          "close": "100",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 60000,
+          "close_time_ms": 119999,
+          "open": "100",
+          "high": "100",
+          "low": "100",
+          "close": "100",
+          "volume": "1",
+          "trades": 1
+        },
+        {
+          "open_time_ms": 120000,
+          "close_time_ms": 179999,
+          "open": "100",
+          "high": "100",
+          "low": "100",
+          "close": "100",
+          "volume": "1",
+          "trades": 1
+        }
+      ],
+      "decisions": [
+        "LongAllIn",
+        null,
+        null
+      ],
+      "fails": {
+        "callback": "on_finish",
+        "bar": null
+      },
+      "calls": [
+        {
+          "callback": "on_start",
+          "bar": null,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 0,
+          "now_ms": 0,
+          "cash": "1000",
+          "position_qty": "0"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 1,
+          "now_ms": 60000,
+          "cash": "0",
+          "position_qty": "10"
+        },
+        {
+          "callback": "on_bar",
+          "bar": 2,
+          "now_ms": 120000,
+          "cash": "0",
+          "position_qty": "10"
+        },
+        {
+          "callback": "on_finish",
+          "bar": null,
+          "now_ms": 120000,
+          "cash": "1000",
+          "position_qty": "0"
+        }
+      ],
+      "result": null,
+      "error": "the script fails here"
+    }
+  ]
+}

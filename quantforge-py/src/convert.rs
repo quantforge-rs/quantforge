@@ -29,7 +29,7 @@ pub(crate) fn refused(error: impl fmt::Display) -> PyErr {
 }
 
 /// The name of `value`'s type, as a message names it.
-fn type_name(value: &Bound<'_, PyAny>) -> String {
+pub(crate) fn type_name(value: &Bound<'_, PyAny>) -> String {
     match value.get_type().name() {
         Ok(name) => name.to_string(),
         Err(_) => "object".to_string(),

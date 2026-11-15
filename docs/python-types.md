@@ -1,10 +1,10 @@
 # The Python types
 
 `quantforge_py` holds the engine's types as Python classes: what a market
-is, a candle and a batch of candles, and a backtest's settings and result.
-Each class holds the engine's own value. It is built by the engine's own
-rule and refused in the engine's own words, so that a value Python built
-is a value the engine takes.
+is, a candle and a batch of candles, a backtest's settings and result, and
+the strategy a class implements. Each class holds the engine's own value.
+It is built by the engine's own rule and refused in the engine's own
+words, so that a value Python built is a value the engine takes.
 
 This page is what each type takes and gives. How the package is named,
 built and tested is [the Python package](python-package.md).
@@ -24,6 +24,7 @@ built and tested is [the Python package](python-package.md).
 - [Market identity](#market-identity)
 - [Candles](#candles)
 - [Backtests](#backtests)
+- [Strategies](#strategies)
 - [Decimal and float](#decimal-and-float)
 - [Fields](#fields)
 - [Equality, keys and repr](#equality-keys-and-repr)
@@ -46,12 +47,17 @@ built and tested is [the Python package](python-package.md).
 | `ClosedTrade` | `quantforge::ClosedTrade` | One closed round trip of a candle strategy on Spot |
 | `EquityPoint` | `quantforge::EquityPoint` | Equity at one bar's close |
 | `BacktestResult` | `quantforge::BacktestResult` | What a backtest produced |
+| `TargetPosition` | `quantforge::TargetPosition` | The position a strategy asks for |
+| `StrategyContext` | `quantforge::StrategyContext` | The engine's state as a strategy's callback is handed it |
+| `Strategy` | `quantforge::Strategy` | The strategy a class implements: three callbacks an engine drives |
 | `decimal_to_f64` | `quantforge::decimal_to_f64` | The float nearest to a decimal |
 | `decimal_from_f64` | `quantforge::decimal_from_f64` | The decimal of a float's shortest text |
 <!-- end: bound types -->
 
 A class cannot be derived from, and a value cannot be changed once it is
-built: there is no setter, and nothing can be added to one.
+built: there is no setter, and nothing can be added to one. `Strategy` is
+the exception to both. It exists to be derived from, and an object of a
+class derived from it holds a state of its own.
 
 ## How a value crosses
 
@@ -130,7 +136,7 @@ kind.
 
 ## Signatures
 
-Every way to build a value, and the one method there is, as Python's
+Every way to build a value, and every method there is, as Python's
 `inspect.signature` gives it:
 
 <!-- begin: signatures -->
@@ -148,6 +154,11 @@ BacktestConfig(*, initial_cash, fee_bps, close_out_at_end)
 ClosedTrade(*, symbol, entry_time_ms, exit_time_ms, entry_price, exit_price, qty, gross_quote_pnl, entry_order_id=None, exit_order_id=None)
 EquityPoint(*, open_time_ms, equity)
 BacktestResult(*, initial_cash, final_equity, total_return_pct, trade_count, max_drawdown_pct, trades, equity_curve)
+StrategyContext(*, market, now_ms, cash, position_qty)
+Strategy(*args, **kwargs)
+Strategy.on_start(ctx)
+Strategy.on_bar(ctx, bar)
+Strategy.on_finish(ctx)
 decimal_to_f64(value, /)
 decimal_from_f64(value, /)
 ```
@@ -155,7 +166,9 @@ decimal_from_f64(value, /)
 
 A type of one part takes it by position. A record takes its fields by
 name, so that no price is taken for another, and every field is required
-but the three that may be unknown.
+but the three that may be unknown. `Strategy` takes whatever the class
+derived from it does, and a `TargetPosition` is not built at all: it is
+one of two constants.
 
 ## Market identity
 
@@ -212,8 +225,9 @@ line's candles are stored under. That says nothing of what runs on it: a
 candle strategy is a Spot strategy, and the story that binds the backtest
 entry point refuses a linear or an inverse market there.
 
-Every interval, family and product line is a constant of its class, and
-`ALL` is a tuple of them in this order:
+Every interval, family and product line is a constant of its class, as
+is each [target a strategy asks for](#strategies), and `ALL` is a tuple of
+them in this order:
 
 <!-- begin: constants -->
 | Type | Constants | Their text |
@@ -221,12 +235,15 @@ Every interval, family and product line is a constant of its class, and
 | `Interval` | `S1`, `M1`, `M3`, `M5`, `M15`, `M30`, `H1`, `H2`, `H4`, `H6`, `H8`, `H12`, `D1`, `D3`, `W1` | `1s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `6h`, `8h`, `12h`, `1d`, `3d`, `1w` |
 | `Category` | `SPOT`, `LINEAR`, `INVERSE` | `spot`, `linear`, `inverse` |
 | `ExchangeId` | `BINANCE_SPOT`, `BINANCE_LINEAR`, `BINANCE_INVERSE`, `BYBIT_SPOT`, `BYBIT_LINEAR`, `BYBIT_INVERSE` | `binance_spot`, `binance_linear`, `binance_inverse`, `bybit_spot`, `bybit_linear`, `bybit_inverse` |
+| `TargetPosition` | `FLAT`, `LONG_ALL_IN` | `TargetPosition.FLAT`, `TargetPosition.LONG_ALL_IN` |
 <!-- end: constants -->
 
-An interval's constant is the engine's name for it, and the other two are
-their text in capitals. The constants are listed from the engine when the
-package is imported, so a product line the engine gains is a constant here
-without a change to the package.
+An interval's constant is the engine's name for it, and a family's and a
+product line's are their text in capitals. The three are listed from the
+engine when the package is imported, so a product line the engine gains is
+a constant here without a change to the package. A target's constant is
+the engine's name for it too, in capitals with its words apart. It has no
+text of its own, and is written as the constant it is.
 
 **A venue is not a type of its own in Python.** A product line's name
 begins with its venue's, and that is all of a venue the package holds:
@@ -335,6 +352,146 @@ funding ([shared-model.md](shared-model.md#not-changing)).
 **A result's equity curve has one point for every bar,** and its trades
 and its curve read as tuples, built anew each time they are read.
 
+## Strategies
+
+**A strategy is a class derived from `Strategy` that defines `on_bar`.**
+An engine drives it bar by bar, through three callbacks:
+
+<!-- begin: callbacks -->
+| Callback | Called | Returns |
+| --- | --- | --- |
+| `on_start(ctx)` | Once, before the first bar | `None` |
+| `on_bar(ctx, bar)` | Once for every candle, in the order the run was given them | A `TargetPosition`, or `None` to leave the position as it is |
+| `on_finish(ctx)` | Once, after the last bar, unless a callback failed | `None` |
+<!-- end: callbacks -->
+
+`ctx` is a `StrategyContext`, the engine's state at that moment, and `bar`
+a `Candle`. A class defines `on_bar` and, where it has a use for them, the
+other two, which otherwise do nothing.
+
+```python
+>>> class EnterThenExit(qf.Strategy):
+...     """Goes long on the first bar and flat on the third."""
+...
+...     def __init__(self):
+...         self.bars = 0
+...
+...     def on_bar(self, ctx, bar):
+...         self.bars += 1
+...         if self.bars == 1:
+...             return qf.TargetPosition.LONG_ALL_IN
+...         if self.bars == 3:
+...             return qf.TargetPosition.FLAT
+...         return None
+...
+>>> strategy = EnterThenExit()
+>>> ctx = qf.StrategyContext(market=market, now_ms=candle.open_time_ms, cash=Decimal("1000"), position_qty=0)
+>>> strategy.on_bar(ctx, candle)
+TargetPosition.LONG_ALL_IN
+>>> strategy.on_bar(ctx, candle) is None
+True
+>>> strategy.on_bar(ctx, candle)
+TargetPosition.FLAT
+```
+
+The callbacks are called here by hand, with a context built by hand, as a
+test of a strategy calls them. **The function that runs a strategy in the
+engine is bound by the story that follows.** Until then the engine is
+reached by the package's own tests alone, which hold every rule of this
+section to it.
+
+**The class is the strategy's own.** It takes whatever arguments its
+`__init__` does, which is how a [strategy bundle's](bundle-spec.md#params)
+parameters reach it, and it keeps its state in itself. Two things are
+asked of it:
+
+- **It defines `on_bar`.** A class that has none cannot be built, and nor
+  can `Strategy` itself.
+- **It is named by its `name`, a `str`, where it has one,** on the class or
+  on the object, and by its class's name otherwise. The name is how a
+  failure names the strategy, and how a host records a run of it.
+
+**A context is the engine's state as the callback is called,** four
+values and nothing of the engine to reach through them:
+
+- **`market`** is the market the run is on.
+- **`now_ms`** is the time of the callback: in a backtest, the open time
+  of the bar, and for `on_start` and `on_finish` that of the first bar and
+  of the last.
+- **`cash`** is the quote currency held and **`position_qty`** the base
+  asset: in a backtest, after any fill at that bar's open.
+
+An engine says what its contexts hold, and these are a backtest's, the
+one engine a Python strategy runs in so far. Each callback is handed a
+context and a bar of its own, built anew. What a context said it still
+says when the run has moved on, and a bar is equal to the candle the run
+was given, digit for digit.
+
+**`on_bar` returns the position to hold after the bar:**
+`TargetPosition.LONG_ALL_IN`, `TargetPosition.FLAT`, or `None` to leave
+the position as it is. A backtest fills a decision at the next bar's open,
+and asking for the position already held does nothing. **Nothing else is
+read as a decision,** and `on_start` and `on_finish` return `None`, where
+a decision returned from either would otherwise be dropped without a word:
+
+<!-- begin: returns -->
+| Returned | From | The run fails with |
+| --- | --- | --- |
+| `"FLAT"` | `on_bar` | `TypeError: on_bar must return a TargetPosition or None, not str` |
+| `True` | `on_bar` | `TypeError: on_bar must return a TargetPosition or None, not bool` |
+| `1` | `on_bar` | `TypeError: on_bar must return a TargetPosition or None, not int` |
+| `qf.TargetPosition` | `on_bar` | `TypeError: on_bar must return a TargetPosition or None, not type` |
+| `qf.TargetPosition.FLAT` | `on_start` | `TypeError: on_start must return None, not TargetPosition` |
+| `0` | `on_finish` | `TypeError: on_finish must return None, not int` |
+<!-- end: returns -->
+
+An `async def` returns a coroutine, which is refused the same way.
+
+**A callback that fails ends the run.** No callback follows it, so
+`on_finish` is not called after a failure, and a callback that returns
+what it may not has failed as one that raised has.
+
+- **Python is raised the exception itself:** the object the callback
+  raised, with its traceback as it was, and one note that says where the
+  strategy failed. Nothing is wrapped around it, so `except
+  ZeroDivisionError` catches a division by zero, and `KeyboardInterrupt`
+  interrupts a run as it interrupts any code.
+- **A host that is not Python is told the same as text:** the command line
+  and a server's worker have the engine's error, which is that line
+  followed by the exception as Python itself writes it, with its
+  traceback and the exceptions it came from.
+
+<!-- begin: failure as told -->
+```text
+the strategy "EnterThenExit" failed in on_bar, at the bar that opened at 1700000000000
+Traceback (most recent call last):
+  File "strategy.py", line 12, in on_bar
+    average = self.total / self.count
+              ~~~~~~~~~~~^~~~~~~~~~~~
+ZeroDivisionError: division by zero
+```
+<!-- end: failure as told -->
+
+The first line is the note, and names the bar by its open time.
+
+**A strategy decides from the bars it has been handed and from its own
+state,** as the engine asks of every strategy: no clock, no randomness and
+no I/O, so that the same bars give the same decisions on every run. Python
+adds one thing to mind. Arithmetic on `Decimal` follows the decimal
+context of the thread a callback runs on, which the engine neither sets
+nor reads: a strategy that needs another precision or rounding sets it
+itself.
+
+**Three callbacks, a context of four values and two targets are all of
+the boundary.** No callback is called for a webhook, an order, a fill or a
+store, and a strategy is handed no exchange, no account and no credential
+([what is not bound](#what-is-not-bound)).
+
+The package's tests hold a strategy written in Python to the cases the
+engine's own tests write from one written in Rust,
+`tests/fixtures/strategy_cases.json`: every callback in order, with the
+state it was handed digit for digit, and the result.
+
 ## Decimal and float
 
 The engine computes in exact decimals, and Python's numeric libraries in
@@ -414,11 +571,16 @@ Everything a value gives, by the name it is read with:
 | `BacktestResult` | `max_drawdown_pct` | `Decimal` | The largest fall of the close-marked equity from an earlier peak, in percent |
 | `BacktestResult` | `trades` | `tuple of ClosedTrade` | Every round trip, in order |
 | `BacktestResult` | `equity_curve` | `tuple of EquityPoint` | The close-marked equity, one point per bar: it leaves out the close-out fee, which `final_equity` includes |
+| `StrategyContext` | `market` | `MarketId` | The market the run is on |
+| `StrategyContext` | `now_ms` | `int` | The time of the callback: in a backtest, the open time of the bar |
+| `StrategyContext` | `cash` | `Decimal` | The quote currency held |
+| `StrategyContext` | `position_qty` | `Decimal` | The base asset held |
 <!-- end: fields -->
 
 A record's fields are the names it is built with, in that order. Every
 time is milliseconds since the Unix epoch, UTC, and every amount of a
-backtest is in the quote currency.
+backtest is in the quote currency. A `TargetPosition` has no field, and a
+`Strategy` none but those its class gives it.
 
 ## Equality, keys and repr
 
@@ -436,6 +598,8 @@ backtest is in the quote currency.
 | `ClosedTrade` | Every field is | no |
 | `EquityPoint` | Both fields are | no |
 | `BacktestResult` | Every field is, trades and curve in order | no |
+| `TargetPosition` | It is the same target | yes |
+| `StrategyContext` | Every field is | no |
 <!-- end: keys -->
 
 **Decimals are compared by value:** a candle that opened at
@@ -445,18 +609,23 @@ tell the two apart.
 **A value is equal only to a value of its own type.** A `Symbol` is not
 equal to its text, and a `MarketId` is not equal to a tuple of its parts.
 
-**The identity types are keys,** of a dict or a set, and the records are
-not: `hash()` of a candle is a `TypeError`. The engine's records have no
-hash either.
+**The identity types are keys,** of a dict or a set, and so is a target.
+The records are not: `hash()` of a candle is a `TypeError`. The engine's
+records have no hash either.
 
 **`repr()` is an expression that builds the value again,** digit for
 digit, wherever that is short enough to read. The two that hold
 sequences count them instead, and their `repr` cannot be evaluated:
 `CandleBatch(<1440 candles>)`, and a result's `trades=<3 trades>,
-equity_curve=<1440 points>`.
+equity_curve=<1440 points>`. A target's `repr` names its constant,
+`TargetPosition.FLAT`, which is the target itself.
 
 **A value cannot be pickled or deep-copied yet.** No story has asked for
 it; one that needs to send a value between processes adds it.
+
+**A strategy is not a value.** It is an object like any other of
+Python's, equal to itself alone and a key by what it is, unless its class
+says otherwise, and its `repr` is its class's own.
 
 ## Refusals
 
@@ -487,6 +656,11 @@ One refusal of each kind, as it is written and as it is refused:
 | `qf.BacktestConfig(initial_cash=1, fee_bps=-1, close_out_at_end=True)` | `ValueError: invalid configuration: fee_bps must be zero or greater, got -1` |
 | `qf.BacktestConfig(initial_cash=1, fee_bps=0, close_out_at_end=1)` | `TypeError: close_out_at_end must be a bool, not int` |
 | `qf.ClosedTrade(symbol="BTCUSDT", entry_time_ms=0, exit_time_ms=1, entry_price=1, exit_price=1, qty=1, gross_quote_pnl=0, entry_order_id="has space")` | `ValueError: invalid venue order id "has space": 1 to 128 characters without spaces` |
+| `qf.StrategyContext(market="binance_spot", now_ms=0, cash=1, position_qty=0)` | `TypeError: market must be a MarketId, not str` |
+| `qf.StrategyContext(market=qf.MarketId("binance_spot", "BTCUSDT", "1m"), now_ms=0, cash=0.5, position_qty=0)` | `TypeError: cash must be a decimal.Decimal or an int, not float: a float is never read as a decimal; convert it with decimal_from_f64` |
+| `qf.TargetPosition()` | `TypeError: cannot create 'quantforge_py.TargetPosition' instances` |
+| `qf.Strategy()` | `TypeError: Strategy cannot be built: derive a class from it that defines on_bar` |
+| `type("Undecided", (qf.Strategy,), {})()` | `TypeError: Undecided cannot be built: it does not define on_bar` |
 | `qf.decimal_from_f64(float("inf"))` | `ValueError: cannot convert inf to a decimal: not finite` |
 | `qf.decimal_from_f64(1)` | `TypeError: value must be a float, not int` |
 | `qf.decimal_to_f64(0.5)` | `TypeError: value must be a decimal.Decimal or an int, not float` |
@@ -536,10 +710,9 @@ change these two.
 **No credential crosses.** These are values: none holds an exchange key, a
 database password or a connection, and building one opens nothing.
 
-Three more parts of the engine belong to the stories that follow:
+Two more parts of the engine belong to the stories that follow:
 
 | What | Story |
 | --- | --- |
-| `Strategy`, `StrategyContext` and `TargetPosition`: the strategy a Python class implements | QUA-464 |
-| `run_backtest`, and its refusal of a market that is not Spot | QUA-470 |
+| `run_backtest`, the function that runs a strategy, and its refusal of a market that is not Spot | QUA-470 |
 | NumPy arrays of a batch's columns, and a batch's market kept with it | QUA-475 |

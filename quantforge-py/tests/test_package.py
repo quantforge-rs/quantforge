@@ -1,6 +1,7 @@
 """The package as Python sees it: what it is called, what it publishes, and
 what it says about the build it is."""
 
+import inspect
 import pathlib
 import re
 import sys
@@ -29,8 +30,14 @@ TYPES = [
     "ClosedTrade",
     "EquityPoint",
     "BacktestResult",
+    "TargetPosition",
+    "StrategyContext",
+    "Strategy",
 ]
 FUNCTIONS = ["decimal_to_f64", "decimal_from_f64"]
+
+# The one class that exists to be derived from.
+DERIVED_FROM = "Strategy"
 
 
 def public(module) -> list[str]:
@@ -50,7 +57,7 @@ def test_every_published_name_is_the_extension_modules_own():
         assert getattr(quantforge_py, name) is getattr(_native, name), name
 
 
-def test_every_type_is_a_class_of_the_package_that_cannot_be_derived_from():
+def test_every_type_is_a_class_of_the_package_and_a_strategy_alone_is_derived_from():
     for name in TYPES:
         bound = getattr(quantforge_py, name)
         assert isinstance(bound, type), name
@@ -58,6 +65,10 @@ def test_every_type_is_a_class_of_the_package_that_cannot_be_derived_from():
         assert (bound.__module__, bound.__qualname__) == ("quantforge_py", name)
         assert repr(bound) == f"<class 'quantforge_py.{name}'>"
         assert bound.__doc__, name
+        if name == DERIVED_FROM:
+            derived = type("Derived", (bound,), {"on_bar": lambda self, ctx, bar: None})
+            assert isinstance(derived(), bound)
+            continue
         with pytest.raises(TypeError, match="not an acceptable base type"):
             type("Derived", (bound,), {})
     for name in FUNCTIONS:
@@ -73,6 +84,19 @@ def test_the_extension_module_is_private_and_built_for_the_stable_abi():
     # Windows has no stable ABI tag for an extension's file name.
     assert extension.name == ("_native.pyd" if sys.platform == "win32" else "_native.abi3.so")
     assert extension.parent == pathlib.Path(quantforge_py.__file__).parent
+
+
+def test_the_extension_module_holds_one_private_entry_which_the_package_does_not_publish():
+    private = [name for name in vars(_native) if name.startswith("_") and not name.startswith("__")]
+    # The engine run on a strategy, for the package's own tests: the
+    # function a user calls is bound by the story that follows.
+    assert private == ["_backtest"]
+    assert not hasattr(quantforge_py, "_backtest")
+    assert "_backtest" not in quantforge_py.__all__
+    assert str(inspect.signature(_native._backtest)) == (
+        "(market, candles, strategy, config, *, embedded=False)"
+    )
+    assert _native._backtest.__doc__
 
 
 def test_the_version_is_the_crates_own(crate):

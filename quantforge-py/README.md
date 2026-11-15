@@ -5,8 +5,8 @@ strategies written in Python, run on the same deterministic Rust engine as
 the `quantforge` command line.
 
 **Not released yet.** The package is being built in the open. So far it
-says what it is, and holds the engine's types, each built by the engine's
-own rule:
+says what it is, holds the engine's types, each built by the engine's own
+rule, and has the class a strategy derives from:
 
 ```python
 from decimal import Decimal
@@ -38,6 +38,29 @@ qf.BacktestConfig(initial_cash=Decimal("10000"), fee_bps=10, close_out_at_end=Tr
 A price is a `decimal.Decimal` on both sides, and a value the engine would
 refuse is refused as it is built, in the engine's words:
 `qf.Interval("7m")` raises `ValueError: invalid interval: 7m`.
+
+A strategy is a class derived from `qf.Strategy` that defines `on_bar`,
+which the engine calls once for every closed candle:
+
+```python
+class EnterThenExit(qf.Strategy):
+    """Goes long on the first bar and flat on the third."""
+
+    def __init__(self):
+        self.bars = 0
+
+    def on_bar(self, ctx, bar):
+        self.bars += 1
+        if self.bars == 1:
+            return qf.TargetPosition.LONG_ALL_IN
+        if self.bars == 3:
+            return qf.TargetPosition.FLAT
+        return None  # leave the position as it is
+```
+
+`ctx` is the engine's state at the bar: the market, the time, the cash and
+the position. An exception a strategy raises ends the run as itself, with
+its traceback. The function that runs a strategy over candles comes next.
 
 The package installs as `quantforge-py` and imports as `quantforge_py`.
 `quantforge` on PyPI is another project.

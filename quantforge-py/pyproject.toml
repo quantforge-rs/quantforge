@@ -30,13 +30,18 @@ Documentation = "https://github.com/quantforge-rs/quantforge/blob/main/docs/pyth
 Changelog = "https://github.com/quantforge-rs/quantforge/blob/main/CHANGELOG.md"
 
 [dependency-groups]
-test = ["pytest>=8"]
+test = ["pytest>=9"]
 
 # The tests run against the installed package (docs/python-package.md).
 [tool.pytest.ini_options]
-minversion = "8"
+minversion = "9"
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-config", "--strict-markers", "--import-mode=importlib"]
+# Some tests wait on another thread. One that waits for good ends the run
+# after this many seconds, with every thread's traceback, instead of holding
+# the job until its own limit; pytest exits on a timeout from 9.0 on.
+faulthandler_timeout = 60
+faulthandler_exit_on_timeout = true
 
 [tool.maturin]
 # The package is `python/quantforge_py/`, and the extension module is built

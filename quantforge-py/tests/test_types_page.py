@@ -1,7 +1,8 @@
 """`docs/python-types.md`, held to the package: the types it says are bound,
 every signature, constant and field, which types are keys, each refusal it
-shows, its examples, and its statement that no futures execution type is
-public in Python."""
+shows, its examples, what it says of a strategy's callbacks and of a run
+that fails, and its statement that no futures execution type is public in
+Python."""
 
 import copy
 import doctest
@@ -38,6 +39,12 @@ def classes() -> dict[str, type]:
     return {name: getattr(qf, name) for name in bound() if isinstance(getattr(qf, name), type)}
 
 
+def values() -> dict[str, type]:
+    """The classes whose objects are values: every one but `Strategy`,
+    which is derived from, and whose objects hold a state of their own."""
+    return {name: cls for name, cls in classes().items() if cls is not qf.Strategy}
+
+
 def members(cls, kind: str) -> list[str]:
     """A class's own public members of one kind, as its dict holds them."""
     return [
@@ -65,12 +72,13 @@ def samples() -> dict[str, list]:
     sent = qf.ClosedTrade(**fill, entry_order_id="8389765519", exit_order_id="8389765520")
     simulated = qf.ClosedTrade(**fill)
     point = qf.EquityPoint(open_time_ms=0, equity=1000)
+    market = qf.MarketId("bybit_inverse", "BTCUSD", "8h")
     return {
         "Symbol": [qf.Symbol("BTCUSDT")],
         "Interval": [qf.Interval.M1],
         "Category": [qf.Category.INVERSE],
         "ExchangeId": [qf.ExchangeId.BYBIT_INVERSE],
-        "MarketId": [qf.MarketId("bybit_inverse", "BTCUSD", "8h")],
+        "MarketId": [market],
         "Candle": [known, unknown],
         "CandleBatch": [qf.CandleBatch.from_candles([known, unknown])],
         "BacktestConfig": [
@@ -88,6 +96,10 @@ def samples() -> dict[str, list]:
                 trades=[sent, simulated],
                 equity_curve=[point],
             )
+        ],
+        "TargetPosition": list(qf.TargetPosition.ALL),
+        "StrategyContext": [
+            qf.StrategyContext(market=market, now_ms=0, cash=Decimal("1000.00"), position_qty=0)
         ],
     }
 
@@ -189,8 +201,9 @@ def test_the_page_lists_every_field_with_what_it_gives(page, quoted):
 
 def test_the_page_says_which_types_are_keys(page, quoted):
     rows = page(PAGE).rows("keys")
-    assert [quoted(name) for name, _, _ in rows] == list(classes())
+    assert [quoted(name) for name, _, _ in rows] == list(values())
     made = samples()
+    assert list(made) == list(values()), "a sample of every value"
     for name, equal_when, key in rows:
         assert equal_when
         assert key in ("yes", "no"), key
@@ -203,16 +216,18 @@ def test_the_page_says_which_types_are_keys(page, quoted):
 
 
 def copy_of(value):
-    """A value equal to `value` and not the same object: its repr evaluated."""
+    """A value equal to `value` and not the same object: its repr evaluated.
+    A target is the one exception: its repr names its constant, which is the
+    target itself."""
     again = eval(repr(value), {"__builtins__": {}}, {name: getattr(qf, name) for name in bound()})
-    assert again is not value
+    assert (again is value) == (type(value) is qf.TargetPosition)
     return again
 
 
 def test_every_refusal_the_page_shows_is_refused_so(page, quoted):
     rows = page(PAGE).rows("refusals")
     assert len(rows) > 20
-    names = {"qf": qf, "Decimal": Decimal, "__builtins__": {"float": float}}
+    names = {"qf": qf, "Decimal": Decimal, "__builtins__": {"float": float, "type": type}}
     kinds = {"ValueError": ValueError, "TypeError": TypeError}
     for written, refusal in rows:
         kind, _, message = quoted(refusal).partition(": ")
@@ -235,6 +250,95 @@ def test_every_example_on_the_page_runs_as_written(page):
     results = doctest.DocTestRunner(verbose=False).run(session, out=said.append)
     assert results.failed == 0, "".join(said)
     assert results.attempted == len(session.examples)
+
+
+def test_the_page_lists_the_callbacks_a_strategy_has(page, quoted):
+    rows = page(PAGE).rows("callbacks")
+    written = [quoted(callback) for callback, _, _ in rows]
+    # In the order an engine calls them.
+    assert written == ["on_start(ctx)", "on_bar(ctx, bar)", "on_finish(ctx)"]
+    callbacks = {}
+    for name in members(qf.Strategy, "method_descriptor"):
+        signature = inspect.signature(getattr(qf.Strategy, name))
+        taken = list(signature.parameters.values())[1:]
+        callbacks[name] = f"{name}{signature.replace(parameters=taken)}"
+    assert sorted(written) == sorted(callbacks.values())
+    for _, called, returns in rows:
+        assert called and returns
+    # The class's own three decide nothing and do nothing: what a strategy
+    # gets where its class leaves a callback as it is.
+    plain = type("Plain", (qf.Strategy,), {"on_bar": lambda self, ctx, bar: None})()
+    assert qf.Strategy.on_start(plain, None) is None
+    assert qf.Strategy.on_bar(plain, None, None) is None
+    assert qf.Strategy.on_finish(plain, None) is None
+
+
+def returning(callback: str, value):
+    """A strategy that returns `value` from `callback`, the first time it
+    is called, and `None` from every other call."""
+
+    def returns(self, *handed):
+        if self.returned:
+            return None
+        self.returned = True
+        return value
+
+    body = {"on_bar": lambda self, ctx, bar: None, "returned": False, callback: returns}
+    return type("Returns", (qf.Strategy,), body)()
+
+
+def test_every_return_the_page_shows_fails_the_run_so(page, quoted, bench, market, minutes):
+    rows = page(PAGE).rows("returns")
+    assert {quoted(callback) for _, callback, _ in rows} == {"on_start", "on_bar", "on_finish"}
+    config = qf.BacktestConfig(initial_cash=1000, fee_bps=0, close_out_at_end=True)
+    for returned, callback, failure in rows:
+        kind, _, message = quoted(failure).partition(": ")
+        assert kind == "TypeError"
+        value = eval(quoted(returned), {"qf": qf, "__builtins__": {}})
+        strategy = returning(quoted(callback), value)
+        with pytest.raises(TypeError) as caught:
+            bench(market, minutes((100, 100), (100, 100)), strategy, config)
+        assert type(caught.value) is TypeError, returned
+        assert str(caught.value) == message, returned
+    # What the page says is taken is taken: a target, and nothing at all.
+    for value in (*qf.TargetPosition.ALL, None):
+        bench(market, minutes((100, 100), (100, 100)), returning("on_bar", value), config)
+
+
+def test_the_failure_the_page_shows_is_what_the_engine_is_told(page, bench):
+    lines = page(PAGE).section("failure as told")
+    assert (lines[0], lines[-1]) == ("```text", "```")
+    shown = lines[1:-1]
+
+    class EnterThenExit(qf.Strategy):
+        total = count = 0
+
+        def on_bar(self, ctx, bar):
+            average = self.total / self.count
+            return qf.TargetPosition.FLAT if average > bar.close else None
+
+    opened = 1_700_000_000_000
+    bar = qf.Candle(
+        open_time_ms=opened, close_time_ms=opened + 59_999, open=1, high=1, low=1, close=1, volume=1
+    )
+    market = qf.MarketId("binance_spot", "BTCUSDT", "1m")
+    config = qf.BacktestConfig(initial_cash=1000, fee_bps=0, close_out_at_end=True)
+    with pytest.raises(RuntimeError) as told:
+        bench(market, [bar], EnterThenExit(), config, embedded=True)
+
+    def anywhere(line: str) -> str:
+        """A traceback's line without the file and the line number, which
+        are the reader's own."""
+        return re.sub(r'^  File ".*", line \d+, in ', '  File "...", line ..., in ', line)
+
+    assert [anywhere(line) for line in str(told.value).splitlines()] == [
+        anywhere(line) for line in shown
+    ]
+    assert anywhere(shown[2]) != shown[2], "the page shows where it was raised"
+    # The first line is the note Python finds on the exception itself.
+    with pytest.raises(ZeroDivisionError) as raised:
+        bench(market, [bar], EnterThenExit(), config)
+    assert raised.value.__notes__ == [shown[0]]
 
 
 def public_names(source: str) -> set[str]:
