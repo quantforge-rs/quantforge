@@ -129,7 +129,7 @@ impl Record {
     /// an event within their account, and an operation, its reservation
     /// and a cycle by the number the store gave. A name alone says less: a
     /// profile of the same name on another account has records of its own.
-    pub(super) fn identity(&self) -> (RecordKind, Option<ExecutionScope>, String) {
+    pub(super) fn identity(&self) -> (RecordKind, Option<ExecutionScope>, Vec<String>) {
         let scope = self.scope();
         let within = match self {
             Self::Signal(_) | Self::Intent(_) => Some(scope.clone()),
@@ -138,7 +138,16 @@ impl Record {
             }
             Self::Operation(_) | Self::Cycle(_) | Self::Reservation(_) => None,
         };
-        (self.kind(), within, self.name())
+        let named = match self {
+            // A fill is known by two things, its symbol and its trade ID,
+            // and either may hold the stroke its name joins them with.
+            Self::Fill(fill) => vec![
+                fill.fill().instrument.symbol.to_string(),
+                fill.trade_id().to_string(),
+            ],
+            _ => vec![self.name()],
+        };
+        (self.kind(), within, named)
     }
 
     /// Whose record it is: the venue, the product family, the environment,

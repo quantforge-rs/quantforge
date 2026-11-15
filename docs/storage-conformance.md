@@ -419,8 +419,9 @@ rows behind the store's back.
 - `execution.orders_fills_and_cycles`: an order's identity is recorded before
   it is sent and then only learns: its venue ID, the venue's report, each fill
   once; an entry's first fill opens the position's cycle, numbered as the
-  operation that opened it, and an exit sent again is another order of its
-  operation
+  operation that opened it, an exit sent again is another order of its
+  operation, and a fill is known by its symbol and its trade ID, each for
+  itself
 - `execution.incidents_and_the_outbox`: an incident is raised once under its
   key and cleared once, with the event that tells of it written in the same
   unit; pending events are listed oldest first up to a limit, and an event

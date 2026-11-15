@@ -41,7 +41,8 @@ BINANCE = Line("binance", "linear", "demo", "key_fingerprint", FINGERPRINT, "mai
                {"SOLUSDT": "USDT"})
 COIN = Line("bybit", "inverse", "demo", "venue", "71002233", "coin", "000000", {"BTCUSD": "BTC"})
 TESTNET = Line("bybit", "linear", "testnet", "venue", "71002233", "main", "k3x9p2", SYMBOLS)
-SPOT = Line("bybit", "spot", "demo", "venue", "71002233", None, None, {"BTCUSDT": "USDT"})
+SPOT = Line("bybit", "spot", "demo", "venue", "71002233", None, None,
+            {"BTCUSDT": "USDT", "BTC/USDT": "USDT", "BTC": "USDT"})
 LINES = {"bybit": BYBIT, "bybit second": SECOND, "binance": BINANCE, "bybit coin": COIN,
          "bybit testnet": TESTNET, "bybit spot": SPOT}
 
@@ -989,7 +990,7 @@ def scenarios():
 
     s = Scenario(
         "execution.orders_fills_and_cycles",
-        "an order's identity is recorded before it is sent and then only learns: its venue ID, the venue's report, each fill once; an entry's first fill opens the position's cycle, numbered as the operation that opened it, and an exit sent again is another order of its operation",
+        "an order's identity is recorded before it is sent and then only learns: its venue ID, the venue's report, each fill once; an entry's first fill opens the position's cycle, numbered as the operation that opened it, an exit sent again is another order of its operation, and a fill is known by its symbol and its trade ID, each for itself",
         active_at=T,
     )
     alert = entry(BYBIT)
@@ -1073,6 +1074,13 @@ def scenarios():
     s.column("position_cycles", "closed_at_ms", [str(T + 74_500)])
     s.column("execution_intents", "operation_id", ["1", "2"])
     s.column("execution_intents", "cycle_id", ["1", "1"])
+    # A fill is known by two things, its symbol and its trade ID. Joined
+    # with a stroke these two read alike, and they are two fills.
+    alike = [fill_record(SPOT, "BTC/USDT", "7", None, "0.5", "67000.00", "0.0335", T + 80_000),
+             fill_record(SPOT, "BTC", "USDT/7", None, "0.5", "67000.00", "0.0335", T + 80_000)]
+    s.commit(Unit(T + 80_000, changes=[(fill, None) for fill in alike]), "applied")
+    s.fill(SPOT, "BTC/USDT", "7")
+    s.fill(SPOT, "BTC", "USDT/7")
     out.append(s)
 
     s = Scenario(

@@ -890,6 +890,14 @@
       "kind": "cycle",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"cycle\":{\"id\":1,\"key\":{\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"profile\":\"main\",\"side\":\"Long\",\"opened_by\":1,\"protection\":\"Closed\",\"recorded_stop\":null,\"close_reason\":\"ExitSignal\",\"pnl\":null,\"opened_at_ms\":1792454404000,\"closed_at_ms\":1792454474500}}"
     },
+    "fill-6": {
+      "kind": "fill",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Spot\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":null},\"fill\":{\"trade_id\":\"7\",\"venue_order_id\":\"8389765519\",\"client_id\":null,\"instrument\":{\"exchange\":\"BybitSpot\",\"symbol\":\"BTC/USDT\",\"settle\":\"USDT\"},\"origin\":\"Client\",\"side\":\"Buy\",\"price\":\"67000.00\",\"quantity\":{\"Base\":\"0.5\"},\"fee\":{\"amount\":\"0.0335\",\"asset\":\"USDT\"},\"realized_pnl\":null,\"time_ms\":1792454480000,\"source\":\"Query\"},\"operation\":null,\"cycle\":null}"
+    },
+    "fill-7": {
+      "kind": "fill",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Spot\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":null},\"fill\":{\"trade_id\":\"USDT/7\",\"venue_order_id\":\"8389765519\",\"client_id\":null,\"instrument\":{\"exchange\":\"BybitSpot\",\"symbol\":\"BTC\",\"settle\":\"USDT\"},\"origin\":\"Client\",\"side\":\"Buy\",\"price\":\"67000.00\",\"quantity\":{\"Base\":\"0.5\"},\"fee\":{\"amount\":\"0.0335\",\"asset\":\"USDT\"},\"realized_pnl\":null,\"time_ms\":1792454480000,\"source\":\"Query\"},\"operation\":null,\"cycle\":null}"
+    },
     "incident-4": {
       "kind": "incident",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"op/1/unsettled_entry\",\"kind\":\"UnsettledEntry\",\"halts\":{\"Position\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"operation\":1,\"cycle\":null,\"message\":\"the entry of operation 1 was still unsettled 60 s after it was sent\",\"opened_at_ms\":1792454401000,\"cleared\":null}"
@@ -1074,7 +1082,7 @@
       "kind": "order",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Inverse\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"coin\"},\"operation\":1,\"client_order_id\":\"qf1-000000-1-1-e1\",\"instrument\":{\"exchange\":\"BybitInverse\",\"symbol\":\"BTCUSD\",\"settle\":\"BTC\"},\"recorded_at_ms\":1792454403000,\"venue_order_id\":\"8389765519\",\"outcome_unknown\":false,\"refusal\":null,\"evidence\":{\"Futures\":{\"instrument\":{\"exchange\":\"BybitInverse\",\"symbol\":\"BTCUSD\",\"settle\":\"BTC\"},\"venue_order_id\":\"8389765519\",\"client_id\":\"qf1-000000-1-1-e1\",\"side\":\"Buy\",\"reduce_only\":false,\"origin\":\"Client\",\"status\":\"Filled\",\"requested\":{\"Contracts\":\"100\"},\"filled\":{\"Contracts\":\"100\"},\"average_price\":null,\"source\":\"Query\",\"updated_at_ms\":1792454404000}}}"
     },
-    "fill-6": {
+    "fill-8": {
       "kind": "fill",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Inverse\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"coin\"},\"fill\":{\"trade_id\":\"t-1\",\"venue_order_id\":\"8389765519\",\"client_id\":\"qf1-000000-1-1-e1\",\"instrument\":{\"exchange\":\"BybitInverse\",\"symbol\":\"BTCUSD\",\"settle\":\"BTC\"},\"origin\":\"Client\",\"side\":\"Buy\",\"price\":\"67010.0\",\"quantity\":{\"Contracts\":\"100\"},\"fee\":{\"amount\":\"0.00000090\",\"asset\":\"BTC\"},\"realized_pnl\":null,\"time_ms\":1792454404000,\"source\":\"Query\"},\"operation\":1,\"cycle\":1}"
     },
@@ -6402,7 +6410,7 @@
     },
     {
       "id": "execution.orders_fills_and_cycles",
-      "doc": "an order's identity is recorded before it is sent and then only learns: its venue ID, the venue's report, each fill once; an entry's first fill opens the position's cycle, numbered as the operation that opened it, and an exit sent again is another order of its operation",
+      "doc": "an order's identity is recorded before it is sent and then only learns: its venue ID, the venue's report, each fill once; an entry's first fill opens the position's cycle, numbered as the operation that opened it, an exit sent again is another order of its operation, and a fill is known by its symbol and its trade ID, each for itself",
       "steps": [
         {
           "op": "bind",
@@ -7046,6 +7054,48 @@
               "1"
             ]
           ]
+        },
+        {
+          "op": "commit",
+          "unit": {
+            "at_ms": 1792454480000,
+            "fence": null,
+            "pool": null,
+            "delivery": null,
+            "changes": [
+              {
+                "record": "fill-6",
+                "expect": null
+              },
+              {
+                "record": "fill-7",
+                "expect": null
+              }
+            ]
+          },
+          "expect": "applied"
+        },
+        {
+          "op": "fill",
+          "scope": "bybit spot",
+          "instrument": {
+            "exchange": "BybitSpot",
+            "symbol": "BTC/USDT",
+            "settle": "USDT"
+          },
+          "trade": "7",
+          "expect": "fill-6"
+        },
+        {
+          "op": "fill",
+          "scope": "bybit spot",
+          "instrument": {
+            "exchange": "BybitSpot",
+            "symbol": "BTC",
+            "settle": "USDT"
+          },
+          "trade": "USDT/7",
+          "expect": "fill-7"
         }
       ]
     },
@@ -8219,7 +8269,7 @@
                 "expect": 1
               },
               {
-                "record": "fill-6",
+                "record": "fill-8",
                 "expect": null
               },
               {
@@ -8261,7 +8311,7 @@
           "op": "fills",
           "cycle": 1,
           "expect": [
-            "fill-6"
+            "fill-8"
           ]
         },
         {
