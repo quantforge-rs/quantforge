@@ -60,7 +60,8 @@
 //!
 //! - no candles: [`EngineError::NoCandles`];
 //! - `initial_cash` not above zero, or `fee_bps` below zero:
-//!   [`EngineError::InvalidConfig`];
+//!   [`EngineError::InvalidConfig`], which [`BacktestConfig::validate`]
+//!   reports for a config before any run;
 //! - a result outside the decimal range, for example an entry at a price so
 //!   small that the quantity cannot be represented: [`EngineError::Overflow`],
 //!   never a panic;
@@ -79,7 +80,7 @@ use tracing::info;
 use crate::EngineError;
 
 /// How a backtest starts and what it charges.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BacktestConfig {
     /// Quote currency to start with; must be above zero.
     pub initial_cash: Decimal,
@@ -89,6 +90,28 @@ pub struct BacktestConfig {
     /// Sell a position still open after the last bar at that bar's close,
     /// recording the trade; otherwise it is only valued at that close.
     pub close_out_at_end: bool,
+}
+
+impl BacktestConfig {
+    /// Checks what [`BacktestEngine::run`] requires of a config, with the
+    /// error a run would report: `initial_cash` above zero, then `fee_bps`
+    /// zero or more. A caller that builds a config long before it runs one,
+    /// as the Python package does, refuses a bad one here.
+    pub fn validate(&self) -> Result<(), EngineError> {
+        if self.initial_cash <= Decimal::ZERO {
+            return Err(EngineError::InvalidConfig(format!(
+                "initial_cash must be greater than 0, got {}",
+                self.initial_cash
+            )));
+        }
+        if self.fee_bps < Decimal::ZERO {
+            return Err(EngineError::InvalidConfig(format!(
+                "fee_bps must be zero or greater, got {}",
+                self.fee_bps
+            )));
+        }
+        Ok(())
+    }
 }
 
 /// Equity at one bar's close: `cash + position × close`, after that bar's
@@ -219,18 +242,7 @@ impl BacktestEngine {
         if candles.is_empty() {
             return Err(EngineError::NoCandles);
         }
-        if self.cfg.initial_cash <= Decimal::ZERO {
-            return Err(EngineError::InvalidConfig(format!(
-                "initial_cash must be greater than 0, got {}",
-                self.cfg.initial_cash
-            )));
-        }
-        if self.cfg.fee_bps < Decimal::ZERO {
-            return Err(EngineError::InvalidConfig(format!(
-                "fee_bps must be zero or greater, got {}",
-                self.cfg.fee_bps
-            )));
-        }
+        self.cfg.validate()?;
 
         let fee_rate = checked(
             self.cfg.fee_bps.checked_div(Decimal::from(10_000)),

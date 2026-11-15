@@ -1,7 +1,7 @@
 """QuantForge for Python: strategies written in Python, run on the same
 deterministic Rust engine as the ``quantforge`` command line.
 
-So far the package only says what it is:
+The package says what it is:
 
 - ``__version__``: the package's own version.
 - ``ENGINE_VERSION``: the version of the engine it was built with, which a
@@ -9,10 +9,58 @@ So far the package only says what it is:
 - ``STORAGE_BACKENDS``: the stores this build can open, ``"sqlite"`` and,
   unless it is the SQLite-only build, ``"postgres"``.
 
+And it holds the engine's types, each built by the engine's own rule and
+refused in the engine's own words:
+
+- ``Symbol``, ``Interval``, ``Category``, ``ExchangeId`` and ``MarketId``:
+  what a market is.
+- ``Candle`` and ``CandleBatch``: one bar, and bars held column by column.
+- ``BacktestConfig``, ``ClosedTrade``, ``EquityPoint`` and
+  ``BacktestResult``: a backtest's settings and what one produces.
+- ``decimal_to_f64`` and ``decimal_from_f64``: the one crossing between an
+  exact decimal and a float.
+
+A price, a quantity or an amount is a ``decimal.Decimal`` on both sides of
+every one of them, and never a float.
+
 The names come from the compiled extension module, ``quantforge_py._native``,
 which is private: import them from here.
 """
 
-from ._native import ENGINE_VERSION, STORAGE_BACKENDS, __version__
+from ._native import (
+    ENGINE_VERSION,
+    STORAGE_BACKENDS,
+    BacktestConfig,
+    BacktestResult,
+    Candle,
+    CandleBatch,
+    Category,
+    ClosedTrade,
+    EquityPoint,
+    ExchangeId,
+    Interval,
+    MarketId,
+    Symbol,
+    __version__,
+    decimal_from_f64,
+    decimal_to_f64,
+)
 
-__all__ = ["__version__", "ENGINE_VERSION", "STORAGE_BACKENDS"]
+__all__ = [
+    "__version__",
+    "ENGINE_VERSION",
+    "STORAGE_BACKENDS",
+    "Symbol",
+    "Interval",
+    "Category",
+    "ExchangeId",
+    "MarketId",
+    "Candle",
+    "CandleBatch",
+    "BacktestConfig",
+    "ClosedTrade",
+    "EquityPoint",
+    "BacktestResult",
+    "decimal_to_f64",
+    "decimal_from_f64",
+]

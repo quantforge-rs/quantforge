@@ -6,10 +6,11 @@ Python will run through, on the same deterministic Rust engine as the
 it holds, which Pythons it runs on, how it is built and tested, and what
 adding it changed for the `quantforge` crate. The code is `quantforge-py/`.
 
-**The package is a scaffold, and is not released.** It builds, installs and
-imports, and says what it is. The engine's types, the strategy adapter, the
-backtest entry point and the candle readers are bound by the stories that
-follow.
+**The package is not released, and does not run a strategy yet.** It
+builds, installs and imports, says what it is, and holds the engine's types:
+what a market is, candles, and a backtest's settings and result
+([the Python types](python-types.md)). The strategy adapter, the backtest
+entry point and the candle readers are bound by the stories that follow.
 
 ## Contents
 
@@ -62,7 +63,8 @@ directory.
 
 ## What it holds
 
-So far, what the package says about itself:
+What the package says about itself, the engine's types, and the two
+conversions between a decimal and a float:
 
 <!-- begin: public names -->
 | Name | What it is |
@@ -70,6 +72,19 @@ So far, what the package says about itself:
 | `__version__` | The package's own version, such as `0.1.0` |
 | `ENGINE_VERSION` | The version of the engine the package was built with, such as `0.2.0`: the `quantforge` crate's |
 | `STORAGE_BACKENDS` | The stores the build can open, by the names `--storage` takes: `("sqlite", "postgres")`, or `("sqlite",)` for the SQLite-only build |
+| `Symbol` | A trading symbol, such as `BTCUSDT` |
+| `Interval` | A candle interval, such as `1m` |
+| `Category` | A product family: `spot`, `linear` or `inverse` |
+| `ExchangeId` | A product line: one venue's market of one family |
+| `MarketId` | The key market data is stored under: a product line, a symbol and an interval |
+| `Candle` | One bar: its times, its prices, its volume and its trade count |
+| `CandleBatch` | Candles held column by column |
+| `BacktestConfig` | How a backtest starts and what it charges |
+| `ClosedTrade` | One closed round trip of a candle strategy on Spot |
+| `EquityPoint` | Equity at one bar's close |
+| `BacktestResult` | What a backtest produced |
+| `decimal_to_f64` | The float nearest to a decimal |
+| `decimal_from_f64` | The decimal of a float's shortest text |
 <!-- end: public names -->
 
 ```python
@@ -82,8 +97,14 @@ So far, what the package says about itself:
 ('sqlite', 'postgres')
 ```
 
-The three are `quantforge_py.__all__`, and the package holds no other
-public name. Importing it opens no store and no connection.
+These are `quantforge_py.__all__`, and the package holds no other public
+name. Importing it opens no store and no connection, and none of its types
+holds a credential.
+
+[The Python types](python-types.md) is what each type takes and gives: how
+a decimal crosses, every signature and field, and what each refuses. A
+price, a quantity or an amount is a `decimal.Decimal` on both sides, and
+never a float.
 
 ## Two versions
 
@@ -155,12 +176,23 @@ quantforge-py/
 │   └── quantforge_py/
 │       └── __init__.py     the package: publishes the extension module's names
 ├── src/
-│   └── lib.rs              the extension module, quantforge_py._native
+│   ├── backtest.rs         BacktestConfig, EquityPoint and BacktestResult: a backtest's settings and its result
+│   ├── candles.rs          Candle and CandleBatch: one bar, and bars held column by column
+│   ├── convert.rs          how a value crosses: an exact decimal, an integer, text, and a refusal in the engine's words
+│   ├── floats.rs           decimal_to_f64 and decimal_from_f64: the one crossing between a decimal and a float
+│   ├── lib.rs              the extension module, quantforge_py._native
+│   ├── market.rs           Symbol, Interval, Category, ExchangeId and MarketId: what a market is
+│   └── trade.rs            ClosedTrade: one closed round trip, with the venue's order IDs as text
 └── tests/
-    ├── conftest.py         what the tests share: the checkout's manifests and the installed distribution
+    ├── conftest.py         what the tests share: the checkout's manifests, the installed distribution, how a page and a refusal are read
+    ├── test_backtest.py    a backtest's config, a closed trade, an equity point and a result
+    ├── test_candles.py     a candle, and a batch of candles by its candles and by its columns
+    ├── test_decimals.py    how a decimal crosses, what is refused, and the float policy's shared cases
     ├── test_distribution.py  the installed distribution: its name, its Pythons, its license, its files
-    ├── test_package.py     the imported package: its names, its versions, its storage backends
-    └── test_repository.py  this page and the manifests, held to the package
+    ├── test_market.py      a symbol, an interval, a product family, a product line and a market
+    ├── test_package.py     the imported package: its names, its classes, its versions, its storage backends
+    ├── test_repository.py  this page, the readme and the manifests, held to the package
+    └── test_types_page.py  the page of the types, held to the package
 ```
 <!-- end: layout -->
 
@@ -225,15 +257,26 @@ pytest
 They hold the installed package to the checkout they are in:
 
 - **The package** (`test_package.py`): the names it publishes and no
-  other, its version against the crate's, the engine's against the
-  `quantforge` crate's, and the storage backends of the build.
+  other, that each type is a class of the package, its version against the
+  crate's, the engine's against the `quantforge` crate's, and the storage
+  backends of the build.
+- **The types** (`test_market.py`, `test_candles.py`, `test_backtest.py`,
+  `test_decimals.py`): that each is built by the engine's rule, gives back
+  what it was given digit for digit, and is refused in the engine's words;
+  and the decimal and float64 policy's shared cases,
+  `tests/fixtures/decimal_float_cases.csv`, which the crate's own tests
+  check as well.
+- **The page of the types** (`test_types_page.py`): every table of
+  [python-types.md](python-types.md), every signature, every refusal it
+  shows, and its examples, which run as they are written.
 - **The distribution** (`test_distribution.py`): that the package
   imported is the one installed, its name, one oldest Python stated alike
   by the crate's PyO3 feature, `requires-python`, the installed metadata
   and the wheel's tag, the repository's license, and that it brings the
   package and nothing beside it.
 - **This page and the manifests** (`test_repository.py`): the tables and
-  the tree above, and what [the workspace](#the-workspace) says.
+  the tree above, the readme's example, and what
+  [the workspace](#the-workspace) says.
 
 A build's storage backends cannot be read from anywhere but the build
 itself, so the tests are told when it is the SQLite-only one:
@@ -294,7 +337,6 @@ The spikes under `spikes/` are workspaces of their own, as before.
 
 | What | Story |
 | --- | --- |
-| The engine's types, bound with their validation | QUA-469 |
 | The strategy adapter and `run_backtest` | QUA-464, QUA-470 |
 | NumPy and pandas interchange, and the candle reader | QUA-475, QUA-473, QUA-472 |
 | Wheels built and tested on Linux, macOS and Windows | QUA-474 |

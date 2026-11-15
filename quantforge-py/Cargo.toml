@@ -38,3 +38,6 @@ postgres = ["quantforge/postgres"]
 # extension module, so the `extension-module` feature stays off.
 pyo3 = { version = "0.30", features = ["abi3-py311"] }
 quantforge = { path = "..", default-features = false }
+# The engine's decimal, named where a value crosses: the crate's own version
+# of it, which the lock file holds.
+rust_decimal = "1"

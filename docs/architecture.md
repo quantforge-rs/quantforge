@@ -150,6 +150,8 @@ src/
 │   ├── interval.rs             Interval: wire form, step duration, parsing
 │   ├── job.rs                  JobId, BundleHash, ResultHash, JobPhase, JobRecord, StoredResult: a remote backtest as a store keeps it
 │   ├── market.rs               Symbol, Venue, Category, ExchangeId (the product lines), MarketId
+│   ├── market/                 its unit tests, beside it for the line budget
+│   │   └── tests.rs            a symbol's normalization, each product line's spellings, and names read back or refused
 │   ├── money.rs                Asset and Money: amounts that never mix assets
 │   ├── order.rs                Side, OrderStatus, Fill, ExchangeOrder, AccountTrade
 │   ├── refusal.rs              Refusal: why a request stops short of a venue

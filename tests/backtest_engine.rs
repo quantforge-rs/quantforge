@@ -189,6 +189,55 @@ fn backtest_rejects_negative_fee_bps() {
     );
 }
 
+// `validate` is the run's own check, for a caller that holds a config before
+// it has candles: the Python package refuses a bad one as it is built.
+#[test]
+fn a_config_is_refused_by_validate_exactly_as_a_run_refuses_it() {
+    let config = |initial_cash: &str, fee_bps: &str| BacktestConfig {
+        initial_cash: dec(initial_cash),
+        fee_bps: dec(fee_bps),
+        close_out_at_end: true,
+    };
+    let refused = [
+        (
+            config("0", "0"),
+            "invalid configuration: initial_cash must be greater than 0, got 0",
+        ),
+        (
+            config("-100.50", "10"),
+            "invalid configuration: initial_cash must be greater than 0, got -100.50",
+        ),
+        (
+            config("1000", "-1"),
+            "invalid configuration: fee_bps must be zero or greater, got -1",
+        ),
+        // The cash is looked at first.
+        (
+            config("0.00", "-0.5"),
+            "invalid configuration: initial_cash must be greater than 0, got 0.00",
+        ),
+    ];
+    let candles = vec![candle(0, "100", "100")];
+    for (config, message) in refused {
+        let error = config.validate().expect_err("config error");
+        assert!(matches!(error, EngineError::InvalidConfig(_)), "{config:?}");
+        assert_eq!(error.to_string(), message, "{config:?}");
+        let run = BacktestEngine::new(config.clone())
+            .run(
+                &market(),
+                &candles,
+                &mut ScriptedStrategy { targets: vec![] },
+            )
+            .expect_err("config error");
+        assert_eq!(run.to_string(), message, "{config:?}");
+    }
+    for config in [config("0.01", "0"), config("1000", "10")] {
+        assert!(config.validate().is_ok(), "{config:?}");
+        assert_eq!(config, config.clone());
+    }
+    assert_ne!(config("1000", "10"), config("1000", "0"));
+}
+
 #[test]
 fn backtest_sma_cross_on_fixed_fixture_reproduces_pinned_result() {
     let market = market();

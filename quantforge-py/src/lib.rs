@@ -2,10 +2,13 @@
 //! module `quantforge_py._native`, which the package's `__init__.py` reads
 //! its names from.
 //!
-//! So far it holds only what the package says about itself. The engine's
-//! types, the strategy adapter and the backtest entry point are bound here
-//! by the stories that follow; `docs/python-package.md` says how the package
-//! is named, built and tested.
+//! It holds what the package says about itself, and the engine's types as
+//! Python classes: market identity, candles, and a backtest's settings and
+//! result, each built by the engine's own rule and refused in the engine's
+//! own words. The strategy adapter and the backtest entry point are bound
+//! here by the stories that follow. `docs/python-package.md` says how the
+//! package is named, built and tested, and `docs/python-types.md` what each
+//! type takes and gives.
 
 // As in the `quantforge` crate. The unsafe code an extension module needs is
 // what PyO3's macros expand to, which the lint leaves alone.
@@ -13,6 +16,13 @@
 #![deny(missing_docs)]
 
 use pyo3::prelude::*;
+
+mod backtest;
+mod candles;
+mod convert;
+mod floats;
+mod market;
+mod trade;
 
 /// The compiled extension module of QuantForge's Python package. Import
 /// `quantforge_py` instead: it publishes these names, and this module's
@@ -22,6 +32,17 @@ mod native {
     use pyo3::prelude::*;
     use pyo3::types::PyTuple;
     use quantforge::StorageBackend;
+
+    #[pymodule_export]
+    use crate::backtest::{BacktestConfig, BacktestResult, EquityPoint};
+    #[pymodule_export]
+    use crate::candles::{Candle, CandleBatch};
+    #[pymodule_export]
+    use crate::floats::{decimal_from_f64, decimal_to_f64};
+    #[pymodule_export]
+    use crate::market::{Category, ExchangeId, Interval, MarketId, Symbol};
+    #[pymodule_export]
+    use crate::trade::ClosedTrade;
 
     /// The version of the engine the package was built with.
     #[pymodule_export]
@@ -38,6 +59,9 @@ mod native {
             .filter(|backend| backend.is_built())
             .map(StorageBackend::as_str)
             .collect();
-        module.add("STORAGE_BACKENDS", PyTuple::new(module.py(), built)?)
+        module.add("STORAGE_BACKENDS", PyTuple::new(module.py(), built)?)?;
+        // Every interval, product family and product line, as a constant of
+        // its class.
+        crate::market::name_constants(module.py())
     }
 }
