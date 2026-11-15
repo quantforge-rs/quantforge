@@ -16,6 +16,9 @@
 //!   wrote, loaded from `tests/fixtures/sqlite/`, with every row carried
 //!   forward unchanged, and the controls that prove a failed step leaves
 //!   the file where it was;
+//! - [`migration_execution`]: the step that gives a store its execution
+//!   tables, from a store the build before it wrote, with every profile
+//!   and every revision of its policy read back word for word;
 //! - [`docs`]: the documents held to the code and the fixtures;
 //! - [`boundary`]: nothing opens a store but the factory, and nothing asks
 //!   the factory but the CLI's context;
@@ -31,6 +34,7 @@ mod crash;
 mod docs;
 mod measure;
 mod migration;
+mod migration_execution;
 #[cfg(feature = "postgres")]
 mod postgres;
 mod sqlite;

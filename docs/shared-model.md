@@ -58,12 +58,23 @@ resolves to. The rest lands with the stories named below.
 | An external signal before it is an intent ([signal-payload.md](signal-payload.md)), each rule a pure function of what it is handed:<ul><li>`ExternalSignal` and `SignalAction`, one alert as it was delivered, with its `SignalHash`;</li><li>`SignalAgeLimit` and `SIGNAL_FUTURE_ALLOWANCE_MS`, how old an entry may be;</li><li>`ProfilePolicy::instrument_named`, the instrument a ticker names, by one of two `TickerSpelling`s;</li><li>`ExternalSignal::resolve`, the `ResolvedSignal` a store records or the `SignalRefusal` it is recorded with;</li><li>`Delivery`, a delivery sent again told from a conflicting one;</li><li>`ExitIntent::closes` and `EntryIntent::against`, a signal against the positions its profile has.</li></ul> | `quantforge::model::futures` | No |
 | The alert's wire form: `Signal`, strict, with its ID, its canonical payload and its hash; `SignalProblems`; and `SignalReceipt` | `quantforge::protocol::signal` | No |
 
+## Changed by QUA-206
+
+| Change | Where | Reaches the Python FFI |
+| --- | --- | --- |
+| The execution store's records ([execution-store.md](execution-store.md)), each one versioned document with every decimal as exact text:<ul><li>`ExecutionScope`, whose record it is;</li><li>`SignalRecord` and `SignalDelivery`, the inbox;</li><li>`OperationRecord`, numbered by the store, with `Replacement` for a Spot amend or cancel-replace;</li><li>`IntentRecord`, `OrderRecord`, `FillRecord`, `CycleRecord` and `Reservation`, the ledger;</li><li>`Incident` and `OutboxEvent`;</li><li>`Lease` and `Fence`, who may act on a position.</li></ul> | `quantforge::model::execution` | No |
+| `ExecutionUnit`, everything one write changes, and `Commit`, what it came to: applied, a duplicate, a conflict, stale or fenced | `quantforge::model::execution` | No |
+| `ExecutionStore`, the storage port for all of it, on both backends from schema 10 ([storage-schema.md](storage-schema.md#keeping-the-execution-store)) | `quantforge::ExecutionStore` | No |
+| `StoreControl::activate` and `deactivate`, with the log of both and `StoreIdentity::authority`: a store executes only while it is active, and copying a store never activates the copy | `quantforge::StoreControl` | No |
+| `ExternalSignal`, `SignalAction` and `SignalRefusal` are stored as part of a signal's record, and `SignalHash::of` hashes a canonical payload | `quantforge::model::futures` | No |
+| `ExternalIntent::on_fill_of` takes a fill through the order it belongs to, by the venue's order ID, since a trade record carries a client ID only on some venues | `quantforge::model::futures` | No |
+| `ExecutionLedger`: a delivery admitted, an order's attempt recorded before it is sent, and an unknown outcome asked of the venue before anything is sent again | `quantforge::automation` | No |
+
 ## Changing next
 
 | Change | Story | Consumers |
 | --- | --- | --- |
 | Candle strategies refuse a linear or inverse series | QUA-37's successors: ALG-532, ALG-379, ALG-509 | Backtests, `trade run`, Python, remote jobs |
-| `ExecutionStore`, which persists the records above | ALG-738 | ALG-743 to ALG-748 |
 | `SignalInbox`, the server's only view of the executor | ALG-743 | The webhook route |
 | `Notifier`, which delivers from the outbox | ALG-749 | ALG-751 |
 

@@ -2,6 +2,11 @@
 //! the order it copies them, and the tables each store keeps for itself.
 
 use super::TRANSFER_FORMAT;
+use super::execution::{
+    EXECUTION_FILLS, EXECUTION_INCIDENTS, EXECUTION_INTENTS, EXECUTION_OPERATIONS,
+    EXECUTION_ORDERS, MARGIN_RESERVATIONS, OUTBOX_EVENTS, POSITION_CYCLES, SIGNAL_DELIVERIES,
+    SIGNAL_INBOX,
+};
 
 /// What a column holds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -18,14 +23,14 @@ pub struct TransferColumn {
     pub kind: ColumnKind,
 }
 
-const fn integer(name: &'static str) -> TransferColumn {
+pub(super) const fn integer(name: &'static str) -> TransferColumn {
     TransferColumn {
         name,
         kind: ColumnKind::Integer,
     }
 }
 
-const fn text(name: &'static str) -> TransferColumn {
+pub(super) const fn text(name: &'static str) -> TransferColumn {
     TransferColumn {
         name,
         kind: ColumnKind::Text,
@@ -346,9 +351,11 @@ pub const POLICY_REVISIONS: TransferTable = TransferTable {
 /// its journals, a segment before the index entry naming it, candles before
 /// the marks on their windows, a bundle before the jobs that run it, a
 /// result before the job that lists it, a job before its log, a profile
-/// before the revisions of its policy. Each part of a target is whole when
-/// read.
-pub const TRANSFER_TABLES: [TransferTable; 13] = [
+/// before the revisions of its policy, a signal before its deliveries and
+/// its intent, an operation before its orders, its fills, the cycle it
+/// opened and its reservation, and every record before the events that
+/// tell of it. Each part of a target is whole when read.
+pub const TRANSFER_TABLES: [TransferTable; 23] = [
     CANDLES,
     BOT_RUNS,
     ORDER_EVENTS,
@@ -362,13 +369,32 @@ pub const TRANSFER_TABLES: [TransferTable; 13] = [
     JOB_LOGS,
     AUTOMATION_PROFILES,
     POLICY_REVISIONS,
+    SIGNAL_INBOX,
+    SIGNAL_DELIVERIES,
+    EXECUTION_OPERATIONS,
+    EXECUTION_INTENTS,
+    EXECUTION_ORDERS,
+    EXECUTION_FILLS,
+    POSITION_CYCLES,
+    MARGIN_RESERVATIONS,
+    EXECUTION_INCIDENTS,
+    OUTBOX_EVENTS,
 ];
 
 /// The tables every store keeps for itself, which a transfer never copies:
 /// a target has its own schema version, its own migration log, and its own
 /// record, with an ID of its own, inactive. The source's environment is
-/// carried over on its own, never its record.
-pub const KEPT_BY_EACH_STORE: [&str; 3] = ["meta", "store_control", "schema_migrations"];
+/// carried over on its own, never its record. A store's leases, the
+/// revisions of its margin pools and the log of its activations are its
+/// own as well: a lease is authority to act, which no copy confers.
+pub const KEPT_BY_EACH_STORE: [&str; 6] = [
+    "meta",
+    "store_control",
+    "schema_migrations",
+    "position_leases",
+    "reservation_pools",
+    "store_control_events",
+];
 
 #[cfg(test)]
 mod tests;

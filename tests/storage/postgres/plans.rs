@@ -13,9 +13,11 @@ use serde_json::Value;
 use super::{IsolatedDatabase, VARIABLE, query, server_url, settings};
 use crate::docs::{items, section_in};
 
+mod execution;
+
 /// One query the stores run, the indexes its plan must use, and the tables
 /// it must never scan whole.
-struct Query {
+pub(crate) struct Query {
     id: &'static str,
     indexes: &'static [&'static str],
     never_scanned: &'static [&'static str],
@@ -487,6 +489,12 @@ fn seed(url: &str, order: Order) {
     );
 }
 
+/// Every statement the stores run: the candle, journal, segment and job
+/// stores' and a transfer's, then the execution store's.
+fn queries() -> impl Iterator<Item = &'static Query> {
+    QUERIES.iter().chain(execution::QUERIES)
+}
+
 /// A database of its own, its schema created and its data seeded.
 fn seeded(server: &str, order: Order) -> IsolatedDatabase {
     let database = IsolatedDatabase::create(server);
@@ -495,6 +503,7 @@ fn seeded(server: &str, order: Order) -> IsolatedDatabase {
         .init()
         .expect("init");
     seed(&database.url, order);
+    query(&database.url, &execution::seed());
     database
 }
 
@@ -590,8 +599,7 @@ fn indexes_of(url: &str, statement: &Query) -> Vec<String> {
 
 #[test]
 fn the_doc_lists_every_query_with_its_indexes() {
-    let expected: Vec<(String, String)> = QUERIES
-        .iter()
+    let expected: Vec<(String, String)> = queries()
         .map(|statement| {
             let indexes = if statement.indexes.is_empty() {
                 "none".to_string()
@@ -620,7 +628,7 @@ fn every_query_the_stores_run_is_planned_on_its_index() {
     };
     for order in [Order::MarketByMarket, Order::TimeAcrossMarkets] {
         let database = seeded(&server, order);
-        for statement in QUERIES {
+        for statement in queries() {
             let used = indexes_of(&database.url, statement);
             for index in statement.indexes {
                 assert!(
@@ -650,7 +658,7 @@ fn a_brin_index_on_open_time_serves_no_query_the_stores_run() {
             &database.url,
             "CREATE INDEX candles_open_time_brin ON candles USING brin (open_time_ms); ANALYZE;",
         );
-        for statement in QUERIES {
+        for statement in queries() {
             let used = indexes_of(&database.url, statement);
             assert!(
                 !used.iter().any(|name| name == "candles_open_time_brin"),

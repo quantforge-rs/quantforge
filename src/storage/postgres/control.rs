@@ -2,7 +2,8 @@
 //! `StoreControl` with SQLite's rules and messages, shared through
 //! `storage::runs`. The binding and an adoption each run in one `READ
 //! COMMITTED` transaction that first locks the row it changes, so two
-//! operators acting at once decide one after the other.
+//! operators acting at once decide one after the other. A change of the
+//! store's activation is `activation`'s.
 
 use std::str::FromStr;
 
@@ -13,15 +14,15 @@ use super::bridge::Effect;
 use super::{PostgresStore, copying, durability};
 use crate::model::futures::ActivationEpoch;
 use crate::model::{
-    DurabilityReport, Environment, ExecutionMode, IdentitySource, LegacyRun, RunIdentity,
-    SchemaMigration, StoreActivation, StoreId, StoreIdentity,
+    ControlEvent, DurabilityReport, Environment, ExecutionMode, IdentitySource, LegacyRun,
+    RunIdentity, SchemaMigration, StoreActivation, StoreId, StoreIdentity, TimestampMs,
 };
 use crate::storage::runs::{
     adopted_state, already_bound, identity_columns, legacy_run, parse_environment, refuse_unadopted,
 };
 use crate::{StorageError, StoreControl, now_utc_ms};
 
-const RECORD: &str = r#"
+pub(super) const RECORD: &str = r#"
     SELECT c.store_id, c.environment, c.activation, c.activation_epoch, m.value
     FROM store_control c, meta m
     WHERE c.id = 1 AND m.key = 'schema_version'
@@ -33,7 +34,7 @@ const MIGRATIONS: &str = r#"
     ORDER BY version ASC
 "#;
 
-const LOCK_BINDING: &str =
+pub(super) const LOCK_BINDING: &str =
     "SELECT store_id, environment FROM store_control WHERE id = 1 FOR UPDATE";
 
 const BIND: &str = "UPDATE store_control SET environment = $1, changed_at_ms = $2 WHERE id = 1";
@@ -56,7 +57,7 @@ const ADOPT: &str = r#"
 "#;
 
 /// The store's record from its row.
-fn record(row: &Row) -> Result<StoreIdentity, StorageError> {
+pub(super) fn record(row: &Row) -> Result<StoreIdentity, StorageError> {
     let invalid = |what: String| StorageError::InvalidArgument(what);
     let get = |index: usize| -> Result<Option<String>, StorageError> {
         row.try_get(index).map_err(StorageError::other)
@@ -93,6 +94,18 @@ impl StoreControl for PostgresStore {
         self.bridge.execute(Effect::Read, |client| {
             Box::pin(async move { Ok(record(&client.query_typed_one(RECORD, &[]).await?)) })
         })?
+    }
+
+    fn activate(&self, at_ms: TimestampMs) -> Result<StoreIdentity, StorageError> {
+        self.change_activation(StoreActivation::Active, at_ms)
+    }
+
+    fn deactivate(&self, at_ms: TimestampMs) -> Result<StoreIdentity, StorageError> {
+        self.change_activation(StoreActivation::Deactivated, at_ms)
+    }
+
+    fn control_events(&self) -> Result<Vec<ControlEvent>, StorageError> {
+        self.activation_log()
     }
 
     fn durability(&self) -> Result<DurabilityReport, StorageError> {

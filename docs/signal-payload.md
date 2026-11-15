@@ -25,7 +25,8 @@ as OBS-R004 and OBS-R008, with its part of OBS-R005 and OBS-R024 and the
 decisions D02 and D06 (the automation PRD (iteration 3), §2 to §2.2 on
 pp.3–4, §3.2 on pp.5–6 and §7 on p.13). The webhook route that
 authenticates a delivery, records it and answers it is ALG-743's; the store
-that keeps a signal and its orders is ALG-738's.
+that keeps a signal and its orders is
+[execution-store.md](execution-store.md)'s.
 
 ## Contents
 
@@ -1151,8 +1152,9 @@ position of its side that was entered since the first send, at most about
   TradingView's certificate, recording it before the answer, and the
   answers themselves are ALG-743's.
 - **The store.** Keeping a signal with its ID, its hash and its state, and
-  finding a duplicate or a conflict, are ALG-738's, which is also where a
-  position's entry is kept for an exit to be held to.
+  finding a duplicate or a conflict, are the execution store's
+  ([execution-store.md](execution-store.md#the-inbox)), which is also where
+  a position's entry is kept for an exit to be held to.
 - **Where a profile keeps its age limit.** The policy document has no field
   for one, so until a story adds it every profile runs at the default. The
   type and the rule are here (`SignalAgeLimit`).

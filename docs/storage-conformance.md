@@ -212,6 +212,12 @@ exist.
   environment, and logs one step to the current schema from 0
 - `control.bound_for_life`: a store is bound to one environment for life;
   binding it again to the same one changes nothing
+- `control.activation_is_a_new_epoch`: an activation takes a bound store to
+  active at the next epoch, a deactivation keeps the epoch, and the log keeps
+  every change in order, for a store opened again too
+- `control.activation_refusals`: a store bound to no environment is not
+  activated, an active one is not activated again, and only an active store is
+  deactivated; a refusal changes nothing and logs nothing
 - `control.legacy_runs_listed`: legacy runs are listed oldest first, then by
   run ID, with the mode only a run that recorded one has; recorded runs are
   not listed
@@ -219,13 +225,16 @@ exist.
   identity, loads, matches only that identity, and keeps its original state
   beside it
 - `control.adopt_states_the_missing_mode`: a legacy run that recorded no
-  execution mode is adopted only with the mode the operator states, then
-  loads with it
+  execution mode is adopted only with the mode the operator states, then loads
+  with it
 - `control.adopt_refusals`: only a legacy run is adopted, only under an
   adopted identity, and a run that recorded its mode refuses another; a
   refusal changes nothing
 - `control.store_id_kept`: a store's ID is 32 lowercase hex digits and stays
   the same when the store is opened again
+- `control.activations_racing`: of eight activations of one store at once, one
+  is made and seven find it done: the store is active at epoch 1, and its log
+  holds one row
 <!-- end: control -->
 
 ### The job store
@@ -333,6 +342,146 @@ exists too.
   row
 <!-- end: policies -->
 
+### The execution store
+
+`ExecutionStore`: the signal inbox, the operations, the ledger, the outbox
+and the leases, whose contract is [execution-store.md](execution-store.md).
+Its scenarios are a fixture of their own,
+[`tests/fixtures/execution_cases.json`](../tests/fixtures/execution_cases.json),
+because every record in them is named once, by the exact text a store keeps
+it as: a step hands the store a record read from that text, and a record
+the store hands back is held to it byte for byte, and to its revision. What
+a record means is the model's; the store's part is what this list holds:
+what a unit comes to, in which order its checks answer, who holds a lease,
+what an operation is numbered, and what each read lists. The `_racing`
+entries are the fixture's races: it sets a store up and names what each of
+several writers asks at once, each on a store of its own opened on the same
+database, and the suite checks what holds whoever wins. The last entries
+are coded, since they refuse writes, hold locks, end connections and change
+rows behind the store's back.
+
+<!-- begin: execution -->
+- `execution.delivery_recorded_once`: the first delivery of a signal is
+  recorded with its admission, its intent and its event in one write; the same
+  payload again changes nothing but the note of it, and another payload under
+  the signal's ID is a conflict, noted with its payload and told once for each
+  payload
+- `execution.received_then_judged`: a delivery may be recorded as received and
+  judged later, once: admitted with its intent in the same write, rejected
+  with its refusal, or asking for nothing; received signals are listed oldest
+  first until they are judged
+- `execution.unit_shape_refusals`: a unit that is not one a store applies is
+  refused before anything is read: one that changes nothing, admits a signal
+  without its intent or records an intent without its admission, or with the
+  admission of another account's signal of the same name, first records a
+  signal or an operation by a change, replaces a fill, changes a record twice,
+  by its name or under the key its account knows it by, changes a position
+  without its lease or two positions at once, reserves without the revision of
+  its pool, or gives its position two unresolved entries or two open cycles
+- `execution.lease_fences_writers`: a position's lease goes to one holder at a
+  time under the next token; a holder asking again keeps its token; a lease
+  that ran out still fences until another holder takes it, and from then on
+  nothing its former holder writes is applied, renewed or released
+- `execution.activation_gates_execution`: a store that is not active records
+  deliveries and numbers operations, and grants no lease; a deactivation stops
+  every unit written under a lease at once, and the activation after it voids
+  every lease, for its own holder too, so the next grant of each position
+  takes the token after its last
+- `execution.compare_and_swap_all_or_nothing`: a change names what it expects
+  to find, no record or the revision it replaces, and a unit one of whose
+  changes finds anything else writes nothing and answers what was found
+- `execution.successor_rules`: a record is replaced only by the same record
+  moved as its kind allows: an intent along its state machine with its policy,
+  its attempts and its cycle kept, an order with nothing it had learned taken
+  back, a cycle's protection along its machine, a reservation released once,
+  an incident cleared once, an event's delivery ended once; anything else is
+  refused and changes nothing
+- `execution.one_unresolved_entry_and_one_open_cycle`: a position has one
+  unresolved entry and one open cycle at a time, whoever's profile acts on it:
+  an entry that was sent holds the slot until it is settled, a cycle until it
+  is closed, and another position of the same account has slots of its own
+- `execution.reservations_and_the_pool`: a unit that reserves or releases
+  margin names the revision it read the pool at, and is applied only while the
+  pool still stands there; every reservation and every release moves the pool
+  on, each pool of each venue account has a revision of its own, and what is
+  held against a pool is added up exactly
+- `execution.operations_numbered_once`: the store numbers every operation, and
+  an operation asked for again under its key is the one already numbered, as
+  it stands now; a key names one operation of its account for good; a Spot
+  replacement is an operation with no signal, no profile and no position,
+  whose state moves only as the matrix allows and whose orders are never
+  renamed, by their client ID or by the venue's once it is known
+- `execution.two_venues_one_alert`: the same alert, byte for byte, sent to
+  profiles of one name that trade one symbol on two venues is two signals:
+  each has its own inbox entry, intent, operation, lease, pool, orders, cycle
+  and events, what happens to one changes nothing of the other, and one unit
+  may change both
+- `execution.orders_fills_and_cycles`: an order's identity is recorded before
+  it is sent and then only learns: its venue ID, the venue's report, each fill
+  once; an entry's first fill opens the position's cycle, numbered as the
+  operation that opened it, an exit sent again is another order of its
+  operation, and a fill is known by its symbol and its trade ID, each for
+  itself
+- `execution.incidents_and_the_outbox`: an incident is raised once under its
+  key and cleared once, with the event that tells of it written in the same
+  unit; pending events are listed oldest first up to a limit, and an event
+  leaves the list when its delivery ended, delivered or not known to be
+- `execution.environment_of_the_store`: a store keeps the executions of the
+  environment it is bound to and of no other, and of none before it is bound:
+  a unit, an operation and a lease of another environment are refused, and
+  nothing of them is written
+- `execution.unsettled_work_listed_for_recovery`: every intent that is not
+  settled is listed, oldest first, for whoever starts on the store, and a
+  position's own are listed for whoever holds its lease; an intent leaves both
+  lists when it is settled, and a store opened again lists what the one before
+  it left
+- `execution.inverse_contracts_keep_their_units`: a coin-margined line keeps
+  its own units exactly: whole contracts for quantities, the coin for margin,
+  risk and fees, each decimal with the scale it was written with, and a signal
+  that names its exchange and family keeps both
+- `execution.first_deliveries_racing`: of eight deliveries of one signal at
+  once, one is recorded with its intent and its event, and seven are
+  duplicates that name it: the inbox holds one signal, one intent and one
+  event, and a note of all eight
+- `execution.conflicting_deliveries_racing`: of eight deliveries at once under
+  one signal ID, four with one payload and four with another, one is recorded;
+  the three that brought its payload are duplicates and the four that brought
+  the other are conflicts, told once
+- `execution.same_change_racing`: of four writers that hold one lease and
+  write the same change at once, one is applied and three find the intent
+  already moved: the order is recorded once
+- `execution.leases_racing`: of eight holders asking for one position's lease
+  at once, one is granted it under token 1 and seven are told who holds it
+- `execution.reservations_racing`: four writers, each on a position of its
+  own, reserve from one pool at once, each sizing again when the pool has
+  moved: every reservation is made once, and the pool ends four revisions on,
+  holding all four
+- `execution.operations_racing`: of eight askers for an operation under one
+  key at once, all are answered with the same number, and of four askers under
+  keys of their own each gets a number no other has
+- `execution.records_keep_their_text`: every record of the fixture is read
+  from the text a store keeps it as and written again byte for byte
+- `execution.failed_unit_changes_nothing`: a unit one of whose writes fails
+  leaves nothing of itself, whichever write it was: no signal, no note of its
+  delivery, no intent and no event; once the write goes through, the same unit
+  is applied whole
+- `execution.waits_are_bounded`: a unit and a lease call held up by another
+  writer fail as contention within their budget and change nothing, and go
+  through once the writer is done
+- `execution.lost_answer_asked_again`: a writer that never got its answer asks
+  again and learns what became of its write: a delivery sent again is a
+  duplicate that names the signal recorded, and a change made again finds its
+  own record at the revision it left, by a store whose connections are gone
+  too
+- `execution.row_changed_behind_the_store_is_refused`: a row whose columns no
+  longer say what its document says is refused where it is read and where a
+  unit would replace it, and is read again once it is put right
+- `execution.lease_row_gives_no_authority`: a lease row written behind the
+  back of a store that was never activated fences nothing, and the store's
+  activation voids it: a unit written under it is applied neither before nor
+  after, and its position's next grant takes the token after the row's
+<!-- end: execution -->
+
 ## The fixtures
 
 `tests/fixtures/storage_conformance_cases.json` (format 1) holds:
@@ -348,6 +497,18 @@ exists too.
   scenarios, each an `id`, the statement listed above, and its `steps`;
 - `races`: the interleavings each backend steps through itself.
 
+`tests/fixtures/execution_cases.json` (format 1) holds the execution
+store's:
+
+- `scopes`, `accounts` and `positions`: whose records the scenarios write,
+  each under a name the steps use: one venue account with two profiles on
+  its linear line and one on its coin-margined line, a profile of the same
+  name that trades the same symbol on the other venue, the first account
+  again on testnet, and its Spot line, which has no profile;
+- `records`: every record a step names, with its kind and its stored text;
+- `scenarios`: each an `id`, the statement listed above, and its `steps`;
+- `races`: each an `id`, its statement, the `setup` steps and the `writers`.
+
 A step is one operation and its answer: a result, or a refusal of a kind
 (`invalid_argument`) whose message contains a given text.
 
@@ -359,7 +520,10 @@ A step is one operation and its answer: a result, or a refusal of a kind
 | `append_order_event`, `list_order_events`, `append_closed_trade`, `list_closed_trades` | the two journals |
 | `refresh`, `resolve`, `load_segment` | the segment store; every listed segment must also load, open under its name, and be as long as listed |
 | `store_bundle`, `load_bundle`, `submit_job`, `job`, `jobs`, `claim_job`, `finish_job`, `cancel_job`, `fail_running_jobs` | the job store, every record compared as text, its JSON byte for byte |
-| `store_record`, `migrations`, `bind_environment`, `legacy_runs`, `adopt_run` | the store's record |
+| `store_record`, `migrations`, `bind_environment`, `activate`, `deactivate`, `control_events`, `legacy_runs`, `adopt_run` | the store's record, its activation and the log of it |
+| `commit` | a unit of the execution store: its answer, `applied`, a `duplicate` or a `conflict` naming the signal recorded, `stale` with what was found, `fenced` with why, or a refusal |
+| `begin_operation`, `acquire_lease`, `renew_lease`, `release_lease`, `lease` | an operation's number, and a position's lease |
+| `signal`, `received_signals`, `deliveries`, `intent`, `position_intents`, `unsettled_intents`, `operation`, `unsettled_replacements`, `order`, `orders`, `fill`, `fills`, `cycle`, `open_cycle`, `open_cycles`, `pool`, `reservation`, `incident`, `open_incidents`, `event`, `pending_events` | the execution store's reads, every record compared with the fixture's and written again to its text |
 | `raw_select`, `raw_contains`, `raw_execute`, `value_types` | the backend's own tables, for what the ports do not show: the text a column holds, a row written behind the store's back, the type a value is stored as |
 | `reopen` | the same database opened again, as a restarted process opens it |
 
@@ -401,6 +565,26 @@ The rules it models, beyond what the statements above say:
   text, and never rounds it; QuantForge writes only text it can read back,
   so such text was written behind the store's back.
 
+The execution store's reference model is
+[`spikes/storage-contract/execution_model.py`](../spikes/storage-contract/execution_model.py),
+written from [execution-store.md](execution-store.md): how each record is
+spelled where a store keeps it, the columns its document decides, and the
+store itself, deciding every unit in the order that page fixes. It takes
+the state machines from the [parity matrix](parity/matrix.toml), not from
+the code.
+[`execution_cases.py`](../spikes/storage-contract/execution_cases.py) runs
+the scenarios on it. Each scenario also says what it means its steps to
+come to, so the model and the scenario have to agree before anything is
+written:
+
+```bash
+python3 -I spikes/storage-contract/execution_cases.py
+```
+
+`spikes/storage-contract/transfer_cases.py` takes the execution tables of
+[the transfer's fixture](storage-migration.md#the-canonical-text) from the
+same model.
+
 ## Registering a backend
 
 A backend joins the suite in its own file under `tests/storage/`, the way
@@ -425,10 +609,12 @@ A backend joins the suite in its own file under `tests/storage/`, the way
    `conformance::control::<B>()` with `RunJournalStore` and `StoreControl`,
    `conformance::segments::<B>()` with `CandleStore` and `SegmentStore`,
    `conformance::jobs::<B>()` with `JobStore`,
-   `conformance::policies::<B>()` with `PolicyStore` and `StoreControl`, and
+   `conformance::policies::<B>()` with `PolicyStore` and `StoreControl`,
+   `conformance::execution::run::<B>()` with `ExecutionStore`, `StoreControl`
+   and a bounded view of the store (`conformance::Bounded`), and
    `conformance::durability::<B>()` with the candle store, the journal, the
-   store's record and a bounded view of the store (`conformance::Bounded`). The groups are generic over the ports, so
-   a backend switches each on as its store lands.
+   store's record and the bounded view. The groups are generic over the
+   ports, so a backend switches each on as its store lands.
 4. Implement `DirtyWindows` (`src/storage/refresh.rs`) for the store, and
    step through the races in its own unit tests, as
    `src/storage/sqlite/segments/tests.rs` does; see [the races](#the-races).
@@ -550,6 +736,12 @@ them with one stepper, `src/storage/races.rs`, called from
 - A segment's stored bytes: their length depends on the compression level,
   which is not part of the [segment format](segment-spec.md#compression).
   The suite checks only that a plan lists the length its bytes have.
-- Concurrency beyond the races above and `segments.refreshes_racing_writers`,
-  and how fast a backend answers.
+- Concurrency beyond the races above, `segments.refreshes_racing_writers`
+  and the `_racing` entries of the other groups, and how fast a backend
+  answers. Which of several writers at once is the one applied is never
+  held, only what holds whoever it is.
+- What an execution record means: whether a signal may be admitted, an
+  order sent or a cycle closed is the model's and the executor's to say
+  ([execution-store.md](execution-store.md)), and the model's own tests
+  hold it.
 - The rest of an error's message, beyond the text a refusal names.

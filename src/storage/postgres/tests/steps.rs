@@ -4,10 +4,9 @@
 //! repeat changes nothing. Each test works in a scratch database of its
 //! own, as `migrate.rs` describes, and skips without the server.
 
-use super::migrate::{
-    SEED, SEED_6, SEED_7, SEED_8, SEED_9, column, log, reread, scratch, snapshot, tables, version,
-};
+use super::migrate::{column, log, reread, scratch, snapshot, tables, version};
 use super::scratch::rows;
+use super::seeds::{SEED, SEED_6, SEED_7, SEED_8, SEED_9, SEED_10};
 use super::*;
 use crate::storage::postgres::migrate::{STEPS, Step, ensure_current_with};
 use tokio_postgres::error::SqlState;
@@ -17,6 +16,7 @@ const SCHEMA_5_CHAIN: [Step; 1] = [STEPS[0]];
 const SCHEMA_6_CHAIN: [Step; 2] = [STEPS[0], STEPS[1]];
 const SCHEMA_7_CHAIN: [Step; 3] = [STEPS[0], STEPS[1], STEPS[2]];
 const SCHEMA_8_CHAIN: [Step; 4] = [STEPS[0], STEPS[1], STEPS[2], STEPS[3]];
+const SCHEMA_9_CHAIN: [Step; 5] = [STEPS[0], STEPS[1], STEPS[2], STEPS[3], STEPS[4]];
 
 /// The collation of `table.column`.
 fn collation(store: &PostgresStore, table: &str, column: &str) -> Vec<String> {
@@ -137,7 +137,7 @@ fn schema_9_keeps_every_row_of_schema_8_and_adds_the_policy_tables() {
         assert!(!tables(&store).contains(&table.to_string()), "{table}");
     }
 
-    store.init().expect("schema 9");
+    ensure_current_with(&store.bridge, &SCHEMA_9_CHAIN, 9, "scratch").expect("schema 9");
     assert_eq!(reread(&store, &before), before);
     assert_eq!(version(&store), ["9"]);
     assert_eq!(log(&store), ["8<-0", "9<-8"]);
@@ -177,6 +177,113 @@ fn schema_9_keeps_every_row_of_schema_8_and_adds_the_policy_tables() {
     }
 
     // Run again, it finds the work done.
-    store.init().expect("a repeat");
+    ensure_current_with(&store.bridge, &SCHEMA_9_CHAIN, 9, "scratch").expect("a repeat");
     assert_eq!(log(&store), ["8<-0", "9<-8"]);
+}
+
+/// The tables schema 10 adds: ten a transfer copies, and three that are
+/// the store's own.
+const EXECUTION_TABLES: [&str; 13] = [
+    "signal_inbox",
+    "signal_deliveries",
+    "execution_operations",
+    "execution_intents",
+    "execution_orders",
+    "execution_fills",
+    "position_cycles",
+    "margin_reservations",
+    "execution_incidents",
+    "outbox_events",
+    "position_leases",
+    "reservation_pools",
+    "store_control_events",
+];
+
+#[test]
+fn schema_10_keeps_every_row_of_schema_9_and_adds_the_execution_tables() {
+    let Some(scratch) = scratch() else {
+        return;
+    };
+    let store = scratch.store();
+    ensure_current_with(&store.bridge, &SCHEMA_9_CHAIN, 9, "scratch").expect("schema 9");
+    for seed in [SEED, SEED_6, SEED_7, SEED_8, SEED_9] {
+        rows(&store, seed);
+    }
+    let before = snapshot(&store);
+    assert!(before.iter().all(|(_, found)| !found.is_empty()), "seeded");
+    for table in EXECUTION_TABLES {
+        assert!(!tables(&store).contains(&table.to_string()), "{table}");
+    }
+
+    store.init().expect("schema 10");
+    assert_eq!(reread(&store, &before), before);
+    assert_eq!(version(&store), ["10"]);
+    assert_eq!(log(&store), ["9<-0", "10<-9"]);
+    for table in EXECUTION_TABLES {
+        assert!(tables(&store).contains(&table.to_string()), "{table}");
+    }
+    // The store's own record is as it was: nothing activates a store.
+    assert_eq!(
+        column(
+            &store,
+            "SELECT activation || ' ' || CAST(activation_epoch AS TEXT) FROM store_control"
+        ),
+        ["inactive 0"]
+    );
+    rows(&store, SEED_10);
+    // A signal is recorded once for its profile, a position has one
+    // unresolved entry at a time, and an event is told once under its key.
+    for refused in [
+        "INSERT INTO signal_inbox(venue, category, environment, account_kind, account_id, \
+         profile_id, signal_id, payload_hash, state, revision, signal_json, received_at_ms) \
+         VALUES ('bybit', 'linear', 'demo', 'venue', '12345', 'main', \
+         'trend:entry:long:SOLUSDT.P:t', 'sha256:other', 'received', 1, '{}', 1)",
+        "INSERT INTO execution_intents(venue, category, environment, account_kind, account_id, \
+         profile_id, signal_id, kind, symbol, side, state, entry_slot, revision, intent_json, \
+         created_at_ms, updated_at_ms) VALUES ('bybit', 'linear', 'demo', 'venue', '12345', \
+         'other', 'another signal', 'entry', 'SOLUSDT', 'long', 'submitting', 1, 1, '{}', 1, 1)",
+        "INSERT INTO outbox_events(venue, category, environment, account_kind, account_id, \
+         profile_id, event_key, kind, delivery, revision, event_json, created_at_ms) VALUES \
+         ('bybit', 'linear', 'demo', 'venue', '12345', 'other', 'sig/main/signal_admitted/t', \
+         'signal_admitted', 'pending', 1, '{}', 1)",
+    ] {
+        let failed = store
+            .bridge
+            .execute(Effect::Write, move |client| {
+                Box::pin(async move { client.batch_execute(refused).await })
+            })
+            .expect_err(refused);
+        let StorageError::Other(source) = &failed else {
+            panic!("{failed:?}");
+        };
+        let code = source
+            .downcast_ref::<tokio_postgres::Error>()
+            .and_then(tokio_postgres::Error::code);
+        assert_eq!(code, Some(&SqlState::UNIQUE_VIOLATION), "{failed:?}");
+    }
+    // The same signal ID and the same symbol on another venue, and a
+    // settled entry on the same position, are rows of their own.
+    rows(
+        &store,
+        "INSERT INTO execution_intents(venue, category, environment, account_kind, account_id, \
+         profile_id, signal_id, kind, symbol, side, state, entry_slot, revision, intent_json, \
+         created_at_ms, updated_at_ms) VALUES \
+         ('elsewhere', 'linear', 'demo', 'venue', '12345', 'main', \
+          'trend:entry:long:SOLUSDT.P:t', 'entry', 'SOLUSDT', 'long', 'submitting', 1, 1, '{}', 1, 1), \
+         ('bybit', 'linear', 'demo', 'venue', '12345', 'main', 'an earlier signal', 'entry', \
+          'SOLUSDT', 'long', 'filled', NULL, 1, '{}', 1, 1), \
+         ('bybit', 'linear', 'demo', 'venue', '12345', 'main', 'one before that', 'entry', \
+          'SOLUSDT', 'long', 'rejected', NULL, 1, '{}', 1, 1)",
+    );
+    assert_eq!(
+        column(
+            &store,
+            "SELECT CAST(COUNT(*) AS TEXT) FROM execution_intents"
+        ),
+        ["4"]
+    );
+
+    // Run again, it finds the work done.
+    store.init().expect("a repeat");
+    assert_eq!(log(&store), ["9<-0", "10<-9"]);
 }

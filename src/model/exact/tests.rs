@@ -156,3 +156,43 @@ fn numbers_far_beyond_a_decimal_divide_back_exactly() {
     assert_eq!(largest.plus(&Natural::of(1)).decimal(0), None);
     assert_eq!(Natural::of(1).decimal(29), None);
 }
+
+/// A sum is kept over one denominator, ten to the most places of its
+/// amounts, however many there are: added one to the next, a thousand
+/// amounts of eight places would end over ten to the eight thousandth.
+#[test]
+fn a_sum_of_many_amounts_stays_over_one_denominator() {
+    let mut amounts = vec![decimal("0.00150000"); 1_000];
+    amounts.push(decimal("2.5"));
+    amounts.push(decimal("7"));
+    let (sum, places) = Exact::sum(&amounts);
+    assert_eq!(places, 8);
+    assert_eq!(sum.denominator, Natural::power_of_ten(8));
+    assert_eq!(
+        sum.floor_on(decimal("0.00000001")),
+        Some(decimal("11.00000000"))
+    );
+    assert_eq!(
+        sum.floor_on(decimal("0.00000001"))
+            .map(|total| total.to_string()),
+        Some("11.00000000".to_string())
+    );
+
+    // The same number as adding one to the next, for amounts of every
+    // scale and of the largest size.
+    let mixed = [
+        decimal("79228162514264337593543950335"),
+        decimal("0.0000000000000000000000000001"),
+        decimal("205.18548"),
+        decimal("410.1"),
+    ];
+    let one_by_one = mixed.iter().fold(Exact::whole(0), |sum, amount| {
+        sum.plus(&Exact::magnitude(*amount))
+    });
+    let (at_once, places) = Exact::sum(&mixed);
+    assert_eq!(places, 28);
+    assert_eq!(at_once, one_by_one);
+    let (nothing, places) = Exact::sum(&[]);
+    assert!(nothing.is_zero());
+    assert_eq!(places, 0);
+}

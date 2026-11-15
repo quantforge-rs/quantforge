@@ -1,23 +1,36 @@
 //! The store record's steps: its identity, the migration log, the
-//! environment it is bound to for life, its legacy runs and their
-//! adoption; and the check that a store keeps its ID.
+//! environment it is bound to for life, its activation and the log of
+//! it, its legacy runs and their adoption; and the checks that a store
+//! keeps its ID and that of several activations at once one is made.
 
-use quantforge::{RunJournalStore, StoreControl};
+use std::sync::Barrier;
+use std::time::{Duration, Instant};
+
+use quantforge::model::Environment;
+use quantforge::{RunJournalStore, StorageError, StorageErrorKind, StoreActivation, StoreControl};
 
 use super::cases::{
-    Cases, LegacyRunText, MigrationText, StoreRecordText, environment, execution_mode,
+    Cases, ControlEventText, LegacyRunText, MigrationText, StoreRecordText, environment,
+    execution_mode,
 };
 use super::{Coded, Fixture, Step, expect_refused};
 
 /// The checks coded here: id and statement.
-pub const CHECKS: &[(&str, &str)] = &[(
-    "control.store_id_kept",
-    "a store's ID is 32 lowercase hex digits and stays the same when the store is opened again",
-)];
+pub const CHECKS: &[(&str, &str)] = &[
+    (
+        "control.store_id_kept",
+        "a store's ID is 32 lowercase hex digits and stays the same when the store is opened again",
+    ),
+    (
+        "control.activations_racing",
+        "of eight activations of one store at once, one is made and seven find it done: the store is active at epoch 1, and its log holds one row",
+    ),
+];
 
 pub fn check<S: RunJournalStore + StoreControl>(id: &str) -> Coded<S> {
     match id {
         "control.store_id_kept" => store_id_kept,
+        "control.activations_racing" => activations_racing,
         other => panic!("no control check {other}"),
     }
 }
@@ -60,6 +73,34 @@ pub fn step<S: StoreControl + ?Sized>(cases: &Cases, store: &S, step: &Step) -> 
                 None => outcome.expect("bind"),
                 Some(refused) => expect_refused(outcome, refused, &format!("bind {bound}")),
             }
+        }
+        Step::Activate { at_ms, refused } => {
+            let outcome = store.activate(*at_ms);
+            match refused {
+                None => drop(outcome.expect("activate")),
+                Some(refused) => expect_refused(outcome, refused, "activate"),
+            }
+        }
+        Step::Deactivate { at_ms, refused } => {
+            let outcome = store.deactivate(*at_ms);
+            match refused {
+                None => drop(outcome.expect("deactivate")),
+                Some(refused) => expect_refused(outcome, refused, "deactivate"),
+            }
+        }
+        Step::ControlEvents { expect } => {
+            let found: Vec<ControlEventText> = store
+                .control_events()
+                .expect("the activation log")
+                .iter()
+                .map(|event| ControlEventText {
+                    from: event.from.as_str().to_string(),
+                    to: event.to.as_str().to_string(),
+                    epoch: event.epoch.0,
+                    at_ms: event.at_ms,
+                })
+                .collect();
+            assert_eq!(&found, expect, "the activation log");
         }
         Step::LegacyRuns { expect } => {
             let found = store.legacy_runs().expect("legacy runs");
@@ -116,4 +157,76 @@ fn store_id_kept<S: RunJournalStore + StoreControl>(fixture: &Fixture<S>) {
     let reopened = (fixture.reopen)();
     let again = reopened.store_identity().expect("the record");
     assert_eq!(again.store_id, first.store_id);
+}
+
+/// A call made again while another writer holds what it needs: contention
+/// means nothing changed.
+fn past_contention<T>(
+    mut call: impl FnMut() -> Result<T, StorageError>,
+) -> Result<T, StorageError> {
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        match call() {
+            Err(busy)
+                if busy.kind() == StorageErrorKind::Contention && Instant::now() < deadline => {}
+            answer => return answer,
+        }
+    }
+}
+
+/// Eight processes activate one store at once. One activation is made:
+/// the others find the store active at the epoch it gave, and say so.
+fn activations_racing<S: RunJournalStore + StoreControl>(fixture: &Fixture<S>) {
+    const OPERATORS: usize = 8;
+    let at_ms = 1_792_454_400_000;
+    fixture
+        .store
+        .bind_environment(Environment::Demo)
+        .expect("bound");
+    let operators: Vec<S> = (0..OPERATORS).map(|_| (fixture.reopen)()).collect();
+    let barrier = Barrier::new(OPERATORS);
+    let answers: Vec<Result<_, StorageError>> = std::thread::scope(|scope| {
+        let asking: Vec<_> = operators
+            .iter()
+            .map(|operator| {
+                let barrier = &barrier;
+                scope.spawn(move || {
+                    barrier.wait();
+                    past_contention(|| operator.activate(at_ms))
+                })
+            })
+            .collect();
+        asking
+            .into_iter()
+            .map(|operator| operator.join().expect("an operator"))
+            .collect()
+    });
+    let made: Vec<_> = answers
+        .iter()
+        .filter_map(|answer| answer.as_ref().ok())
+        .collect();
+    let [identity] = made.as_slice() else {
+        panic!("one activation is made: {answers:?}");
+    };
+    assert_eq!(
+        (identity.activation, identity.activation_epoch.0),
+        (StoreActivation::Active, 1)
+    );
+    for refused in answers.iter().filter_map(|answer| answer.as_ref().err()) {
+        assert!(
+            matches!(refused, StorageError::InvalidArgument(_))
+                && refused
+                    .to_string()
+                    .contains("is already active, at epoch 1"),
+            "{refused}"
+        );
+    }
+    let now = fixture.store.store_identity().expect("the record");
+    assert_eq!(
+        (now.activation, now.activation_epoch.0),
+        (StoreActivation::Active, 1)
+    );
+    let log = fixture.store.control_events().expect("the activation log");
+    assert_eq!(log.len(), 1, "{log:?}");
+    assert_eq!((log[0].epoch.0, log[0].at_ms), (1, at_ms));
 }

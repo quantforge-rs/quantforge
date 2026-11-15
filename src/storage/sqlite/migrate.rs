@@ -10,7 +10,8 @@
 
 use super::errors::{commit_failed, failed};
 use super::{
-    META_DDL, SCHEMA_VERSION, SqliteStore, candles, control, jobs, journal, policies, segments,
+    META_DDL, SCHEMA_VERSION, SqliteStore, candles, control, execution, jobs, journal, policies,
+    segments,
 };
 use crate::storage::segments as format;
 use crate::{Interval, StorageError, now_utc_ms};
@@ -38,7 +39,7 @@ struct Step {
 
 /// The chain, in order. Each step's DDL is the text the build that
 /// introduced it wrote, which never changes again.
-const STEPS: [Step; 9] = [
+const STEPS: [Step; 10] = [
     Step {
         to: 1,
         apply: step_1_candles,
@@ -74,6 +75,10 @@ const STEPS: [Step; 9] = [
     Step {
         to: 9,
         apply: step_9_policies,
+    },
+    Step {
+        to: 10,
+        apply: step_10_execution,
     },
 ];
 
@@ -240,6 +245,12 @@ fn step_8_job_logs(transaction: &Transaction<'_>) -> Result<(), StorageError> {
 /// policies.
 fn step_9_policies(transaction: &Transaction<'_>) -> Result<(), StorageError> {
     batch(transaction, policies::SCHEMA_DDL)
+}
+
+/// Schema 10 (QUA-206): the signal inbox, the execution ledger, the event
+/// outbox, and the store's own leases, pool revisions and activation log.
+fn step_10_execution(transaction: &Transaction<'_>) -> Result<(), StorageError> {
+    batch(transaction, execution::SCHEMA_DDL)
 }
 
 fn mark_every_window(transaction: &Transaction<'_>) -> Result<(), StorageError> {

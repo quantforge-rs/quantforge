@@ -316,6 +316,19 @@ pub enum Step {
         #[serde(default)]
         refused: Option<Refusal>,
     },
+    Activate {
+        at_ms: i64,
+        #[serde(default)]
+        refused: Option<Refusal>,
+    },
+    Deactivate {
+        at_ms: i64,
+        #[serde(default)]
+        refused: Option<Refusal>,
+    },
+    ControlEvents {
+        expect: Vec<ControlEventText>,
+    },
     LegacyRuns {
         expect: Vec<LegacyRunText>,
     },
@@ -336,6 +349,16 @@ pub struct StoreRecordText {
     pub environment: Option<String>,
     pub activation: String,
     pub activation_epoch: u32,
+}
+
+/// One change of the store's activation, as its log keeps it.
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ControlEventText {
+    pub from: String,
+    pub to: String,
+    pub epoch: u32,
+    pub at_ms: i64,
 }
 
 /// One step of the migration log, but when and by which build.

@@ -33,7 +33,7 @@ T = 1_792_454_400_000
 # 29 decimal places: more than a Decimal holds.
 INEXACT = "1.00000000000000000000000000001"
 # The schema every backend creates; a new store logs one step to it from 0.
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 WINDOW_BARS = 1440
 STEP_MS = {
     "1s": 1_000,
@@ -239,6 +239,9 @@ class Model:
         self.journal = []  # (kind, run_id, name), in append order
         self.edits = {}  # (run_id, trade name) -> columns written behind the store's back
         self.environment = None  # the store's binding
+        self.activation = "inactive"  # the store's authority to execute
+        self.epoch = 0  # one more with each activation
+        self.control_log = []  # every change of activation, in order
         self.bundles = {}  # name -> bytes
         self.results = {}  # name -> what the store keeps of a result
         self.logs = {}  # job ID -> what a server kept of the job's log, as text
@@ -538,6 +541,25 @@ class Model:
         self.journal.append((kind, run_id, item))
 
     # The store's record.
+
+    def change_activation(self, to, at_ms):
+        """The activation contract of docs/storage-schema.md, "The store's
+        record": inactive -> active -> deactivated -> active; each
+        activation is a new epoch and needs a bound store; a deactivation
+        keeps the epoch; each change logs one row."""
+        if to == "active":
+            if self.activation == "active":
+                return refusal(f"is already active, at epoch {self.epoch}")
+            if self.environment is None:
+                return refusal("is bound to no environment yet; bind it before it is activated")
+            self.epoch += 1
+        elif self.activation != "active":
+            return refusal(f"is {self.activation}, and only an active store is deactivated")
+        self.control_log.append(
+            {"from": self.activation, "to": to, "epoch": self.epoch, "at_ms": at_ms}
+        )
+        self.activation = to
+        return None
 
     def bind(self, environment):
         if self.environment in (None, environment):
@@ -861,10 +883,23 @@ class Scenario:
         expect = {
             "schema_version": SCHEMA_VERSION,
             "environment": self.model.environment,
-            "activation": "inactive",
-            "activation_epoch": 0,
+            "activation": self.model.activation,
+            "activation_epoch": self.model.epoch,
         }
         self.step("store_record", expect=expect)
+
+    def activate(self, at_ms):
+        refused = self.model.change_activation("active", at_ms)
+        answer = {"refused": refused} if refused else {}
+        self.step("activate", at_ms=at_ms, **answer)
+
+    def deactivate(self, at_ms):
+        refused = self.model.change_activation("deactivated", at_ms)
+        answer = {"refused": refused} if refused else {}
+        self.step("deactivate", at_ms=at_ms, **answer)
+
+    def control_events(self):
+        self.step("control_events", expect=list(self.model.control_log))
 
     def migrations(self):
         self.step("migrations", expect=[{"to_version": SCHEMA_VERSION, "from_version": 0}])
@@ -2099,6 +2134,7 @@ def control_scenarios():
     )
     s.store_record()
     s.migrations()
+    s.control_events()
     s.reopen()
     s.store_record()
     out.append(s)
@@ -2112,6 +2148,50 @@ def control_scenarios():
     s.bind_environment("mainnet")
     s.reopen()
     s.store_record()
+    out.append(s)
+
+    s = Scenario(
+        "control.activation_is_a_new_epoch",
+        "an activation takes a bound store to active at the next epoch, a deactivation keeps the epoch, and the log keeps every change in order, for a store opened again too",
+    )
+    s.bind_environment("testnet")
+    s.activate(T)
+    s.store_record()
+    s.control_events()
+    s.deactivate(T + 60_000)
+    s.store_record()
+    s.activate(T + 120_000)
+    s.reopen()
+    s.store_record()
+    s.control_events()
+    s.raw_select(
+        "SELECT from_activation, to_activation, CAST(activation_epoch AS TEXT), "
+        "CAST(changed_at_ms AS TEXT) FROM store_control_events ORDER BY seq",
+        [
+            ["inactive", "active", "1", str(T)],
+            ["active", "deactivated", "1", str(T + 60_000)],
+            ["deactivated", "active", "2", str(T + 120_000)],
+        ],
+    )
+    out.append(s)
+
+    s = Scenario(
+        "control.activation_refusals",
+        "a store bound to no environment is not activated, an active one is not activated again, and only an active store is deactivated; a refusal changes nothing and logs nothing",
+    )
+    s.activate(T)
+    s.deactivate(T)
+    s.bind_environment("demo")
+    s.deactivate(T + 1)
+    s.store_record()
+    s.control_events()
+    s.activate(T + 2)
+    s.activate(T + 3)
+    s.store_record()
+    s.deactivate(T + 4)
+    s.deactivate(T + 5)
+    s.store_record()
+    s.control_events()
     out.append(s)
 
     s = Scenario(

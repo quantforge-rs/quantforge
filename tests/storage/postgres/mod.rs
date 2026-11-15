@@ -319,6 +319,15 @@ fn policies() {
 }
 
 #[test]
+fn execution() {
+    if server_url().is_none() {
+        eprintln!("skipping: {VARIABLE} is unset");
+        return;
+    }
+    conformance::execution::run::<Postgres>();
+}
+
+#[test]
 fn durability() {
     if server_url().is_none() {
         eprintln!("skipping: {VARIABLE} is unset");

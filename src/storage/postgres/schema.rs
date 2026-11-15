@@ -19,7 +19,7 @@ pub(super) const LOCK_KEY: i64 = 0x5146_5343_4845_4D41;
 
 /// The tables of the current schema. A database holding any of them but no
 /// recorded version is not a QuantForge store, and `init` refuses it.
-pub(super) const TABLES: [&str; 16] = [
+pub(super) const TABLES: [&str; 29] = [
     "meta",
     "candles",
     "bot_runs",
@@ -36,6 +36,19 @@ pub(super) const TABLES: [&str; 16] = [
     "job_logs",
     "automation_profiles",
     "policy_revisions",
+    "signal_inbox",
+    "signal_deliveries",
+    "execution_operations",
+    "execution_intents",
+    "execution_orders",
+    "execution_fills",
+    "position_cycles",
+    "margin_reservations",
+    "execution_incidents",
+    "outbox_events",
+    "position_leases",
+    "reservation_pools",
+    "store_control_events",
 ];
 
 /// Schema 5, where PostgreSQL starts: the tables of SQLite's schema 5,

@@ -13,17 +13,17 @@ contract behind it.
 <!-- begin: supported upgrades -->
 | Written by | Schema | Upgrades to |
 | --- | --- | --- |
-| QuantForge 0.1.0 | 1 | 9 |
-| QuantForge 0.2.0 | 2 | 9 |
-| A development build after 0.2.0 | 3, 4, 5, 6, 7 or 8 | 9 |
-| This release | 9 | — |
+| QuantForge 0.1.0 | 1 | 10 |
+| QuantForge 0.2.0 | 2 | 10 |
+| A development build after 0.2.0 | 3, 4, 5, 6, 7, 8 or 9 | 10 |
+| This release | 10 | — |
 <!-- end: supported upgrades -->
 
 Every step of the chain runs forward only. A file a newer release has
 already upgraded is refused by an older one, untouched:
 
 ```text
-database schema version 9 is newer than this build supports (8); use a newer
+database schema version 10 is newer than this build supports (9); use a newer
 quantforge release, and never an older one on this database
 ```
 
@@ -65,6 +65,7 @@ Each step runs in one transaction with its version stamp, and
 | 6 → 7 | Creates the table `serve run` keeps the result files of succeeded jobs in. Every job an earlier build recorded stays as it was. |
 | 7 → 8 | Creates the table `serve run` keeps each job's log in once the job has ended. Every job an earlier build recorded stays as it was, without a log. |
 | 8 → 9 | Creates the tables automation profiles and every revision of their policies are kept in. Both start empty, and nothing a store already holds changes. |
+| 9 → 10 | Creates the execution store's tables: the signal inbox, the intents, orders, fills and position cycles of automated trading, their reservations and incidents, the event outbox, and the store's own leases and activation log. All start empty, and nothing a store already holds changes: its record stays as it was, bound or not, and no step activates a store. |
 
 Candles are not rewritten. The journal tables are copied row by row, so the
 upgrade takes seconds for any journal and leaves the sequence numbers as

@@ -5,7 +5,10 @@ of the Rust code under test.
 A store's tables as rows of plain values: candles of three product lines on
 two venues, a run journal with every identity source, segments with their
 index and dirty marks, a server's bundles and jobs with their results and
-logs, and automation profiles with every revision of their policies. Then, for every table and every market of a
+logs, automation profiles with every revision of their policies, and an
+execution store's signals, operations, intents, orders, fills, cycles,
+reservations, incidents and events, as the reference model of
+execution_model.py leaves them. Then, for every table and every market of a
 market table, what a verification reads from either store: the number of
 rows, the first and last value of an integer key, and the checksum of the
 canonical text docs/storage-migration.md defines. A worked example shows the
@@ -26,6 +29,12 @@ import json
 import pathlib
 import re
 import struct
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from execution_cases import transfer_rows  # noqa: E402
+from execution_model import COLUMNS as EXECUTION_COLUMNS  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OUT = ROOT / "tests" / "fixtures" / "storage_transfer_cases.json"
@@ -109,6 +118,9 @@ TABLES = [
         False,
     ),
 ]
+# The execution store's tables, in copy order: each is read in order of its
+# first column, the number its store gave the row, or a cycle's own.
+TABLES += [(table, columns, columns[0], False) for table, columns in EXECUTION_COLUMNS.items()]
 
 # --- The canonical text of docs/storage-migration.md --------------------------
 
@@ -627,6 +639,7 @@ ROWS = {
     "job_logs": JOB_LOGS,
     "automation_profiles": AUTOMATION_PROFILES,
     "policy_revisions": POLICY_REVISIONS,
+    **transfer_rows(),
 }
 
 # --- What a verification reads ------------------------------------------------

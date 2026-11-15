@@ -153,6 +153,11 @@ fn policies() {
 }
 
 #[test]
+fn execution() {
+    conformance::execution::run::<Sqlite>();
+}
+
+#[test]
 fn durability() {
     conformance::durability::<Sqlite>();
 }

@@ -3,9 +3,9 @@
 //! identity every journal carries, and the log of the schema migrations it
 //! went through. The control contract these types spell out is
 //! `docs/storage-schema.md`: QUA-37 defines it and records the migration
-//! defaults, ALG-738 persists its transitions, ALG-767 enforces them and
-//! ALG-768 verifies a transfer. Nothing here moves a store between its
-//! activation states yet.
+//! defaults, QUA-206 persists its transitions and holds leases and fenced
+//! writes to them, ALG-767 enforces them before arming and ALG-768
+//! verifies a transfer.
 
 use super::futures::ActivationEpoch;
 use super::identity::text_id;
@@ -128,6 +128,37 @@ pub struct StoreIdentity {
     pub environment: Option<Environment>,
     pub activation: StoreActivation,
     pub activation_epoch: ActivationEpoch,
+}
+
+impl StoreIdentity {
+    /// The epoch the store executes under, or why it executes nothing:
+    /// only a store an operator activated has authority, and a copy or a
+    /// transfer never brings any.
+    pub fn authority(&self) -> Result<ActivationEpoch, ModelError> {
+        if self.activation != StoreActivation::Active {
+            return Err(ModelError::InvalidRecord {
+                record: "store",
+                reason: format!(
+                    "store {} is {}, and only an active store executes; an operator activates \
+                     it once no other store of its account is active",
+                    self.store_id, self.activation
+                ),
+            });
+        }
+        Ok(self.activation_epoch)
+    }
+}
+
+/// One change of a store's activation, as its own log records it. The log
+/// is the store's and stays with it: no copy or transfer carries it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ControlEvent {
+    pub from: StoreActivation,
+    pub to: StoreActivation,
+    /// The epoch the store stood at after the change: a new one for each
+    /// activation, and the one it had for a deactivation.
+    pub epoch: ActivationEpoch,
+    pub at_ms: TimestampMs,
 }
 
 /// One step of the schema chain a store went through, as its log records

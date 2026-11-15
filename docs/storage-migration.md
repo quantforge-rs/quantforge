@@ -27,8 +27,9 @@ writes into.
 Every row of these tables, in this order, each read in order of its key:
 a run before its journals, a segment's bytes before the index entry that
 names them, candles before the marks on their windows, a profile before
-the revisions of its policy. Each table's columns are those of the
-[DDL](storage-schema.md#sqlite-ddl).
+the revisions of its policy, a signal before its deliveries and the intent
+it became, and an operation before the orders and fills made under it.
+Each table's columns are those of the [DDL](storage-schema.md#sqlite-ddl).
 
 <!-- begin: transfer tables -->
 - `candles`: market by market, by `open_time_ms`
@@ -44,16 +45,29 @@ the revisions of its policy. Each table's columns are those of the
 - `job_logs`: by `job_id`, byte by byte
 - `automation_profiles`: by `profile_id`, byte by byte
 - `policy_revisions`: by `seq`, a number the store gave
+- `signal_inbox`: by `seq`, a number the store gave
+- `signal_deliveries`: by `seq`, a number the store gave
+- `execution_operations`: by `operation_id`, a number the store gave
+- `execution_intents`: by `seq`, a number the store gave
+- `execution_orders`: by `seq`, a number the store gave
+- `execution_fills`: by `seq`, a number the store gave
+- `position_cycles`: by `cycle_id`, the number of the operation that opened it
+- `margin_reservations`: by `seq`, a number the store gave
+- `execution_incidents`: by `seq`, a number the store gave
+- `outbox_events`: by `seq`, a number the store gave
 <!-- end: transfer tables -->
 
 Nothing is parsed or rewritten on the way: a decimal keeps its exact text
 and scale (`1.10` stays `1.10`, and text no `Decimal` holds is copied as it
 is and refused alike by both stores when read), IDs and sequence numbers
-keep their values, timestamps their milliseconds, run state, order JSON and
-policy documents their bytes, and a segment its bytes, a replaced one too.
-A dirty mark keeps its revision. The target's own numbering moves past the
-numbers copied, so the next event, trade, mark, job or policy revision it
-writes takes a new one.
+keep their values, timestamps their milliseconds, run state, order JSON,
+policy documents and the execution store's records their bytes, and a
+segment its bytes, a replaced one too. A dirty mark keeps its revision,
+and so does every record of the execution store. The target's own
+numbering moves past the numbers copied, so the next event, trade, mark,
+job, policy revision, signal or operation it writes takes a new one, and
+no client order ID it derives from an operation's number repeats one the
+source sent.
 
 Identities are copied as they are, never guessed: a run keeps the
 environment, account and identity source it recorded; a legacy run stays
@@ -66,15 +80,29 @@ These stay behind, because every store keeps its own:
 - `meta`
 - `store_control`
 - `schema_migrations`
+- `position_leases`
+- `reservation_pools`
+- `store_control_events`
 <!-- end: kept by each store -->
 
 The target has its own schema version and migration log, and its own
-record: a new store ID, `inactive`, epoch 0. Copying never gives a store
-execution authority (storage-schema.md, [The store's
-record](storage-schema.md#the-stores-record)). The source's environment is
-carried over on its own: a target bound to no environment is bound to the
-source's, and one bound to another is refused. On the target, `meta` holds
-one more row, `transfer`, the record of the copy it holds.
+record: a new store ID, `inactive`, epoch 0, with an activation log of its
+own that starts empty. Copying never gives a store execution authority
+(storage-schema.md, [The store's
+record](storage-schema.md#the-stores-record)): the signals, intents,
+orders, cycles and reservations of the source are all in the copy, and no
+executor may act on any of them there until the target is activated,
+which is a step of its own that a copy never takes. A lease is the promise
+of the store that granted it to one executor, so none is copied, and the
+target grants its first only once it is active. The revision of a margin
+pool is the number a store's own writers compare before they reserve from
+it: the target's start again, so an entry sized against the source's pool
+is sized again before it reserves on the target, while every reservation
+the source held is in the copy and counts against the pool there as it did.
+The source's environment is carried over on its own: a target bound to no
+environment is bound to the source's, and one bound to another is refused.
+On the target, `meta` holds one more row, `transfer`, the record of the
+copy it holds.
 
 ## Before you start
 
@@ -273,8 +301,9 @@ sha256:f334507638bb188f7f323a1895d78aa292eeef987789beaa64d7e0ac4ebf4f79
 
 [`tests/fixtures/storage_transfer_cases.json`](../tests/fixtures/storage_transfer_cases.json)
 holds a store's tables as rows, three product lines on two venues, a run of
-every identity source, and segments with their index and marks, with the
-checksum of every scope. An independent Python script,
+every identity source, segments with their index and marks, and an
+execution store's signals, intents, orders, fills, cycles, reservations,
+incidents and events on two venues, with the checksum of every scope. An independent Python script,
 `spikes/storage-contract/transfer_cases.py`, wrote it, not the Rust code
 under test, and both stores read every checksum from it.
 
@@ -284,8 +313,9 @@ The transfer is versioned twice. `TRANSFER_SCHEMA`, in
 `src/model/transfer/mod.rs`, is the schema whose tables it copies, and a
 source and a target are both at it; `TRANSFER_FORMAT` is the format of the
 canonical text and of the target's record, and a copy begun under another
-format is refused. A story that adds or changes tables, such as ALG-738's
-signal inbox, execution ledger and outbox:
+format is refused. A story that adds or changes tables, as QUA-206 (the
+matrix's ALG-738) did for the signal inbox, the execution ledger and the
+outbox:
 
 - lists each new table in `TRANSFER_TABLES`, in copy order with its key, or
   among the tables each store keeps for itself, and here in the lists

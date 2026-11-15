@@ -5989,7 +5989,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 9,
+      "schema_version": 10,
       "environment": null,
       "activation": "inactive",
       "activation_epoch": 0
@@ -5999,10 +5999,14 @@
      "op": "migrations",
      "expect": [
       {
-       "to_version": 9,
+       "to_version": 10,
        "from_version": 0
       }
      ]
+    },
+    {
+     "op": "control_events",
+     "expect": []
     },
     {
      "op": "reopen"
@@ -6010,7 +6014,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 9,
+      "schema_version": 10,
       "environment": null,
       "activation": "inactive",
       "activation_epoch": 0
@@ -6044,11 +6048,227 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 9,
+      "schema_version": 10,
       "environment": "testnet",
       "activation": "inactive",
       "activation_epoch": 0
      }
+    }
+   ]
+  },
+  {
+   "id": "control.activation_is_a_new_epoch",
+   "doc": "an activation takes a bound store to active at the next epoch, a deactivation keeps the epoch, and the log keeps every change in order, for a store opened again too",
+   "steps": [
+    {
+     "op": "bind_environment",
+     "environment": "testnet"
+    },
+    {
+     "op": "activate",
+     "at_ms": 1792454400000
+    },
+    {
+     "op": "store_record",
+     "expect": {
+      "schema_version": 10,
+      "environment": "testnet",
+      "activation": "active",
+      "activation_epoch": 1
+     }
+    },
+    {
+     "op": "control_events",
+     "expect": [
+      {
+       "from": "inactive",
+       "to": "active",
+       "epoch": 1,
+       "at_ms": 1792454400000
+      }
+     ]
+    },
+    {
+     "op": "deactivate",
+     "at_ms": 1792454460000
+    },
+    {
+     "op": "store_record",
+     "expect": {
+      "schema_version": 10,
+      "environment": "testnet",
+      "activation": "deactivated",
+      "activation_epoch": 1
+     }
+    },
+    {
+     "op": "activate",
+     "at_ms": 1792454520000
+    },
+    {
+     "op": "reopen"
+    },
+    {
+     "op": "store_record",
+     "expect": {
+      "schema_version": 10,
+      "environment": "testnet",
+      "activation": "active",
+      "activation_epoch": 2
+     }
+    },
+    {
+     "op": "control_events",
+     "expect": [
+      {
+       "from": "inactive",
+       "to": "active",
+       "epoch": 1,
+       "at_ms": 1792454400000
+      },
+      {
+       "from": "active",
+       "to": "deactivated",
+       "epoch": 1,
+       "at_ms": 1792454460000
+      },
+      {
+       "from": "deactivated",
+       "to": "active",
+       "epoch": 2,
+       "at_ms": 1792454520000
+      }
+     ]
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT from_activation, to_activation, CAST(activation_epoch AS TEXT), CAST(changed_at_ms AS TEXT) FROM store_control_events ORDER BY seq",
+     "expect": [
+      [
+       "inactive",
+       "active",
+       "1",
+       "1792454400000"
+      ],
+      [
+       "active",
+       "deactivated",
+       "1",
+       "1792454460000"
+      ],
+      [
+       "deactivated",
+       "active",
+       "2",
+       "1792454520000"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "id": "control.activation_refusals",
+   "doc": "a store bound to no environment is not activated, an active one is not activated again, and only an active store is deactivated; a refusal changes nothing and logs nothing",
+   "steps": [
+    {
+     "op": "activate",
+     "at_ms": 1792454400000,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "is bound to no environment yet; bind it before it is activated"
+     }
+    },
+    {
+     "op": "deactivate",
+     "at_ms": 1792454400000,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "is inactive, and only an active store is deactivated"
+     }
+    },
+    {
+     "op": "bind_environment",
+     "environment": "demo"
+    },
+    {
+     "op": "deactivate",
+     "at_ms": 1792454400001,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "is inactive, and only an active store is deactivated"
+     }
+    },
+    {
+     "op": "store_record",
+     "expect": {
+      "schema_version": 10,
+      "environment": "demo",
+      "activation": "inactive",
+      "activation_epoch": 0
+     }
+    },
+    {
+     "op": "control_events",
+     "expect": []
+    },
+    {
+     "op": "activate",
+     "at_ms": 1792454400002
+    },
+    {
+     "op": "activate",
+     "at_ms": 1792454400003,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "is already active, at epoch 1"
+     }
+    },
+    {
+     "op": "store_record",
+     "expect": {
+      "schema_version": 10,
+      "environment": "demo",
+      "activation": "active",
+      "activation_epoch": 1
+     }
+    },
+    {
+     "op": "deactivate",
+     "at_ms": 1792454400004
+    },
+    {
+     "op": "deactivate",
+     "at_ms": 1792454400005,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "is deactivated, and only an active store is deactivated"
+     }
+    },
+    {
+     "op": "store_record",
+     "expect": {
+      "schema_version": 10,
+      "environment": "demo",
+      "activation": "deactivated",
+      "activation_epoch": 1
+     }
+    },
+    {
+     "op": "control_events",
+     "expect": [
+      {
+       "from": "inactive",
+       "to": "active",
+       "epoch": 1,
+       "at_ms": 1792454400002
+      },
+      {
+       "from": "active",
+       "to": "deactivated",
+       "epoch": 1,
+       "at_ms": 1792454400004
+      }
+     ]
     }
    ]
   },

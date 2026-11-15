@@ -166,13 +166,13 @@ pub mod storage;
 /// interchange, which no command uses yet.
 pub use model::{
     AccountTrade, AssetBalance, BotRunState, BundleHash, CancelOrderRequest, Candle, CandleBatch,
-    CandleColumns, Category, ClosedTrade, DurabilityReport, DurabilitySetting, Environment,
-    ExchangeId, ExchangeOrder, ExecutionMode, Fill, IdentitySource, Interval, JobId, JobOutcome,
-    JobPhase, JobRecord, KeyFingerprint, KlineRequest, LegacyRun, MarketCoverage, MarketId,
-    MarketOrderRequest, ModelError, NewJob, OrderQueryRequest, OrderStatus, PositionState,
-    ResultHash, RunIdentity, RunStatus, SchemaMigration, SegmentHash, SegmentPlan, SegmentRef,
-    SegmentRefresh, SegmentTip, Side, StoreActivation, StoreId, StoreIdentity, StoredResult,
-    Symbol, SymbolRules, TargetPosition, TimestampMs, TransferRecord, TransferState,
+    CandleColumns, Category, ClosedTrade, ControlEvent, DurabilityReport, DurabilitySetting,
+    Environment, ExchangeId, ExchangeOrder, ExecutionMode, Fill, IdentitySource, Interval, JobId,
+    JobOutcome, JobPhase, JobRecord, KeyFingerprint, KlineRequest, LegacyRun, MarketCoverage,
+    MarketId, MarketOrderRequest, ModelError, NewJob, OrderQueryRequest, OrderStatus,
+    PositionState, ResultHash, RunIdentity, RunStatus, SchemaMigration, SegmentHash, SegmentPlan,
+    SegmentRef, SegmentRefresh, SegmentTip, Side, StoreActivation, StoreId, StoreIdentity,
+    StoredResult, Symbol, SymbolRules, TargetPosition, TimestampMs, TransferRecord, TransferState,
     ValidationIssue, ValidationReport, Venue, VenueAccountId, VenueOrderId, VenueTradeId,
     decimal_from_f64, decimal_to_f64, describe_account, describe_environment, ms_to_rfc3339,
     now_utc_ms, parse_rfc3339_to_ms, round_down_to_step, validate_candles,
@@ -191,10 +191,10 @@ pub use model::{
 /// `ExchangeError`.
 pub use ports::{
     AccountConnector, CandleQuery, CandleStore, ExchangeCapabilities, ExchangeConnector,
-    ExchangeError, ExchangeErrorKind, JobStore, MarketDataCapabilities, MarketDataConnector,
-    OrderCapabilities, PolicyStore, RunJournalStore, SegmentStore, SignedConnectors, StorageError,
-    StorageErrorKind, StoreControl, StreamCapabilities, TradingConnector, TransferBegun,
-    TransferSnapshot, TransferSource, TransferTarget,
+    ExchangeError, ExchangeErrorKind, ExecutionStore, JobStore, MarketDataCapabilities,
+    MarketDataConnector, OrderCapabilities, PolicyStore, RunJournalStore, SegmentStore,
+    SignedConnectors, StorageError, StorageErrorKind, StoreControl, StreamCapabilities,
+    TradingConnector, TransferBegun, TransferSnapshot, TransferSource, TransferTarget,
 };
 
 /// What building an exchange's connectors takes and returns. The registry

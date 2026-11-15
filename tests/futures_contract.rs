@@ -535,6 +535,48 @@ async fn an_acknowledgement_leaves_an_entry_submitting_until_the_venue_reports_f
     assert_eq!(intent.state(), IntentState::Filled);
 }
 
+/// A venue's trade records name their order by the venue's own ID, and
+/// carry a client ID only on some venues. Such a fill names no attempt by
+/// itself; the order it belongs to, which does, is what makes it the
+/// intent's.
+#[test]
+fn a_fill_that_names_no_client_is_its_orders_by_the_venues_id() {
+    let (mut intent, id) = sent_entry();
+    let reported = order(&id, FuturesOrderStatus::PartiallyFilled, "1.0");
+    let nameless = FuturesFill {
+        client_id: None,
+        ..fill(&id)
+    };
+    assert!(
+        intent.clone().on_fill(&nameless).is_err(),
+        "alone, it is no evidence for any attempt"
+    );
+    intent
+        .on_fill_of(&reported, &nameless)
+        .expect("a fill of the attempt's order");
+    assert_eq!(intent.state(), IntentState::PartiallyFilled);
+
+    // A fill of another order, a fill that names another client, and a
+    // fill of an order that is not the intent's own are none of its.
+    let (mut untouched, _) = sent_entry();
+    let elsewhere = FuturesFill {
+        venue_order_id: VenueOrderId::new("5502").expect("order id"),
+        ..nameless.clone()
+    };
+    let someone = FuturesFill {
+        client_id: Some("someone-else".to_string()),
+        ..fill(&id)
+    };
+    let foreign = FuturesOrder {
+        client_id: Some("someone-else".to_string()),
+        ..reported.clone()
+    };
+    assert!(untouched.on_fill_of(&reported, &elsewhere).is_err());
+    assert!(untouched.on_fill_of(&reported, &someone).is_err());
+    assert!(untouched.on_fill_of(&foreign, &nameless).is_err());
+    assert_eq!(untouched.state(), IntentState::Submitting);
+}
+
 #[test]
 fn only_a_definitive_refusal_rejects_and_an_unknown_outcome_waits_for_evidence() {
     let (mut rejected, id) = sent_entry();

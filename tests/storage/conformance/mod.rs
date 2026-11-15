@@ -6,8 +6,8 @@
 //!
 //! A backend joins by implementing [`Backend`] and [`Raw`], then calling
 //! the group of each port it implements: [`candles`], [`journal`],
-//! [`segments`], [`control`], [`jobs`], [`policies`], and, with all of
-//! them, [`durability`]. Every
+//! [`segments`], [`control`], [`jobs`], [`policies`], [`execution`], and,
+//! with all of them, [`durability`]. Every
 //! scenario and check runs on a fresh, empty store, and a group fails
 //! listing every one that failed.
 
@@ -15,6 +15,8 @@ pub mod candles;
 pub mod cases;
 pub mod control;
 pub mod durability;
+pub mod execution;
+pub mod execution_checks;
 pub mod jobs;
 pub mod journal;
 pub mod policies;
@@ -268,7 +270,7 @@ fn run_group<B, F>(
     );
 }
 
-fn message(payload: &Box<dyn Any + Send>) -> String {
+pub(crate) fn message(payload: &Box<dyn Any + Send>) -> String {
     payload
         .downcast_ref::<String>()
         .cloned()
