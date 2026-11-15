@@ -10,7 +10,9 @@
 //!   ([`ExecutionLedger::record_attempt`]): the client order ID an order
 //!   will carry is recorded, under the position's lease, before the order
 //!   is sent. A process that dies after that finds the attempt, and knows
-//!   what to ask the venue about.
+//!   what to ask the venue about. An entry is held to what the store holds
+//!   once more before it is recorded, since admission looked without a
+//!   lease ([`LedgerError::Refused`]).
 //! - **Evidence settles** ([`ExecutionLedger::settle`]): an order or a
 //!   refusal read back from the venue moves the intent, records the fills,
 //!   opens the position's cycle at an entry's first fill and releases its
@@ -36,7 +38,7 @@ use thiserror::Error;
 
 use crate::model::ModelError;
 use crate::model::execution::{Commit, ExecutionUnit, Fenced, SignalRecord, Stale};
-use crate::model::futures::Delivery;
+use crate::model::futures::{Delivery, SignalRefusal};
 use crate::ports::{Clock, ExchangeError, ExecutionStore, StorageError};
 
 pub use admission::Admission;
@@ -65,6 +67,12 @@ pub enum LedgerError {
     /// may not execute. Nothing was written, and nothing may be sent.
     #[error("this writer may not act on the position: {0}; nothing was written")]
     Fenced(Fenced),
+
+    /// What the store holds refuses the entry that was about to be sent:
+    /// an incident halts it, its position is held, or another entry on it
+    /// is unresolved. Nothing was written, and nothing may be sent.
+    #[error("the entry may not be sent: {}; nothing was written", .0.message)]
+    Refused(SignalRefusal),
 
     /// A delivery kept meeting other deliveries of its signal.
     #[error("the signal kept changing while its delivery was recorded; deliver it again")]

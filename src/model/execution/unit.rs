@@ -142,8 +142,9 @@ impl ExecutionUnit {
     /// Whether the unit is one a store may be asked to apply. This holds
     /// what no revision can: that a position's records change only under
     /// its lease, that an intent is recorded with the admission of its
-    /// signal and never apart from it, and that each kind of record is
-    /// first written the way its kind is.
+    /// own signal and never apart from it, that each kind of record is
+    /// first written the way its kind is, and that a unit gives its
+    /// position one unresolved entry and one open cycle at most.
     pub fn check(&self) -> Result<(), ModelError> {
         if self.delivery.is_none() && self.changes.is_empty() {
             return Err(refused("it changes nothing".to_string()));
@@ -177,7 +178,8 @@ impl ExecutionUnit {
         }
         self.check_fence()?;
         self.check_pool()?;
-        self.check_admissions()
+        self.check_admissions()?;
+        self.check_slots()
     }
 
     fn check_fence(&self) -> Result<(), ModelError> {
@@ -232,39 +234,70 @@ impl ExecutionUnit {
                 _ => None,
             });
         let signals: Vec<&SignalRecord> = delivered.chain(judged).collect();
-        let mut named: Vec<String> = Vec::new();
+        // A signal is its scope's: two accounts' profiles of one name that
+        // take one alert hold two signals, and each is paired with its own
+        // intent.
+        let known_by = |signal: &SignalRecord| (signal.scope().clone(), signal.id().clone());
+        let name = |signal: &SignalRecord| format!("{}/{}", signal.profile(), signal.id());
+        let mut seen = Vec::new();
         for signal in &signals {
-            let name = format!("{}/{}", signal.profile(), signal.id());
-            if named.contains(&name) {
-                return Err(refused(format!("it records signal {name} twice")));
+            if seen.contains(&known_by(signal)) {
+                return Err(refused(format!("it records signal {} twice", name(signal))));
             }
-            named.push(name);
+            seen.push(known_by(signal));
         }
-        let admitted: Vec<String> = signals
+        let admitted: Vec<&SignalRecord> = signals
             .iter()
+            .copied()
             .filter(|signal| signal.state() == SignalState::Admitted)
-            .map(|signal| format!("{}/{}", signal.profile(), signal.id()))
             .collect();
-        let mut recorded: Vec<String> = Vec::new();
+        let mut recorded = Vec::new();
         for change in &self.changes {
             let (Record::Intent(intent), Expect::Absent) = (&change.record, change.expect) else {
                 continue;
             };
-            let name = change.record.name();
-            if intent.intent().state() != IntentState::Admitted || !admitted.contains(&name) {
+            let of = (intent.scope().clone(), intent.signal().clone());
+            let admits = admitted.iter().any(|signal| known_by(signal) == of);
+            if intent.intent().state() != IntentState::Admitted || !admits {
                 return Err(refused(format!(
-                    "intent {name} is first recorded as admitted, in the unit that admits its \
-                     signal"
+                    "intent {} is first recorded as admitted, in the unit that admits its signal",
+                    change.record.name()
                 )));
             }
-            recorded.push(name);
+            recorded.push(of);
         }
-        match admitted.iter().find(|name| !recorded.contains(name)) {
-            Some(name) => Err(refused(format!(
-                "it admits signal {name} without recording its intent"
+        match admitted
+            .iter()
+            .find(|signal| !recorded.contains(&known_by(signal)))
+        {
+            Some(signal) => Err(refused(format!(
+                "it admits signal {} without recording its intent",
+                name(signal)
             ))),
             None => Ok(()),
         }
+    }
+
+    /// A position has one unresolved entry and one open cycle at a time,
+    /// so a unit gives its position at most one of each. What the store
+    /// already holds is the store's to check.
+    fn check_slots(&self) -> Result<(), ModelError> {
+        let mut taken: Vec<&'static str> = Vec::new();
+        for change in &self.changes {
+            let slot = match &change.record {
+                Record::Intent(intent) if intent.blocks_entries() => "unresolved entries",
+                Record::Cycle(cycle) if cycle.is_open() => "open cycles",
+                _ => continue,
+            };
+            if taken.contains(&slot) {
+                return Err(refused(format!(
+                    "it gives its position two {slot}; a position has one unresolved entry and \
+                     one open cycle at a time"
+                )));
+            }
+            taken.push(slot);
+        }
+        Ok(())
     }
 }
 

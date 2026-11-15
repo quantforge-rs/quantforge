@@ -194,9 +194,13 @@ impl Replacement {
         if self.original != previous.original {
             return Err(not_the_same(RECORD, "replaced order"));
         }
-        // A client ID never changes; the venue's ID is learned later.
+        // A client ID never changes. The venue's ID is learned later, and
+        // once learned it neither changes nor goes.
         let renamed = match (&previous.replacement, &self.replacement) {
-            (Some(old), Some(new)) => old.client_order_id != new.client_order_id,
+            (Some(old), Some(new)) => {
+                old.client_order_id != new.client_order_id
+                    || (old.venue_order_id.is_some() && old.venue_order_id != new.venue_order_id)
+            }
             (Some(_), None) => true,
             (None, _) => false,
         };

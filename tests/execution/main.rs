@@ -14,6 +14,8 @@
 //!   and in conflict, judged in place, and what the store's records refuse.
 //! - `orders`: an attempt recorded before it is sent, the venue's evidence,
 //!   and a restart that asks the venue and sends nothing.
+//! - `between`: what another writer does between admission's look and its
+//!   write, and the second look an entry gets before its order is recorded.
 //! - `workers`: two workers on one intent, a lease that was taken, and a
 //!   store that is not active.
 //! - `isolation`: the same alert on two venues.
@@ -24,6 +26,7 @@
 //!   cases.
 
 mod admission;
+mod between;
 mod crash;
 mod docs;
 mod fixtures;

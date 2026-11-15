@@ -11,7 +11,7 @@ use quantforge::model::execution::{
 use quantforge::model::futures::{
     ClientOrderId, FuturesOrderStatus, IntentState, OrderLeg, PoolScope, ProtectionState,
 };
-use quantforge::model::{Asset, OperationId};
+use quantforge::model::{Asset, OperationId, VenueOrderId};
 use quantforge::ports::{ExchangeError, ExchangeErrorKind};
 use quantforge::{ExecutionStore, StoreControl};
 
@@ -471,6 +471,102 @@ fn an_order_the_venue_holds_is_settled_from_its_report_and_not_sent_again<B: Bac
     assert_eq!(count(backend, "position_cycles"), 1);
 }
 
+/// A venue's trade records name their order by the venue's own ID, and on
+/// some venues carry no client ID at all. The fills of a recovered order
+/// are the ones under its venue ID: each is recorded, with or without a
+/// client ID, and another order's fill on the same instrument in the same
+/// minutes is not.
+fn a_recovered_orders_fills_are_its_own_by_the_venues_id_for_it<B: Backend>(backend: &B) {
+    let store = backend.open();
+    store.activate(T).expect("activated");
+    let line = line("bybit linear");
+    let clock = Manual::at(T + 6_000);
+    let ledger = ExecutionLedger::new(&store, &clock);
+    let entry = started(&store, &ledger, &line, "entry", "trend", 0);
+    let lease = line.lease(&store, "executor-a", T + 7_000);
+    clock.set(T + 8_000);
+    let sent = ledger
+        .record_attempt(&lease.fence(), &entry.intent, &entry.id, None)
+        .expect("recorded");
+
+    let order = reported(&line, &entry.id, FuturesOrderStatus::Filled, "4.38", "4.38");
+    let trade = |trade: &str, of_order: &str, quantity: &str, named: bool| {
+        let recorded = line.fill(trade, &entry.id, quantity, "234.25", entry.operation, None);
+        let mut fill = recorded.fill().clone();
+        fill.venue_order_id = VenueOrderId::new(of_order).expect("an order id");
+        if !named {
+            fill.client_id = None;
+        }
+        fill
+    };
+    let its_own = order.venue_order_id.as_str().to_string();
+    let venue = Venue::new(line.instrument().exchange, &clock);
+    venue.holds(
+        order,
+        vec![
+            trade("t-1", &its_own, "2", false),
+            trade("t-2", &its_own, "2.38", true),
+            // Someone else's order on the same instrument.
+            trade("t-9", "777", "1", false),
+        ],
+    );
+    clock.set(T + 12_000);
+    let asked = block_on(ledger.resume(&lease.fence(), &sent, &venue, &venue)).expect("asked");
+    let Resumed::Settled(filled) = &asked else {
+        panic!("settled: {asked:?}");
+    };
+    assert_eq!(filled.record.intent().state(), IntentState::Filled);
+    let cycle = filled.record.cycle().expect("the cycle it opened");
+    let mut trades: Vec<String> = store
+        .fills(cycle)
+        .expect("the fills")
+        .iter()
+        .map(|fill| fill.fill().trade_id.as_str().to_string())
+        .collect();
+    trades.sort_unstable();
+    assert_eq!(trades, ["t-1", "t-2"], "the order's own, named or not");
+    assert_eq!(count(backend, "execution_fills"), 2);
+
+    // Handed a fill of another order, a settlement refuses all of it.
+    let other = started(
+        &store,
+        &ledger,
+        &line.trading("BTCUSDT"),
+        "entry",
+        "trend",
+        0,
+    );
+    let btc = line.trading("BTCUSDT");
+    let btc_lease = btc.lease(&store, "executor-a", T + 12_000);
+    let btc_sent = ledger
+        .record_attempt(&btc_lease.fence(), &other.intent, &other.id, None)
+        .expect("recorded");
+    let report = reported(&btc, &other.id, FuturesOrderStatus::Filled, "4.38", "4.38");
+    let mut stray = btc
+        .fill("t-3", &other.id, "4.38", "234.25", other.operation, None)
+        .fill()
+        .clone();
+    stray.venue_order_id = VenueOrderId::new("777").expect("an order id");
+    let evidence = Evidence::Order {
+        order: &report,
+        fills: std::slice::from_ref(&stray),
+    };
+    let refused = ledger
+        .settle(&btc_lease.fence(), &btc_sent, evidence)
+        .expect_err("not this order's fill");
+    assert!(
+        refused
+            .to_string()
+            .contains("a fill of the order reported for the intent's attempt"),
+        "{refused}"
+    );
+    assert_eq!(
+        count(backend, "execution_fills"),
+        2,
+        "nothing of it written"
+    );
+}
+
 /// An exit's attempt the venue does not know may be sent again, since a
 /// close can only reduce; the new attempt is recorded first, and decides.
 fn an_exit_may_be_sent_again_as_a_new_attempt_recorded_first<B: Backend>(backend: &B) {
@@ -579,5 +675,6 @@ on_each_backend!(
     an_attempt_found_after_a_restart_is_asked_for_and_never_sent_again,
     an_entry_stays_unknown_without_the_whole_proof,
     an_order_the_venue_holds_is_settled_from_its_report_and_not_sent_again,
+    a_recovered_orders_fills_are_its_own_by_the_venues_id_for_it,
     an_exit_may_be_sent_again_as_a_new_attempt_recorded_first,
 );

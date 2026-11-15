@@ -166,6 +166,8 @@ src/
 │   │   │   └── tests.rs        what an operation may name, and how a replacement moves
 │   │   ├── replacement.rs      Replacement, OrderRef, SpotReplaceState: a Spot amend or cancel-replace
 │   │   ├── order.rs            OrderRecord, OrderPhase, OrderEvidence: an order's identity before it is sent, then what is learned
+│   │   ├── order/              its unit tests, beside it for the line budget
+│   │   │   └── tests.rs        a final report that stands, and a record that holds only its own order's report
 │   │   ├── fill.rs             FillRecord: a venue's fill, recorded once
 │   │   ├── cycle.rs            CycleRecord: a position cycle, numbered as the operation that opened it
 │   │   ├── reservation.rs      Reservation, PoolReservations: margin held for an entry, against its pool

@@ -3,7 +3,7 @@
 //! it since.
 
 use super::{ExecutionScope, disagrees, from_stored, not_the_same, to_stored};
-use crate::model::futures::{FuturesOrder, StopOrder};
+use crate::model::futures::{FuturesOrder, StopOrder, StopStatus};
 use crate::model::identity::plain_text;
 use crate::model::{InstrumentId, ModelError, OperationId, TimestampMs};
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,18 @@ const ORDER: &str = "order record";
 pub enum OrderEvidence {
     Futures(Box<FuturesOrder>),
     Stop(Box<StopOrder>),
+}
+
+impl OrderEvidence {
+    /// Whether the report is the last the order has: it can fill no
+    /// more, or its stop has ended. A later report that says otherwise is
+    /// an older one arriving late.
+    pub fn is_final(&self) -> bool {
+        match self {
+            Self::Futures(order) => order.status.is_final(),
+            Self::Stop(stop) => !matches!(stop.status, StopStatus::Active | StopStatus::Triggered),
+        }
+    }
 }
 
 /// A venue's definitive refusal of an order, as the ledger keeps it: the
@@ -218,7 +230,7 @@ impl OrderRecord {
     }
 
     /// Whether `self` may replace `previous`: the same order, with nothing
-    /// it had learned taken back.
+    /// it had learned taken back, a final report among it.
     pub(super) fn follows(&self, previous: &Self) -> Result<(), ModelError> {
         let same = self.scope == previous.scope
             && self.operation == previous.operation
@@ -228,9 +240,14 @@ impl OrderRecord {
         if !same {
             return Err(not_the_same(ORDER, "identity"));
         }
+        let reopened = match (&previous.evidence, &self.evidence) {
+            (Some(held), Some(next)) => held.is_final() && !next.is_final(),
+            (Some(_), None) => true,
+            (None, _) => false,
+        };
         let forgotten = (previous.venue_order_id.is_some()
             && self.venue_order_id != previous.venue_order_id)
-            || (previous.evidence.is_some() && self.evidence.is_none())
+            || reopened
             || (previous.outcome_unknown && !self.outcome_unknown)
             || (previous.refusal.is_some() && self.refusal != previous.refusal);
         if forgotten {
@@ -286,14 +303,22 @@ impl TryFrom<OrderRecordParts> for OrderRecord {
                 rule: "1 to 128 characters without spaces",
             });
         }
-        if let Some(OrderEvidence::Futures(order)) = &parts.evidence {
-            let reported = order.client_id.as_deref();
-            if order.instrument != parts.instrument || reported != Some(&parts.client_order_id) {
-                return Err(disagrees(
-                    ORDER,
-                    "the order the venue reported is not the one the record is of",
-                ));
+        // What the venue reported is of this order: its instrument, and for
+        // an order its client ID and the venue's own.
+        let reported = match &parts.evidence {
+            Some(OrderEvidence::Futures(order)) => {
+                order.instrument == parts.instrument
+                    && order.client_id.as_deref() == Some(&parts.client_order_id)
+                    && parts.venue_order_id.as_deref() == Some(order.venue_order_id.as_str())
             }
+            Some(OrderEvidence::Stop(stop)) => stop.instrument == parts.instrument,
+            None => true,
+        };
+        if !reported {
+            return Err(disagrees(
+                ORDER,
+                "the order the venue reported is not the one the record is of",
+            ));
         }
         Ok(Self {
             format: parts.format,
@@ -309,3 +334,6 @@ impl TryFrom<OrderRecordParts> for OrderRecord {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;

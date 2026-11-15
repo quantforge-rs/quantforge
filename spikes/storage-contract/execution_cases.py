@@ -506,7 +506,7 @@ def scenarios():
 
     s = Scenario(
         "execution.unit_shape_refusals",
-        "a unit that is not one a store applies is refused before anything is read: one that changes nothing, admits a signal without its intent or records an intent without its admission, first records a signal or an operation by a change, replaces a fill, changes a record twice, changes a position without its lease or two positions at once, or reserves without the revision of its pool",
+        "a unit that is not one a store applies is refused before anything is read: one that changes nothing, admits a signal without its intent or records an intent without its admission, or with the admission of another account's signal of the same name, first records a signal or an operation by a change, replaces a fill, changes a record twice, changes a position without its lease or two positions at once, reserves without the revision of its pool, or gives its position two unresolved entries or two open cycles",
     )
     alert = entry(BYBIT)
     intent = intent_record(BYBIT, alert)
@@ -520,6 +520,9 @@ def scenarios():
     held = reservation_record(BYBIT, 1, "SOLUSDT", "205.18548", "149.9274", T)
     in_usd = reservation_record(BYBIT, 2, "SOLUSDT", "100.00", "149.9274", T, pool="AccountUsd")
     event = signal_event(BYBIT, alert, "signal_admitted", T)
+    sent, _ = submitted(BYBIT, intent, first, T)
+    rival = intent_record(SECOND, entry(SECOND, source="other"))
+    rival_sent, _ = submitted(SECOND, rival, SECOND.client_order_id(1, 2, "entry"), T)
     for unit in (
         Unit(T),
         Unit(T, delivery=(admitted(BYBIT, alert, T), told)),
@@ -535,6 +538,13 @@ def scenarios():
         Unit(T, changes=[(order, None)], fence=lease, pool=0),
         Unit(T, changes=[(held, None), (in_usd, None)], fence=lease, pool=0),
         Unit(T, delivery=(signal_record(BYBIT, alert, T), event)),
+        # The other venue's profile has the same name and takes the same
+        # alert: its intent is not the one this signal's admission records.
+        Unit(T, delivery=(admitted(BYBIT, alert, T), told),
+             changes=[(intent_record(BINANCE, entry(BINANCE)), None)]),
+        Unit(T, changes=[(sent, 1), (rival_sent, 1)], fence=lease),
+        Unit(T, changes=[(cycle_record(BYBIT, "SOLUSDT", 1, T), None),
+                         (cycle_record(SECOND, "SOLUSDT", 2, T), None)], fence=lease),
     ):
         s.commit(unit, "refused")
     for table in ("signal_inbox", "signal_deliveries", "execution_intents", "execution_orders",
@@ -708,6 +718,15 @@ def scenarios():
         pool = 2 if record.kind == "reservation" else None
         s.commit(Unit(T + 9_000, changes=[change], fence=a if fenced else None, pool=pool),
                  "refused")
+    # A venue's final report of an order stands: one that says the order
+    # is still working is an older one arriving late.
+    done = acknowledged.but(evidence=venue_order(BYBIT, "SOLUSDT", first, "filled", "2", "2",
+                                                 T + 10_000))
+    s.commit(Unit(T + 10_000, changes=[(done, 2)], fence=a), "applied")
+    working = acknowledged.but(evidence=venue_order(BYBIT, "SOLUSDT", first, "partially_filled",
+                                                    "2", "1", T + 11_000))
+    s.commit(Unit(T + 11_000, changes=[(working, 3)], fence=a), "refused")
+    s.commit(Unit(T + 11_000, changes=[(acknowledged, 3)], fence=a), "refused")
     s.intent(BYBIT, alert)
     s.order(BYBIT, first)
     s.cycle(1)
@@ -767,7 +786,7 @@ def scenarios():
 
     s = Scenario(
         "execution.reservations_and_the_pool",
-        "a unit that reserves or releases margin names the revision it read the pool at, and is applied only while the pool still stands there; every reservation and every release moves the pool on, and each pool of each venue account has a revision of its own",
+        "a unit that reserves or releases margin names the revision it read the pool at, and is applied only while the pool still stands there; every reservation and every release moves the pool on, each pool of each venue account has a revision of its own, and what is held against a pool is added up exactly",
         active_at=T,
     )
     sol = started(s, BYBIT, entry(BYBIT), T + 1_000, 1)
@@ -808,11 +827,18 @@ def scenarios():
     s.pool(BINANCE, USDT, (0, 0))
     s.column("margin_reservations", "pool", ["asset:USDT", "asset:USDT", "asset:BTC"])
     s.column("margin_reservations", "state", ["released", "held", "held"])
+    # A total is exact however many digits it takes: this one has 29
+    # significant ones, one more than a decimal sum keeps by default.
+    fine = reservation_record(COIN, 8, "BTCUSD", "1.0000000000000000000000000001", "0.00075000",
+                              T + 6_000)
+    s.commit(Unit(T + 6_000, changes=[(fine, None)], fence=c, pool=1), "applied")
+    assert s.store.pool(COIN.account(), BTC)["total"] == "1.0015000000000000000000000001"
+    s.pool(COIN, BTC, (2, 2))
     out.append(s)
 
     s = Scenario(
         "execution.operations_numbered_once",
-        "the store numbers every operation, and an operation asked for again under its key is the one already numbered, as it stands now; a key names one operation of its account for good; a Spot replacement is an operation with no signal, no profile and no position, whose state moves only as the matrix allows and whose orders are never renamed",
+        "the store numbers every operation, and an operation asked for again under its key is the one already numbered, as it stands now; a key names one operation of its account for good; a Spot replacement is an operation with no signal, no profile and no position, whose state moves only as the matrix allows and whose orders are never renamed, by their client ID or by the venue's once it is known",
     )
     alert, leaving = entry(BYBIT), exit_(BYBIT)
     key = operation_key(BYBIT, alert)
@@ -848,6 +874,10 @@ def scenarios():
         replace.but(replacement=replacement(old, "accepted", order_ref("qf-new-2", "9001"))),
         replace.but(replacement=replacement(order_ref("qf-old-2"), "accepted",
                                             order_ref("qf-new-1", "9001"))),
+        # The venue's ID of the replacing order, once learned, neither
+        # changes nor goes.
+        replace.but(replacement=replacement(old, "accepted", order_ref("qf-new-1", "9002"))),
+        replace.but(replacement=replacement(old, "accepted", order_ref("qf-new-1"))),
     ):
         s.commit(Unit(T + 11_000, changes=[(wrong, 3)]), "refused")
     # Asked again once it has moved on, the key answers the operation as it stands.

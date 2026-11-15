@@ -266,8 +266,12 @@ impl ExecutionLedger<'_> {
         })
     }
 
-    /// Why the store's records refuse `entry`, if they do.
-    fn entry_refusal(&self, entry: &EntryIntent) -> Result<Option<SignalRefusal>, LedgerError> {
+    /// Why the store's records refuse `entry`, if they do. The position's
+    /// unsettled intents are read before its open cycle, as for an exit.
+    pub(super) fn entry_refusal(
+        &self,
+        entry: &EntryIntent,
+    ) -> Result<Option<SignalRefusal>, LedgerError> {
         let key = &entry.key;
         let symbol = &key.instrument().symbol;
         let halting = self.store.open_incidents()?;
@@ -284,12 +288,12 @@ impl ExecutionLedger<'_> {
                 ),
             }));
         }
+        let unresolved = self.store.position_intents(key)?;
         if let Some(open) = self.store.open_cycle(key)? {
             if let Err(refusal) = entry.against(Some(open.record.cycle().side())) {
                 return Ok(Some(refusal));
             }
         }
-        let unresolved = self.store.position_intents(key)?;
         if unresolved.iter().any(|held| held.record.blocks_entries()) {
             return Ok(Some(SignalRefusal {
                 refusal: Refusal::UnresolvedEntry,
@@ -302,9 +306,15 @@ impl ExecutionLedger<'_> {
         Ok(None)
     }
 
-    /// What `exit` closes, by the store's records.
+    /// What `exit` closes, by the store's records. The position's
+    /// unsettled intents are read before its open cycle: a cycle opens no
+    /// later than its entry stops being unsettled, so an entry that fills
+    /// between the two reads is found by one of them. Read the other way
+    /// round it is missed by both, and its exit recorded as having nothing
+    /// to do while the position stands open.
     fn exit_target(&self, exit: &ExitIntent) -> Result<ExitTarget, LedgerError> {
         let scope = ExecutionScope::of_position(&exit.key, &exit.profile);
+        let waiting = self.store.position_intents(&exit.key)?;
         if let Some(open) = self.store.open_cycle(&exit.key)? {
             // Another profile's position on the same account is not this
             // exit's to close, whatever its alerts are named.
@@ -326,7 +336,6 @@ impl ExecutionLedger<'_> {
                 ExitTarget::Nothing
             });
         }
-        let waiting = self.store.position_intents(&exit.key)?;
         let closes = waiting
             .iter()
             .any(|held| match held.record.intent().kind() {

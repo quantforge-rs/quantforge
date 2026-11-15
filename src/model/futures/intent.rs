@@ -245,6 +245,27 @@ impl ExternalIntent {
         Ok(())
     }
 
+    /// A fill of `order`, which the venue reported for one of the intent's
+    /// attempts. A venue's trade records name their order by the venue's
+    /// own ID and carry a client ID only on some venues, so the order is
+    /// what ties such a fill to its attempt. A fill of another order, or
+    /// one that names another client ID, is not this order's.
+    pub fn on_fill_of(
+        &mut self,
+        order: &FuturesOrder,
+        fill: &FuturesFill,
+    ) -> Result<(), ModelError> {
+        self.own(order.client_order_id().as_ref(), &order.instrument)?;
+        let its_own = fill.venue_order_id == order.venue_order_id
+            && fill.instrument == order.instrument
+            && (fill.client_id.is_none() || fill.client_id == order.client_id);
+        if !its_own {
+            return Err(self.missing("a fill of the order reported for the intent's attempt"));
+        }
+        self.state = self.state.on_fill(fill)?;
+        Ok(())
+    }
+
     /// The venue's definitive refusal of one of the intent's own attempts.
     /// A refused retry settles an exit as rejected; a refusal of an earlier,
     /// superseded attempt says nothing, like its order.

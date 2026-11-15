@@ -65,8 +65,9 @@ resolves to. The rest lands with the stories named below.
 | The execution store's records ([execution-store.md](execution-store.md)), each one versioned document with every decimal as exact text:<ul><li>`ExecutionScope`, whose record it is;</li><li>`SignalRecord` and `SignalDelivery`, the inbox;</li><li>`OperationRecord`, numbered by the store, with `Replacement` for a Spot amend or cancel-replace;</li><li>`IntentRecord`, `OrderRecord`, `FillRecord`, `CycleRecord` and `Reservation`, the ledger;</li><li>`Incident` and `OutboxEvent`;</li><li>`Lease` and `Fence`, who may act on a position.</li></ul> | `quantforge::model::execution` | No |
 | `ExecutionUnit`, everything one write changes, and `Commit`, what it came to: applied, a duplicate, a conflict, stale or fenced | `quantforge::model::execution` | No |
 | `ExecutionStore`, the storage port for all of it, on both backends from schema 10 ([storage-schema.md](storage-schema.md#keeping-the-execution-store)) | `quantforge::ExecutionStore` | No |
-| `StoreControl::activate` and `deactivate`, with the log of both and `StoreIdentity::authority`: a store executes only while it is active, and a copy of it never is | `quantforge::StoreControl` | No |
+| `StoreControl::activate` and `deactivate`, with the log of both and `StoreIdentity::authority`: a store executes only while it is active, and copying a store never activates the copy | `quantforge::StoreControl` | No |
 | `ExternalSignal`, `SignalAction` and `SignalRefusal` are stored as part of a signal's record, and `SignalHash::of` hashes a canonical payload | `quantforge::model::futures` | No |
+| `ExternalIntent::on_fill_of` takes a fill through the order it belongs to, by the venue's order ID, since a trade record carries a client ID only on some venues | `quantforge::model::futures` | No |
 | `ExecutionLedger`: a delivery admitted, an order's attempt recorded before it is sent, and an unknown outcome asked of the venue before anything is sent again | `quantforge::automation` | No |
 
 ## Changing next

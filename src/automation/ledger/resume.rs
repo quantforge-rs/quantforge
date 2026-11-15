@@ -41,7 +41,7 @@ impl ExecutionLedger<'_> {
     /// before any retry. **It never sends an order.**
     ///
     /// - The venue knows the order: it is settled by what the venue
-    ///   reports, with the fills it lists for it.
+    ///   reports, with the fills it lists under the order's venue ID.
     /// - The venue does not know it: an attempt found `submitting` is
     ///   recorded as of unknown outcome first, since nobody knows whether
     ///   its request left. An entry is then never placed only on ADR 0002
@@ -73,11 +73,13 @@ impl ExecutionLedger<'_> {
                     attempt.sent_at_ms,
                     self.clock.now_ms().max(attempt.sent_at_ms),
                 )?;
+                // The order's own fills, by the venue's ID for it: a
+                // trade record carries a client ID only on some venues.
                 let fills: Vec<FuturesFill> = orders
                     .fills(&instrument, window)
                     .await?
                     .into_iter()
-                    .filter(|fill| fill.client_order_id().as_ref() == Some(id))
+                    .filter(|fill| fill.venue_order_id == order.venue_order_id)
                     .collect();
                 let evidence = Evidence::Order {
                     order: &order,

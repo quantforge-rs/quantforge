@@ -51,6 +51,15 @@ impl ExecutionLedger<'_> {
     /// its reservation and the revision its pool was read at when it was
     /// sized. If the pool has moved since, nothing is written and the
     /// answer is [`LedgerError::Stale`]: size the entry again.
+    ///
+    /// An entry is first held to what the store holds once more, since
+    /// admission looked without a lease and things may have changed: an
+    /// incident opened since halts it, a position opened since refuses it,
+    /// and so does another entry now unresolved. Then nothing is written,
+    /// the answer is [`LedgerError::Refused`], and the entry stays
+    /// `admitted` for its executor to end. Under the lease the position
+    /// cannot change between this look and the write; an incident, which
+    /// needs no lease, still can, in the moment between the two.
     pub fn record_attempt(
         &self,
         fence: &Fence,
@@ -58,6 +67,12 @@ impl ExecutionLedger<'_> {
         id: &ClientOrderId,
         reservation: Option<(Reservation, u64)>,
     ) -> Result<Stored<IntentRecord>, LedgerError> {
+        let held = intent.record.intent();
+        if let (IntentKind::Entry(entry), true) = (held.kind(), held.attempts().is_empty()) {
+            if let Some(refusal) = self.entry_refusal(entry)? {
+                return Err(LedgerError::Refused(refusal));
+            }
+        }
         let now_ms = self.clock.now_ms();
         let operation = id.operation();
         let mut next = intent.record.intent().clone();
@@ -110,7 +125,9 @@ impl ExecutionLedger<'_> {
     /// evidence, the order's record, each fill not recorded yet, the
     /// position's cycle opened by an entry's first fill, the entry's
     /// reservation released once it is settled, and the event that tells
-    /// of it. Evidence that changes nothing writes nothing.
+    /// of it. Evidence that changes nothing writes nothing. The fills
+    /// given with an order are that order's, by the venue's own order ID:
+    /// a fill of another order is refused.
     pub fn settle(
         &self,
         fence: &Fence,
@@ -166,7 +183,7 @@ impl ExecutionLedger<'_> {
                 for fill in fills {
                     let known = self.store.fill(&scope, &instrument, &fill.trade_id)?;
                     if known.is_none() {
-                        next.on_fill(fill)?;
+                        next.on_fill_of(seen, fill)?;
                         new_fills.push(fill.clone());
                     }
                 }

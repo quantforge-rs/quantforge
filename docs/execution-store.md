@@ -53,11 +53,22 @@ to ([storage-schema.md](storage-schema.md#the-stores-record)), and of none
 before it is bound: a unit, an operation or a lease of another environment
 is refused, and nothing of it is written.
 
-The scope is part of what each record is known by. The same signal ID, the
-same symbol, the same event key and the same client order ID under two
-scopes are two records that never meet: a profile named `main` that trades
-`SOLUSDT` on each venue has two inboxes, two positions, two leases and two
-margin pools, and an alert sent to both, byte for byte, is two signals.
+The scope is part of what each record is known by, as far as its kind
+goes. A signal and its intent are known within their **profile**: the same
+signal ID under two profiles is two signals, on one account as on two. An
+order, a fill, an incident and an event are known within their **account**,
+the venue, the family, the environment and the account itself, by a key
+that already says whose it is: a client order ID carries its profile's own
+tag, an event's key names the profile or the operation it tells of, and a
+fill is the account's trade. Two profiles of one account therefore never
+hold two orders under one client order ID or two events under one key: the
+second finds the first. An operation, its reservation and a cycle are known
+by the number the store gave the operation.
+
+So what two venues share never meets: a profile named `main` that trades
+`SOLUSDT` on each has two inboxes, two positions, two leases and two margin
+pools, and an alert sent to both, byte for byte, is two signals, with the
+same event keys and the same trade IDs kept once for each.
 
 ## Three identities
 
@@ -166,13 +177,17 @@ A record changes only into the same record, moved as its kind allows:
   `noop`; the signal, its payload and when it arrived never change.
 - `operation`: its number, scope, kind, key, instrument and signal never
   change; a cycle, once named, is never replaced; a replacement's replaced
-  order never changes, its replacing order keeps its client order ID, and
-  its state moves only as the parity matrix's `spot_replace` machine allows.
+  order never changes, its replacing order keeps its client order ID and,
+  once it is known, the venue's ID, and its state moves only as the parity
+  matrix's `spot_replace` machine allows.
 - `intent`: its state moves along the matrix's `signal_intent` machine or
   stays; the policy it was admitted under never changes, its attempts are
   only added to, and a cycle, once named, is never replaced.
 - `order`: its identity never changes, and nothing it had learned is taken
-  back: a venue ID, an unknown outcome, a refusal, the venue's report.
+  back: a venue ID, an unknown outcome, a refusal, the venue's report. A
+  final report, of an order that can fill no more, is not replaced by one
+  that says the order is still working, which is an older one arriving
+  late.
 - `fill`: never replaced.
 - `cycle`: its number, position, profile, side and opening never change;
   its protection moves along the matrix's `futures_position` machine or
@@ -244,9 +259,12 @@ store applies:
 - it reserves from two pools, changes a reservation without naming its
   pool's revision, or names one and changes none;
 - it admits a signal without recording its intent, or first records an
-  intent anywhere but in the unit that admits its signal, as `admitted`;
+  intent anywhere but in the unit that admits its signal, as `admitted`. A
+  signal and its intent are paired by their scope and the signal's ID, so
+  the intent of another account's profile of the same name is not it;
 - its delivery's conflict event is not a signal conflict of the same
-  profile.
+  profile;
+- it gives its position two unresolved entries or two open cycles.
 
 Then the store decides it, in this order, and the first check that fails
 is the one answered:
@@ -438,10 +456,15 @@ once under its key, cleared once with a note, and never deleted; exits,
 stops and the protective close go on while it is open.
 
 An **event** is one thing to tell, written in the unit that makes it true:
-a signal admitted, an order recorded, an outcome unknown, an incident
-raised. An event that exists therefore tells of something that happened,
-and nothing happens that the outbox was not told. An event is written once
-under its key, so one cause is told once however often it is reached.
+a signal admitted, refused or without anything to do, a delivery that
+conflicts, an order recorded, an intent that reached a new state, an
+outcome unknown, an incident raised or cleared. An event that exists
+therefore tells of something that happened, and each of those steps is
+told. Not every
+write is a step: a further fill of an order already partly filled is
+recorded, with the order's newest report, and tells nothing of its own
+until the intent moves. An event is written once under its key, so one
+cause is told once however often it is reached.
 Pending events are listed oldest first, and an event leaves the list when
 its delivery ended: `delivered`, or `outcome_unknown` where the transport
 cannot say, which is never sent again on its own. Delivering them is
@@ -464,19 +487,42 @@ records, each step one unit.
   Another profile's position on the same account is never an exit's to
   close, whatever its alerts are named. `receive` records a delivery
   without judging it.
+
+  Admission holds no lease, so it looks at a position that may be
+  changing. It reads the position's unsettled intents first and its open
+  cycle second: a cycle opens no later than its entry stops being
+  unsettled, so an entry that fills between the two reads is found by one
+  of them, and an exit that arrives at that moment closes the position
+  the fill opened. Read the other way round, the fill is seen by neither.
 - **`record_attempt`** records that an intent's next order is about to be
   sent: the intent `submitting` with the attempt, the order's record, the
   entry's reservation, and the event, under the position's lease. It is
   called **before** the request, never after.
+
+  An entry is first held to what the store holds once more, since what
+  admission saw may have changed: an incident opened since halts it, a
+  position opened since refuses it (`pyramiding`, `reversal`), and so does
+  another entry sent since (`unresolved_entry`). Nothing is then written,
+  the answer is `LedgerError::Refused` with the refusal, and the entry
+  stays `admitted` for its executor to end (ALG-745). Under the lease the
+  position cannot change between this look and the write. An incident,
+  which is raised without a lease, still can in the moment between the
+  two: the store itself holds a position to one unresolved entry and one
+  open cycle, and not yet to its incidents. An exit is held up by none of
+  it.
 - **`settle`** applies what the venue said of an attempt: the intent moved
   by the evidence, the order's record, each fill not recorded yet, the
   cycle an entry's first fill opens, the reservation released once the
   entry is settled, and the event. Evidence that changes nothing writes
-  nothing.
+  nothing. The fills given with an order are that order's by the venue's
+  own ID for it, which every trade record carries; a client ID, which only
+  some venues put on a trade, is not needed, and a fill of another order
+  is refused.
 - **`resume`** is what a process does for every unsettled intent it finds
   when it starts, and before any retry: it asks the venue for the client
   order ID that was recorded before the attempt was sent, and **never sends
-  an order**. An order the venue holds is settled from its report. One it
+  an order**. An order the venue holds is settled from its report, with
+  the fills the venue lists under that order's own ID. One it
   does not hold was recorded and perhaps never sent, which is recorded as
   an unknown outcome first; then an entry is never placed only on ADR 0002
   §9's proof (the propagation delay passed, a verified lookup inside the

@@ -655,6 +655,17 @@ def name_of(record):
     return doc["key"]
 
 
+def known_by(record):
+    """What a signal, or the intent of one, is known by in a store: its
+    scope and its signal's ID. Its name alone says its profile, which two
+    accounts may both have."""
+    doc = record.doc
+    if record.kind == "signal":
+        return (dumps(doc["scope"]), doc["signal"]["id"])
+    _, inner = intent_parts(record)
+    return (dumps(doc["scope"]), inner["signal"])
+
+
 def position_key(scope, instrument):
     return {
         "account": {"venue": scope["venue"], "environment": scope["environment"],
@@ -801,6 +812,17 @@ def refusal(contains: str) -> dict:
     return {"kind": "invalid_argument", "contains": contains}
 
 
+def final(evidence):
+    """Whether a venue's report is the last its order has: an order that
+    can fill no more, or a stop that has ended. A status with a reason, a
+    cancellation's, is spelled as an object."""
+    (kind, reported), = evidence.items()
+    status = reported["status"]
+    word = status if isinstance(status, str) else next(iter(status))
+    working = ("New", "PartiallyFilled") if kind == "Futures" else ("Active", "Triggered")
+    return word not in working
+
+
 def follows(new, old):
     """Why `new` may not replace `old`, or None: the same record, changed
     only as its kind allows."""
@@ -850,9 +872,13 @@ def follows(new, old):
         if before["original"] != after["original"]:
             return never("replaced order")
         if before["replacement"] is not None:
-            renamed = (after["replacement"] is None
-                       or after["replacement"]["client_order_id"]
-                       != before["replacement"]["client_order_id"])
+            was, now = before["replacement"], after["replacement"]
+            # A client ID never changes. The venue's ID is learned later,
+            # and once learned it neither changes nor goes.
+            renamed = (now is None
+                       or now["client_order_id"] != was["client_order_id"]
+                       or (was["venue_order_id"] is not None
+                           and now["venue_order_id"] != was["venue_order_id"]))
             if renamed:
                 return never("replacing order")
         edge = (wire(before["state"]), wire(after["state"]))
@@ -863,9 +889,11 @@ def follows(new, old):
         fixed = ("scope", "operation", "client_order_id", "instrument", "recorded_at_ms")
         if any(a[m] != b[m] for m in fixed):
             return never("identity")
+        reopened = a["evidence"] is not None and (
+            b["evidence"] is None or (final(a["evidence"]) and not final(b["evidence"])))
         forgotten = (
             (a["venue_order_id"] is not None and b["venue_order_id"] != a["venue_order_id"])
-            or (a["evidence"] is not None and b["evidence"] is None)
+            or reopened
             or (a["outcome_unknown"] and not b["outcome_unknown"])
             or (a["refusal"] is not None and b["refusal"] != a["refusal"])
         )
@@ -961,21 +989,51 @@ def shape(unit):
         if told.doc["kind"] != "SignalConflict" or told.doc["scope"] != arrived.doc["scope"]:
             return "its delivery's conflict event is not a signal conflict of the same profile"
         signals.insert(0, arrived)
-    names = [name_of(signal) for signal in signals]
+    # A signal is its scope's: two accounts' profiles of one name that take
+    # one alert hold two signals, and each is paired with its own intent.
+    names = [known_by(signal) for signal in signals]
     if len(set(names)) != len(names):
         return "twice"
-    admitted = [name_of(signal) for signal in signals if signal.doc["state"] == "Admitted"]
+    admitted = [known_by(signal) for signal in signals if signal.doc["state"] == "Admitted"]
     recorded = []
     for record, expect in unit.changes:
         if record.kind != "intent" or expect is not None:
             continue
-        named = name_of(record)
+        named = known_by(record)
         if record.doc["intent"]["state"] != "Admitted" or named not in admitted:
             return "is first recorded as admitted, in the unit that admits its signal"
         recorded.append(named)
     if any(named not in recorded for named in admitted):
         return "without recording its intent"
+    # A position has one unresolved entry and one open cycle at a time, so
+    # a unit gives its position at most one of each.
+    taken = []
+    for record, _ in unit.changes:
+        slot = slot_of(record)
+        if slot is None:
+            continue
+        if slot[0] in taken:
+            return ("it gives its position two unresolved entries" if slot[0] == "entry_slot"
+                    else "it gives its position two open cycles")
+        taken.append(slot[0])
     return None
+
+
+def exact_sum(amounts):
+    """The sum of decimal texts, exact, as text. Python adds decimals to
+    28 significant digits unless told otherwise, which would round a total
+    a store holds whole; here an inexact step is an error. So is a total
+    outside what a store's decimals hold, 28 places and 96 bits: no case
+    may be written that a store could only answer rounded."""
+    with decimal.localcontext() as context:
+        context.prec = 80
+        context.traps[decimal.Inexact] = True
+        total = sum((decimal.Decimal(amount) for amount in amounts), decimal.Decimal(0))
+    sign, digits, exponent = total.as_tuple()
+    mantissa = int("".join(str(digit) for digit in digits))
+    if -exponent > 28 or mantissa >= 2 ** 96:
+        raise ValueError(f"a total of {total} is outside a store's decimals")
+    return format(total, "f")
 
 
 # --- The store ----------------------------------------------------------------
@@ -1274,10 +1332,9 @@ class Store:
         columns = ("venue", "environment", "account_kind", "account_id", "pool")
         held = [row["_record"] for row in self.rows["margin_reservations"]
                 if tuple(row[name] for name in columns) == at and row["state"] == "held"]
-        total = sum((decimal.Decimal(record.doc["margin"]["amount"]) for record in held),
-                    decimal.Decimal(0))
         return {"revision": self.pools.get(at, 0), "held": held,
-                "total": format(total, "f") if held else None}
+                "total": exact_sum(record.doc["margin"]["amount"] for record in held)
+                if held else None}
 
     def table(self, table):
         """A table's rows as a transfer copies them: every column, in the

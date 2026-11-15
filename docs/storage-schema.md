@@ -134,10 +134,11 @@ matrix's `states.store`):
   applies what is written under one, only while it is `active` at the
   epoch the lease was granted under
   ([Keeping the execution store](#keeping-the-execution-store)). A
-  deactivation stops every executor of the store at its next write, lease
-  or no lease, and a reactivation voids every lease of the earlier epoch.
-  A store that is not active still records: a delivery is noted, and a
-  policy edited, whatever its activation.
+  deactivation stops, at once and whatever a lease's clock says, every
+  write made under a lease, every grant and every renewal of one; a
+  reactivation voids every lease of the earlier epoch. What needs no lease
+  goes on whatever the activation: a delivery is recorded and judged, an
+  operation numbered, an incident raised or cleared, and a policy edited.
 - **What a copy cannot bring.** The leases, the revisions of the margin
   pools and the activation log are the store's own tables, and no
   transfer copies them ([storage-migration.md](storage-migration.md)): a

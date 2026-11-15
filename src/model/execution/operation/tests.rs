@@ -151,7 +151,21 @@ fn a_replacement_moves_only_along_its_state_machine_and_keeps_what_it_replaces()
     let known = unknown.replaced_by(
         OrderRef::new(Some("qf-new-1".to_string()), Some(venue_id)).expect("a reference"),
     );
-    assert!(moved.with_replacement(known).is_ok());
+    let learned = moved.with_replacement(known).expect("learned");
+    // Once learned it neither changes nor goes, whatever the client ID.
+    let other_id = VenueOrderId::new("8389765520").expect("an id");
+    let changed = unknown.replaced_by(
+        OrderRef::new(Some("qf-new-1".to_string()), Some(other_id)).expect("a reference"),
+    );
+    assert!(learned.with_replacement(changed).is_err());
+    assert!(learned.with_replacement(unknown).is_err());
+    let by_venue = |id: &str| {
+        let id = VenueOrderId::new(id).expect("an id");
+        pending.replaced_by(OrderRef::new(None, Some(id)).expect("a reference"))
+    };
+    let first = record.with_replacement(by_venue("9001")).expect("named");
+    assert!(first.with_replacement(by_venue("9001")).is_ok());
+    assert!(first.with_replacement(by_venue("9002")).is_err());
 }
 
 #[test]
