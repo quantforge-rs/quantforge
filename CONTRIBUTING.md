@@ -47,7 +47,9 @@ requires.
 `quantforge-py/` is the Python package: a crate that builds a Python
 extension module with [maturin](https://www.maturin.rs), and the package the
 module is built into. [docs/python-package.md](docs/python-package.md) says
-how it is named, built and tested.
+how it is named, built and tested, and
+[docs/python-types.md](docs/python-types.md) what each type it binds takes
+and gives.
 
 None of the commands above builds it: `cargo fmt --all` formats it, and the
 file-size budget covers its Rust files. After a change to it, or to what it

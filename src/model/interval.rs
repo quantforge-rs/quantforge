@@ -26,6 +26,25 @@ pub enum Interval {
 }
 
 impl Interval {
+    /// Every interval, shortest first.
+    pub const ALL: [Self; 15] = [
+        Self::S1,
+        Self::M1,
+        Self::M3,
+        Self::M5,
+        Self::M15,
+        Self::M30,
+        Self::H1,
+        Self::H2,
+        Self::H4,
+        Self::H6,
+        Self::H8,
+        Self::H12,
+        Self::D1,
+        Self::D3,
+        Self::W1,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::S1 => "1s",
@@ -156,6 +175,17 @@ mod tests {
                 | Interval::D3
                 | Interval::W1 => {}
             }
+        }
+    }
+
+    // `ALL` is what a caller lists the intervals from, the Python package
+    // among them, which also names each one by its variant: the name `Debug`
+    // prints, and the serde token.
+    #[test]
+    fn all_lists_every_variant_once_in_declaration_order_under_its_own_name() {
+        assert_eq!(Interval::ALL, INTERVAL_CASES.map(|(interval, ..)| interval));
+        for (interval, _, _, serde_token) in INTERVAL_CASES {
+            assert_eq!(format!("{interval:?}"), serde_token);
         }
     }
 

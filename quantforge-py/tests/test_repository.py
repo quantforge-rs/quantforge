@@ -12,30 +12,9 @@ from quantforge_py import _native
 PAGE = "docs/python-package.md"
 
 
-def section(repository, name) -> list[str]:
-    """The lines of a marked section of the page, as written."""
-    lines = (repository / PAGE).read_text(encoding="utf-8").splitlines()
-
-    def marker(kind):
-        text = f"<!-- {kind}: {name} -->"
-        found = [at for at, line in enumerate(lines) if line.strip() == text]
-        assert len(found) == 1, f"{PAGE} has one {text}"
-        return found[0]
-
-    return lines[marker("begin") + 1 : marker("end")]
-
-
-def rows(repository, name) -> list[list[str]]:
-    """A marked table's rows after its header and separator, cell by cell."""
-    return [
-        [cell.strip() for cell in row.strip().strip("|").split("|")]
-        for row in section(repository, name)[2:]
-    ]
-
-
-def documented_files(repository) -> dict[str, str]:
+def documented_files(page) -> dict[str, str]:
     """The page's tree of `quantforge-py/`: each file's path to its note."""
-    lines = section(repository, "layout")
+    lines = page(PAGE).section("layout")
     assert (lines[0], lines[1], lines[-1]) == ("```text", "quantforge-py/", "```")
     files, parents = {}, []
     for line in lines[2:-1]:
@@ -68,8 +47,8 @@ def files_of_the_package(repository) -> set[str]:
     return {path.removeprefix("quantforge-py/") for path in listed.stdout.splitlines()}
 
 
-def test_the_page_names_the_package_as_the_manifests_do(repository, package_dir, pyproject, crate):
-    names = {what: name.strip("`") for what, name in rows(repository, "names")}
+def test_the_page_names_the_package_as_the_manifests_do(page, package_dir, pyproject, crate):
+    names = {what: name.strip("`") for what, name in page(PAGE).rows("names")}
     assert names == {
         "The distribution, as `pip` installs it": pyproject["project"]["name"],
         "The package, as Python imports it": quantforge_py.__name__,
@@ -82,24 +61,32 @@ def test_the_page_names_the_package_as_the_manifests_do(repository, package_dir,
     assert (package / "__init__.py").is_file()
 
 
-def test_the_page_lists_the_names_the_package_publishes(repository):
-    listed = [name.strip("`") for name, _ in rows(repository, "public names")]
+def test_the_page_lists_the_names_the_package_publishes(page):
+    listed = [name.strip("`") for name, _ in page(PAGE).rows("public names")]
     assert listed == quantforge_py.__all__
 
 
-def test_the_page_states_the_oldest_python_the_distribution_requires(repository, pyproject):
-    stated = [line.strip() for line in section(repository, "oldest python") if line.strip()]
+def test_the_page_states_the_oldest_python_the_distribution_requires(page, pyproject):
+    stated = [line.strip() for line in page(PAGE).section("oldest python") if line.strip()]
     assert [f">={oldest}" for oldest in stated] == [pyproject["project"]["requires-python"]]
 
 
-def test_the_page_maps_every_file_of_the_package(repository):
-    assert set(documented_files(repository)) == files_of_the_package(repository)
+def test_the_page_maps_every_file_of_the_package(page, repository):
+    assert set(documented_files(page)) == files_of_the_package(repository)
 
 
-def test_the_readme_shows_the_names_the_package_publishes(package_dir):
-    readme = (package_dir / "README.md").read_text(encoding="utf-8")
-    shown = re.findall(r"\bqf\.(\w+)", readme)
-    assert shown == quantforge_py.__all__
+def test_the_readme_shows_only_names_the_package_publishes_and_its_example_runs(page):
+    readme = page("quantforge-py/README.md")
+    shown = re.findall(r"\bqf\.(\w+)", readme.text)
+    assert shown, "the readme shows the package at work"
+    assert set(shown) <= set(quantforge_py.__all__)
+    # What PyPI shows is what a reader copies: every example runs as it is
+    # written, one after another.
+    examples = readme.fences("python")
+    assert examples
+    names = {}
+    for example in examples:
+        exec(compile(example, readme.name, "exec"), names)
 
 
 def test_the_crate_and_the_distribution_are_described_alike(crate, pyproject):

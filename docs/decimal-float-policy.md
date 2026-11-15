@@ -8,9 +8,10 @@ crosses, so that a backtest gives the same result in Rust, in a local
 Python process, and in a remote worker.
 
 The policy is implemented once, by `quantforge::decimal_to_f64` and
-`quantforge::decimal_from_f64`. Every conversion between the two types goes
-through them — never through NumPy, `rust_decimal`'s own `to_f64` or
-`from_f64`, or ad-hoc Python.
+`quantforge::decimal_from_f64`, which the Python package binds under the
+same names ([python-types.md](python-types.md#decimal-and-float)). Every
+conversion between the two types goes through them — never through NumPy,
+`rust_decimal`'s own `to_f64` or `from_f64`, or ad-hoc Python.
 
 ## Decimal to float64
 
@@ -87,7 +88,7 @@ result, and a `note`. A float64 is written as its IEEE 754 bit pattern in 16
 hex digits, a decimal as an exact string, and an error as `error:` followed
 by its reason. The expected values were computed with Python's correctly
 rounded `float()` and `repr()`, not with the Rust functions.
-`tests/decimal_float.rs` checks every row, and the Python bindings' tests
-must check the same file. Rust prints a decimal without an exponent and
-compares strings; Python compares `from_f64` results by value, because
-`str(Decimal(repr(1e21)))` is `'1E+21'`.
+`tests/decimal_float.rs` checks every row, and so do the Python package's
+tests, `quantforge-py/tests/test_decimals.py`. Rust prints a decimal without
+an exponent and compares strings; Python compares `from_f64` results by
+value, because `str(Decimal(repr(1e21)))` is `'1E+21'`.

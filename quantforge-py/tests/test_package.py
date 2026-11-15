@@ -5,6 +5,8 @@ import pathlib
 import re
 import sys
 
+import pytest
+
 import quantforge_py
 from quantforge_py import _native
 
@@ -12,16 +14,57 @@ from quantforge_py import _native
 # bundle's `engine` requirement names one (docs/bundle-spec.md).
 ENGINE_VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
+# What the package publishes, in the order `__all__` gives it: what it says
+# about itself, the engine's types, and the two conversions.
+ABOUT = ["__version__", "ENGINE_VERSION", "STORAGE_BACKENDS"]
+TYPES = [
+    "Symbol",
+    "Interval",
+    "Category",
+    "ExchangeId",
+    "MarketId",
+    "Candle",
+    "CandleBatch",
+    "BacktestConfig",
+    "ClosedTrade",
+    "EquityPoint",
+    "BacktestResult",
+]
+FUNCTIONS = ["decimal_to_f64", "decimal_from_f64"]
+
+
+def public(module) -> list[str]:
+    return sorted(name for name in vars(module) if not name.startswith("_"))
+
 
 def test_the_package_publishes_its_names_and_holds_no_other_public_one():
-    assert quantforge_py.__all__ == ["__version__", "ENGINE_VERSION", "STORAGE_BACKENDS"]
-    public = sorted(name for name in vars(quantforge_py) if not name.startswith("_"))
-    assert public == ["ENGINE_VERSION", "STORAGE_BACKENDS"]
+    assert quantforge_py.__all__ == ABOUT + TYPES + FUNCTIONS
+    published = sorted(name for name in quantforge_py.__all__ if not name.startswith("_"))
+    assert public(quantforge_py) == published
+    # The extension module holds the same names and no other.
+    assert public(_native) == published
 
 
 def test_every_published_name_is_the_extension_modules_own():
     for name in quantforge_py.__all__:
         assert getattr(quantforge_py, name) is getattr(_native, name), name
+
+
+def test_every_type_is_a_class_of_the_package_that_cannot_be_derived_from():
+    for name in TYPES:
+        bound = getattr(quantforge_py, name)
+        assert isinstance(bound, type), name
+        # A class says where it is imported from, not where it is compiled.
+        assert (bound.__module__, bound.__qualname__) == ("quantforge_py", name)
+        assert repr(bound) == f"<class 'quantforge_py.{name}'>"
+        assert bound.__doc__, name
+        with pytest.raises(TypeError, match="not an acceptable base type"):
+            type("Derived", (bound,), {})
+    for name in FUNCTIONS:
+        bound = getattr(quantforge_py, name)
+        assert callable(bound) and not isinstance(bound, type), name
+        assert bound.__name__ == name
+        assert bound.__doc__, name
 
 
 def test_the_extension_module_is_private_and_built_for_the_stable_abi():

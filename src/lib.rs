@@ -119,13 +119,12 @@
 //!   [`StrategyError`], [`Indicator`], [`Sma`] and [`SmaCrossStrategy`] are
 //!   driven by the engines but named by neither the CLI nor the tests, and
 //!   are kept reachable on purpose;
-//! - it is the Python interchange, published ahead of the bindings that
-//!   will use it: [`CandleBatch`], [`CandleColumns`], [`decimal_to_f64`] and
+//! - it is the Python interchange, which the
+//!   [Python package](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-package.md)
+//!   binds: [`CandleBatch`], [`CandleColumns`], [`decimal_to_f64`] and
 //!   [`decimal_from_f64`], which follow the
 //!   [decimal and float64 policy](https://github.com/quantforge-rs/quantforge/blob/main/docs/decimal-float-policy.md);
-//!   [`ENGINE_VERSION`] is the first name the
-//!   [Python package](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-package.md)
-//!   reads, as the engine it was built with;
+//!   and [`ENGINE_VERSION`], the engine the package says it was built with;
 //! - it is the conformance suite, published for adapters written outside
 //!   this repository: [`exchange::conformance`] runs against any connector
 //!   factory, not only the registered ones;

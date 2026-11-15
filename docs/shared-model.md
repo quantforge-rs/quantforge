@@ -12,7 +12,8 @@ QUA-37 (ALG-734 in the previous workspace) the storage, the wire's
 `category` and the migrations, QUA-36 (ALG-735 in the parity matrix) a
 profile's policy and its store, QUA-35 (ALG-736) the sizing of an entry
 from it, and QUA-207 (ALG-737) the payload of an alert and what its signal
-resolves to. The rest lands with the stories named below.
+resolves to. QUA-469 (ALG-377) bound to Python what the tables below say
+reaches it. The rest lands with the stories named below.
 
 ## Changed in Rust by ALG-733
 
@@ -69,6 +70,29 @@ resolves to. The rest lands with the stories named below.
 | `ExternalSignal`, `SignalAction` and `SignalRefusal` are stored as part of a signal's record, and `SignalHash::of` hashes a canonical payload | `quantforge::model::futures` | No |
 | `ExternalIntent::on_fill_of` takes a fill through the order it belongs to, by the venue's order ID, since a trade record carries a client ID only on some venues | `quantforge::model::futures` | No |
 | `ExecutionLedger`: a delivery admitted, an order's attempt recorded before it is sent, and an unknown outcome asked of the venue before anything is sent again | `quantforge::automation` | No |
+
+## Bound to Python by QUA-469
+
+What the tables above mark as reaching the Python FFI, as the Python
+package has it ([python-types.md](python-types.md)):
+
+| What | In Python |
+| --- | --- |
+| `ExchangeId` with every product line | `ExchangeId`, read from a line's storage name such as `bybit_linear`. A venue's name alone is refused: nothing takes it for the venue's Spot line |
+| `Category`, and `MarketId::category()` | `Category`, and `MarketId.category`, which is its product line's. A market of any line can be named, as the key its candles are stored under; the backtest entry point is what refuses one that is not Spot (QUA-470) |
+| Spot's venue order IDs as text | `ClosedTrade.entry_order_id` and `ClosedTrade.exit_order_id`: a `str`, or `None` where no order reached a venue |
+
+`Venue` is not bound: a product line's name begins with its venue's, and
+that is all of a venue Python holds. Every type marked `No` above stays in
+Rust, and no futures execution type is public in Python.
+
+For the binding, the crate gained:
+
+| Change | Where |
+| --- | --- |
+| `Category` and `ExchangeId` are read from their names with `str::parse`, and text that is neither is refused with the names there are | `quantforge::{Category, ExchangeId}`, `ModelError::{InvalidCategory, InvalidExchange}` |
+| `Interval::ALL` and `ExchangeId::all()` list every interval and every product line | `quantforge::{Interval, ExchangeId}` |
+| `BacktestConfig::validate`: what a run requires of a config, before any run | `quantforge::BacktestConfig` |
 
 ## Changing next
 

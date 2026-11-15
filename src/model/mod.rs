@@ -68,6 +68,11 @@ pub use transfer::{
 };
 pub use units::{BaseQty, Contracts, FaceValue, Leverage, PositionSide, Price, Quantity};
 
+/// The names a message offers its reader, in the order given: `a, b, c`.
+fn listed<'a>(names: impl IntoIterator<Item = &'a str>) -> String {
+    names.into_iter().collect::<Vec<_>>().join(", ")
+}
+
 #[derive(Error, Debug)]
 pub enum ModelError {
     #[error("invalid symbol: {0}")]
@@ -75,6 +80,18 @@ pub enum ModelError {
 
     #[error("invalid interval: {0}")]
     InvalidInterval(String),
+
+    #[error(
+        "invalid category {0:?}: expected one of {names}",
+        names = listed(Category::ALL.map(Category::as_str))
+    )]
+    InvalidCategory(String),
+
+    #[error(
+        "invalid exchange {0:?}: expected one of {names}",
+        names = listed(ExchangeId::all().map(ExchangeId::as_str))
+    )]
+    InvalidExchange(String),
 
     #[error("invalid side: {0}")]
     InvalidSide(String),
