@@ -140,3 +140,28 @@ jobs:
         run: test "$RESULT" = success
         env:
           RESULT: ${{ needs.postgres.result }}
+
+  # the python package (docs/python-package.md): the extension crate's lints
+  # and its oldest rust, then the wheel maturin builds, installed and tested
+  # on each python named, the sqlite-only wheel and the in-place install.
+  # scripts/python-package-check.sh is the whole of it, here and locally
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      # the oldest python the package supports and the newest released: one
+      # wheel has to load on both. raise the newest as a new one is released
+      - uses: actions/setup-python@v7
+        with:
+          python-version: |
+            3.11
+            3.15
+      # the oldest rust the crate declares, as in the package job
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: check
+        run: ./scripts/python-package-check.sh python3.11 python3.15

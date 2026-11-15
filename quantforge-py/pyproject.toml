@@ -1,0 +1,49 @@
+[build-system]
+requires = ["maturin>=1.16,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "quantforge-py"
+description = "QuantForge for Python: strategies written in Python, run on the deterministic Rust engine."
+readme = "README.md"
+# The stable ABI of 3.11 (the crate's `abi3-py311`): a wheel loads on 3.11 and
+# every later CPython.
+requires-python = ">=3.11"
+license = "MIT"
+keywords = ["trading", "backtesting", "quant"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Financial and Insurance Industry",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Rust",
+  "Topic :: Office/Business :: Financial :: Investment",
+]
+# The crate's version (Cargo.toml), which is the package's own.
+dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/quantforge-rs/quantforge"
+Documentation = "https://github.com/quantforge-rs/quantforge/blob/main/docs/python-package.md"
+Changelog = "https://github.com/quantforge-rs/quantforge/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+test = ["pytest>=8"]
+
+# The tests run against the installed package (docs/python-package.md).
+[tool.pytest.ini_options]
+minversion = "8"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-config", "--strict-markers", "--import-mode=importlib"]
+
+[tool.maturin]
+# The package is `python/quantforge_py/`, and the extension module is built
+# into it as `quantforge_py._native`.
+python-source = "python"
+module-name = "quantforge_py._native"
+# As everywhere in the repository: the build fails on a lock file that is not
+# up to date instead of rewriting it.
+locked = true
+exclude = ["**/__pycache__", "**/*.pyc", "**/*.pyo"]

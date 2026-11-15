@@ -13,3 +13,9 @@
 /spikes/*/target/
 # Python bytecode from running the spikes.
 __pycache__/
+# The Python package (quantforge-py/): the extension module `maturin develop`
+# builds into the source tree, and what a virtualenv and pytest leave.
+/quantforge-py/python/quantforge_py/*.so
+/quantforge-py/python/quantforge_py/*.pyd
+.venv/
+.pytest_cache/

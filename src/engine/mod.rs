@@ -11,6 +11,13 @@ use thiserror::Error;
 
 use crate::{ExchangeError, StorageError, StrategyError};
 
+/// The version of the engine this build is: the crate's own, as
+/// `MAJOR.MINOR.PATCH`. A strategy bundle's `engine` requirement is held to
+/// it ([`EngineRequirement`](crate::protocol::bundle::EngineRequirement)),
+/// and the Python package reports it beside its own version, which does not
+/// follow this one.
+pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Error, Debug)]
 pub enum EngineError {
     #[error("no candles provided")]

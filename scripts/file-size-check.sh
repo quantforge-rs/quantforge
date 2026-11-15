@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Enforces the file-size budget on src/**/*.rs: a file with more than
+# Enforces the file-size budget on the Rust sources, src/**/*.rs and the
+# Python package's quantforge-py/src/**/*.rs: a file with more than
 # WARN_LINES lines warns, and one with more than MAX_LINES fails unless
 # scripts/file-size-allowlist.txt grants it a higher, justified ceiling. Lines
 # are counted raw, in-file tests included, and a local run also scans untracked
@@ -36,7 +37,7 @@ report() {
 # their command substitution, so a failing find or a missing allowlist stops
 # the script here. A loop reading `< <(find ...)` never sees find fail, and
 # bash before 5.2 carries on past a failed `done < file`.
-files=$(find src -type f -name '*.rs' | LC_ALL=C sort)
+files=$(find src quantforge-py/src -type f -name '*.rs' | LC_ALL=C sort)
 entries=$(< "$ALLOWLIST")
 
 # Parallel arrays and index loops: macOS ships bash 3.2, which has no
@@ -68,8 +69,8 @@ while read -r path ceiling reason || [[ -n $path ]]; do
     if [[ -z $path || $path == '#'* ]]; then
         continue
     fi
-    if [[ $path != src/*.rs ]]; then
-        report error "$ALLOWLIST" "line $number: $path is not a src/**/*.rs path; fix or remove the entry"
+    if [[ $path != src/*.rs && $path != quantforge-py/src/*.rs ]]; then
+        report error "$ALLOWLIST" "line $number: $path is not a src/**/*.rs or quantforge-py/src/**/*.rs path; fix or remove the entry"
     elif ! [[ $ceiling =~ $whole ]] || ((ceiling <= MAX_LINES)); then
         report error "$ALLOWLIST" "line $number: the ceiling for $path must be a whole number above $MAX_LINES"
     elif [[ -z $reason ]]; then
@@ -109,13 +110,13 @@ done < <(printf '%s' "$files")
 
 # Guards against passing on a scan that checked nothing.
 if ((checked == 0)); then
-    echo "error: no src/**/*.rs files found under $PWD" >&2
+    echo "error: no Rust source files found under $PWD" >&2
     exit 1
 fi
 
 for ((i = 0; i < ${#allowed_paths[@]}; i++)); do
     if ((allowed_matched[i] == 0)); then
-        report error "$ALLOWLIST" "${allowed_paths[i]} matches no file under src/; remove its entry"
+        report error "$ALLOWLIST" "${allowed_paths[i]} matches no source file; remove its entry"
     fi
 done
 

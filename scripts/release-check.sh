@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# What CI checks (docs/ci.md). With the variables of
+# What CI checks of the crate (docs/ci.md). With the variables of
 # `scripts/postgres-test-servers.sh start` exported, the tests run on
-# PostgreSQL too; the MSRV lines need `rustup toolchain install 1.85`.
+# PostgreSQL too; the MSRV lines need `rustup toolchain install 1.85`. The
+# Python package has a script of its own, python-package-check.sh.
 set -euo pipefail
 
 "$(dirname "$0")/file-size-check.sh"
@@ -12,7 +13,13 @@ cargo test --all-features --locked
 cargo test --no-default-features --locked
 cargo +1.85 check --locked --all-targets
 cargo +1.85 check --locked --all-targets --no-default-features
-cargo package --list >/dev/null
+# the crate as it would be published holds nothing of the python package, a
+# workspace member that is released on its own (docs/python-package.md)
+packaged=$(cargo package --list)
+if [[ $'\n'$packaged == *$'\n'quantforge-py/* ]]; then
+    echo "error: the quantforge crate would be published with files of quantforge-py/" >&2
+    exit 1
+fi
 # a target directory of its own: the dry run's verify build would otherwise
 # leave target/debug's binary pointing at the packaged copy of the sources
 CARGO_TARGET_DIR=target/publish cargo publish --dry-run --locked

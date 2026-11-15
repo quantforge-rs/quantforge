@@ -42,6 +42,21 @@ scripts/postgres-test-servers.sh stop
 [docs/ci.md](docs/ci.md) lists every check CI runs and which ones a merge
 requires.
 
+## The Python package
+
+`quantforge-py/` is the Python package: a crate that builds a Python
+extension module with [maturin](https://www.maturin.rs), and the package the
+module is built into. [docs/python-package.md](docs/python-package.md) says
+how it is named, built and tested.
+
+None of the commands above builds it: `cargo fmt --all` formats it, and the
+file-size budget covers its Rust files. After a change to it, or to what it
+binds, run what CI's `python` job runs, with CPython 3.11 or later:
+
+```bash
+scripts/python-package-check.sh
+```
+
 ## Commit style
 
 Small, reviewable commits are preferred.
@@ -185,7 +200,8 @@ UPDATE_SNAPSHOTS=1 cargo test --test e2e snapshot::
 
 ## File size budget
 
-Each `.rs` file under `src/` has a line budget: more than 400 lines prints a
+Each `.rs` file under `src/`, and under the Python package's
+`quantforge-py/src/`, has a line budget: more than 400 lines prints a
 warning, and more than 600 lines fails CI and `./scripts/release-check.sh`.
 Lines are counted raw, so comments, blank lines, and an in-file
 `#[cfg(test)] mod tests` all count; files under `tests/` are not checked. Run
