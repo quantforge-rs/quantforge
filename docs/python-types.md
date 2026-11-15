@@ -73,6 +73,9 @@ number it is.
   its decimal places.
 - **No decimal context has a say.** A value crosses as it is whatever the
   context's precision or rounding.
+- **Nor has a type derived from `Decimal` or from `int`.** A value of one
+  crosses by the number it holds, whatever its own `__format__` or
+  `__str__` writes of it, and comes back a plain `Decimal`.
 - **A float is never read as a decimal.** It is a `TypeError` that names
   [`decimal_from_f64`](#decimal-and-float), the one way across.
 
@@ -448,8 +451,9 @@ hash either.
 
 **`repr()` is an expression that builds the value again,** digit for
 digit, wherever that is short enough to read. The two that hold
-sequences count them instead: `CandleBatch(<1440 candles>)`, and a
-result's `trades=<3 trades>, equity_curve=<1440 points>`.
+sequences count them instead, and their `repr` cannot be evaluated:
+`CandleBatch(<1440 candles>)`, and a result's `trades=<3 trades>,
+equity_curve=<1440 points>`.
 
 **A value cannot be pickled or deep-copied yet.** No story has asked for
 it; one that needs to send a value between processes adds it.

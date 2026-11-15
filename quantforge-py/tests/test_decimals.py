@@ -159,6 +159,76 @@ def test_a_decimal_of_a_type_derived_from_decimal_crosses_and_comes_back_plain()
     assert parts(back) == parts(Decimal("81940.0100"))
 
 
+def test_a_value_of_a_derived_type_crosses_by_the_number_it_holds_whatever_it_says(refused):
+    class Shown(Decimal):
+        """A price that writes itself to two places, and answers what the
+        crossing asks of a decimal as if it were a small whole number."""
+
+        def __format__(self, spec):
+            return Decimal.__format__(self, ".2f")
+
+        def __str__(self):
+            return "a price"
+
+        def __repr__(self):
+            return "Shown()"
+
+        def adjusted(self):
+            return 0
+
+        def is_zero(self):
+            return True
+
+        def is_finite(self):
+            return True
+
+    back = crossed(Shown("81940.0199"))
+    assert type(back) is Decimal
+    assert parts(back) == parts(Decimal("81940.0199"))
+    assert bits(qf.decimal_to_f64(Shown("0.129"))) == bits(0.129)
+    # It is refused for the number it holds as well, quoted as that number.
+    refused(ValueError, f"invalid equity 1E-29: {FITS}", crossed, Shown("1E-29"))
+    refused(ValueError, f"invalid equity 1E+29: {FITS}", crossed, Shown("1E+29"))
+    refused(ValueError, "invalid equity NaN: must be a finite number", crossed, Shown("NaN"))
+
+    class Counted(int):
+        """A whole number that shifts to nothing, says it is seven, and
+        writes itself in words."""
+
+        def __rshift__(self, places):
+            return 0
+
+        def __and__(self, mask):
+            return 0
+
+        def __index__(self):
+            return 7
+
+        def __int__(self):
+            return 7
+
+        def __str__(self):
+            return "seven"
+
+        def __repr__(self):
+            return "Counted()"
+
+    large = 2**70 + 5
+    assert parts(crossed(Counted(large))) == parts(Decimal(large))
+    assert parts(crossed(Counted(-large))) == parts(Decimal(-large))
+    refused(ValueError, f"invalid equity {2**96}: {FITS}", crossed, Counted(2**96))
+    # A time is the number an int holds too, and is refused as that number.
+    point = qf.EquityPoint(open_time_ms=Counted(1_700_000_000_000), equity=Counted(3))
+    assert (point.open_time_ms, point.equity) == (1_700_000_000_000, 3)
+    refused(
+        ValueError,
+        f"invalid open_time_ms {2**63}: must be between {-(2**63)} and {2**63 - 1}",
+        qf.EquityPoint,
+        open_time_ms=Counted(2**63),
+        equity=1,
+    )
+
+
 def test_a_decimal_the_engine_cannot_hold_is_refused_and_never_rounded(refused):
     for text, rule in REFUSED:
         value = Decimal(text)

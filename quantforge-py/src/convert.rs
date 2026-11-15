@@ -92,33 +92,46 @@ const ADJUSTED: std::ops::RangeInclusive<i64> = -28..=28;
 /// engine's decimal has none. A negative zero becomes zero, as everywhere in
 /// the engine. What does not fit is refused, never rounded, and so is a
 /// `float`: it crosses only through `decimal_from_f64`.
+///
+/// A value of a type derived from `Decimal` or from `int` crosses by the
+/// number it holds, whatever its own methods say of it.
 pub(crate) fn decimal(value: &Bound<'_, PyAny>, what: impl fmt::Display) -> PyResult<Decimal> {
     let py = value.py();
-    if value.is_instance(decimal_type(py)?)? {
+    let decimal = decimal_type(py)?;
+    if value.is_instance(decimal)? {
+        // A type derived from `Decimal` may write itself as it likes, and
+        // one that formats itself to two places would cross rounded. The
+        // value is read from a plain `Decimal`, which `Decimal(value)`
+        // copies from it digit for digit.
+        let plain = if value.is_exact_instance(decimal) {
+            value.clone()
+        } else {
+            decimal.call1((value,))?
+        };
         // Where the value's first digit stands decides most refusals before
         // any text is written: `1E+999999999` would take a gigabyte of it. A
         // zero is zero whatever its exponent, unless that asks for places.
-        let adjusted: i64 = value.call_method0(intern!(py, "adjusted"))?.extract()?;
+        let adjusted: i64 = plain.call_method0(intern!(py, "adjusted"))?.extract()?;
         if adjusted < *ADJUSTED.start()
             || (adjusted > *ADJUSTED.end()
-                && !value.call_method0(intern!(py, "is_zero"))?.is_truthy()?)
+                && !plain.call_method0(intern!(py, "is_zero"))?.is_truthy()?)
         {
-            return Err(invalid(what, value, DECIMAL_RULE));
+            return Err(invalid(what, &plain, DECIMAL_RULE));
         }
         // Fixed-point text with every digit the value has: no context
         // rounds it, and no exponent is left in it. The engine's own parser
         // reads it, which refuses what it would have to round, and reads a
         // negative zero as zero.
-        let text = value.call_method1(intern!(py, "__format__"), (intern!(py, "f"),))?;
+        let text = plain.call_method1(intern!(py, "__format__"), (intern!(py, "f"),))?;
         let text = text.cast::<PyString>()?.to_cow()?;
         return Decimal::from_str_exact(&text).or_else(|_| {
-            let finite = value.call_method0(intern!(py, "is_finite"))?.is_truthy()?;
+            let finite = plain.call_method0(intern!(py, "is_finite"))?.is_truthy()?;
             let rule = if finite {
                 DECIMAL_RULE
             } else {
                 "must be a finite number"
             };
-            Err(invalid(what, value, rule))
+            Err(invalid(what, &plain, rule))
         });
     }
     if value.is_instance_of::<PyFloat>() {
@@ -146,14 +159,31 @@ pub(crate) fn decimal(value: &Bound<'_, PyAny>, what: impl fmt::Display) -> PyRe
 /// The `int` that `value` is, or says it is through `__index__`, as the
 /// integers of every other field are read; `None` for anything else. A
 /// number that would have to be cut to a whole one says no such thing.
+///
+/// What is returned is a plain `int`. A type derived from `int` may shift
+/// and write itself as it likes, and the 128 bits a decimal's whole number
+/// takes are read by shifting: `int.__index__` copies the number it holds.
 fn whole_number<'py>(value: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyInt>>> {
-    if let Ok(whole) = value.cast::<PyInt>() {
-        return Ok(Some(whole.clone()));
-    }
-    let Ok(index) = value.getattr(intern!(value.py(), "__index__")) else {
-        return Ok(None);
+    let py = value.py();
+    let whole = match value.cast::<PyInt>() {
+        Ok(whole) => whole.clone(),
+        Err(_) => {
+            let Ok(index) = value.getattr(intern!(py, "__index__")) else {
+                return Ok(None);
+            };
+            let Ok(whole) = index.call0()?.cast_into::<PyInt>() else {
+                return Ok(None);
+            };
+            whole
+        }
     };
-    Ok(index.call0()?.cast_into::<PyInt>().ok())
+    if whole.is_exact_instance_of::<PyInt>() {
+        return Ok(Some(whole));
+    }
+    let plain = py
+        .get_type::<PyInt>()
+        .call_method1(intern!(py, "__index__"), (whole,))?;
+    Ok(plain.cast_into::<PyInt>().ok())
 }
 
 /// `value` as a `decimal.Decimal`, from its exact text: every digit and
@@ -206,11 +236,15 @@ pub(crate) fn integer<T: Whole>(value: &Bound<'_, PyAny>, what: impl fmt::Displa
     }
     match value.extract::<T>() {
         Ok(whole) => Ok(whole),
-        Err(error) if error.is_instance_of::<PyOverflowError>(py) => Err(invalid(
-            what,
-            value,
-            format_args!("must be between {} and {}", T::MIN, T::MAX),
-        )),
+        Err(error) if error.is_instance_of::<PyOverflowError>(py) => {
+            // Quoted as the number it is, not as its type writes itself.
+            let plain = whole_number(value)?;
+            Err(invalid(
+                what,
+                plain.as_deref().unwrap_or(value),
+                format_args!("must be between {} and {}", T::MIN, T::MAX),
+            ))
+        }
         Err(error) if error.is_instance_of::<PyTypeError>(py) => {
             Err(wrong_type(what, "an int", value))
         }
