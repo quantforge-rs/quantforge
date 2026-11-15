@@ -375,9 +375,9 @@ rows behind the store's back.
   without its intent or records an intent without its admission, or with the
   admission of another account's signal of the same name, first records a
   signal or an operation by a change, replaces a fill, changes a record twice,
-  changes a position without its lease or two positions at once, reserves
-  without the revision of its pool, or gives its position two unresolved
-  entries or two open cycles
+  by its name or under the key its account knows it by, changes a position
+  without its lease or two positions at once, reserves without the revision of
+  its pool, or gives its position two unresolved entries or two open cycles
 - `execution.lease_fences_writers`: a position's lease goes to one holder at a
   time under the next token; a holder asking again keeps its token; a lease
   that ran out still fences until another holder takes it, and from then on
@@ -414,7 +414,8 @@ rows behind the store's back.
 - `execution.two_venues_one_alert`: the same alert, byte for byte, sent to
   profiles of one name that trade one symbol on two venues is two signals:
   each has its own inbox entry, intent, operation, lease, pool, orders, cycle
-  and events, and what happens to one changes nothing of the other
+  and events, what happens to one changes nothing of the other, and one unit
+  may change both
 - `execution.orders_fills_and_cycles`: an order's identity is recorded before
   it is sent and then only learns: its venue ID, the venue's report, each fill
   once; an entry's first fill opens the position's cycle, numbered as the

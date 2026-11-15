@@ -386,11 +386,15 @@
       "kind": "cycle",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"second\"},\"cycle\":{\"id\":2,\"key\":{\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"profile\":\"second\",\"side\":\"Long\",\"opened_by\":2,\"protection\":\"ProtectionPending\",\"recorded_stop\":null,\"close_reason\":null,\"pnl\":null,\"opened_at_ms\":1792454400000,\"closed_at_ms\":null}}"
     },
+    "event-18": {
+      "kind": "event",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"second\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454400000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
+    },
     "signal-16": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454401000,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454401000}"
     },
-    "event-18": {
+    "event-19": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -434,7 +438,7 @@
       "kind": "order",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"operation\":1,\"client_order_id\":\"qf1-k3x9p2-1-1-e1\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"recorded_at_ms\":1792454403000,\"venue_order_id\":null,\"outcome_unknown\":false,\"refusal\":null,\"evidence\":null}"
     },
-    "event-19": {
+    "event-20": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"op/1/submitted:1\",\"kind\":\"OrderSubmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":1,\"cycle\":null,\"facts\":{\"client_order_id\":\"qf1-k3x9p2-1-1-e1\",\"leg\":\"entry\"},\"created_at_ms\":1792454404000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -466,7 +470,7 @@
       "kind": "incident",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"op/1/unsettled_entry\",\"kind\":\"UnsettledEntry\",\"halts\":{\"Position\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"operation\":1,\"cycle\":null,\"message\":\"the entry of operation 1 was still unsettled 60 s after it was sent\",\"opened_at_ms\":1792454407000,\"cleared\":null}"
     },
-    "event-20": {
+    "event-21": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"incident/op/1/unsettled_entry\",\"kind\":\"IncidentOpened\",\"instrument\":null,\"signal\":null,\"operation\":null,\"cycle\":null,\"facts\":{\"incident\":\"op/1/unsettled_entry\"},\"created_at_ms\":1792454407000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -474,7 +478,7 @@
       "kind": "incident",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"op/1/unsettled_entry\",\"kind\":\"UnsettledEntry\",\"halts\":{\"Position\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"operation\":1,\"cycle\":null,\"message\":\"the entry of operation 1 was still unsettled 60 s after it was sent\",\"opened_at_ms\":1792454407000,\"cleared\":{\"at_ms\":1792454408000,\"note\":\"flat, checked by hand\"}}"
     },
-    "event-21": {
+    "event-22": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"incident/op/1/unsettled_entry\",\"kind\":\"IncidentOpened\",\"instrument\":null,\"signal\":null,\"operation\":null,\"cycle\":null,\"facts\":{\"incident\":\"op/1/unsettled_entry\"},\"created_at_ms\":1792454407000,\"delivery\":\"Delivered\",\"delivery_at_ms\":1792454408000}"
     },
@@ -510,7 +514,7 @@
       "kind": "incident",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"op/1/unsettled_entry\",\"kind\":\"UnsettledEntry\",\"halts\":{\"Position\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"operation\":1,\"cycle\":null,\"message\":\"another cause\",\"opened_at_ms\":1792454407000,\"cleared\":{\"at_ms\":1792454408000,\"note\":\"flat, checked by hand\"}}"
     },
-    "event-22": {
+    "event-23": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"incident/op/1/unsettled_entry\",\"kind\":\"IncidentOpened\",\"instrument\":null,\"signal\":null,\"operation\":null,\"cycle\":null,\"facts\":{\"incident\":\"another\"},\"created_at_ms\":1792454407000,\"delivery\":\"Delivered\",\"delivery_at_ms\":1792454409000}"
     },
@@ -526,7 +530,7 @@
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"second\"},\"signal\":{\"id\":\"other:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:c471bf852ac1e29c93ad41c405ed028e8f29a18bce489a89f2186c2b52b78884\",\"profile\":\"second\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"second\\\",\\\"source\\\":\\\"other\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454401500,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454401500}"
     },
-    "event-23": {
+    "event-24": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"second\"},\"key\":\"sig/second/conflict:sha256:c471bf852ac1e29c93ad41c405ed028e8f29a18bce489a89f2186c2b52b78884/other:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"other:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401500,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -534,7 +538,7 @@
       "kind": "intent",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"second\"},\"intent\":{\"format\":1,\"kind\":{\"Entry\":{\"profile\":\"second\",\"signal\":\"other:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"signal_time_ms\":1792454405000,\"key\":{\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"side\":\"Long\",\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"state\":\"Admitted\",\"policy\":{\"format\":1,\"profile\":\"second\",\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"revision\":4,\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"risk_percent\":{\"value\":\"1\",\"source\":\"Defaults\"},\"stop_percent\":{\"value\":\"3\",\"source\":\"Defaults\"},\"leverage\":{\"value\":\"5\",\"source\":\"Defaults\"},\"capital\":{\"amount\":\"15000\",\"asset\":\"USDT\"},\"capital_revision\":4},\"attempts\":[]},\"operation\":null,\"cycle\":null}"
     },
-    "event-24": {
+    "event-25": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"second\"},\"key\":\"sig/second/signal_admitted/other:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"other:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401500,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -574,7 +578,7 @@
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:14cdd8ea302743b3ae6fbafa4330d8c8ce7f06040321871dd41117d9361d56bd\",\"profile\":\"main\",\"ticker\":\"BTCUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"BTCUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454408000,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454408000}"
     },
-    "event-25": {
+    "event-26": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:14cdd8ea302743b3ae6fbafa4330d8c8ce7f06040321871dd41117d9361d56bd/trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454408000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -582,7 +586,7 @@
       "kind": "intent",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"intent\":{\"format\":1,\"kind\":{\"Entry\":{\"profile\":\"main\",\"signal\":\"trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"signal_time_ms\":1792454405000,\"key\":{\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"BTCUSDT\",\"settle\":\"USDT\"}},\"side\":\"Long\",\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"state\":\"Admitted\",\"policy\":{\"format\":1,\"profile\":\"main\",\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"revision\":4,\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"BTCUSDT\",\"settle\":\"USDT\"},\"risk_percent\":{\"value\":\"1\",\"source\":\"Defaults\"},\"stop_percent\":{\"value\":\"3\",\"source\":\"Defaults\"},\"leverage\":{\"value\":\"5\",\"source\":\"Defaults\"},\"capital\":{\"amount\":\"15000\",\"asset\":\"USDT\"},\"capital_revision\":4},\"attempts\":[]},\"operation\":null,\"cycle\":null}"
     },
-    "event-26": {
+    "event-27": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"BTCUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454408000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -602,11 +606,11 @@
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:14cdd8ea302743b3ae6fbafa4330d8c8ce7f06040321871dd41117d9361d56bd\",\"profile\":\"main\",\"ticker\":\"BTCUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"BTCUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454401500,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454401500}"
     },
-    "event-27": {
+    "event-28": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:14cdd8ea302743b3ae6fbafa4330d8c8ce7f06040321871dd41117d9361d56bd/trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401500,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "event-28": {
+    "event-29": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"BTCUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401500,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -706,11 +710,11 @@
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454401000,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454401000}"
     },
-    "event-29": {
+    "event-30": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "event-30": {
+    "event-31": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BinanceLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -722,7 +726,7 @@
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:4b0ebaa56ab63fec191230c391bc8a870b3b25bca23a7e9f33915ec1ebbff082\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"999.99\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"999.99\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454402000,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454402000}"
     },
-    "event-31": {
+    "event-32": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:4b0ebaa56ab63fec191230c391bc8a870b3b25bca23a7e9f33915ec1ebbff082/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454402000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -774,6 +778,38 @@
       "kind": "cycle",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"cycle\":{\"id\":2,\"key\":{\"account\":{\"venue\":\"Binance\",\"environment\":\"Demo\",\"venue_account_id\":{\"KeyFingerprint\":\"00000000000000a1\"}},\"instrument\":{\"exchange\":\"BinanceLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"profile\":\"main\",\"side\":\"Long\",\"opened_by\":2,\"protection\":\"ProtectionPending\",\"recorded_stop\":null,\"close_reason\":null,\"pnl\":null,\"opened_at_ms\":1792454404900,\"closed_at_ms\":null}}"
     },
+    "signal-22": {
+      "kind": "signal",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z\",\"payload_hash\":\"sha256:70f725e35252d0802cbbe913998ee3a83ac0ad4a1e95d836927e4cea75ae4ece\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454580000,\"fire_time_ms\":1792454585000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"later\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:03:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406000,\"state\":\"Received\",\"refusal\":null,\"note\":null,\"judged_at_ms\":null}"
+    },
+    "event-33": {
+      "kind": "event",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:70f725e35252d0802cbbe913998ee3a83ac0ad4a1e95d836927e4cea75ae4ece/later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
+    },
+    "signal-23": {
+      "kind": "signal",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"signal\":{\"id\":\"later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z\",\"payload_hash\":\"sha256:70f725e35252d0802cbbe913998ee3a83ac0ad4a1e95d836927e4cea75ae4ece\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454580000,\"fire_time_ms\":1792454585000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"later\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:03:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406000,\"state\":\"Received\",\"refusal\":null,\"note\":null,\"judged_at_ms\":null}"
+    },
+    "event-34": {
+      "kind": "event",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:70f725e35252d0802cbbe913998ee3a83ac0ad4a1e95d836927e4cea75ae4ece/later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
+    },
+    "signal-24": {
+      "kind": "signal",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z\",\"payload_hash\":\"sha256:70f725e35252d0802cbbe913998ee3a83ac0ad4a1e95d836927e4cea75ae4ece\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454580000,\"fire_time_ms\":1792454585000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"later\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:03:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406000,\"state\":\"Rejected\",\"refusal\":{\"refusal\":\"Stale\",\"message\":\"the alert fired 75 s ago, and profile main takes one at most 60 s old\"},\"note\":null,\"judged_at_ms\":1792454407000}"
+    },
+    "signal-25": {
+      "kind": "signal",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"signal\":{\"id\":\"later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z\",\"payload_hash\":\"sha256:70f725e35252d0802cbbe913998ee3a83ac0ad4a1e95d836927e4cea75ae4ece\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454580000,\"fire_time_ms\":1792454585000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"later\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:03:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406000,\"state\":\"Rejected\",\"refusal\":{\"refusal\":\"Stale\",\"message\":\"the alert fired 75 s ago, and profile main takes one at most 60 s old\"},\"note\":null,\"judged_at_ms\":1792454407000}"
+    },
+    "event-35": {
+      "kind": "event",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_rejected/later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z\",\"kind\":\"SignalRejected\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454407000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
+    },
+    "event-36": {
+      "kind": "event",
+      "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_rejected/later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z\",\"kind\":\"SignalRejected\",\"instrument\":{\"exchange\":\"BinanceLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454407000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
+    },
     "intent-27": {
       "kind": "intent",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"intent\":{\"format\":1,\"kind\":{\"Entry\":{\"profile\":\"main\",\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"signal_time_ms\":1792454405000,\"key\":{\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"side\":\"Long\",\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"state\":\"PartiallyFilled\",\"policy\":{\"format\":1,\"profile\":\"main\",\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"revision\":4,\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"risk_percent\":{\"value\":\"1\",\"source\":\"Defaults\"},\"stop_percent\":{\"value\":\"3\",\"source\":\"Defaults\"},\"leverage\":{\"value\":\"5\",\"source\":\"Defaults\"},\"capital\":{\"amount\":\"15000\",\"asset\":\"USDT\"},\"capital_revision\":4},\"attempts\":[{\"client_order_id\":\"qf1-k3x9p2-1-1-e1\",\"sent_at_ms\":1792454403000}]},\"operation\":1,\"cycle\":1}"
@@ -798,11 +834,11 @@
       "kind": "cycle",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"cycle\":{\"id\":1,\"key\":{\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"profile\":\"main\",\"side\":\"Long\",\"opened_by\":1,\"protection\":\"Protected\",\"recorded_stop\":null,\"close_reason\":null,\"pnl\":null,\"opened_at_ms\":1792454404000,\"closed_at_ms\":null}}"
     },
-    "signal-22": {
+    "signal-26": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"payload_hash\":\"sha256:4d45632dd421ee721dc608b792b9461c34aa950f20d603ee7258e5fda50b5624\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":\"Exit\",\"bar_time_ms\":1792454460000,\"fire_time_ms\":1792454465000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"exit\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:01:00Z\\\"}\",\"received_at_ms\":1792454460000,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454460000}"
     },
-    "event-32": {
+    "event-37": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:4d45632dd421ee721dc608b792b9461c34aa950f20d603ee7258e5fda50b5624/trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454460000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -810,7 +846,7 @@
       "kind": "intent",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"intent\":{\"format\":1,\"kind\":{\"Exit\":{\"profile\":\"main\",\"signal\":\"trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"signal_time_ms\":1792454465000,\"key\":{\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"side\":\"Long\"}},\"state\":\"Admitted\",\"policy\":null,\"attempts\":[]},\"operation\":null,\"cycle\":1}"
     },
-    "event-33": {
+    "event-38": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454460000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -858,7 +894,7 @@
       "kind": "incident",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"op/1/unsettled_entry\",\"kind\":\"UnsettledEntry\",\"halts\":{\"Position\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"operation\":1,\"cycle\":null,\"message\":\"the entry of operation 1 was still unsettled 60 s after it was sent\",\"opened_at_ms\":1792454401000,\"cleared\":null}"
     },
-    "event-34": {
+    "event-39": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"incident/op/1/unsettled_entry\",\"kind\":\"IncidentOpened\",\"instrument\":null,\"signal\":null,\"operation\":null,\"cycle\":null,\"facts\":{\"incident\":\"op/1/unsettled_entry\"},\"created_at_ms\":1792454401000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -866,7 +902,7 @@
       "kind": "incident",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"profile/second-writer\",\"kind\":\"SecondWriter\",\"halts\":\"Profile\",\"operation\":null,\"cycle\":null,\"message\":\"orders with owner tag k3x9p2 and another store's epoch\",\"opened_at_ms\":1792454402000,\"cleared\":null}"
     },
-    "event-35": {
+    "event-40": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"incident/profile/second-writer\",\"kind\":\"IncidentOpened\",\"instrument\":null,\"signal\":null,\"operation\":null,\"cycle\":null,\"facts\":{\"incident\":\"profile/second-writer\"},\"created_at_ms\":1792454402000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -874,23 +910,23 @@
       "kind": "incident",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"op/1/unsettled_entry\",\"kind\":\"UnsettledEntry\",\"halts\":{\"Position\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"operation\":1,\"cycle\":null,\"message\":\"the entry of operation 1 was still unsettled 60 s after it was sent\",\"opened_at_ms\":1792454401000,\"cleared\":{\"at_ms\":1792454403000,\"note\":\"flat, checked by hand\"}}"
     },
-    "event-36": {
+    "event-41": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"incident/op/1/unsettled_entry/cleared\",\"kind\":\"IncidentCleared\",\"instrument\":null,\"signal\":null,\"operation\":null,\"cycle\":null,\"facts\":{\"incident\":\"op/1/unsettled_entry\",\"note\":\"flat, checked by hand\"},\"created_at_ms\":1792454403000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "event-37": {
+    "event-42": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"incident/op/1/unsettled_entry\",\"kind\":\"IncidentOpened\",\"instrument\":null,\"signal\":null,\"operation\":null,\"cycle\":null,\"facts\":{\"incident\":\"op/1/unsettled_entry\"},\"created_at_ms\":1792454401000,\"delivery\":\"Delivered\",\"delivery_at_ms\":1792454404000}"
     },
-    "event-38": {
+    "event-43": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"incident/profile/second-writer\",\"kind\":\"IncidentOpened\",\"instrument\":null,\"signal\":null,\"operation\":null,\"cycle\":null,\"facts\":{\"incident\":\"profile/second-writer\"},\"created_at_ms\":1792454402000,\"delivery\":\"OutcomeUnknown\",\"delivery_at_ms\":1792454405000}"
     },
-    "signal-23": {
+    "signal-27": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Testnet\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454401000,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454401000}"
     },
-    "event-39": {
+    "event-44": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Testnet\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -898,47 +934,47 @@
       "kind": "intent",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Testnet\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"intent\":{\"format\":1,\"kind\":{\"Entry\":{\"profile\":\"main\",\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"signal_time_ms\":1792454405000,\"key\":{\"account\":{\"venue\":\"Bybit\",\"environment\":\"Testnet\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"side\":\"Long\",\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"state\":\"Admitted\",\"policy\":{\"format\":1,\"profile\":\"main\",\"account\":{\"venue\":\"Bybit\",\"environment\":\"Testnet\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"revision\":4,\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"risk_percent\":{\"value\":\"1\",\"source\":\"Defaults\"},\"stop_percent\":{\"value\":\"3\",\"source\":\"Defaults\"},\"leverage\":{\"value\":\"5\",\"source\":\"Defaults\"},\"capital\":{\"amount\":\"15000\",\"asset\":\"USDT\"},\"capital_revision\":4},\"attempts\":[]},\"operation\":null,\"cycle\":null}"
     },
-    "event-40": {
+    "event-45": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Testnet\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "signal-24": {
+    "signal-28": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Testnet\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454401000,\"state\":\"Received\",\"refusal\":null,\"note\":null,\"judged_at_ms\":null}"
     },
-    "signal-25": {
+    "signal-29": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454404000,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454404000}"
     },
-    "event-41": {
+    "event-46": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454404000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "event-42": {
+    "event-47": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454404000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "signal-26": {
+    "signal-30": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:14cdd8ea302743b3ae6fbafa4330d8c8ce7f06040321871dd41117d9361d56bd\",\"profile\":\"main\",\"ticker\":\"BTCUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"BTCUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454401100,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454401100}"
     },
-    "event-43": {
+    "event-48": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:14cdd8ea302743b3ae6fbafa4330d8c8ce7f06040321871dd41117d9361d56bd/trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401100,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "event-44": {
+    "event-49": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"BTCUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401100,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "signal-27": {
+    "signal-31": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454401200,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454401200}"
     },
-    "event-45": {
+    "event-50": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401200,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "event-46": {
+    "event-51": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BinanceLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401200,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -978,11 +1014,11 @@
       "kind": "order",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Binance\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"KeyFingerprint\":\"00000000000000a1\"},\"profile\":\"main\"},\"operation\":3,\"client_order_id\":\"qf1-zzzzzz-1-3-e1\",\"instrument\":{\"exchange\":\"BinanceLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"recorded_at_ms\":1792454403000,\"venue_order_id\":null,\"outcome_unknown\":false,\"refusal\":{\"kind\":\"insufficient_balance\",\"message\":\"api error: code=Some(110007) message=ab not enough\"},\"evidence\":null}"
     },
-    "signal-28": {
+    "signal-32": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"payload_hash\":\"sha256:4d45632dd421ee721dc608b792b9461c34aa950f20d603ee7258e5fda50b5624\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":\"Exit\",\"bar_time_ms\":1792454460000,\"fire_time_ms\":1792454465000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"exit\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:01:00Z\\\"}\",\"received_at_ms\":1792454405000,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454405000}"
     },
-    "event-47": {
+    "event-52": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:4d45632dd421ee721dc608b792b9461c34aa950f20d603ee7258e5fda50b5624/trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454405000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -990,7 +1026,7 @@
       "kind": "intent",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"intent\":{\"format\":1,\"kind\":{\"Exit\":{\"profile\":\"main\",\"signal\":\"trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"signal_time_ms\":1792454465000,\"key\":{\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"}},\"side\":\"Long\"}},\"state\":\"Admitted\",\"policy\":null,\"attempts\":[]},\"operation\":null,\"cycle\":null}"
     },
-    "event-48": {
+    "event-53": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:exit:long:SOLUSDT.P:2026-10-20T00:01:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454405000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -998,11 +1034,11 @@
       "kind": "intent",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"intent\":{\"format\":1,\"kind\":{\"Entry\":{\"profile\":\"main\",\"signal\":\"trend:entry:long:BTCUSDT.P:2026-10-20T00:00:00Z\",\"signal_time_ms\":1792454405000,\"key\":{\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"BTCUSDT\",\"settle\":\"USDT\"}},\"side\":\"Long\",\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"state\":\"NotPlaced\",\"policy\":{\"format\":1,\"profile\":\"main\",\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"revision\":4,\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"BTCUSDT\",\"settle\":\"USDT\"},\"risk_percent\":{\"value\":\"1\",\"source\":\"Defaults\"},\"stop_percent\":{\"value\":\"3\",\"source\":\"Defaults\"},\"leverage\":{\"value\":\"5\",\"source\":\"Defaults\"},\"capital\":{\"amount\":\"15000\",\"asset\":\"USDT\"},\"capital_revision\":4},\"attempts\":[{\"client_order_id\":\"qf1-k3x9p2-1-2-e1\",\"sent_at_ms\":1792454403000}]},\"operation\":2,\"cycle\":null}"
     },
-    "signal-29": {
+    "signal-33": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Inverse\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"coin\"},\"signal\":{\"id\":\"trend:entry:long:BTCUSD.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:cd78719357ea03cb95ec3d48046b6293b8d059833af6779153a40dec4a418387\",\"profile\":\"coin\",\"ticker\":\"BTCUSD.P\",\"exchange\":\"BYBIT\",\"category\":\"Inverse\",\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"67012.5\",\"stop\":\"65000.0\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"coin\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"BTCUSD.P\\\",\\\"exchange\\\":\\\"BYBIT\\\",\\\"category\\\":\\\"inverse\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"67012.5\\\",\\\"stop\\\":\\\"65000.0\\\"}\",\"received_at_ms\":1792454401000,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454401000}"
     },
-    "event-49": {
+    "event-54": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Inverse\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"coin\"},\"key\":\"sig/coin/conflict:sha256:cd78719357ea03cb95ec3d48046b6293b8d059833af6779153a40dec4a418387/trend:entry:long:BTCUSD.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:BTCUSD.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -1010,7 +1046,7 @@
       "kind": "intent",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Inverse\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"coin\"},\"intent\":{\"format\":1,\"kind\":{\"Entry\":{\"profile\":\"coin\",\"signal\":\"trend:entry:long:BTCUSD.P:2026-10-20T00:00:00Z\",\"signal_time_ms\":1792454405000,\"key\":{\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"instrument\":{\"exchange\":\"BybitInverse\",\"symbol\":\"BTCUSD\",\"settle\":\"BTC\"}},\"side\":\"Long\",\"expected_price\":\"67012.5\",\"stop\":\"65000.0\"}},\"state\":\"Admitted\",\"policy\":{\"format\":1,\"profile\":\"coin\",\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"revision\":4,\"instrument\":{\"exchange\":\"BybitInverse\",\"symbol\":\"BTCUSD\",\"settle\":\"BTC\"},\"risk_percent\":{\"value\":\"1\",\"source\":\"Defaults\"},\"stop_percent\":{\"value\":\"3\",\"source\":\"Defaults\"},\"leverage\":{\"value\":\"5\",\"source\":\"Defaults\"},\"capital\":{\"amount\":\"0.75000000\",\"asset\":\"BTC\"},\"capital_revision\":4},\"attempts\":[]},\"operation\":null,\"cycle\":null}"
     },
-    "event-50": {
+    "event-55": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Inverse\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"coin\"},\"key\":\"sig/coin/signal_admitted/trend:entry:long:BTCUSD.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitInverse\",\"symbol\":\"BTCUSD\",\"settle\":\"BTC\"},\"signal\":\"trend:entry:long:BTCUSD.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454401000,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -1046,119 +1082,119 @@
       "kind": "cycle",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Inverse\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"coin\"},\"cycle\":{\"id\":1,\"key\":{\"account\":{\"venue\":\"Bybit\",\"environment\":\"Demo\",\"venue_account_id\":{\"Venue\":\"71002233\"}},\"instrument\":{\"exchange\":\"BybitInverse\",\"symbol\":\"BTCUSD\",\"settle\":\"BTC\"}},\"profile\":\"coin\",\"side\":\"Long\",\"opened_by\":1,\"protection\":\"ProtectionPending\",\"recorded_stop\":null,\"close_reason\":null,\"pnl\":null,\"opened_at_ms\":1792454404000,\"closed_at_ms\":null}}"
     },
-    "signal-30": {
+    "signal-34": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406001,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454406001}"
     },
-    "event-51": {
+    "event-56": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406001,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "event-52": {
+    "event-57": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406001,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "signal-31": {
+    "signal-35": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406002,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454406002}"
     },
-    "event-53": {
+    "event-58": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406002,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "event-54": {
+    "event-59": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406002,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "signal-32": {
+    "signal-36": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406003,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454406003}"
     },
-    "event-55": {
+    "event-60": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406003,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "event-56": {
+    "event-61": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406003,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "signal-33": {
+    "signal-37": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406004,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454406004}"
     },
-    "event-57": {
+    "event-62": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406004,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "event-58": {
+    "event-63": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406004,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "signal-34": {
+    "signal-38": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406005,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454406005}"
     },
-    "event-59": {
+    "event-64": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406005,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "event-60": {
+    "event-65": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406005,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "signal-35": {
+    "signal-39": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406006,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454406006}"
     },
-    "event-61": {
+    "event-66": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406006,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "event-62": {
+    "event-67": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406006,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "signal-36": {
+    "signal-40": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"234.23\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"234.23\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406007,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454406007}"
     },
-    "event-63": {
+    "event-68": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:a5720c956247a433fdd7d8b381606e0ae7df51faeeb12b99392e646bc065861c/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406007,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "event-64": {
+    "event-69": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalAdmitted\",\"instrument\":{\"exchange\":\"BybitLinear\",\"symbol\":\"SOLUSDT\",\"settle\":\"USDT\"},\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406007,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "signal-37": {
+    "signal-41": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:4b0ebaa56ab63fec191230c391bc8a870b3b25bca23a7e9f33915ec1ebbff082\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"999.99\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"999.99\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406001,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454406001}"
     },
-    "event-65": {
+    "event-70": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:4b0ebaa56ab63fec191230c391bc8a870b3b25bca23a7e9f33915ec1ebbff082/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406001,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "signal-38": {
+    "signal-42": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:4b0ebaa56ab63fec191230c391bc8a870b3b25bca23a7e9f33915ec1ebbff082\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"999.99\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"999.99\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406003,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454406003}"
     },
-    "event-66": {
+    "event-71": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:4b0ebaa56ab63fec191230c391bc8a870b3b25bca23a7e9f33915ec1ebbff082/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406003,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "signal-39": {
+    "signal-43": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:4b0ebaa56ab63fec191230c391bc8a870b3b25bca23a7e9f33915ec1ebbff082\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"999.99\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"999.99\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406005,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454406005}"
     },
-    "event-67": {
+    "event-72": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:4b0ebaa56ab63fec191230c391bc8a870b3b25bca23a7e9f33915ec1ebbff082/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406005,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
-    "signal-40": {
+    "signal-44": {
       "kind": "signal",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"signal\":{\"id\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"payload_hash\":\"sha256:4b0ebaa56ab63fec191230c391bc8a870b3b25bca23a7e9f33915ec1ebbff082\",\"profile\":\"main\",\"ticker\":\"SOLUSDT.P\",\"exchange\":null,\"category\":null,\"side\":\"Long\",\"action\":{\"Entry\":{\"expected_price\":\"999.99\",\"stop\":\"200.00\"}},\"bar_time_ms\":1792454400000,\"fire_time_ms\":1792454405000},\"payload\":\"{\\\"version\\\":1,\\\"kind\\\":\\\"entry\\\",\\\"profile\\\":\\\"main\\\",\\\"source\\\":\\\"trend\\\",\\\"ticker\\\":\\\"SOLUSDT.P\\\",\\\"side\\\":\\\"long\\\",\\\"bar_time\\\":\\\"2026-10-20T00:00:00Z\\\",\\\"price\\\":\\\"999.99\\\",\\\"stop\\\":\\\"200.00\\\"}\",\"received_at_ms\":1792454406007,\"state\":\"Admitted\",\"refusal\":null,\"note\":null,\"judged_at_ms\":1792454406007}"
     },
-    "event-68": {
+    "event-73": {
       "kind": "event",
       "stored": "{\"format\":1,\"scope\":{\"venue\":\"Bybit\",\"category\":\"Linear\",\"environment\":\"Demo\",\"account\":{\"Venue\":\"71002233\"},\"profile\":\"main\"},\"key\":\"sig/main/conflict:sha256:4b0ebaa56ab63fec191230c391bc8a870b3b25bca23a7e9f33915ec1ebbff082/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"kind\":\"SignalConflict\",\"instrument\":null,\"signal\":\"trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z\",\"operation\":null,\"cycle\":null,\"facts\":{},\"created_at_ms\":1792454406007,\"delivery\":\"Pending\",\"delivery_at_ms\":null}"
     },
@@ -1797,7 +1833,7 @@
     },
     {
       "id": "execution.unit_shape_refusals",
-      "doc": "a unit that is not one a store applies is refused before anything is read: one that changes nothing, admits a signal without its intent or records an intent without its admission, or with the admission of another account's signal of the same name, first records a signal or an operation by a change, replaces a fill, changes a record twice, changes a position without its lease or two positions at once, reserves without the revision of its pool, or gives its position two unresolved entries or two open cycles",
+      "doc": "a unit that is not one a store applies is refused before anything is read: one that changes nothing, admits a signal without its intent or records an intent without its admission, or with the admission of another account's signal of the same name, first records a signal or an operation by a change, replaces a fill, changes a record twice, by its name or under the key its account knows it by, changes a position without its lease or two positions at once, reserves without the revision of its pool, or gives its position two unresolved entries or two open cycles",
       "steps": [
         {
           "op": "bind",
@@ -2173,6 +2209,29 @@
           }
         },
         {
+          "op": "commit",
+          "unit": {
+            "at_ms": 1792454400000,
+            "fence": null,
+            "pool": null,
+            "delivery": null,
+            "changes": [
+              {
+                "record": "event-17",
+                "expect": null
+              },
+              {
+                "record": "event-18",
+                "expect": null
+              }
+            ]
+          },
+          "refused": {
+            "kind": "invalid_argument",
+            "contains": "it changes event sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z twice"
+          }
+        },
+        {
           "op": "raw_select",
           "sql": "SELECT CAST(COUNT(*) AS TEXT) FROM signal_inbox",
           "expect": [
@@ -2247,7 +2306,7 @@
                 "expect": null
               },
               {
-                "record": "event-18",
+                "record": "event-19",
                 "expect": null
               }
             ]
@@ -2735,7 +2794,7 @@
                 "expect": null
               },
               {
-                "record": "event-18",
+                "record": "event-19",
                 "expect": null
               }
             ]
@@ -3059,7 +3118,7 @@
                 "expect": null
               },
               {
-                "record": "event-18",
+                "record": "event-19",
                 "expect": null
               }
             ]
@@ -3252,7 +3311,7 @@
             "delivery": null,
             "changes": [
               {
-                "record": "event-19",
+                "record": "event-20",
                 "expect": null
               },
               {
@@ -3290,7 +3349,7 @@
             "delivery": null,
             "changes": [
               {
-                "record": "event-19",
+                "record": "event-20",
                 "expect": null
               },
               {
@@ -3310,7 +3369,7 @@
             "delivery": null,
             "changes": [
               {
-                "record": "event-19",
+                "record": "event-20",
                 "expect": null
               }
             ]
@@ -3409,7 +3468,7 @@
                 "expect": null
               },
               {
-                "record": "event-18",
+                "record": "event-19",
                 "expect": null
               }
             ]
@@ -3564,7 +3623,7 @@
                 "expect": null
               },
               {
-                "record": "event-20",
+                "record": "event-21",
                 "expect": null
               }
             ]
@@ -3584,7 +3643,7 @@
                 "expect": 1
               },
               {
-                "record": "event-21",
+                "record": "event-22",
                 "expect": 1
               }
             ]
@@ -3868,7 +3927,7 @@
             "delivery": null,
             "changes": [
               {
-                "record": "event-21",
+                "record": "event-22",
                 "expect": 2
               }
             ]
@@ -3887,7 +3946,7 @@
             "delivery": null,
             "changes": [
               {
-                "record": "event-22",
+                "record": "event-23",
                 "expect": 2
               }
             ]
@@ -4011,7 +4070,7 @@
           "scope": "bybit",
           "key": "incident/op/1/unsettled_entry",
           "expect": {
-            "record": "event-21",
+            "record": "event-22",
             "revision": 2
           }
         },
@@ -4057,7 +4116,7 @@
                 "expect": null
               },
               {
-                "record": "event-18",
+                "record": "event-19",
                 "expect": null
               }
             ]
@@ -4092,7 +4151,7 @@
             "pool": null,
             "delivery": {
               "record": "signal-17",
-              "conflict_event": "event-23"
+              "conflict_event": "event-24"
             },
             "changes": [
               {
@@ -4100,7 +4159,7 @@
                 "expect": null
               },
               {
-                "record": "event-24",
+                "record": "event-25",
                 "expect": null
               }
             ]
@@ -4423,7 +4482,7 @@
             "pool": null,
             "delivery": {
               "record": "signal-18",
-              "conflict_event": "event-25"
+              "conflict_event": "event-26"
             },
             "changes": [
               {
@@ -4431,7 +4490,7 @@
                 "expect": null
               },
               {
-                "record": "event-26",
+                "record": "event-27",
                 "expect": null
               }
             ]
@@ -4558,7 +4617,7 @@
                 "expect": null
               },
               {
-                "record": "event-18",
+                "record": "event-19",
                 "expect": null
               }
             ]
@@ -4593,7 +4652,7 @@
             "pool": null,
             "delivery": {
               "record": "signal-19",
-              "conflict_event": "event-27"
+              "conflict_event": "event-28"
             },
             "changes": [
               {
@@ -4601,7 +4660,7 @@
                 "expect": null
               },
               {
-                "record": "event-28",
+                "record": "event-29",
                 "expect": null
               }
             ]
@@ -5727,7 +5786,7 @@
     },
     {
       "id": "execution.two_venues_one_alert",
-      "doc": "the same alert, byte for byte, sent to profiles of one name that trade one symbol on two venues is two signals: each has its own inbox entry, intent, operation, lease, pool, orders, cycle and events, and what happens to one changes nothing of the other",
+      "doc": "the same alert, byte for byte, sent to profiles of one name that trade one symbol on two venues is two signals: each has its own inbox entry, intent, operation, lease, pool, orders, cycle and events, what happens to one changes nothing of the other, and one unit may change both",
       "steps": [
         {
           "op": "bind",
@@ -5753,7 +5812,7 @@
                 "expect": null
               },
               {
-                "record": "event-18",
+                "record": "event-19",
                 "expect": null
               }
             ]
@@ -5788,7 +5847,7 @@
             "pool": null,
             "delivery": {
               "record": "signal-20",
-              "conflict_event": "event-29"
+              "conflict_event": "event-30"
             },
             "changes": [
               {
@@ -5796,7 +5855,7 @@
                 "expect": null
               },
               {
-                "record": "event-30",
+                "record": "event-31",
                 "expect": null
               }
             ]
@@ -5831,7 +5890,7 @@
             "pool": null,
             "delivery": {
               "record": "signal-21",
-              "conflict_event": "event-31"
+              "conflict_event": "event-32"
             },
             "changes": [
               {
@@ -6192,7 +6251,7 @@
           "scope": "bybit",
           "key": "sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z",
           "expect": {
-            "record": "event-18",
+            "record": "event-19",
             "revision": 1
           }
         },
@@ -6201,7 +6260,7 @@
           "scope": "binance",
           "key": "sig/main/signal_admitted/trend:entry:long:SOLUSDT.P:2026-10-20T00:00:00Z",
           "expect": {
-            "record": "event-30",
+            "record": "event-31",
             "revision": 1
           }
         },
@@ -6210,15 +6269,15 @@
           "limit": 10,
           "expect": [
             {
-              "record": "event-18",
-              "revision": 1
-            },
-            {
-              "record": "event-30",
+              "record": "event-19",
               "revision": 1
             },
             {
               "record": "event-31",
+              "revision": 1
+            },
+            {
+              "record": "event-32",
               "revision": 1
             }
           ]
@@ -6244,6 +6303,98 @@
             ],
             [
               null
+            ]
+          ]
+        },
+        {
+          "op": "commit",
+          "unit": {
+            "at_ms": 1792454406000,
+            "fence": null,
+            "pool": null,
+            "delivery": {
+              "record": "signal-22",
+              "conflict_event": "event-33"
+            },
+            "changes": []
+          },
+          "expect": "applied"
+        },
+        {
+          "op": "commit",
+          "unit": {
+            "at_ms": 1792454406000,
+            "fence": null,
+            "pool": null,
+            "delivery": {
+              "record": "signal-23",
+              "conflict_event": "event-34"
+            },
+            "changes": []
+          },
+          "expect": "applied"
+        },
+        {
+          "op": "commit",
+          "unit": {
+            "at_ms": 1792454407000,
+            "fence": null,
+            "pool": null,
+            "delivery": null,
+            "changes": [
+              {
+                "record": "signal-24",
+                "expect": 1
+              },
+              {
+                "record": "signal-25",
+                "expect": 1
+              },
+              {
+                "record": "event-35",
+                "expect": null
+              },
+              {
+                "record": "event-36",
+                "expect": null
+              }
+            ]
+          },
+          "expect": "applied"
+        },
+        {
+          "op": "signal",
+          "scope": "bybit",
+          "signal": "later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z",
+          "expect": {
+            "record": "signal-24",
+            "revision": 2
+          }
+        },
+        {
+          "op": "signal",
+          "scope": "binance",
+          "signal": "later:entry:long:SOLUSDT.P:2026-10-20T00:03:00Z",
+          "expect": {
+            "record": "signal-25",
+            "revision": 2
+          }
+        },
+        {
+          "op": "raw_select",
+          "sql": "SELECT CAST(state AS TEXT) FROM signal_inbox ORDER BY seq",
+          "expect": [
+            [
+              "admitted"
+            ],
+            [
+              "admitted"
+            ],
+            [
+              "rejected"
+            ],
+            [
+              "rejected"
             ]
           ]
         }
@@ -6277,7 +6428,7 @@
                 "expect": null
               },
               {
-                "record": "event-18",
+                "record": "event-19",
                 "expect": null
               }
             ]
@@ -6595,8 +6746,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-22",
-              "conflict_event": "event-32"
+              "record": "signal-26",
+              "conflict_event": "event-37"
             },
             "changes": [
               {
@@ -6604,7 +6755,7 @@
                 "expect": null
               },
               {
-                "record": "event-33",
+                "record": "event-38",
                 "expect": null
               }
             ]
@@ -6919,7 +7070,7 @@
                 "expect": null
               },
               {
-                "record": "event-34",
+                "record": "event-39",
                 "expect": null
               }
             ]
@@ -6939,7 +7090,7 @@
                 "expect": null
               },
               {
-                "record": "event-35",
+                "record": "event-40",
                 "expect": null
               }
             ]
@@ -6959,7 +7110,7 @@
                 "expect": null
               },
               {
-                "record": "event-34",
+                "record": "event-39",
                 "expect": null
               }
             ]
@@ -7000,7 +7151,7 @@
                 "expect": 1
               },
               {
-                "record": "event-36",
+                "record": "event-41",
                 "expect": null
               }
             ]
@@ -7042,15 +7193,15 @@
           "limit": 10,
           "expect": [
             {
-              "record": "event-34",
+              "record": "event-39",
               "revision": 1
             },
             {
-              "record": "event-35",
+              "record": "event-40",
               "revision": 1
             },
             {
-              "record": "event-36",
+              "record": "event-41",
               "revision": 1
             }
           ]
@@ -7060,11 +7211,11 @@
           "limit": 2,
           "expect": [
             {
-              "record": "event-34",
+              "record": "event-39",
               "revision": 1
             },
             {
-              "record": "event-35",
+              "record": "event-40",
               "revision": 1
             }
           ]
@@ -7078,7 +7229,7 @@
             "delivery": null,
             "changes": [
               {
-                "record": "event-37",
+                "record": "event-42",
                 "expect": 1
               }
             ]
@@ -7094,7 +7245,7 @@
             "delivery": null,
             "changes": [
               {
-                "record": "event-38",
+                "record": "event-43",
                 "expect": 1
               }
             ]
@@ -7106,7 +7257,7 @@
           "limit": 10,
           "expect": [
             {
-              "record": "event-36",
+              "record": "event-41",
               "revision": 1
             }
           ]
@@ -7116,7 +7267,7 @@
           "scope": "bybit",
           "key": "incident/op/1/unsettled_entry",
           "expect": {
-            "record": "event-37",
+            "record": "event-42",
             "revision": 2
           }
         },
@@ -7125,7 +7276,7 @@
           "scope": "bybit",
           "key": "incident/profile/second-writer",
           "expect": {
-            "record": "event-38",
+            "record": "event-43",
             "revision": 2
           }
         },
@@ -7281,8 +7432,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-23",
-              "conflict_event": "event-39"
+              "record": "signal-27",
+              "conflict_event": "event-44"
             },
             "changes": [
               {
@@ -7290,7 +7441,7 @@
                 "expect": null
               },
               {
-                "record": "event-40",
+                "record": "event-45",
                 "expect": null
               }
             ]
@@ -7307,8 +7458,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-24",
-              "conflict_event": "event-39"
+              "record": "signal-28",
+              "conflict_event": "event-44"
             },
             "changes": []
           },
@@ -7387,8 +7538,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-25",
-              "conflict_event": "event-41"
+              "record": "signal-29",
+              "conflict_event": "event-46"
             },
             "changes": [
               {
@@ -7396,7 +7547,7 @@
                 "expect": null
               },
               {
-                "record": "event-42",
+                "record": "event-47",
                 "expect": null
               }
             ]
@@ -7481,7 +7632,7 @@
                 "expect": null
               },
               {
-                "record": "event-18",
+                "record": "event-19",
                 "expect": null
               }
             ]
@@ -7515,8 +7666,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-26",
-              "conflict_event": "event-43"
+              "record": "signal-30",
+              "conflict_event": "event-48"
             },
             "changes": [
               {
@@ -7524,7 +7675,7 @@
                 "expect": null
               },
               {
-                "record": "event-44",
+                "record": "event-49",
                 "expect": null
               }
             ]
@@ -7558,8 +7709,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-27",
-              "conflict_event": "event-45"
+              "record": "signal-31",
+              "conflict_event": "event-50"
             },
             "changes": [
               {
@@ -7567,7 +7718,7 @@
                 "expect": null
               },
               {
-                "record": "event-46",
+                "record": "event-51",
                 "expect": null
               }
             ]
@@ -7778,8 +7929,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-28",
-              "conflict_event": "event-47"
+              "record": "signal-32",
+              "conflict_event": "event-52"
             },
             "changes": [
               {
@@ -7787,7 +7938,7 @@
                 "expect": null
               },
               {
-                "record": "event-48",
+                "record": "event-53",
                 "expect": null
               }
             ]
@@ -7964,8 +8115,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-29",
-              "conflict_event": "event-49"
+              "record": "signal-33",
+              "conflict_event": "event-54"
             },
             "changes": [
               {
@@ -7973,7 +8124,7 @@
                 "expect": null
               },
               {
-                "record": "event-50",
+                "record": "event-55",
                 "expect": null
               }
             ]
@@ -8084,7 +8235,7 @@
           "scope": "bybit coin",
           "signal": "trend:entry:long:BTCUSD.P:2026-10-20T00:00:00Z",
           "expect": {
-            "record": "signal-29",
+            "record": "signal-33",
             "revision": 1
           }
         },
@@ -8204,8 +8355,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-30",
-              "conflict_event": "event-51"
+              "record": "signal-34",
+              "conflict_event": "event-56"
             },
             "changes": [
               {
@@ -8213,7 +8364,7 @@
                 "expect": null
               },
               {
-                "record": "event-52",
+                "record": "event-57",
                 "expect": null
               }
             ]
@@ -8226,8 +8377,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-31",
-              "conflict_event": "event-53"
+              "record": "signal-35",
+              "conflict_event": "event-58"
             },
             "changes": [
               {
@@ -8235,7 +8386,7 @@
                 "expect": null
               },
               {
-                "record": "event-54",
+                "record": "event-59",
                 "expect": null
               }
             ]
@@ -8248,8 +8399,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-32",
-              "conflict_event": "event-55"
+              "record": "signal-36",
+              "conflict_event": "event-60"
             },
             "changes": [
               {
@@ -8257,7 +8408,7 @@
                 "expect": null
               },
               {
-                "record": "event-56",
+                "record": "event-61",
                 "expect": null
               }
             ]
@@ -8270,8 +8421,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-33",
-              "conflict_event": "event-57"
+              "record": "signal-37",
+              "conflict_event": "event-62"
             },
             "changes": [
               {
@@ -8279,7 +8430,7 @@
                 "expect": null
               },
               {
-                "record": "event-58",
+                "record": "event-63",
                 "expect": null
               }
             ]
@@ -8292,8 +8443,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-34",
-              "conflict_event": "event-59"
+              "record": "signal-38",
+              "conflict_event": "event-64"
             },
             "changes": [
               {
@@ -8301,7 +8452,7 @@
                 "expect": null
               },
               {
-                "record": "event-60",
+                "record": "event-65",
                 "expect": null
               }
             ]
@@ -8314,8 +8465,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-35",
-              "conflict_event": "event-61"
+              "record": "signal-39",
+              "conflict_event": "event-66"
             },
             "changes": [
               {
@@ -8323,7 +8474,7 @@
                 "expect": null
               },
               {
-                "record": "event-62",
+                "record": "event-67",
                 "expect": null
               }
             ]
@@ -8336,8 +8487,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-36",
-              "conflict_event": "event-63"
+              "record": "signal-40",
+              "conflict_event": "event-68"
             },
             "changes": [
               {
@@ -8345,7 +8496,7 @@
                 "expect": null
               },
               {
-                "record": "event-64",
+                "record": "event-69",
                 "expect": null
               }
             ]
@@ -8392,8 +8543,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-37",
-              "conflict_event": "event-65"
+              "record": "signal-41",
+              "conflict_event": "event-70"
             },
             "changes": [
               {
@@ -8401,7 +8552,7 @@
                 "expect": null
               },
               {
-                "record": "event-52",
+                "record": "event-57",
                 "expect": null
               }
             ]
@@ -8414,8 +8565,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-31",
-              "conflict_event": "event-53"
+              "record": "signal-35",
+              "conflict_event": "event-58"
             },
             "changes": [
               {
@@ -8423,7 +8574,7 @@
                 "expect": null
               },
               {
-                "record": "event-54",
+                "record": "event-59",
                 "expect": null
               }
             ]
@@ -8436,8 +8587,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-38",
-              "conflict_event": "event-66"
+              "record": "signal-42",
+              "conflict_event": "event-71"
             },
             "changes": [
               {
@@ -8445,7 +8596,7 @@
                 "expect": null
               },
               {
-                "record": "event-56",
+                "record": "event-61",
                 "expect": null
               }
             ]
@@ -8458,8 +8609,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-33",
-              "conflict_event": "event-57"
+              "record": "signal-37",
+              "conflict_event": "event-62"
             },
             "changes": [
               {
@@ -8467,7 +8618,7 @@
                 "expect": null
               },
               {
-                "record": "event-58",
+                "record": "event-63",
                 "expect": null
               }
             ]
@@ -8480,8 +8631,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-39",
-              "conflict_event": "event-67"
+              "record": "signal-43",
+              "conflict_event": "event-72"
             },
             "changes": [
               {
@@ -8489,7 +8640,7 @@
                 "expect": null
               },
               {
-                "record": "event-60",
+                "record": "event-65",
                 "expect": null
               }
             ]
@@ -8502,8 +8653,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-35",
-              "conflict_event": "event-61"
+              "record": "signal-39",
+              "conflict_event": "event-66"
             },
             "changes": [
               {
@@ -8511,7 +8662,7 @@
                 "expect": null
               },
               {
-                "record": "event-62",
+                "record": "event-67",
                 "expect": null
               }
             ]
@@ -8524,8 +8675,8 @@
             "fence": null,
             "pool": null,
             "delivery": {
-              "record": "signal-40",
-              "conflict_event": "event-68"
+              "record": "signal-44",
+              "conflict_event": "event-73"
             },
             "changes": [
               {
@@ -8533,7 +8684,7 @@
                 "expect": null
               },
               {
-                "record": "event-64",
+                "record": "event-69",
                 "expect": null
               }
             ]
@@ -8569,7 +8720,7 @@
                 "expect": null
               },
               {
-                "record": "event-18",
+                "record": "event-19",
                 "expect": null
               }
             ]

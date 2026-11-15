@@ -955,9 +955,11 @@ def shape(unit):
             return f"{record.kind} {name_of(record)} cannot be first recorded by a change"
         if record.kind == "fill" and expect is not None:
             return f"fill {name_of(record)} cannot be replaced by a change"
-        named = (record.kind, name_of(record))
+        # One record is one key in a store, not one name: two accounts'
+        # profiles of one name hold two records of it.
+        named = (record.kind, key_of(record))
         if named in seen:
-            return f"it changes {named[0]} {named[1]} twice"
+            return f"it changes {record.kind} {name_of(record)} twice"
         seen.add(named)
     # A position's records change only under its lease. An intent is first
     # recorded by admission, which holds none.

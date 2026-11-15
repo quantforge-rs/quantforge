@@ -250,7 +250,10 @@ store applies:
 - it first records a signal or an operation by a change, or replaces a
   fill: a signal is first recorded by its delivery, an operation by being
   numbered, and a fill once;
-- it changes one record twice;
+- it changes one record twice. One record is what a store knows under
+  one key, not what carries one name: two accounts' signals of one name
+  are two records, which one unit may change, and one event key under two
+  profiles of an account is one;
 - it changes a record that is part of a futures position, an intent, an
   order, a fill, a cycle or a reservation, without that position's lease,
   under another position's lease, or it changes two positions. The one

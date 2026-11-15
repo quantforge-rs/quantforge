@@ -92,6 +92,15 @@ impl ExecutionScope {
         ExchangeId::from_parts(self.venue, self.category)
     }
 
+    /// The scope with no profile: the account's, which an order, a fill,
+    /// an incident and an event are known within.
+    pub(super) fn of_its_account(&self) -> Self {
+        Self {
+            profile: None,
+            ..self.clone()
+        }
+    }
+
     /// The profile, for a record that is always a profile's.
     pub(super) fn profile_of(&self, record: &'static str) -> Result<&ProfileId, ModelError> {
         self.profile

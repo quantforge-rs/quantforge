@@ -149,7 +149,7 @@ impl ExecutionUnit {
         if self.delivery.is_none() && self.changes.is_empty() {
             return Err(refused("it changes nothing".to_string()));
         }
-        let mut seen: Vec<(RecordKind, String)> = Vec::new();
+        let mut seen = Vec::new();
         for change in &self.changes {
             let record = &change.record;
             let allowed = match (record.kind(), change.expect) {
@@ -170,11 +170,17 @@ impl ExecutionUnit {
                     }
                 )));
             }
-            let named = (record.kind(), record.name());
-            if seen.contains(&named) {
-                return Err(refused(format!("it changes {} {} twice", named.0, named.1)));
+            // One record is one identity in a store, not one name: two
+            // accounts' profiles of one name hold two records of it.
+            let known_by = record.identity();
+            if seen.contains(&known_by) {
+                return Err(refused(format!(
+                    "it changes {} {} twice",
+                    record.kind(),
+                    record.name()
+                )));
             }
-            seen.push(named);
+            seen.push(known_by);
         }
         self.check_fence()?;
         self.check_pool()?;

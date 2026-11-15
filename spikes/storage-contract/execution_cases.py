@@ -506,7 +506,7 @@ def scenarios():
 
     s = Scenario(
         "execution.unit_shape_refusals",
-        "a unit that is not one a store applies is refused before anything is read: one that changes nothing, admits a signal without its intent or records an intent without its admission, or with the admission of another account's signal of the same name, first records a signal or an operation by a change, replaces a fill, changes a record twice, changes a position without its lease or two positions at once, reserves without the revision of its pool, or gives its position two unresolved entries or two open cycles",
+        "a unit that is not one a store applies is refused before anything is read: one that changes nothing, admits a signal without its intent or records an intent without its admission, or with the admission of another account's signal of the same name, first records a signal or an operation by a change, replaces a fill, changes a record twice, by its name or under the key its account knows it by, changes a position without its lease or two positions at once, reserves without the revision of its pool, or gives its position two unresolved entries or two open cycles",
     )
     alert = entry(BYBIT)
     intent = intent_record(BYBIT, alert)
@@ -545,6 +545,11 @@ def scenarios():
         Unit(T, changes=[(sent, 1), (rival_sent, 1)], fence=lease),
         Unit(T, changes=[(cycle_record(BYBIT, "SOLUSDT", 1, T), None),
                          (cycle_record(SECOND, "SOLUSDT", 2, T), None)], fence=lease),
+        # An event is known within its account: under one key, the same
+        # account's other profile names the same record.
+        Unit(T, changes=[(event, None),
+                         (event_record(SECOND, event.doc["key"], "signal_admitted", T,
+                                       symbol=alert.symbol, signal=alert.id), None)]),
     ):
         s.commit(unit, "refused")
     for table in ("signal_inbox", "signal_deliveries", "execution_intents", "execution_orders",
@@ -900,7 +905,7 @@ def scenarios():
 
     s = Scenario(
         "execution.two_venues_one_alert",
-        "the same alert, byte for byte, sent to profiles of one name that trade one symbol on two venues is two signals: each has its own inbox entry, intent, operation, lease, pool, orders, cycle and events, and what happens to one changes nothing of the other",
+        "the same alert, byte for byte, sent to profiles of one name that trade one symbol on two venues is two signals: each has its own inbox entry, intent, operation, lease, pool, orders, cycle and events, what happens to one changes nothing of the other, and one unit may change both",
         active_at=T,
     )
     here, there = entry(BYBIT), entry(BINANCE)
@@ -959,6 +964,27 @@ def scenarios():
     s.pending_events(10, 3)
     s.column("signal_inbox", "venue", ["bybit", "binance"])
     s.column("execution_intents", "entry_slot", ["1", None])
+    # One unit may change both lines' records of one name: they are two
+    # records, each known within its own account and profile.
+    later_here = entry(BYBIT, source="later", minute=3)
+    later_there = entry(BINANCE, source="later", minute=3)
+    assert later_here.id == later_there.id
+    arrived = []
+    for line, alert in ((BYBIT, later_here), (BINANCE, later_there)):
+        record = signal_record(line, alert, T + 6_000)
+        s.commit(Unit(T + 6_000, delivery=(record, conflict_event(line, alert, T + 6_000))),
+                 "applied")
+        arrived.append(record)
+    stale = ("stale", "the alert fired 75 s ago, and profile main takes one at most 60 s old")
+    s.commit(Unit(T + 7_000, changes=[
+        (judged(arrived[0], "rejected", T + 7_000, refusal=stale), 1),
+        (judged(arrived[1], "rejected", T + 7_000, refusal=stale), 1),
+        (signal_event(BYBIT, later_here, "signal_rejected", T + 7_000), None),
+        (signal_event(BINANCE, later_there, "signal_rejected", T + 7_000), None),
+    ]), "applied")
+    s.signal(BYBIT, later_here)
+    s.signal(BINANCE, later_there)
+    s.column("signal_inbox", "state", ["admitted", "admitted", "rejected", "rejected"])
     out.append(s)
 
     s = Scenario(

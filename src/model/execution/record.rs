@@ -123,6 +123,24 @@ impl Record {
         }
     }
 
+    /// What a store knows the record by among its kind, so that two
+    /// changes with one identity are changes of one record: a signal and
+    /// its intent within their profile, an order, a fill, an incident and
+    /// an event within their account, and an operation, its reservation
+    /// and a cycle by the number the store gave. A name alone says less: a
+    /// profile of the same name on another account has records of its own.
+    pub(super) fn identity(&self) -> (RecordKind, Option<ExecutionScope>, String) {
+        let scope = self.scope();
+        let within = match self {
+            Self::Signal(_) | Self::Intent(_) => Some(scope.clone()),
+            Self::Order(_) | Self::Fill(_) | Self::Incident(_) | Self::Event(_) => {
+                Some(scope.of_its_account())
+            }
+            Self::Operation(_) | Self::Cycle(_) | Self::Reservation(_) => None,
+        };
+        (self.kind(), within, self.name())
+    }
+
     /// Whose record it is: the venue, the product family, the environment,
     /// the account and, where one acts, the profile.
     pub fn scope(&self) -> &ExecutionScope {
