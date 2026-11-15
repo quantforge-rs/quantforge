@@ -229,6 +229,25 @@ impl Exact {
         })
     }
 
+    /// The sum of `values`, each read by its size, with the most places
+    /// any of them has. The sum is kept over one denominator, ten to those
+    /// places: added one to the next with [`Exact::plus`], which multiplies
+    /// denominators, a thousand small amounts would cost what their number
+    /// costs, and not what their total takes to write.
+    pub(crate) fn sum(values: &[Decimal]) -> (Self, u32) {
+        let places = values.iter().map(Decimal::scale).max().unwrap_or(0);
+        let numerator = values.iter().fold(Natural::of(0), |sum, value| {
+            let lifted = Natural::of(value.mantissa().unsigned_abs())
+                .times(&Natural::power_of_ten(places - value.scale()));
+            sum.plus(&lifted)
+        });
+        let sum = Self {
+            numerator,
+            denominator: Natural::power_of_ten(places),
+        };
+        (sum, places)
+    }
+
     pub(crate) fn plus(&self, other: &Self) -> Self {
         let (left, right) = self.aligned(other);
         Self {

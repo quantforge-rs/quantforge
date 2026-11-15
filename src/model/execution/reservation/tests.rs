@@ -97,6 +97,21 @@ fn a_total_no_decimal_holds_exactly_is_refused_and_never_rounded() {
 }
 
 #[test]
+fn a_pool_of_many_reservations_adds_up_like_a_pool_of_few() {
+    let many = vec!["0.00150000"; 1_000];
+    assert_eq!(total(&many).expect("a thousand"), "1.50000000");
+    // Five thousand amounts of eight places, one of two and one of
+    // twenty-eight: 29 significant digits, which a decimal still holds.
+    let mut mixed = vec!["0.00100000"; 5_000];
+    mixed.push("0.25");
+    mixed.push("0.0000000000000000000000000001");
+    assert_eq!(
+        total(&mixed).expect("five thousand and two"),
+        "5.2500000000000000000000000001"
+    );
+}
+
+#[test]
 fn a_total_is_of_one_unit() {
     let pool = PoolReservations {
         revision: 0,

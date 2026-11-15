@@ -303,8 +303,7 @@ impl PoolReservations {
     /// `Decimal`'s own addition rounds what does not fit and says nothing.
     pub fn total(&self, pool: &PoolScope) -> Result<Money, ModelError> {
         let asset = crate::model::Asset::new(unit_of(pool))?;
-        let mut sum = Exact::whole(0);
-        let mut places = 0;
+        let mut amounts = Vec::with_capacity(self.held.len());
         for held in &self.held {
             let margin = held.margin();
             if margin.asset() != &asset {
@@ -313,9 +312,11 @@ impl PoolReservations {
                     right: margin.asset().to_string(),
                 });
             }
-            sum = sum.plus(&Exact::magnitude(margin.amount()));
-            places = places.max(margin.amount().scale());
+            amounts.push(margin.amount());
         }
+        // Over one scale, so that a pool costs its reservations' number
+        // to add up and not the product of their places.
+        let (sum, places) = Exact::sum(&amounts);
         let total = Decimal::try_new(1, places)
             .ok()
             .and_then(|grid| sum.floor_on(grid))
