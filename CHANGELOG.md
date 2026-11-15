@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `quantforge-py/` is the crate of the Python package, the one member of the Cargo workspace the repository now is: maturin builds its extension module with PyO3 against Python's stable ABI, so one wheel per platform loads on CPython 3.11 and on every later version; the package installs as `quantforge-py` and imports as `quantforge_py`, the name `quantforge` on PyPI being another project's, and its compiled module is the private `quantforge_py._native`; it is a scaffold that is not released, and `docs/python-package.md` says how it is named, built and tested
+- the Python package says what it is: `__version__` is its own version, `ENGINE_VERSION` the version of the engine it was built with, and `STORAGE_BACKENDS` the stores the build can open, `("sqlite", "postgres")`, or `("sqlite",)` for the SQLite-only build
+- `quantforge::ENGINE_VERSION` is the crate's version, as the engine version a strategy bundle's `engine` requirement is held to
+- nothing in what the `quantforge` crate builds, tests or publishes changes with the workspace: a cargo command at the repository's root without `-p` acts on the crate alone, the crate's package holds no file of `quantforge-py/`, and `quantforge-py` is never published to crates.io
+- ci has a `python` job, which is `scripts/python-package-check.sh`: clippy for the package's crate with and without PostgreSQL, its check with Rust 1.85, the wheel maturin builds tested on Python 3.11 and 3.15, the SQLite-only wheel, and the in-place install of `maturin develop`; the script runs the same locally
 - the selected store, SQLite or PostgreSQL, keeps what automated trading was asked, decided and did: a signal inbox with the note of every delivery, the operations it numbers, the intents, orders, fills, position cycles and margin reservations of the ledger, incidents, an event outbox, and the leases that say who may act on a position; `docs/execution-store.md` is the contract
 - every write to it is one unit, applied whole or not at all in one transaction that never spans a request to an exchange: a delivery with what became of it, an intent with its policy snapshot, an order with its reservation, a fill with the cycle it opens, each with the event that tells of it, so nothing is admitted, sent or settled without its record, and no event tells of something that did not happen
 - a signal is recorded once for its profile: the same ID with the same payload again is a duplicate that names the signal as it was first judged, and the same ID with another payload is a conflict, noted with the payload it brought and told to the outbox once; a signal ID is deduplicated for as long as the store lives, and in a copy of the store too
@@ -201,6 +206,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- `scripts/release-check.sh` fails when the crate's package list names a file of `quantforge-py/`, the Python package, which is released on its own
+- `scripts/file-size-check.sh` holds `quantforge-py/src/**/*.rs` to the line budget of `src/**/*.rs`
 - the database schema is version 10: the first command a store is opened with adds the execution store's thirteen tables, on SQLite and on PostgreSQL, and keeps every row; a store's record stays as it was, bound or not, and no step activates a store; back the store up first, since a release before this one refuses it afterwards (`docs/upgrading.md`)
 - `StoreControl` has three new required methods, `activate`, `deactivate` and `control_events`, which a store implemented outside QuantForge must add
 - `model::futures::ExternalSignal`, `SignalAction` and `SignalRefusal` implement `Serialize` and `Deserialize`, and `SignalHash` is written and read as its text, since a signal is stored as part of its inbox record

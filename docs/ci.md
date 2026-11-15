@@ -11,6 +11,7 @@ conformance suite runs live against the exchanges on a schedule
 - [The checks](#the-checks)
 - [Required checks](#required-checks)
 - [PostgreSQL](#postgresql)
+- [The Python package](#the-python-package)
 - [Running them locally](#running-them-locally)
 - [How long they take](#how-long-they-take)
 - [What they are evidence for](#what-they-are-evidence-for)
@@ -23,6 +24,7 @@ conformance suite runs live against the exchanges on a schedule
 | `package` | Linux | `cargo check` with Rust 1.85, the oldest the crate declares (`rust-version`), with and without the default features; then `cargo publish --dry-run` |
 | `postgres 16`, `postgres 17`, `postgres 18` | Linux | The whole suite against each PostgreSQL major [ADR 0001](adr/0001-postgres-client-strategy.md) supports: see [PostgreSQL](#postgresql) |
 | `storage` | Linux | Passes only when every `postgres` leg passed |
+| `python` | Linux | The Python package, `quantforge-py/`: clippy for its crate with and without the default features, `cargo check` with Rust 1.85, then the wheel maturin builds, installed and tested on Python 3.11 and 3.15, the SQLite-only wheel, and the in-place install: see [The Python package](#the-python-package) |
 
 Every check runs on every pull request; none has a path filter. A pull
 request that changes only documentation can still break the PostgreSQL
@@ -67,6 +69,10 @@ gh api --method POST \
   repos/quantforge-rs/quantforge/branches/main/protection/required_status_checks/contexts \
   -f 'contexts[]=storage'
 ```
+
+`python`, the Python package's job, runs on every pull request and is not
+required yet. The same command with `contexts[]=python` makes it hold up a
+merge.
 
 The `postgres` legs are not required themselves: `storage` stands for them.
 A major added to the matrix, or dropped from it, then needs no change to
@@ -132,6 +138,32 @@ Two things stay off CI:
 - **PostgreSQL on macOS and Windows:** GitHub runs service containers on
   Linux only.
 
+## The Python package
+
+The `python` job checks [the Python package](python-package.md), whose
+crate the other jobs do not build: a cargo command at the repository's root
+acts on the `quantforge` crate alone. In `checks`, `cargo fmt --all` and
+the file-size budget read it, and neither builds it.
+
+The job is one script, `scripts/python-package-check.sh python3.11
+python3.15`, which runs, in order:
+
+- **Clippy for the crate**, with and without the default features, and
+  `cargo check` with Rust 1.85.
+- **The wheel**: `maturin build` once, then the tests against it in a fresh
+  virtualenv of each Python named. Nothing is rebuilt between them: the
+  package promises one wheel for Python 3.11 and every later version, and
+  the two are the oldest it supports and the newest released. The newest
+  is raised by hand as a new Python is released.
+- **The SQLite-only wheel** (`--no-default-features`), with
+  `QUANTFORGE_PY_TEST_SQLITE_ONLY=1` telling the tests which build it is.
+- **The in-place install**: `maturin develop` in a virtualenv, the import,
+  and the tests again, as a contributor runs them.
+
+maturin and pytest come from PyPI, at the versions `pyproject.toml` asks
+for. The wheels are built in the `dev` profile, on Linux only: release
+wheels for Linux, macOS and Windows are QUA-474's.
+
 ## Running them locally
 
 The same commands as CI:
@@ -154,6 +186,9 @@ eval "$(scripts/postgres-test-servers.sh start 16)"
 cargo test --all-features --locked --no-fail-fast
 scripts/postgres-test-servers.sh leftovers
 scripts/postgres-test-servers.sh stop
+
+# python, with CPython 3.11 or later; name each interpreter to test on
+scripts/python-package-check.sh python3.11 python3.15
 ```
 
 `start` runs the two servers on `127.0.0.1:54329` and `127.0.0.1:54330`, set
@@ -165,7 +200,14 @@ works too, such as the Homebrew one in
 and the PostgreSQL tests too when the variables are exported. It gives the
 publish dry run a target directory of its own: the dry run's verify build
 would otherwise leave `target/debug`'s binary pointing at the packaged copy
-of the sources, and later test runs would run that copy.
+of the sources, and later test runs would run that copy. It also fails if
+the crate's package list names a file of `quantforge-py/`. It does not run
+the `python` job's script: the crate is released without the Python
+package's tools.
+
+`scripts/python-package-check.sh` without arguments tests on `python3`
+alone. It makes its virtualenvs with `python -m venv`, which on Debian and
+Ubuntu needs the `python3-venv` package.
 
 ## How long they take
 

@@ -5,6 +5,11 @@ rooted at `src/lib.rs`, and the `quantforge` binary, rooted at `src/main.rs`,
 whose command tree lives in `src/cli/`. The binary reaches the library only
 through its crate root, exactly as an outside caller would.
 
+The repository is a Cargo workspace around that package. Its one member,
+`quantforge-py/`, is the crate of the [Python package](python-package.md):
+it depends on the library, the package does not include it, and a cargo
+command run at the root without `-p` leaves it alone.
+
 ## Finding the code for a command
 
 The module tree under `src/cli/` mirrors the command tree. Each word of a

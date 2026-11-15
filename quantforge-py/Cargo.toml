@@ -1,0 +1,40 @@
+[package]
+name = "quantforge-py"
+# The Python package's own version, which the wheel takes (pyproject.toml
+# names it dynamic). It does not follow the `quantforge` crate's: that one is
+# the engine version, and the module reports both.
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+# As pyproject.toml describes the package: that one is what PyPI shows.
+description = "QuantForge for Python: strategies written in Python, run on the deterministic Rust engine."
+# MIT: the repository's one license file, which maturin puts in every wheel.
+# pyproject.toml names the license itself, and cargo takes only one of the two.
+license-file = "../LICENSE"
+repository = "https://github.com/quantforge-rs/quantforge"
+readme = "README.md"
+# Wheels go to PyPI; the crate itself never goes to crates.io.
+publish = false
+
+[lib]
+name = "quantforge_py"
+# The extension module only: nothing links this crate from Rust, and
+# `cargo test` has nothing to build here. The package's tests are Python's,
+# run against the installed package (tests/).
+crate-type = ["cdylib"]
+test = false
+doctest = false
+
+[features]
+default = ["postgres"]
+# PostgreSQL storage, as in the `quantforge` crate. A wheel built without it
+# is the SQLite-only build: `STORAGE_BACKENDS` says so, and it is never
+# published as the package.
+postgres = ["quantforge/postgres"]
+
+[dependencies]
+# abi3-py311: the stable ABI as of Python 3.11, so one wheel per platform
+# loads on 3.11 and every later version. maturin tells PyO3 it is building an
+# extension module, so the `extension-module` feature stays off.
+pyo3 = { version = "0.30", features = ["abi3-py311"] }
+quantforge = { path = "..", default-features = false }

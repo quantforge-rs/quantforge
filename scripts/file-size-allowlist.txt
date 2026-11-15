@@ -1,6 +1,7 @@
 # Exceptions to the file-size budget that scripts/file-size-check.sh enforces
-# on src/**/*.rs: more than 400 lines warns, more than 600 fails. Prefer
-# splitting the module; see "File size budget" in CONTRIBUTING.md.
+# on src/**/*.rs and quantforge-py/src/**/*.rs: more than 400 lines warns, more
+# than 600 fails. Prefer splitting the module; see "File size budget" in
+# CONTRIBUTING.md.
 #
 # One entry per line, fields separated by whitespace:
 #

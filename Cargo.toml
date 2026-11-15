@@ -12,9 +12,17 @@ keywords = ["trading", "backtesting", "quant", "cli", "binance"]
 categories = ["command-line-utilities", "finance"]
 exclude = [
   ".github/",
+  "quantforge-py/",
   "scripts/",
   "spikes/",
 ]
+
+# The Python package's extension crate (docs/python-package.md). A command
+# run here without `-p` still acts on the package above alone: the member is
+# built by name (`-p quantforge-py`) or by maturin, and never goes to
+# crates.io.
+[workspace]
+members = ["quantforge-py"]
 
 [lib]
 name = "quantforge"

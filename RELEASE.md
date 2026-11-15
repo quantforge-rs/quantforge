@@ -23,6 +23,11 @@ Either authenticate locally with `cargo login`, or set `CARGO_REGISTRY_TOKEN`.
 cargo publish --locked
 ```
 
+This publishes the `quantforge` crate alone. `quantforge-py`, the Python
+package's crate, is a workspace member that cargo refuses to publish; its
+wheels go to PyPI, which this guide does not cover yet
+([docs/python-package.md](docs/python-package.md)).
+
 ## Smoke test
 
 After publishing:

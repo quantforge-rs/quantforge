@@ -123,6 +123,9 @@
 //!   will use it: [`CandleBatch`], [`CandleColumns`], [`decimal_to_f64`] and
 //!   [`decimal_from_f64`], which follow the
 //!   [decimal and float64 policy](https://github.com/quantforge-rs/quantforge/blob/main/docs/decimal-float-policy.md);
+//!   [`ENGINE_VERSION`] is the first name the
+//!   [Python package](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-package.md)
+//!   reads, as the engine it was built with;
 //! - it is the conformance suite, published for adapters written outside
 //!   this repository: [`exchange::conformance`] runs against any connector
 //!   factory, not only the registered ones;
@@ -229,7 +232,8 @@ pub use sdk::{
 
 /// The drivers the CLI subcommands wrap: a config in, a summary out, with
 /// `EngineError` folding the strategy, exchange and storage failures into
-/// one channel.
+/// one channel. `ENGINE_VERSION` is the version of the build they belong to.
+pub use engine::ENGINE_VERSION;
 pub use engine::EngineError;
 pub use engine::backtest::{BacktestConfig, BacktestEngine, BacktestResult, EquityPoint};
 pub use engine::data_sync::{DataSyncConfig, DataSyncEngine, DataSyncSummary};
