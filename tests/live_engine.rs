@@ -585,6 +585,61 @@ async fn dry_run_exit_on_resume<S: CandleStore + RunJournalStore>(store: &S) {
     );
 }
 
+#[tokio::test]
+async fn resume_enters_on_the_first_rising_backlog_bar() {
+    let tempdir = tempdir().expect("tempdir");
+    resume_with_backlog(&sqlite_store(&tempdir), 10, &[12_000, 12_500]).await;
+}
+
+#[tokio::test]
+async fn resume_warms_history_after_downtime_longer_than_bootstrap() {
+    let tempdir = tempdir().expect("tempdir");
+    resume_with_backlog(&sqlite_store(&tempdir), 2, &[12_000, 12_500, 13_000]).await;
+}
+
+/// A resumed run warms on processed bars and delivers the backlog once: its first rising bar enters.
+async fn resume_with_backlog<S: CandleStore + RunJournalStore>(
+    store: &S,
+    bootstrap_bars: usize,
+    closes: &[i64],
+) {
+    let (anchor, warmup, _) = timeline(Decimal::from(12_000));
+    store
+        .upsert_candles(&market(), &warmup)
+        .expect("seed warmup");
+    let mut cfg = engine_config(ExecutionMode::DryRun, "run-resume-backlog");
+    cfg.bootstrap_bars = bootstrap_bars;
+    let mut state = seeded_open_run_state(&cfg, anchor);
+    state.position = PositionState::flat();
+    store.create_run(&state, &cfg.identity).expect("seed state");
+    let backlog: Vec<_> = closes
+        .iter()
+        .enumerate()
+        .map(|(i, close)| engine_bar(anchor + (i as i64 + 2) * 60_000, Decimal::from(*close)))
+        .collect();
+    store
+        .upsert_candles(&market(), &backlog)
+        .expect("seed backlog");
+    let source = ScriptedMarketData::new(Vec::new());
+    let summary = LiveTradeEngine::new(&source, store, store, None)
+        .run(&cfg)
+        .await
+        .expect("resume");
+
+    assert_eq!(summary.processed_bars, backlog.len());
+    assert_eq!(
+        summary.last_processed_open_time_ms,
+        backlog.last().map(|bar| bar.open_time_ms)
+    );
+    let events = store
+        .list_order_events("run-resume-backlog", 10)
+        .expect("events");
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].side, Side::Buy);
+    assert_eq!(events[0].avg_price, Some(Decimal::from(12_000)));
+    assert_eq!(events[0].transact_time_ms, Some(backlog[0].close_time_ms));
+}
+
 /// Runs a dry run of `cfg` that must be refused before it changes the run
 /// `recorded`, and returns the refusal.
 async fn refused_resume<S: CandleStore + RunJournalStore>(
@@ -1035,6 +1090,20 @@ mod postgres {
     async fn dry_run_exit_on_resume_sells_journaled_qty_and_writes_closed_trade() {
         if let Some(fresh) = fresh() {
             dry_run_exit_on_resume(&fresh.store).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn resume_enters_on_the_first_rising_backlog_bar() {
+        if let Some(fresh) = fresh() {
+            resume_with_backlog(&fresh.store, 10, &[12_000, 12_500]).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn resume_warms_history_after_downtime_longer_than_bootstrap() {
+        if let Some(fresh) = fresh() {
+            resume_with_backlog(&fresh.store, 2, &[12_000, 12_500, 13_000]).await;
         }
     }
 
