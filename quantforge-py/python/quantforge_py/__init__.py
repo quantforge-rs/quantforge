@@ -20,6 +20,8 @@ refused in the engine's own words:
 - ``Strategy``, ``StrategyContext`` and ``TargetPosition``: the strategy a
   class implements, what its callbacks are handed, and the position it asks
   for.
+- ``run_backtest``: runs a strategy over candles in the engine, and gives
+  the result.
 - ``decimal_to_f64`` and ``decimal_from_f64``: the one crossing between an
   exact decimal and a float.
 
@@ -50,6 +52,7 @@ from ._native import (
     __version__,
     decimal_from_f64,
     decimal_to_f64,
+    run_backtest,
 )
 
 __all__ = [
@@ -70,6 +73,7 @@ __all__ = [
     "TargetPosition",
     "StrategyContext",
     "Strategy",
+    "run_backtest",
     "decimal_to_f64",
     "decimal_from_f64",
 ]

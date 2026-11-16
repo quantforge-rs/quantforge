@@ -5,11 +5,12 @@
 //! It holds what the package says about itself, and the engine's types as
 //! Python classes: market identity, candles, and a backtest's settings and
 //! result, each built by the engine's own rule and refused in the engine's
-//! own words; and the strategy a class implements, which an engine drives
-//! through the adapter (`adapter.rs`). The backtest entry point is bound
-//! here by the story that follows. `docs/python-package.md` says how the
-//! package is named, built and tested, and `docs/python-types.md` what each
-//! type takes and gives.
+//! own words; the strategy a class implements, which an engine drives
+//! through the adapter (`adapter.rs`); and `run_backtest`, which runs such
+//! a strategy over candles in the engine (`run.rs`).
+//! `docs/python-package.md` says how the package is named, built and
+//! tested, and `docs/python-types.md` what each type takes and gives and
+//! how a backtest is run.
 
 // As in the `quantforge` crate. The unsafe code an extension module needs is
 // what PyO3's macros expand to, which the lint leaves alone.
@@ -25,6 +26,7 @@ mod candles;
 mod convert;
 mod floats;
 mod market;
+mod run;
 mod strategy;
 mod trade;
 
@@ -39,15 +41,18 @@ mod native {
 
     #[pymodule_export]
     use crate::backtest::{BacktestConfig, BacktestResult, EquityPoint};
-    // Private: the package's own tests run the adapter through it.
+    // Private: the package's own tests run the other kind of host through
+    // it.
     #[pymodule_export]
-    use crate::bench::backtest;
+    use crate::bench::embedded_backtest;
     #[pymodule_export]
     use crate::candles::{Candle, CandleBatch};
     #[pymodule_export]
     use crate::floats::{decimal_from_f64, decimal_to_f64};
     #[pymodule_export]
     use crate::market::{Category, ExchangeId, Interval, MarketId, Symbol};
+    #[pymodule_export]
+    use crate::run::run_backtest;
     #[pymodule_export]
     use crate::strategy::{Strategy, StrategyContext, TargetPosition};
     #[pymodule_export]

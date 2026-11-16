@@ -18,7 +18,7 @@ use pyo3::exceptions::{PyOverflowError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pyclass::boolean_struct::True;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyBool, PyFloat, PyInt, PyString, PyTuple, PyType};
+use pyo3::types::{PyBool, PyFloat, PyInt, PyIterator, PyString, PyTuple, PyType};
 use pyo3::{PyClass, intern};
 use rust_decimal::Decimal;
 
@@ -299,9 +299,29 @@ where
     T: PyClass<Frozen = True> + Sync,
 {
     let class = takes.split_once(' ').map_or(takes, |(_, class)| class);
-    let items = values
-        .try_iter()
-        .map_err(|_| wrong_type(what, &format!("an iterable of {class}"), values))?;
+    each_in(
+        values,
+        what,
+        &format!("an iterable of {class}"),
+        takes,
+        value_of,
+    )
+}
+
+/// As [`each`], for an argument that takes more than an iterable: `holds`
+/// names everything it takes, such as `a CandleBatch or an iterable of
+/// Candle`, where a value that does not iterate is refused.
+pub(crate) fn each_in<T, V>(
+    values: &Bound<'_, PyAny>,
+    what: &'static str,
+    holds: &str,
+    takes: &str,
+    value_of: impl Fn(&T) -> V,
+) -> PyResult<Vec<V>>
+where
+    T: PyClass<Frozen = True> + Sync,
+{
+    let items = iterated(values, what, holds)?;
     let mut taken = Vec::new();
     for (row, item) in items.enumerate() {
         let item = item?;
@@ -313,19 +333,50 @@ where
     Ok(taken)
 }
 
+/// Starts reading `values`, which is anything Python iterates but text:
+/// `what` names the argument, and `holds` what it takes, for a value that
+/// is refused.
+///
+/// - **Text is refused.** A str iterates too, one character at a time, and
+///   is never a sequence of values.
+/// - **A value Python does not iterate is of the wrong type.**
+/// - **What a value's own `__iter__` raises is raised as it is.** A source
+///   that fails to open is no value of the wrong type, and an interrupt is
+///   an interrupt.
+fn iterated<'py>(
+    values: &Bound<'py, PyAny>,
+    what: &'static str,
+    holds: &str,
+) -> PyResult<Bound<'py, PyIterator>> {
+    if values.is_instance_of::<PyString>() {
+        return Err(wrong_type(what, holds, values));
+    }
+    match values.try_iter() {
+        Ok(items) => Ok(items),
+        // Its own `__iter__` failed: that is the error to raise.
+        Err(raised) if iterates(values) => Err(raised),
+        Err(_) => Err(wrong_type(what, holds, values)),
+    }
+}
+
+/// Whether a value that could not be iterated has an `__iter__` of its
+/// own, one that is not `None`: then the failure is that method's, which
+/// raised or gave back no iterator. A value read by index always iterates,
+/// and never comes here.
+fn iterates(value: &Bound<'_, PyAny>) -> bool {
+    let own = value
+        .get_type()
+        .getattr_opt(intern!(value.py(), "__iter__"));
+    matches!(own, Ok(Some(found)) if !found.is_none())
+}
+
 /// Every item of the column `values`, read by `read` under its row's name.
 pub(crate) fn column<V>(
     values: &Bound<'_, PyAny>,
     name: &'static str,
     read: impl Fn(&Bound<'_, PyAny>, Row) -> PyResult<V>,
 ) -> PyResult<Vec<V>> {
-    // A str iterates too, one character at a time, and is never a column.
-    if values.is_instance_of::<PyString>() {
-        return Err(wrong_type(name, "an iterable of values", values));
-    }
-    let items = values
-        .try_iter()
-        .map_err(|_| wrong_type(name, "an iterable of values", values))?;
+    let items = iterated(values, name, "an iterable of values")?;
     let mut taken = Vec::new();
     for (row, item) in items.enumerate() {
         taken.push(read(&item?, Row(name, row))?);

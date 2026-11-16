@@ -3,12 +3,19 @@
 //! here and written to `tests/fixtures/strategy_cases.json`.
 //!
 //! The engine is the oracle. For every case the file holds the run's
-//! inputs, the decision the script gives on each bar, every callback in the
-//! order the engine made it with the state it was handed, and the result or
-//! the error. The Python package's tests read it and hold a strategy
-//! written in Python to it, call for call and digit for digit
+//! inputs, the decision made on each bar, every callback in the order the
+//! engine made it with the state it was handed, and the result or the
+//! error. The Python package's tests read it and hold a strategy written in
+//! Python to it, call for call and digit for digit
 //! (`quantforge-py/tests/test_strategy_cases.py`), so a strategy behind the
 //! Python adapter is driven exactly as one written in Rust is.
+//!
+//! Most cases play a list of decisions back. One follows a rule instead
+//! ([`Breakout`]): its strategy decides from the bars it is handed and the
+//! position it holds, as a strategy a user writes does, and the file names
+//! the rule. The package's tests write the same rule in Python and run it
+//! through `run_backtest`, where it has to decide the same on every bar and
+//! bring the same result (`quantforge-py/tests/test_end_to_end.py`).
 //!
 //! The file is generated, never edited. After an intended change to a case,
 //! or to the engine's execution model, refresh it with
@@ -45,9 +52,53 @@ struct Script {
     config: BacktestConfig,
     candles: Vec<Candle>,
     /// The decision on each bar; a bar past the list's end keeps the
-    /// position.
+    /// position. A script that follows a rule lists none.
     decisions: Vec<Option<TargetPosition>>,
     fails: Option<Fails>,
+    /// The rule the strategy follows, in place of decisions listed.
+    rule: Option<Breakout>,
+}
+
+/// A rule that reads the bars: enter on a close above the bars before it,
+/// and leave on a close below them.
+///
+/// The strategy keeps every bar it has been handed. On a bar, before it
+/// keeps that one too:
+///
+/// - while it holds nothing (`position_qty` is zero) and has been handed at
+///   least `enter_bars` bars, it asks for a long position when the bar's
+///   close is above the highest high of the `enter_bars` bars before it;
+/// - while it holds a position and has been handed at least `exit_bars`
+///   bars, it asks to be flat when the bar's close is below the lowest low
+///   of the `exit_bars` bars before it;
+/// - otherwise it decides nothing.
+///
+/// Every step is a comparison of two decimals, so the rule decides the
+/// same in any language, whatever precision its arithmetic has.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+struct Breakout {
+    enter_bars: usize,
+    exit_bars: usize,
+}
+
+impl Breakout {
+    /// What the rule decides on `bar`, from the bars `before` it and the
+    /// state the engine handed over.
+    fn decide(
+        &self,
+        before: &[Candle],
+        ctx: &StrategyContext,
+        bar: &Candle,
+    ) -> Option<TargetPosition> {
+        let last = |count: usize| before.len().checked_sub(count).map(|from| &before[from..]);
+        if ctx.position_qty.is_zero() {
+            let highest = last(self.enter_bars)?.iter().map(|bar| bar.high).max()?;
+            (bar.close > highest).then_some(TargetPosition::LongAllIn)
+        } else {
+            let lowest = last(self.exit_bars)?.iter().map(|bar| bar.low).min()?;
+            (bar.close < lowest).then_some(TargetPosition::Flat)
+        }
+    }
 }
 
 /// The callback a script fails in, and for `on_bar` the bar, by its place
@@ -74,9 +125,18 @@ struct Case {
     candles: Vec<CandleText>,
     decisions: Vec<Option<TargetPosition>>,
     fails: Option<Fails>,
+    rule: Option<RuleText>,
     calls: Vec<Call>,
     result: Option<ResultText>,
     error: Option<String>,
+}
+
+/// The rule a case's decisions follow, as the file names it.
+#[derive(Debug, Serialize)]
+struct RuleText {
+    name: &'static str,
+    enter_bars: usize,
+    exit_bars: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -181,17 +241,20 @@ impl ResultText {
     }
 }
 
-/// Plays a script back and writes down every callback. It holds the engine
-/// to what the file leaves unsaid: the market of every context, and each
-/// bar being the candle at its place.
+/// Plays a script back, or follows its rule, and writes down every
+/// callback. It holds the engine to what the file leaves unsaid: the market
+/// of every context, and each bar being the candle at its place.
 #[derive(Debug)]
 struct Scripted<'a> {
     market: &'a MarketId,
     candles: &'a [Candle],
     decisions: &'a [Option<TargetPosition>],
     fails: Option<Fails>,
+    rule: Option<Breakout>,
     bars: usize,
     calls: Vec<Call>,
+    /// What it decided on each bar it was handed.
+    decided: Vec<Option<TargetPosition>>,
 }
 
 impl Scripted<'_> {
@@ -234,7 +297,14 @@ impl Strategy for Scripted<'_> {
         self.bars += 1;
         assert_eq!(Some(bar), self.candles.get(index), "bar {index} in order");
         self.called("on_bar", Some(index), ctx)?;
-        Ok(self.decisions.get(index).copied().flatten())
+        let decision = match self.rule {
+            // From the bars it was handed before this one, which the
+            // assertion above holds to the candles of the run.
+            Some(rule) => rule.decide(&self.candles[..index], ctx, bar),
+            None => self.decisions.get(index).copied().flatten(),
+        };
+        self.decided.push(decision);
+        Ok(decision)
     }
 
     fn on_finish(&mut self, ctx: &StrategyContext) -> Result<(), StrategyError> {
@@ -248,8 +318,10 @@ fn played(script: &Script) -> Case {
         candles: &script.candles,
         decisions: &script.decisions,
         fails: script.fails,
+        rule: script.rule,
         bars: 0,
         calls: Vec::new(),
+        decided: Vec::new(),
     };
     let outcome = BacktestEngine::new(script.config.clone()).run(
         &script.market,
@@ -260,8 +332,16 @@ fn played(script: &Script) -> Case {
         Ok(result) => (Some(ResultText::of(&result)), None),
         Err(error) => (None, Some(error.to_string())),
     };
-    let mut decisions = script.decisions.clone();
-    decisions.resize(script.candles.len(), KEEP);
+    // A script's decisions as it lists them, on every bar of the run even
+    // where the run failed before it; a rule's as the strategy made them.
+    let decisions = match script.rule {
+        Some(_) => strategy.decided,
+        None => {
+            let mut decisions = script.decisions.clone();
+            decisions.resize(script.candles.len(), KEEP);
+            decisions
+        }
+    };
     Case {
         id: script.id,
         doc: script.doc,
@@ -291,6 +371,11 @@ fn played(script: &Script) -> Case {
             .collect(),
         decisions,
         fails: script.fails,
+        rule: script.rule.map(|rule| RuleText {
+            name: "breakout",
+            enter_bars: rule.enter_bars,
+            exit_bars: rule.exit_bars,
+        }),
         calls: strategy.calls,
         result,
         error,
@@ -366,6 +451,56 @@ fn sixty_bars() -> (Vec<Candle>, Vec<Option<TargetPosition>>) {
     (candles, decisions)
 }
 
+/// The rule of the one case a rule decides.
+const BREAKOUT: Breakout = Breakout {
+    enter_bars: 20,
+    exit_bars: 10,
+};
+
+/// Four hours of one-minute candles from midnight on 2026-01-01, UTC: a
+/// price that falls and rises by turns of forty bars under noise of its
+/// own, with the gaps, the wicks, the volumes and the trade counts of an
+/// exchange's candles. Every number comes from a generator written out
+/// here, so the candles are the same on every run: no clock and no random
+/// source has a part in them.
+fn four_hours() -> Vec<Candle> {
+    // A linear congruential generator (Knuth's MMIX constants), read from
+    // its upper bits.
+    let mut state: u64 = 20_260_101;
+    let mut below = move |limit: i64| {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        i64::try_from((state >> 33) % limit.unsigned_abs()).expect("a number below the limit")
+    };
+    // Prices in hundredths, as the exchange quotes them.
+    let cents = |price: i64| Decimal::new(price, 2);
+    let mut last_close: i64 = 8_194_001;
+    (0..240)
+        .map(|index: i64| {
+            let open_time_ms = 1_767_225_600_000 + index * 60_000;
+            let trend = if (index / 40) % 2 == 0 { -1_100 } else { 900 };
+            let open = last_close + below(201) - 100;
+            let close = open + trend + below(4_001) - 2_000;
+            let high = open.max(close) + below(1_500);
+            let low = open.min(close) - below(1_500);
+            last_close = close;
+            Candle {
+                open_time_ms,
+                close_time_ms: open_time_ms + 59_999,
+                open: cents(open),
+                high: cents(high),
+                low: cents(low),
+                close: cents(close),
+                // Eight decimal places, as a base-asset volume has.
+                volume: Decimal::new(below(900_000_000) + 1, 8),
+                // One bar in eleven has no trade count reported.
+                trades: (below(11) != 0).then(|| below(5_000).unsigned_abs()),
+            }
+        })
+        .collect()
+}
+
 fn scripts() -> Vec<Script> {
     let (sixty_candles, sixty_decisions) = sixty_bars();
     let flat_market = [("100", "100"), ("100", "100"), ("100", "100")];
@@ -384,6 +519,7 @@ fn scripts() -> Vec<Script> {
             ]),
             decisions: vec![LONG, KEEP, FLAT, KEEP],
             fails: None,
+            rule: None,
         },
         Script {
             id: "fees_on_both_fills",
@@ -399,6 +535,7 @@ fn scripts() -> Vec<Script> {
             ]),
             decisions: vec![LONG, KEEP, FLAT, KEEP],
             fails: None,
+            rule: None,
         },
         Script {
             id: "closed_out_at_the_end",
@@ -409,6 +546,7 @@ fn scripts() -> Vec<Script> {
             candles: minutes(&[("50", "50"), ("50", "55"), ("55", "60.5")]),
             decisions: vec![LONG, KEEP, KEEP],
             fails: None,
+            rule: None,
         },
         Script {
             id: "left_open_at_the_end",
@@ -419,6 +557,7 @@ fn scripts() -> Vec<Script> {
             candles: minutes(&[("50", "50"), ("50", "55"), ("55", "60.5")]),
             decisions: vec![LONG, KEEP, KEEP],
             fails: None,
+            rule: None,
         },
         Script {
             id: "no_decision",
@@ -428,6 +567,7 @@ fn scripts() -> Vec<Script> {
             candles: minutes(&[("100", "101"), ("101", "99"), ("99", "104")]),
             decisions: vec![KEEP, KEEP, KEEP],
             fails: None,
+            rule: None,
         },
         Script {
             id: "the_held_position_asked_for_again",
@@ -445,6 +585,7 @@ fn scripts() -> Vec<Script> {
             ]),
             decisions: vec![FLAT, LONG, LONG, FLAT, FLAT, KEEP],
             fails: None,
+            rule: None,
         },
         Script {
             id: "a_decision_on_the_last_bar",
@@ -454,6 +595,7 @@ fn scripts() -> Vec<Script> {
             candles: minutes(&[("100", "100"), ("100", "110")]),
             decisions: vec![KEEP, LONG],
             fails: None,
+            rule: None,
         },
         Script {
             id: "one_bar",
@@ -463,6 +605,7 @@ fn scripts() -> Vec<Script> {
             candles: minutes(&[("100", "105")]),
             decisions: vec![LONG],
             fails: None,
+            rule: None,
         },
         Script {
             id: "two_round_trips",
@@ -480,6 +623,7 @@ fn scripts() -> Vec<Script> {
             ]),
             decisions: vec![LONG, FLAT, LONG, FLAT, KEEP, KEEP],
             fails: None,
+            rule: None,
         },
         Script {
             id: "decimals_as_they_are_written",
@@ -532,6 +676,7 @@ fn scripts() -> Vec<Script> {
             ],
             decisions: vec![LONG, KEEP, FLAT, KEEP],
             fails: None,
+            rule: None,
         },
         Script {
             id: "bars_in_the_order_given",
@@ -547,6 +692,7 @@ fn scripts() -> Vec<Script> {
             ],
             decisions: vec![LONG, KEEP, FLAT, KEEP],
             fails: None,
+            rule: None,
         },
         Script {
             id: "another_market",
@@ -561,6 +707,7 @@ fn scripts() -> Vec<Script> {
             ],
             decisions: vec![LONG, FLAT, KEEP],
             fails: None,
+            rule: None,
         },
         Script {
             id: "bars_before_1970",
@@ -574,6 +721,7 @@ fn scripts() -> Vec<Script> {
             ],
             decisions: vec![LONG, FLAT, KEEP],
             fails: None,
+            rule: None,
         },
         Script {
             id: "an_entry_at_no_price",
@@ -584,6 +732,7 @@ fn scripts() -> Vec<Script> {
             candles: minutes(&[("100", "100"), ("0", "50"), ("50", "50")]),
             decisions: vec![LONG, KEEP, KEEP],
             fails: None,
+            rule: None,
         },
         Script {
             id: "sixty_bars",
@@ -595,6 +744,20 @@ fn scripts() -> Vec<Script> {
             candles: sixty_candles,
             decisions: sixty_decisions,
             fails: None,
+            rule: None,
+        },
+        Script {
+            id: "a_rule_over_four_hours",
+            doc: "A strategy that decides from its bars, at ten basis points: long on a \
+                  close above the highest high of the twenty bars before it, and flat on a \
+                  close below the lowest low of the ten before it, while it holds a \
+                  position. The decisions are the rule's own, made bar by bar.",
+            market: btcusdt(),
+            config: config("10000", "10", true),
+            candles: four_hours(),
+            decisions: Vec::new(),
+            fails: None,
+            rule: Some(BREAKOUT),
         },
         Script {
             id: "fails_in_on_start",
@@ -604,6 +767,7 @@ fn scripts() -> Vec<Script> {
             candles: minutes(&flat_market),
             decisions: vec![LONG, KEEP, KEEP],
             fails: failing("on_start", None),
+            rule: None,
         },
         Script {
             id: "fails_in_on_bar",
@@ -614,6 +778,7 @@ fn scripts() -> Vec<Script> {
             candles: minutes(&flat_market),
             decisions: vec![LONG, KEEP, KEEP],
             fails: failing("on_bar", Some(1)),
+            rule: None,
         },
         Script {
             id: "fails_in_on_finish",
@@ -624,13 +789,14 @@ fn scripts() -> Vec<Script> {
             candles: minutes(&flat_market),
             decisions: vec![LONG, KEEP, KEEP],
             fails: failing("on_finish", None),
+            rule: None,
         },
     ]
 }
 
 fn document() -> Document {
     Document {
-        format: 1,
+        format: 2,
         failure: FAILURE,
         cases: scripts().iter().map(played).collect(),
     }
@@ -779,4 +945,137 @@ fn the_cases_cover_every_callback_decision_and_ending() {
         .expect("the case");
     let callbacks: Vec<&str> = failed.calls.iter().map(|call| call.callback).collect();
     assert_eq!(callbacks, ["on_start", "on_bar", "on_bar"]);
+
+    // One case follows a rule: it enters and leaves by it more than once,
+    // and ends in a position, which the run closes out.
+    let ruled: Vec<&Case> = cases.iter().filter(|case| case.rule.is_some()).collect();
+    assert_eq!(ruled.len(), 1, "one case follows a rule");
+    let ruled = ruled[0];
+    assert_eq!(ruled.id, "a_rule_over_four_hours");
+    assert_eq!(ruled.candles.len(), 240);
+    let decided = |decision| {
+        ruled
+            .decisions
+            .iter()
+            .filter(|made| **made == decision)
+            .count()
+    };
+    assert_eq!((decided(LONG), decided(FLAT)), (3, 2));
+    let result = ruled.result.as_ref().expect("a result");
+    assert_eq!(result.trade_count, 3);
+    let last_bar = ruled.candles.last().expect("a last candle");
+    let closed_out = result.trades.last().expect("a last trade");
+    assert_eq!(closed_out.exit_time_ms, last_bar.close_time_ms);
+    assert_eq!(closed_out.exit_price, last_bar.close);
+    // Its candles are an exchange's in shape: prices to the hundredth, a
+    // volume of eight places, and a trade count some bars do not have.
+    for candle in &ruled.candles {
+        let (low, high) = (dec(&candle.low), dec(&candle.high));
+        for price in [&candle.open, &candle.close] {
+            assert_eq!(dec(price).scale(), 2, "{price}");
+            assert!(low <= dec(price) && dec(price) <= high, "{candle:?}");
+        }
+        assert_eq!(dec(&candle.volume).scale(), 8, "{}", candle.volume);
+    }
+    let unknown = |candle: &&CandleText| candle.trades.is_none();
+    let unreported = ruled.candles.iter().filter(unknown).count();
+    assert!((10..60).contains(&unreported), "{unreported} unreported");
+}
+
+/// A bar that ran from `low` to `high` and closed at `close`.
+fn ranged(low: &str, high: &str, close: &str) -> Candle {
+    Candle {
+        high: dec(high),
+        low: dec(low),
+        ..minute(0, close, close)
+    }
+}
+
+/// The engine's state, holding `position_qty` of the base asset.
+fn holding(position_qty: &str) -> StrategyContext {
+    StrategyContext {
+        market: btcusdt(),
+        now_ms: 0,
+        cash: Decimal::ZERO,
+        position_qty: dec(position_qty),
+    }
+}
+
+// The rule itself, worked by hand on bars written out here, so that the one
+// case it decides rests on more than the rule's own word.
+#[test]
+fn the_rule_enters_above_the_highs_before_a_bar_and_leaves_below_the_lows() {
+    let rule = Breakout {
+        enter_bars: 2,
+        exit_bars: 1,
+    };
+    // Highs of 20, 15 and 11, and lows of 8, 9 and 7.
+    let before = [
+        ranged("8", "20", "10"),
+        ranged("9", "15", "10"),
+        ranged("7", "11", "10"),
+    ];
+    let (flat, long) = (holding("0"), holding("0.5"));
+    let decided = |before: &[Candle], ctx: &StrategyContext, close: &str| {
+        rule.decide(before, ctx, &ranged("1", "99", close))
+    };
+
+    // Holding nothing: a close above the highest of the two highs before
+    // the bar enters, and one that only reaches it does not. The first
+    // bar's high, of 20, is no longer among them.
+    assert_eq!(decided(&before, &flat, "15.01"), LONG);
+    assert_eq!(decided(&before, &flat, "15"), KEEP);
+    // A bar earlier it still was, and the highest of the two.
+    assert_eq!(decided(&before[..2], &flat, "20.01"), LONG);
+    assert_eq!(decided(&before[..2], &flat, "20"), KEEP);
+    // The bar's own high has no say: only the bars before it have.
+    assert_eq!(
+        rule.decide(&before, &flat, &ranged("1", "999", "15.01")),
+        LONG
+    );
+    // Fewer bars than the rule looks back over: no decision yet.
+    assert_eq!(decided(&before[..1], &flat, "1000"), KEEP);
+    assert_eq!(decided(&[], &flat, "1000"), KEEP);
+    // Holding nothing, a close below the lows is no reason to act.
+    assert_eq!(decided(&before, &flat, "0.01"), KEEP);
+
+    // Holding a position: a close below the low of the one bar before
+    // leaves, and one that only reaches it does not. The low before that
+    // one, of 8, has no say.
+    assert_eq!(decided(&before, &long, "6.99"), FLAT);
+    assert_eq!(decided(&before, &long, "7"), KEEP);
+    assert_eq!(decided(&before[..2], &long, "8.99"), FLAT);
+    assert_eq!(decided(&before[..2], &long, "9"), KEEP);
+    assert_eq!(decided(&[], &long, "0.01"), KEEP);
+    // Holding a position, a close above the highs is no reason to act.
+    assert_eq!(decided(&before, &long, "1000"), KEEP);
+}
+
+// The generator is written out, and so are its first numbers: candles that
+// came out otherwise would be another case under the same name.
+#[test]
+fn the_generated_candles_are_the_same_on_every_run() {
+    let candles = four_hours();
+    assert_eq!(candles, four_hours());
+    let first = candles.first().expect("a first candle");
+    assert_eq!(
+        (first.open_time_ms, first.close_time_ms),
+        (1_767_225_600_000, 1_767_225_659_999)
+    );
+    assert_eq!(
+        [first.open, first.high, first.low, first.close, first.volume]
+            .map(|value| value.to_string()),
+        ["81940.77", "81955.60", "81921.04", "81931.94", "6.84854048"]
+    );
+    assert_eq!(first.trades, Some(4_410));
+    let last = candles.last().expect("a last candle");
+    assert_eq!(last.open_time_ms, 1_767_239_940_000);
+    assert_eq!(last.close.to_string(), "81617.22");
+    assert_eq!(last.trades, None);
+    // One minute after another, with no bar missing.
+    assert!(
+        candles
+            .windows(2)
+            .all(|pair| pair[1].open_time_ms == pair[0].open_time_ms + 60_000)
+    );
 }

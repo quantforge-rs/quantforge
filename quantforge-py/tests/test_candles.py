@@ -391,11 +391,79 @@ def test_a_batch_is_made_of_candles_and_nothing_else(refused):
             built,
             [candle(), value, candle()],
         )
-    refused(TypeError, "candles[0] must be a Candle, not str", built, "candles")
+    # Text iterates too, one character at a time, and is never candles.
+    for text in ["candles", ""]:
+        refused(TypeError, "candles must be an iterable of Candle, not str", built, text)
     with pytest.raises(TypeError):
         built()
     with pytest.raises(TypeError):
         built(candles=[candle()])
+
+
+class Opens:
+    """A source of values that fails as it is opened: its `__iter__` raises."""
+
+    def __init__(self, raised):
+        self.raised = raised
+
+    def __iter__(self):
+        raise self.raised
+
+
+class RunsDry:
+    """A source of values that fails after the first of them."""
+
+    def __init__(self, first, raised):
+        self.first, self.raised, self.read = first, raised, 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        self.read += 1
+        if self.read == 1:
+            return self.first
+        raise self.raised
+
+
+class Unlisted:
+    """A value that says it does not iterate."""
+
+    __iter__ = None
+
+
+@pytest.mark.parametrize(
+    "raised",
+    [
+        OSError("the store is closed"),
+        LookupError("no such range"),
+        TypeError("the source's own"),
+        MemoryError(),
+        KeyboardInterrupt(),
+    ],
+    ids=lambda raised: type(raised).__name__,
+)
+def test_what_reading_a_batchs_values_raises_is_raised_as_it_is(raised):
+    full = {column: [FIELDS[column]] * 3 for column in COLUMNS}
+    for build in [
+        lambda: qf.CandleBatch.from_candles(Opens(raised)),
+        lambda: qf.CandleBatch.from_candles(RunsDry(candle(), raised)),
+        lambda: qf.CandleBatch.from_columns(**{**full, "open": Opens(raised)}),
+        lambda: qf.CandleBatch.from_columns(**{**full, "trades": RunsDry(1, raised)}),
+    ]:
+        # The source's own error, the object it raised: it is no value of
+        # the wrong type, and an interrupt is an interrupt.
+        with pytest.raises(type(raised)) as caught:
+            build()
+        assert caught.value is raised
+
+
+def test_a_value_that_does_not_iterate_is_of_the_wrong_type(refused):
+    full = {column: [FIELDS[column]] * 3 for column in COLUMNS}
+    message = "candles must be an iterable of Candle, not Unlisted"
+    refused(TypeError, message, qf.CandleBatch.from_candles, Unlisted())
+    message = "low must be an iterable of values, not Unlisted"
+    refused(TypeError, message, qf.CandleBatch.from_columns, **{**full, "low": Unlisted()})
 
 
 def test_a_batch_is_built_from_candles_or_columns_and_cannot_be_changed():

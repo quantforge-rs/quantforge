@@ -7,7 +7,12 @@ plays a script back: for every case, the run's inputs, the decision on each
 bar, every callback in the order the engine made it with the state it was
 handed, and the result or the error. Here the same script is played back by
 a class derived from `Strategy`, which has to be called the same way, call
-for call and digit for digit, and to bring the same result."""
+for call and digit for digit, and to bring the same result.
+
+A run Python hosts is `run_backtest` itself, and one a host that embeds
+Python would make is the bench's. One case's decisions were made by a rule
+and not listed: here they are played back like any other's, and
+`test_end_to_end.py` holds a strategy that follows the rule to them."""
 
 import json
 import pathlib
@@ -151,8 +156,11 @@ def result_as_given(result: qf.BacktestResult) -> dict:
 
 
 def test_the_shared_cases_are_read_and_name_every_target():
-    assert FIXTURE["format"] == 1
+    assert FIXTURE["format"] == 2
     assert len(CASES) == len(FIXTURE["cases"]) > 15
+    # A case's decisions are listed by its script, or made by the rule it
+    # names: one case has one.
+    assert [case["id"] for case in CASES.values() if case["rule"]] == ["a_rule_over_four_hours"]
     decided = {decision for case in CASES.values() for decision in case["decisions"]}
     assert decided == set(TARGETS)
     assert {TARGETS[decision] for decision in decided if decision} == set(qf.TargetPosition.ALL)

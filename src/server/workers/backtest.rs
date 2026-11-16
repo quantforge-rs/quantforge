@@ -121,6 +121,8 @@ fn backtest(
                 ErrorCode::InvalidRequest,
                 format!("the strategy failed: {error}"),
             ),
+            // In the engine's words: they name the product line asked for.
+            EngineError::NotSpot { .. } => failure(ErrorCode::InvalidRequest, error.to_string()),
             EngineError::NoCandles => failure(
                 ErrorCode::InvalidRequest,
                 "the job's range holds no candles",

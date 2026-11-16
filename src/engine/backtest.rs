@@ -1,6 +1,6 @@
 //! Deterministic bar-by-bar backtest: replays a candle slice through a
-//! [`Strategy`] and fills each decision at the next bar's open, so a fill
-//! never uses information the strategy had not seen.
+//! [`Strategy`] and fills each decision at the next bar's open, a price the
+//! strategy had not seen when it decided.
 //!
 //! [`BacktestEngine::run`] is the whole API. It takes the market, the
 //! candles, and any [`Strategy`]: the built-in
@@ -10,6 +10,11 @@
 //!
 //! # Execution model
 //!
+//! - **Spot only.** A candle strategy is long or flat on Spot inventory, so
+//!   the market is one of a Spot product line. A linear or an inverse market
+//!   is refused before the strategy is called: nothing here models a
+//!   contract, a margin or a funding payment, and a futures series is never
+//!   run by Spot's rules.
 //! - **Bar-close signal.** For each candle, in the order given,
 //!   [`Strategy::on_bar`] is called once with the complete bar, close
 //!   included. Its [`StrategyContext`] has the bar's open time as `now_ms`,
@@ -58,10 +63,16 @@
 //!
 //! # Errors
 //!
+//! Three are found before the strategy is called, in this order:
+//!
+//! - a market that is not Spot: [`EngineError::NotSpot`];
 //! - no candles: [`EngineError::NoCandles`];
 //! - `initial_cash` not above zero, or `fee_bps` below zero:
 //!   [`EngineError::InvalidConfig`], which [`BacktestConfig::validate`]
-//!   reports for a config before any run;
+//!   reports for a config before any run.
+//!
+//! Two end a run that has started:
+//!
 //! - a result outside the decimal range, for example an entry at a price so
 //!   small that the quantity cannot be represented: [`EngineError::Overflow`],
 //!   never a panic;
@@ -72,7 +83,7 @@
 //! gaps, duplicates, and impossible prices.
 
 use crate::{
-    Candle, ClosedTrade, MarketId, Strategy, StrategyContext, TargetPosition, TimestampMs,
+    Candle, Category, ClosedTrade, MarketId, Strategy, StrategyContext, TargetPosition, TimestampMs,
 };
 use rust_decimal::Decimal;
 use tracing::info;
@@ -231,7 +242,9 @@ impl BacktestEngine {
     }
 
     /// Replays `candles`, in the order given, through `strategy`, which can
-    /// be any [`Strategy`], including one defined outside the crate. The
+    /// be any [`Strategy`], including one defined outside the crate.
+    /// `market` is the Spot market the candles are of: every callback is
+    /// handed it, and every trade names its symbol. The
     /// [module docs](self) state the execution model and the errors.
     pub fn run(
         &self,
@@ -239,6 +252,11 @@ impl BacktestEngine {
         candles: &[Candle],
         strategy: &mut dyn Strategy,
     ) -> Result<BacktestResult, EngineError> {
+        if market.category() != Category::Spot {
+            return Err(EngineError::NotSpot {
+                exchange: market.exchange,
+            });
+        }
         if candles.is_empty() {
             return Err(EngineError::NoCandles);
         }

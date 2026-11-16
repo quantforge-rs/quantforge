@@ -9,7 +9,7 @@ pub mod transfer;
 
 use thiserror::Error;
 
-use crate::{ExchangeError, StorageError, StrategyError};
+use crate::{ExchangeError, ExchangeId, StorageError, StrategyError};
 
 /// The version of the engine this build is: the crate's own, as
 /// `MAJOR.MINOR.PATCH`. A strategy bundle's `engine` requirement is held to
@@ -20,6 +20,17 @@ pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Error, Debug)]
 pub enum EngineError {
+    /// A candle strategy was given a market that is not Spot: one of a
+    /// linear or an inverse product line. A candle strategy is long or flat
+    /// on Spot inventory, and a backtest fills, charges and marks by those
+    /// rules, so a futures series is refused before the strategy is called
+    /// and is never run under them.
+    #[error(
+        "candle strategies run on spot markets only, and {exchange} trades {category} futures",
+        category = .exchange.category()
+    )]
+    NotSpot { exchange: ExchangeId },
+
     #[error("no candles provided")]
     NoCandles,
 

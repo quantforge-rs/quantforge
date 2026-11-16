@@ -559,7 +559,8 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   replayed and flooded among it (`logs.rs`), run on SQLite and, with
   `QUANTFORGE_TEST_POSTGRES_URL`, on PostgreSQL
 - `tests/strategy_cases.rs`: the strategy boundary's shared cases, runs of
-  a scripted strategy written to `tests/fixtures/strategy_cases.json` as
+  a scripted strategy, and one of a strategy that follows a rule over
+  generated candles, written to `tests/fixtures/strategy_cases.json` as
   the engine makes them: every callback in order, with the state it was
   handed, and the result. The Python package's tests hold a strategy
   written in Python to the same file

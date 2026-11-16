@@ -1,18 +1,18 @@
 # The Python package
 
 `quantforge-py` is QuantForge for Python: the package a strategy written in
-Python will run through, on the same deterministic Rust engine as the
+Python runs through, on the same deterministic Rust engine as the
 `quantforge` command line. This page says what the package is called, what
 it holds, which Pythons it runs on, how it is built and tested, and what
 adding it changed for the `quantforge` crate. The code is `quantforge-py/`.
 
-**The package is not released, and has no function that runs a backtest
-yet.** It builds, installs and imports, says what it is, and holds the
-engine's types: what a market is, candles, a backtest's settings and
-result, and the strategy a class implements
-([the Python types](python-types.md)). The engine drives such a class
-through [the strategy adapter](#the-strategy-adapter). The backtest entry
-point and the candle readers are bound by the stories that follow.
+**The package is not released.** It builds, installs and imports, says
+what it is, and holds the engine's types: what a market is, candles, a
+backtest's settings and result, and the strategy a class implements
+([the Python types](python-types.md)). `run_backtest` runs such a class
+over candles in the engine, which drives it through
+[the strategy adapter](#the-strategy-adapter). The candle readers and the
+NumPy and pandas interchange are bound by the stories that follow.
 
 ## Contents
 
@@ -67,7 +67,8 @@ directory.
 ## What it holds
 
 What the package says about itself, the engine's types, the strategy a
-class implements, and the two conversions between a decimal and a float:
+class implements, the function that runs one, and the two conversions
+between a decimal and a float:
 
 <!-- begin: public names -->
 | Name | What it is |
@@ -89,6 +90,7 @@ class implements, and the two conversions between a decimal and a float:
 | `TargetPosition` | The position a strategy asks for |
 | `StrategyContext` | The engine's state as a strategy's callback is handed it |
 | `Strategy` | The strategy a class implements: three callbacks an engine drives |
+| `run_backtest` | Runs a strategy over candles in the engine, and gives the result |
 | `decimal_to_f64` | The float nearest to a decimal |
 | `decimal_from_f64` | The decimal of a float's shortest text |
 <!-- end: public names -->
@@ -105,12 +107,13 @@ class implements, and the two conversions between a decimal and a float:
 
 These are `quantforge_py.__all__`, and the package holds no other public
 name. Importing it opens no store and no connection, and none of its types
-holds a credential.
+holds a credential. A backtest opens none either: it runs on the candles
+it is handed.
 
 [The Python types](python-types.md) is what each type takes and gives: how
-a decimal crosses, every signature and field, what each refuses, and how a
-strategy is called. A price, a quantity or an amount is a
-`decimal.Decimal` on both sides, and never a float.
+a decimal crosses, every signature and field, what each refuses, how a
+strategy is called, and how a backtest is run. A price, a quantity or an
+amount is a `decimal.Decimal` on both sides, and never a float.
 
 ## Two versions
 
@@ -191,7 +194,7 @@ adds nothing to a run.
 
 | Host | The engine's thread | A callback that fails |
 | --- | --- | --- |
-| Python: the function the package will run a backtest with | The thread that called, attached throughout | Raises its own exception, in the caller |
+| Python: `run_backtest` | The thread that called, attached throughout | Raises its own exception, in the caller |
 | One that embeds Python: a server's worker, the command line | A thread of the host's own, attached once around the run and detached while the engine computes | Is the engine's error, with the traceback in its text |
 
 **A host that embeds Python attaches its engine thread once, around the
@@ -211,11 +214,18 @@ let any busy thread take it, and keep it for a switch interval each time:
 beside one such thread, a run of callbacks that do nothing took about
 350 µs a bar that way, and 1.5 µs when it kept the interpreter.
 
-**No function of the package runs a backtest yet.** The extension module
-holds one private entry, `quantforge_py._native._backtest`, which runs a
-strategy in the engine as either kind of host does. The package's own
-tests reach the adapter through it, and the story that binds `run_backtest`
-builds on the same adapter.
+**`run_backtest` is the run Python hosts.** `quantforge-py/src/run.rs`
+reads its arguments, runs the engine on the calling thread through the
+adapter, and raises what a callback raised, or what the engine refused in
+the engine's words ([running a backtest](python-types.md#running-a-backtest)).
+
+**The other kind of host is not built yet:** a server's worker and the
+command line run a Python strategy with the stories that embed Python
+([what is left](#what-is-left)). Until then the extension module holds one
+private entry in their place, `quantforge_py._native._embedded_backtest`,
+which takes what `run_backtest` takes and runs the engine as such a host
+does. The package's own tests reach that kind of host through it, and hold
+both to the same cases.
 
 ## Layout
 
@@ -234,23 +244,26 @@ quantforge-py/
 ├── src/
 │   ├── adapter.rs          the engine's Strategy over a Python object: a thread attached for each callback, a failure with its traceback
 │   ├── backtest.rs         BacktestConfig, EquityPoint and BacktestResult: a backtest's settings and its result
-│   ├── bench.rs            the private entry the adapter is tested through: one backtest, as each kind of host runs one
+│   ├── bench.rs            the private entry a host that embeds Python is tested through: one backtest, run as such a host runs one
 │   ├── candles.rs          Candle and CandleBatch: one bar, and bars held column by column
 │   ├── convert.rs          how a value crosses: an exact decimal, an integer, text, and a refusal in the engine's words
 │   ├── floats.rs           decimal_to_f64 and decimal_from_f64: the one crossing between a decimal and a float
 │   ├── lib.rs              the extension module, quantforge_py._native
 │   ├── market.rs           Symbol, Interval, Category, ExchangeId and MarketId: what a market is
+│   ├── run.rs              run_backtest: a run's arguments read, the engine run on the calling thread, and what it refused raised in its words
 │   ├── strategy.rs         Strategy, StrategyContext and TargetPosition: the class a strategy derives from, what its callbacks are handed, what they hand back
 │   └── trade.rs            ClosedTrade: one closed round trip, with the venue's order IDs as text
 └── tests/
-    ├── conftest.py         what the tests share: the checkout's manifests, the installed distribution, how a page and a refusal are read
+    ├── conftest.py         what the tests share: the checkout's manifests, the installed distribution, how a page and a refusal are read, how a strategy is run on either host
     ├── test_backtest.py    a backtest's config, a closed trade, an equity point and a result
     ├── test_candles.py     a candle, and a batch of candles by its candles and by its columns
     ├── test_decimals.py    how a decimal crosses, what is refused, and the float policy's shared cases
     ├── test_distribution.py  the installed distribution: its name, its Pythons, its license, its files
+    ├── test_end_to_end.py  a strategy that decides from its bars, run over fixture candles: the engine's decisions and result, and what each figure means
     ├── test_market.py      a symbol, an interval, a product family, a product line and a market
     ├── test_package.py     the imported package: its names, its classes, its versions, its storage backends
     ├── test_repository.py  this page, the readme and the manifests, held to the package
+    ├── test_run_backtest.py  run_backtest: what it takes, the order it checks that in, what the engine refuses, and that a run repeats
     ├── test_strategy.py    a target, a context, and the class a strategy derives from
     ├── test_strategy_cases.py  the strategy boundary's shared cases: a Python strategy called and obeyed as the engine's own is
     ├── test_strategy_failures.py  a callback that raises or returns what it may not, a strategy's name, and what is no strategy
@@ -338,6 +351,16 @@ They hold the installed package to the checkout they are in:
   from a strategy written in Rust: every callback in order, with the state
   it was handed digit for digit, and the result. The rest is what a
   callback raises or returns, and the thread it runs on.
+- **The run** (`test_run_backtest.py`, `test_end_to_end.py`):
+  `run_backtest` itself, which is how every test above reaches the engine
+  as Python hosts a run. What it takes and in what order it checks it, a
+  market that is not Spot and a run of no candles refused in the engine's
+  words, the result's fields held to the engine's own types one for one,
+  and the same run giving the same result. Then a strategy that decides
+  from its bars, run end to end over four hours of fixture candles: one of
+  the shared cases is decided by a rule written in Rust, and the same rule
+  written in Python has to decide the same on every bar and bring the same
+  result, each figure of which is then worked out again from the trades.
 - **The page of the types** (`test_types_page.py`): every table of
   [python-types.md](python-types.md), every signature, every refusal it
   shows, and its examples, which run as they are written.
@@ -414,8 +437,9 @@ The spikes under `spikes/` are workspaces of their own, as before.
 
 | What | Story |
 | --- | --- |
-| `run_backtest`, the function that runs a strategy | QUA-470 |
+| The frozen results a Python SMA cross is held to, from the Rust one | QUA-465 |
 | NumPy and pandas interchange, and the candle reader | QUA-475, QUA-473, QUA-472 |
+| A Python strategy run by a server's worker and by the command line | QUA-353, QUA-461 |
 | Wheels built and tested on Linux, macOS and Windows | QUA-474 |
 | Type stubs and the `py.typed` marker | QUA-471 |
 | The release to PyPI, and whether it carries a source distribution | QUA-476 |

@@ -6,7 +6,7 @@ the `quantforge` command line.
 
 **Not released yet.** The package is being built in the open. So far it
 says what it is, holds the engine's types, each built by the engine's own
-rule, and has the class a strategy derives from:
+rule, has the class a strategy derives from, and runs a backtest:
 
 ```python
 from decimal import Decimal
@@ -59,8 +59,38 @@ class EnterThenExit(qf.Strategy):
 ```
 
 `ctx` is the engine's state at the bar: the market, the time, the cash and
-the position. An exception a strategy raises ends the run as itself, with
-its traceback. The function that runs a strategy over candles comes next.
+the position. `run_backtest` runs a strategy over candles in the engine,
+and gives the result:
+
+```python
+def minute(index, open, close):
+    return qf.Candle(
+        open_time_ms=index * 60_000,
+        close_time_ms=index * 60_000 + 59_999,
+        open=open,
+        high=max(open, close),
+        low=min(open, close),
+        close=close,
+        volume=1,
+    )
+
+
+candles = [minute(0, 100, 100), minute(1, 100, 110), minute(2, 110, 120), minute(3, 125, 125)]
+config = qf.BacktestConfig(initial_cash=1000, fee_bps=0, close_out_at_end=True)
+
+result = qf.run_backtest(candles, EnterThenExit(), config, market=market)
+result.final_equity           # Decimal('1250')
+result.total_return_pct       # Decimal('25.00')
+result.trades[0].entry_price  # Decimal('100'): the open of the bar after the decision
+result.trades[0].exit_price   # Decimal('125')
+```
+
+A decision made at a bar's close is filled at the next bar's open, a price
+the strategy had not seen when it decided, and the same candles, config and
+strategy give the same result on every run. `market` says whose candles
+they are, and is a Spot market: a candle strategy does not run on a futures
+series. An exception a strategy raises ends the run as itself, with its
+traceback.
 
 The package installs as `quantforge-py` and imports as `quantforge_py`.
 `quantforge` on PyPI is another project.

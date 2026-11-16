@@ -1,8 +1,8 @@
 """`docs/python-types.md`, held to the package: the types it says are bound,
 every signature, constant and field, which types are keys, each refusal it
 shows, its examples, what it says of a strategy's callbacks and of a run
-that fails, and its statement that no futures execution type is public in
-Python."""
+that fails, what `run_backtest` takes and raises, and its statement that no
+futures execution type is public in Python."""
 
 import copy
 import doctest
@@ -20,6 +20,10 @@ PAGE = "docs/python-types.md"
 # What the package says about itself comes first in `__all__`; the rest is
 # what this page is about.
 ABOUT = ["__version__", "ENGINE_VERSION", "STORAGE_BACKENDS"]
+
+# What the engine calls a name the package binds under another: a method of
+# a type the crate publishes, and the file that declares it.
+RUST = {"run_backtest": ("BacktestEngine::run", "src/engine/backtest.rs")}
 
 # The Rust modules the page says stay in Rust, and the file each one's
 # public names are declared in.
@@ -115,9 +119,16 @@ def test_the_page_lists_every_type_and_function_the_package_binds(page, quoted, 
         published.update(re.findall(r"\w+", names))
     assert len(published) > 100, "the crate's re-exports were read"
     for python, rust, described in rows:
-        assert quoted(rust) == f"quantforge::{quoted(python)}"
-        assert quoted(python) in published, python
+        path, declared_in = RUST.get(quoted(python), (quoted(python), None))
+        assert quoted(rust) == f"quantforge::{path}"
+        owner, _, method = path.partition("::")
+        assert owner in published, python
+        if method:
+            source = (repository / declared_in).read_text(encoding="utf-8")
+            assert re.search(rf"^impl {owner} \{{$", source, re.MULTILINE), path
+            assert f"\n    pub fn {method}(" in source, path
         assert described
+    assert set(RUST) <= {quoted(python) for python, _, _ in rows}
 
 
 def test_the_page_gives_every_signature_python_does(page):
@@ -238,18 +249,115 @@ def test_every_refusal_the_page_shows_is_refused_so(page, quoted):
     assert {quoted(refusal).partition(": ")[0] for _, refusal in rows} == set(kinds)
 
 
-def test_every_example_on_the_page_runs_as_written(page):
+@pytest.fixture(scope="module")
+def session(page):
+    """The page's examples, run as one session from top to bottom: a later
+    example uses an earlier one's names, as a reader does. Gives what the
+    run came to, what it said, and the names it left."""
     examples = page(PAGE).fences("python")
     assert len(examples) > 5
     assert all(">>> " in example for example in examples)
-    # One session from top to bottom: a later example uses an earlier one's
-    # names, as a reader does.
     session = doctest.DocTestParser().get_doctest("\n".join(examples), {}, PAGE, PAGE, 0)
-    assert len(session.examples) > 25
     said = []
-    results = doctest.DocTestRunner(verbose=False).run(session, out=said.append)
-    assert results.failed == 0, "".join(said)
-    assert results.attempted == len(session.examples)
+    runner = doctest.DocTestRunner(verbose=False)
+    results = runner.run(session, out=said.append, clear_globs=False)
+    return results, "".join(said), len(session.examples), session.globs
+
+
+def test_every_example_on_the_page_runs_as_written(session):
+    results, said, examples, _ = session
+    assert examples > 30
+    assert results.failed == 0, said
+    assert results.attempted == examples
+
+
+def test_the_page_lists_what_a_run_takes(page, quoted):
+    rows = page(PAGE).rows("run arguments")
+    taken = inspect.signature(qf.run_backtest).parameters
+    assert [quoted(name) for name, _, _, _ in rows] == list(taken)
+    for name, given, takes, described in rows:
+        argument = taken[quoted(name)]
+        by_name_alone = argument.kind is inspect.Parameter.KEYWORD_ONLY
+        assert given == ("By name alone" if by_name_alone else "By position or by name"), name
+        assert argument.default is inspect.Parameter.empty, "every argument is required"
+        assert takes and described
+    assert [quoted(name) for name, given, _, _ in rows if given == "By name alone"] == ["market"]
+
+
+def test_every_run_the_page_shows_refused_raises_so(page, quoted, session):
+    rows = page(PAGE).rows("run refusals")
+    assert len(rows) >= 8
+    kinds = {"TypeError": TypeError, "ValueError": ValueError, "OverflowError": OverflowError}
+    # The names are those the page's examples left, as it says.
+    *_, names = session
+    for written, refusal in rows:
+        kind, _, message = quoted(refusal).partition(": ")
+        with pytest.raises(kinds[kind]) as caught:
+            eval(quoted(written), names)
+        assert type(caught.value) is kinds[kind], written
+        assert str(caught.value) == message, written
+    # Each failure the page lists before a callback's own is shown by rows
+    # of its own: the kind of exception, and the words that are that
+    # failure's.
+    failures = page(PAGE).rows("run failures")
+    shown = [tuple(quoted(refusal).partition(": ")[::2]) for _, refusal in rows]
+    expected = {
+        "An argument of a type it does not take": (
+            "TypeError",
+            [
+                "candles must be ",
+                "candles[",
+                "strategy must be ",
+                "config must be ",
+                "market must be ",
+            ],
+        ),
+        "A market that is not Spot": ("ValueError", ["candle strategies run on spot markets only"]),
+        "No candles": ("ValueError", ["no candles provided"]),
+        "An amount beyond the engine's decimal": ("OverflowError", ["decimal overflow computing "]),
+    }
+    assert [what for what, _, _ in failures[: len(expected)]] == list(expected)
+    for what, raised, when in failures[: len(expected)]:
+        kind, starts = expected[what]
+        assert quoted(raised) == kind, what
+        assert when
+        for start in starts:
+            assert any(
+                (shown_kind, message[: len(start)]) == (kind, start)
+                for shown_kind, message in shown
+            ), f"no row shows {what}: {start}"
+    assert {kind for kind, _ in shown} == {kind for kind, _ in expected.values()}
+
+
+def test_a_callback_ends_a_run_with_its_own_exception_as_the_page_says(page, quoted, session):
+    *_, raises, returns = page(PAGE).rows("run failures")
+    assert raises[:2] == ["A callback that raises", "The callback's own exception"]
+    assert returns[0] == "A callback that returns what it may not"
+    assert quoted(returns[1]) == "TypeError"
+    assert raises[2] and returns[2]
+    *_, names = session
+
+    class Unsure(Exception):
+        pass
+
+    failure = Unsure("not on this bar")
+
+    class Fails(qf.Strategy):
+        def on_bar(self, ctx, bar):
+            raise failure
+
+    with pytest.raises(Unsure) as caught:
+        qf.run_backtest(names["candles"], Fails(), names["config"], market=names["market"])
+    assert caught.value is failure
+
+    class Says(qf.Strategy):
+        def on_bar(self, ctx, bar):
+            return "LONG_ALL_IN"
+
+    with pytest.raises(TypeError) as caught:
+        qf.run_backtest(names["candles"], Says(), names["config"], market=names["market"])
+    assert type(caught.value) is TypeError
+    assert str(caught.value) == "on_bar must return a TargetPosition or None, not str"
 
 
 def test_the_page_lists_the_callbacks_a_strategy_has(page, quoted):
