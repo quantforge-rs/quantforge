@@ -120,8 +120,10 @@ fn raised(error: EngineError) -> PyErr {
 /// the last bar is sold at that bar's close where the config says so, and
 /// equity is marked at every bar's close. The same candles and config give
 /// the same `BacktestResult` on every run and every machine, for a strategy
-/// that decides from its bars and its own state alone and is built anew for
-/// the run: a strategy keeps its state from one run to the next.
+/// that starts each run in the same state and decides from its bars and
+/// that state alone, with no clock and no randomness. A strategy keeps its
+/// state from one run to the next, so each run is given one built anew, the
+/// same way.
 ///
 /// The run is on the calling thread. An argument of the wrong type is a
 /// `TypeError`; a market that is not Spot and candles that are none are a

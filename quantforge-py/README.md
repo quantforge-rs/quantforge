@@ -87,11 +87,13 @@ result.trades[0].exit_price   # Decimal('125')
 
 A decision made at a bar's close is filled at the next bar's open, a price
 the strategy had not seen when it decided. The same candles and config give
-the same result on every run, for a strategy that decides from its bars and
-its own state alone and is built anew for each run: a strategy keeps its
-state from one run to the next. `market` says whose candles they are, and
-is a Spot market: a candle strategy does not run on a futures series. An
-exception a strategy raises ends the run as itself, with its traceback.
+the same result on every run, for a strategy that starts each run in the
+same state and decides from its bars and that state alone, with no clock
+and no randomness. A strategy keeps its state from one run to the next, so
+each run is given one built anew, the same way. `market` says whose candles
+they are, and is a Spot market: a candle strategy does not run on a futures
+series. An exception a strategy raises ends the run as itself, with its
+traceback.
 
 The package installs as `quantforge-py` and imports as `quantforge_py`.
 `quantforge` on PyPI is another project.

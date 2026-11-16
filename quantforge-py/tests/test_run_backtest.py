@@ -718,6 +718,32 @@ def test_a_strategys_state_is_its_own_from_one_run_to_the_next(four, config, mar
     assert again != fresh
 
 
+def test_a_run_repeats_for_a_strategy_that_starts_it_in_the_same_state(four, config, market):
+    class Waits(qf.Strategy):
+        """Goes long on the third bar it counts, from wherever it starts
+        counting."""
+
+        def __init__(self, counted):
+            self.counted = counted
+
+        def on_bar(self, ctx, bar):
+            self.counted += 1
+            return qf.TargetPosition.LONG_ALL_IN if self.counted == 3 else None
+
+    # Built anew the same way, a strategy starts every run in the same
+    # state, and every run is the same.
+    first, second, third = (
+        qf.run_backtest(four, Waits(0), config, market=market) for _ in range(3)
+    )
+    assert first == second == third
+    assert written(first) == written(second) == written(third)
+    # Built anew is not enough by itself: built another way it starts in
+    # another state, and that is another run of the same candles and config.
+    ahead = qf.run_backtest(four, Waits(1), config, market=market)
+    assert (first.trades[0].entry_price, ahead.trades[0].entry_price) == (125, 110)
+    assert ahead != first
+
+
 def rust_fields(repository, path: str, name: str) -> list[str]:
     """The public fields of a Rust struct, in the order it declares them."""
     source = (repository / path).read_text(encoding="utf-8")

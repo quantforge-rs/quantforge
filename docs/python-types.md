@@ -606,10 +606,12 @@ out, or worked out again in Python.
 **The same run gives the same result,** on every run and on every
 machine, digit for digit: a run is a function of its candles, its config
 and its strategy, and the engine reads no clock, draws no random number
-and does no I/O. That holds for a strategy that itself
-[decides from its bars and its own state](#strategies). The engine keeps
-nothing between two runs, but a strategy keeps its state: each run is
-given a strategy built for it.
+and does no I/O. That holds for a strategy that starts each run in the
+same state and itself
+[decides from its bars and its own state](#strategies), with no clock and
+no randomness, in what it is built with as in what it decides. The engine
+keeps nothing between two runs, but a strategy keeps its state: each run
+is given a strategy built for it, the same way each time.
 
 **A run that is not made, or does not end, raises:**
 
