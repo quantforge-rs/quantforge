@@ -200,6 +200,27 @@ surface, refresh the snapshots and review the diff:
 UPDATE_SNAPSHOTS=1 cargo test --test e2e snapshot::
 ```
 
+## The goldens
+
+`tests/fixtures/golden/` holds one frozen backtest: a day of candles, and
+what the built-in SMA cross made of them. The engine and a strategy written
+in Python are both held to it, digit for digit
+([docs/golden-parity.md](docs/golden-parity.md)).
+
+**Unlike a snapshot, the two data files are never refreshed.** A golden test
+that fails says the change under test moved a result: mend the change, not
+the files. A change that is meant to move a backtest's result needs the
+maintainer's decision first.
+
+`cargo test` holds the engine to them, and the Python package's check holds
+the strategy written in Python, so a change to the engine or to the
+strategy boundary needs both:
+
+```bash
+cargo test --test golden
+scripts/python-package-check.sh
+```
+
 ## File size budget
 
 Each `.rs` file under `src/`, and under the Python package's

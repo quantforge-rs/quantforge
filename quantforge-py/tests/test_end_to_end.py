@@ -27,8 +27,6 @@ FIXTURE = json.loads((REPOSITORY / "tests" / "fixtures" / "strategy_cases.json")
 RULED = [case for case in FIXTURE["cases"] if case["rule"] is not None]
 
 CANDLE_DECIMALS = ["open", "high", "low", "close", "volume"]
-RESULT_DECIMALS = ["initial_cash", "final_equity", "total_return_pct", "max_drawdown_pct"]
-TRADE_DECIMALS = ["entry_price", "exit_price", "qty", "gross_quote_pnl"]
 
 TARGETS = {"LongAllIn": qf.TargetPosition.LONG_ALL_IN, "Flat": qf.TargetPosition.FLAT, None: None}
 
@@ -129,29 +127,6 @@ def config_of(case: dict) -> qf.BacktestConfig:
     )
 
 
-def result_as_given(result: qf.BacktestResult) -> dict:
-    """A result as the fixture writes one: every decimal with its digits."""
-    assert type(result) is qf.BacktestResult
-    given = {field: format(getattr(result, field), "f") for field in RESULT_DECIMALS}
-    given["trade_count"] = result.trade_count
-    given["trades"] = [
-        dict(
-            symbol=str(trade.symbol),
-            entry_time_ms=trade.entry_time_ms,
-            exit_time_ms=trade.exit_time_ms,
-            entry_order_id=trade.entry_order_id,
-            exit_order_id=trade.exit_order_id,
-            **{field: format(getattr(trade, field), "f") for field in TRADE_DECIMALS},
-        )
-        for trade in result.trades
-    ]
-    given["equity_curve"] = [
-        dict(open_time_ms=point.open_time_ms, equity=format(point.equity, "f"))
-        for point in result.equity_curve
-    ]
-    return given
-
-
 @pytest.fixture(scope="module")
 def case() -> dict:
     (case,) = RULED
@@ -207,19 +182,21 @@ def test_a_strategy_that_reads_its_bars_decides_as_the_same_rule_written_in_rust
     ]
 
 
-def test_it_is_called_as_the_engines_own_strategy_was_and_brings_the_same_result(case, ran):
+def test_it_is_called_as_the_engines_own_strategy_was_and_brings_the_same_result(
+    case, ran, as_given
+):
     strategy, result = ran
     # Every callback, in order, with the state the engine handed it.
     assert len(strategy.calls) == 242
     assert strategy.calls == case["calls"]
     # And the engine's result of the run, digit for digit.
-    assert result_as_given(result) == case["result"]
+    assert as_given(result) == case["result"]
     assert result.trade_count == 3
     assert str(result.final_equity) == "9998.670979465278896412314620"
 
 
 @pytest.mark.parametrize("given", ["a list", "a batch", "a generator", "the plain strategy"])
-def test_the_result_is_the_same_however_the_candles_are_handed_over(given, case, ran):
+def test_the_result_is_the_same_however_the_candles_are_handed_over(given, case, ran, as_given):
     _, expected = ran
     candles = candles_of(case)
     rule = case["rule"]
@@ -235,7 +212,7 @@ def test_the_result_is_the_same_however_the_candles_are_handed_over(given, case,
         candles, strategy, config_of(case), market=qf.MarketId(**case["market"])
     )
     assert result == expected
-    assert result_as_given(result) == case["result"]
+    assert as_given(result) == case["result"]
 
 
 def exact(value: Decimal) -> Fraction:
@@ -323,11 +300,11 @@ def test_every_figure_of_the_result_is_what_the_engine_says_it_is(case, ran):
     assert abs(over - fee) < ROUNDING and fee > 0
 
 
-def test_the_run_is_the_same_on_a_host_that_embeds_python(case, ran, bench):
+def test_the_run_is_the_same_on_a_host_that_embeds_python(case, ran, bench, as_given):
     _, expected = ran
     rule = case["rule"]
     strategy = Watched(rule["enter_bars"], rule["exit_bars"])
     market = qf.MarketId(**case["market"])
     result = bench(market, candles_of(case), strategy, config_of(case), embedded=True)
     assert strategy.calls == case["calls"]
-    assert result_as_given(result) == result_as_given(expected)
+    assert as_given(result) == as_given(expected)

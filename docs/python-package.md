@@ -11,8 +11,10 @@ what it is, and holds the engine's types: what a market is, candles, a
 backtest's settings and result, and the strategy a class implements
 ([the Python types](python-types.md)). `run_backtest` runs such a class
 over candles in the engine, which drives it through
-[the strategy adapter](#the-strategy-adapter). The candle readers and the
-NumPy and pandas interchange are bound by the stories that follow.
+[the strategy adapter](#the-strategy-adapter). An SMA cross written in
+Python is held to the frozen results of the engine's own, digit for digit
+([the goldens](golden-parity.md)). The candle readers and the NumPy and
+pandas interchange are bound by the stories that follow.
 
 ## Contents
 
@@ -254,12 +256,13 @@ quantforge-py/
 │   ├── strategy.rs         Strategy, StrategyContext and TargetPosition: the class a strategy derives from, what its callbacks are handed, what they hand back
 │   └── trade.rs            ClosedTrade: one closed round trip, with the venue's order IDs as text
 └── tests/
-    ├── conftest.py         what the tests share: the checkout's manifests, the installed distribution, how a page and a refusal are read, how a strategy is run on either host
+    ├── conftest.py         what the tests share: the checkout's manifests, the installed distribution, how a page and a refusal are read, how a strategy is run on either host, how a result is compared with a fixture's
     ├── test_backtest.py    a backtest's config, a closed trade, an equity point and a result
     ├── test_candles.py     a candle, and a batch of candles by its candles and by its columns
     ├── test_decimals.py    how a decimal crosses, what is refused, and the float policy's shared cases
     ├── test_distribution.py  the installed distribution: its name, its Pythons, its license, its files
     ├── test_end_to_end.py  a strategy that decides from its bars, run over fixture candles: the engine's decisions and result, and what each figure means
+    ├── test_golden_parity.py  the golden parity test: an SMA cross written in Python makes the trades, the final equity and the drawdown of the Rust one's frozen run, digit for digit
     ├── test_market.py      a symbol, an interval, a product family, a product line and a market
     ├── test_package.py     the imported package: its names, its classes, its versions, its storage backends
     ├── test_repository.py  this page, the readme and the manifests, held to the package
@@ -361,6 +364,20 @@ They hold the installed package to the checkout they are in:
   the shared cases is decided by a rule written in Rust, and the same rule
   written in Python has to decide the same on every bar and bring the same
   result, each figure of which is then worked out again from the trades.
+- **The goldens** (`test_golden_parity.py`): the package's headline
+  promise. `tests/fixtures/golden/` holds one frozen day of candles, what
+  the engine's built-in Rust SMA cross made of them, and the same strategy
+  written in Python ([golden-parity.md](golden-parity.md)). The Python one
+  is run through `run_backtest`, and as a host that embeds Python runs
+  one, and has to decide the same on all 1,440 bars and bring the same
+  trades, final equity and drawdown, each compared as the text of its
+  decimal. Then the fixture is shown to tell apart what it should:
+  strategies that take equal averages for a signal, skip the warm-up,
+  leave out the bar's own close, round their averages to the cent, or
+  average floats in each of three ways, each trade differently on it, and
+  so does the strategy itself in a decimal context too coarse for the sums
+  it adds up. A fourth way of averaging floats makes the same trades, and
+  is caught by its decisions, which the goldens record for every bar.
 - **The page of the types** (`test_types_page.py`): every table of
   [python-types.md](python-types.md), every signature, every refusal it
   shows, and its examples, which run as they are written.
@@ -437,8 +454,8 @@ The spikes under `spikes/` are workspaces of their own, as before.
 
 | What | Story |
 | --- | --- |
-| The frozen results a Python SMA cross is held to, from the Rust one | QUA-465 |
 | NumPy and pandas interchange, and the candle reader | QUA-475, QUA-473, QUA-472 |
+| The goldens reproduced from candles read out of each store, and by a server's job | QUA-458 |
 | A Python strategy run by a server's worker and by the command line | QUA-353, QUA-461 |
 | Wheels built and tested on Linux, macOS and Windows | QUA-474 |
 | Type stubs and the `py.typed` marker | QUA-471 |
