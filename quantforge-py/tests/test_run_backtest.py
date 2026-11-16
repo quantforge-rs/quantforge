@@ -377,14 +377,53 @@ def test_what_reading_the_candles_raises_is_raised_as_it_is(raised, four, config
     assert strategy.calls == []
 
 
+@pytest.mark.parametrize("kind", [KeyboardInterrupt, OSError, TypeError])
+def test_a_source_that_takes_its_own_iteration_away_as_it_fails_still_fails_as_itself(
+    kind, config, market
+):
+    class Withdraws:
+        """A source whose `__iter__` removes itself from its class, and then
+        raises: once it has run, its class says it does not iterate."""
+
+        def __iter__(self):
+            type(self).__iter__ = None
+            raise raised
+
+    raised = kind("as it was opened")
+    strategy = Notes()
+    # What it raised is what is raised: whether it iterates was looked at
+    # before it was asked to, and not afterwards.
+    with pytest.raises(kind) as caught:
+        qf.run_backtest(Withdraws(), strategy, config, market=market)
+    assert caught.value is raised
+    assert Withdraws.__iter__ is None
+    # Asked again, it is a value that does not iterate.
+    with pytest.raises(TypeError) as caught:
+        qf.run_backtest(Withdraws(), strategy, config, market=market)
+    assert str(caught.value) == (
+        "candles must be a CandleBatch or an iterable of Candle, not Withdraws"
+    )
+    assert strategy.calls == []
+
+
 def test_a_value_that_does_not_iterate_is_no_candles(four, config, market, refused):
     class Unlisted:
         """A value that says it does not iterate."""
 
         __iter__ = None
 
-    message = "candles must be a CandleBatch or an iterable of Candle, not Unlisted"
-    refused(TypeError, message, qf.run_backtest, Unlisted(), Notes(), config, market=market)
+    class Unlistable(Unlisted):
+        """One that could be read by index, and still says it does not."""
+
+        def __getitem__(self, index):
+            return four[index]
+
+    # A value Python reads by a key and does not iterate: a match of a
+    # regular expression has a `__getitem__`, and no place among sequences.
+    found = re.match("candles", "candles")
+    for value, named in [(Unlisted(), "Unlisted"), (Unlistable(), "Unlistable"), (found, "Match")]:
+        message = f"candles must be a CandleBatch or an iterable of Candle, not {named}"
+        refused(TypeError, message, qf.run_backtest, value, Notes(), config, market=market)
 
 
 def test_a_run_of_no_candles_is_refused_in_the_engines_words(config, market, refused):

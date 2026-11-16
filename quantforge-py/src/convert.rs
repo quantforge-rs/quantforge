@@ -351,19 +351,23 @@ fn iterated<'py>(
     if values.is_instance_of::<PyString>() {
         return Err(wrong_type(what, holds, values));
     }
+    // Looked at before the value is asked for anything: an `__iter__` that
+    // runs may change what its own type has.
+    let own = has_iter(values);
     match values.try_iter() {
         Ok(items) => Ok(items),
-        // Its own `__iter__` failed: that is the error to raise.
-        Err(raised) if iterates(values) => Err(raised),
+        // Its own `__iter__` ran, and this is what came of it.
+        Err(raised) if own => Err(raised),
+        // Nothing of its own ran: Python does not iterate it.
         Err(_) => Err(wrong_type(what, holds, values)),
     }
 }
 
-/// Whether a value that could not be iterated has an `__iter__` of its
-/// own, one that is not `None`: then the failure is that method's, which
-/// raised or gave back no iterator. A value read by index always iterates,
-/// and never comes here.
-fn iterates(value: &Bound<'_, PyAny>) -> bool {
+/// Whether a value's type has an `__iter__` of its own, one that is not
+/// `None`: iterating such a value calls it. Any other value Python either
+/// reads by index, which fails at no call of the value's, or does not
+/// iterate at all.
+fn has_iter(value: &Bound<'_, PyAny>) -> bool {
     let own = value
         .get_type()
         .getattr_opt(intern!(value.py(), "__iter__"));

@@ -458,6 +458,31 @@ def test_what_reading_a_batchs_values_raises_is_raised_as_it_is(raised):
         assert caught.value is raised
 
 
+def test_a_source_that_takes_its_own_iteration_away_as_it_fails_still_fails_as_itself():
+    full = {column: [FIELDS[column]] * 3 for column in COLUMNS}
+    for build in [
+        lambda source: qf.CandleBatch.from_candles(source),
+        lambda source: qf.CandleBatch.from_columns(**{**full, "close": source}),
+    ]:
+
+        class Withdraws:
+            """A source whose `__iter__` removes itself from its class, and
+            then raises: once it has run, its class says it does not iterate."""
+
+            def __iter__(self):
+                type(self).__iter__ = None
+                raise raised
+
+        raised = KeyboardInterrupt()
+        # Whether it iterates was looked at before it was asked to.
+        with pytest.raises(KeyboardInterrupt) as caught:
+            build(Withdraws())
+        assert caught.value is raised
+        assert Withdraws.__iter__ is None
+        with pytest.raises(TypeError, match="not Withdraws"):
+            build(Withdraws())
+
+
 def test_a_value_that_does_not_iterate_is_of_the_wrong_type(refused):
     full = {column: [FIELDS[column]] * 3 for column in COLUMNS}
     message = "candles must be an iterable of Candle, not Unlisted"
