@@ -13,7 +13,8 @@ QUA-37 (ALG-734 in the previous workspace) the storage, the wire's
 profile's policy and its store, QUA-35 (ALG-736) the sizing of an entry
 from it, and QUA-207 (ALG-737) the payload of an alert and what its signal
 resolves to. QUA-469 (ALG-377) bound to Python what the tables below say
-reaches it. The rest lands with the stories named below.
+reaches it, and QUA-464 (ALG-378) the candle strategy itself. The rest
+lands with the stories named below.
 
 ## Changed in Rust by ALG-733
 
@@ -93,6 +94,30 @@ For the binding, the crate gained:
 | `Category` and `ExchangeId` are read from their names with `str::parse`, and text that is neither is refused with the names there are | `quantforge::{Category, ExchangeId}`, `ModelError::{InvalidCategory, InvalidExchange}` |
 | `Interval::ALL` and `ExchangeId::all()` list every interval and every product line | `quantforge::{Interval, ExchangeId}` |
 | `BacktestConfig::validate`: what a run requires of a config, before any run | `quantforge::BacktestConfig` |
+
+## Bound to Python by QUA-464
+
+The candle-strategy contract, which [did not change](#not-changing), as
+the Python package has it ([python-types.md](python-types.md#strategies)):
+
+| What | In Python |
+| --- | --- |
+| `Strategy`, with its three callbacks in the order an engine calls them | `Strategy`, a class to derive from that defines `on_bar`; `on_start` and `on_finish` do nothing unless a class defines them |
+| `StrategyContext`, with the meaning each engine gives its fields | `StrategyContext`: `market`, `now_ms`, `cash` and `position_qty`, a value built anew for every callback |
+| `TargetPosition`, and no decision | `TargetPosition.FLAT` and `TargetPosition.LONG_ALL_IN`, and `None` |
+| `StrategyError`, a message | The exception a callback raised, as it was raised, where Python hosts the run; the engine's message is the same as text, with the traceback |
+
+The crate did not change for it. The engine drives a class derived from
+`Strategy` through one adapter, its `Strategy` trait over a Python object
+([python-package.md](python-package.md#the-strategy-adapter)), and nothing
+but those three callbacks crosses: no webhook, no order, no credential and
+no store.
+
+`tests/fixtures/strategy_cases.json` holds a strategy on either side of
+the boundary to the same calls. The crate's tests write it from the
+engine's runs of a strategy written in Rust (`tests/strategy_cases.rs`),
+and the package's tests hold one written in Python to it, call for call
+and digit for digit.
 
 ## Changing next
 

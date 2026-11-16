@@ -558,6 +558,11 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   job queue's lifecycle with a scripted worker, a job's log followed,
   replayed and flooded among it (`logs.rs`), run on SQLite and, with
   `QUANTFORGE_TEST_POSTGRES_URL`, on PostgreSQL
+- `tests/strategy_cases.rs`: the strategy boundary's shared cases, runs of
+  a scripted strategy written to `tests/fixtures/strategy_cases.json` as
+  the engine makes them: every callback in order, with the state it was
+  handed, and the result. The Python package's tests hold a strategy
+  written in Python to the same file
 - `tests/workers/`: the job workers of
   [worker-isolation.md](worker-isolation.md), this build's binary started as
   `quantforge worker` and running the synthetic workloads: each limit run
@@ -656,10 +661,10 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   can fail, the recorder, and the generated feature matrix
 - `tests/fixtures/`: data shared with the Python bindings' tests: the
   decimal ↔ float64 conformance cases of
-  [decimal-float-policy.md](decimal-float-policy.md), the shared cases
-  of the bundle, segment and result specs, the storage identity cases, the
-  execution store's cases, and the SQLite databases of every earlier schema
-  under `sqlite/`
+  [decimal-float-policy.md](decimal-float-policy.md), the strategy
+  boundary's cases, the shared cases of the bundle, segment and result
+  specs, the storage identity cases, the execution store's cases, and the
+  SQLite databases of every earlier schema under `sqlite/`
 - unit tests sit at the bottom of the module they test, in
   `#[cfg(test)] mod tests`, or in a `tests.rs` beside it once they would
   push the file over its line budget (`src/cli/tests.rs`)

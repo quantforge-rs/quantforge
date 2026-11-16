@@ -17,6 +17,9 @@ refused in the engine's own words:
 - ``Candle`` and ``CandleBatch``: one bar, and bars held column by column.
 - ``BacktestConfig``, ``ClosedTrade``, ``EquityPoint`` and
   ``BacktestResult``: a backtest's settings and what one produces.
+- ``Strategy``, ``StrategyContext`` and ``TargetPosition``: the strategy a
+  class implements, what its callbacks are handed, and the position it asks
+  for.
 - ``decimal_to_f64`` and ``decimal_from_f64``: the one crossing between an
   exact decimal and a float.
 
@@ -40,7 +43,10 @@ from ._native import (
     ExchangeId,
     Interval,
     MarketId,
+    Strategy,
+    StrategyContext,
     Symbol,
+    TargetPosition,
     __version__,
     decimal_from_f64,
     decimal_to_f64,
@@ -61,6 +67,9 @@ __all__ = [
     "ClosedTrade",
     "EquityPoint",
     "BacktestResult",
+    "TargetPosition",
+    "StrategyContext",
+    "Strategy",
     "decimal_to_f64",
     "decimal_from_f64",
 ]

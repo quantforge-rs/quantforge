@@ -265,7 +265,7 @@ impl MarketId {
 
 /// Gives a class one constant for each of `values`, named by `name`, and
 /// `ALL`, a tuple of them in the order given.
-fn name_each<T: PyClass>(
+pub(crate) fn name_each<T: PyClass>(
     py: Python<'_>,
     values: impl IntoIterator<Item = (String, T)>,
 ) -> PyResult<()>

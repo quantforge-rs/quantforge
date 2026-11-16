@@ -1,5 +1,6 @@
 """What the package's tests share: where the checkout is, its manifests, the
-distribution under test, and how a refusal and a `repr` are checked.
+distribution under test, how a refusal and a `repr` are checked, and how a
+strategy is run in the engine.
 
 The tests run against `quantforge_py` as it is installed, from a wheel or by
 `maturin develop`, and hold it to the files of the checkout they are in.
@@ -15,6 +16,7 @@ import tomllib
 import pytest
 
 import quantforge_py
+from quantforge_py import _native
 
 # quantforge-py/, and the repository it is a member of.
 PACKAGE_DIR = pathlib.Path(__file__).resolve().parents[1]
@@ -186,3 +188,67 @@ def evaluated():
         return eval(text, {"__builtins__": {}}, names)
 
     return evaluated
+
+
+@pytest.fixture(scope="session")
+def bench():
+    """The engine run on a Python strategy, through the adapter:
+    `bench(market, candles, strategy, config, *, embedded=False)` gives the
+    result. It is the extension module's private entry, which the function a
+    user calls is built on by the story that binds it.
+
+    A run is hosted one of two ways. As Python hosts one, it is on the
+    calling thread, and a callback that fails raises its own exception. As a
+    host that embeds Python runs one (`embedded=True`), it is on a thread of
+    the engine's own, and a failure is a `RuntimeError` of the engine's
+    error text, which is all such a host has."""
+    return _native._backtest
+
+
+@pytest.fixture(params=[False, True], ids=["hosted by python", "embedded"])
+def embedded(request) -> bool:
+    """Each of the two ways a run is hosted, in turn."""
+    return request.param
+
+
+@pytest.fixture(scope="session")
+def market() -> quantforge_py.MarketId:
+    return quantforge_py.MarketId("binance_spot", "BTCUSDT", "1m")
+
+
+@pytest.fixture(scope="session")
+def minutes():
+    """One-minute candles, the first at time zero, from each one's open and
+    close."""
+
+    def minutes(*prices) -> list[quantforge_py.Candle]:
+        return [
+            quantforge_py.Candle(
+                open_time_ms=index * 60_000,
+                close_time_ms=index * 60_000 + 59_999,
+                open=open,
+                high=max(open, close),
+                low=min(open, close),
+                close=close,
+                volume=1,
+            )
+            for index, (open, close) in enumerate(prices)
+        ]
+
+    return minutes
+
+
+@pytest.fixture
+def run(bench, market, minutes, embedded):
+    """Runs a strategy on the host under test: over five quiet bars, with
+    1000 in cash and no fee, unless told otherwise."""
+    quiet = minutes(*[(100, 100)] * 5)
+
+    def run(strategy, candles=None, *, initial_cash=1000, fee_bps=0, close_out_at_end=True):
+        config = quantforge_py.BacktestConfig(
+            initial_cash=initial_cash, fee_bps=fee_bps, close_out_at_end=close_out_at_end
+        )
+        candles = quiet if candles is None else candles
+        return bench(market, candles, strategy, config, embedded=embedded)
+
+    return run

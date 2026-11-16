@@ -5,8 +5,9 @@
 //! It holds what the package says about itself, and the engine's types as
 //! Python classes: market identity, candles, and a backtest's settings and
 //! result, each built by the engine's own rule and refused in the engine's
-//! own words. The strategy adapter and the backtest entry point are bound
-//! here by the stories that follow. `docs/python-package.md` says how the
+//! own words; and the strategy a class implements, which an engine drives
+//! through the adapter (`adapter.rs`). The backtest entry point is bound
+//! here by the story that follows. `docs/python-package.md` says how the
 //! package is named, built and tested, and `docs/python-types.md` what each
 //! type takes and gives.
 
@@ -17,11 +18,14 @@
 
 use pyo3::prelude::*;
 
+mod adapter;
 mod backtest;
+mod bench;
 mod candles;
 mod convert;
 mod floats;
 mod market;
+mod strategy;
 mod trade;
 
 /// The compiled extension module of QuantForge's Python package. Import
@@ -35,12 +39,17 @@ mod native {
 
     #[pymodule_export]
     use crate::backtest::{BacktestConfig, BacktestResult, EquityPoint};
+    // Private: the package's own tests run the adapter through it.
+    #[pymodule_export]
+    use crate::bench::backtest;
     #[pymodule_export]
     use crate::candles::{Candle, CandleBatch};
     #[pymodule_export]
     use crate::floats::{decimal_from_f64, decimal_to_f64};
     #[pymodule_export]
     use crate::market::{Category, ExchangeId, Interval, MarketId, Symbol};
+    #[pymodule_export]
+    use crate::strategy::{Strategy, StrategyContext, TargetPosition};
     #[pymodule_export]
     use crate::trade::ClosedTrade;
 
@@ -60,8 +69,9 @@ mod native {
             .map(StorageBackend::as_str)
             .collect();
         module.add("STORAGE_BACKENDS", PyTuple::new(module.py(), built)?)?;
-        // Every interval, product family and product line, as a constant of
-        // its class.
-        crate::market::name_constants(module.py())
+        // Every interval, product family, product line and target, as a
+        // constant of its class.
+        crate::market::name_constants(module.py())?;
+        crate::strategy::name_targets(module.py())
     }
 }
