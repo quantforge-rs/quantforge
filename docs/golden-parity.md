@@ -320,9 +320,10 @@ decides on every bar.
 computes in is one of its inputs:
 
 - **What it has to hold is the sum of fifty prices,** which has nine
-  digits. From nine digits up the Python strategy's result is the goldens',
-  and with these windows nothing it computes is rounded at all. Python's
-  own context has 28.
+  significant digits. From nine digits up the Python strategy's result is the goldens',
+  and with these windows nothing it computes is inexact. Python's
+  own context has 28. At precision 9, a context that traps `Rounded` still raises,
+  because the first addition discards trailing zeros from an eight-place price.
 - **At eight digits every price is still held, and their sum is not.** The
   two sums are rounded apart, the strategy finds one average below the
   other where the two are equal, and it trades differently from the first
