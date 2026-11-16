@@ -95,6 +95,11 @@ they are, and is a Spot market: a candle strategy does not run on a futures
 series. An exception a strategy raises ends the run as itself, with its
 traceback.
 
+The result is exact, and held to be: an SMA cross written in Python makes
+the trades, the final equity and the drawdown of the engine's own Rust one
+over a frozen day of candles, digit for digit, on every pull request
+([the goldens](https://github.com/quantforge-rs/quantforge/blob/main/docs/golden-parity.md)).
+
 The package installs as `quantforge-py` and imports as `quantforge_py`.
 `quantforge` on PyPI is another project.
 

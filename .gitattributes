@@ -3,6 +3,9 @@ tests/snapshots/*.txt text eol=lf
 # Fixtures are shared with the Python tests; the same bytes everywhere.
 tests/fixtures/*.csv text eol=lf
 tests/fixtures/*.json text eol=lf
+# The goldens are frozen and pinned by their hashes, and the strategy beside
+# them is compared with its listing in the page.
+tests/fixtures/golden/* text eol=lf
 # The databases of every earlier schema are loaded as SQL by tests/storage.
 tests/fixtures/sqlite/*.sql text eol=lf
 # The bundle spec's worked example is hashed by its drift test.
@@ -23,3 +26,5 @@ docs/result-spec.md text eol=lf
 # The signal schema is hashed by its drift test, which the Python model's
 # record of the file must match.
 docs/signal-schema.json text eol=lf
+# The goldens' page shows the Python strategy as its file has it.
+docs/golden-parity.md text eol=lf

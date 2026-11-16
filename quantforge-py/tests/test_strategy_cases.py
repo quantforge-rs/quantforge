@@ -36,8 +36,6 @@ TARGETS = {
 
 CANDLE_DECIMALS = ["open", "high", "low", "close", "volume"]
 CANDLE_FIELDS = ["open_time_ms", "close_time_ms", *CANDLE_DECIMALS, "trades"]
-RESULT_DECIMALS = ["initial_cash", "final_equity", "total_return_pct", "max_drawdown_pct"]
-TRADE_DECIMALS = ["entry_price", "exit_price", "qty", "gross_quote_pnl"]
 
 
 class ScriptFails(Exception):
@@ -132,29 +130,6 @@ def played(case: dict, bench, embedded: bool):
         return strategy, None, raised
 
 
-def result_as_given(result: qf.BacktestResult) -> dict:
-    """A result as the fixture writes one."""
-    assert type(result) is qf.BacktestResult, result
-    given = {field: written(getattr(result, field)) for field in RESULT_DECIMALS}
-    given["trade_count"] = result.trade_count
-    given["trades"] = [
-        dict(
-            symbol=str(trade.symbol),
-            entry_time_ms=trade.entry_time_ms,
-            exit_time_ms=trade.exit_time_ms,
-            entry_order_id=trade.entry_order_id,
-            exit_order_id=trade.exit_order_id,
-            **{field: written(getattr(trade, field)) for field in TRADE_DECIMALS},
-        )
-        for trade in result.trades
-    ]
-    given["equity_curve"] = [
-        dict(open_time_ms=point.open_time_ms, equity=written(point.equity))
-        for point in result.equity_curve
-    ]
-    return given
-
-
 def test_the_shared_cases_are_read_and_name_every_target():
     assert FIXTURE["format"] == 2
     assert len(CASES) == len(FIXTURE["cases"]) > 15
@@ -171,13 +146,15 @@ def test_the_shared_cases_are_read_and_name_every_target():
 
 
 @pytest.mark.parametrize("case", CASES.values(), ids=CASES.keys())
-def test_a_python_strategy_is_called_and_obeyed_as_the_engines_own_is(case, bench, embedded):
+def test_a_python_strategy_is_called_and_obeyed_as_the_engines_own_is(
+    case, bench, embedded, as_given
+):
     strategy, result, raised = played(case, bench, embedded)
     # Every callback, in order, with the state the engine handed it.
     assert strategy.calls == case["calls"]
     if case["fails"] is None:
         assert raised is None
-        assert result_as_given(result) == case["result"]
+        assert as_given(result) == case["result"]
         return
     # The run failed where the script did, and the engine was told so.
     assert result is None
@@ -216,7 +193,7 @@ def test_the_engines_documented_example_runs_to_its_documented_result(bench, emb
     assert [point.equity for point in result.equity_curve] == [1000, 1100, 1200, 1250]
 
 
-def test_a_run_is_the_same_every_time_and_on_either_host(bench):
+def test_a_run_is_the_same_every_time_and_on_either_host(bench, as_given):
     case = CASES["sixty_bars"]
     runs = [played(case, bench, embedded) for embedded in (False, True, False, True)]
     first_strategy, first_result, _ = runs[0]
@@ -225,7 +202,7 @@ def test_a_run_is_the_same_every_time_and_on_either_host(bench):
         assert raised is None
         assert strategy.calls == first_strategy.calls
         assert result == first_result
-        assert result_as_given(result) == result_as_given(first_result)
+        assert as_given(result) == as_given(first_result)
 
 
 def test_every_callback_is_handed_a_context_and_a_bar_of_its_own(run, minutes):

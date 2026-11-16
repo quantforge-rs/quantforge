@@ -164,7 +164,8 @@ decision and digit for digit.
   - `Candle` and `TargetPosition`;
   - `CandleBatch` and the decimal ↔ float64 policy.
 - **The bundle manifest.**
-- **The ALG-383 goldens.** They are never regenerated for these changes.
+- **The ALG-383 goldens** ([golden-parity.md](golden-parity.md)). They are
+  never regenerated for these changes.
 - **Every Spot fixture:**
   - the conformance fixtures;
   - `tests/fixtures/`;

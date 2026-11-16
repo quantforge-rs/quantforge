@@ -494,7 +494,10 @@ no I/O, so that the same bars give the same decisions on every run. Python
 adds one thing to mind. Arithmetic on `Decimal` follows the decimal
 context of the thread a callback runs on, which the engine neither sets
 nor reads: a strategy that needs another precision or rounding sets it
-itself.
+itself. [The goldens](golden-parity.md#decimals-in-the-strategy) show what
+that comes to for one strategy that divides, an SMA cross: at its windows,
+the same decisions as the engine's own decimal makes in any context that
+holds the sums it adds up.
 
 **Three callbacks, a context of four values and two targets are all of
 the boundary.** No callback is called for a webhook, an order, a fill or a
@@ -668,6 +671,13 @@ The package's tests run a strategy that decides from its bars over four
 hours of fixture candles, and hold it to the engine's run of the same rule
 written in Rust: the decision on every bar, every callback, and the
 result, digit for digit (`quantforge-py/tests/test_end_to_end.py`).
+
+**And they hold an SMA cross written in Python to the engine's own.**
+[The goldens](golden-parity.md) are one frozen day of candles and what the
+built-in Rust SMA cross made of them. The same strategy written in Python,
+run through `run_backtest`, has to make the same trades, the same final
+equity and the same drawdown, each compared as the text of its decimal
+(`quantforge-py/tests/test_golden_parity.py`).
 
 ## Decimal and float
 

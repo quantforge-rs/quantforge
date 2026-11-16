@@ -52,37 +52,44 @@ never comes.
 
 ## Required checks
 
-Branch protection on `main` requires these checks by name, `storage` once a
-maintainer adds it:
+Branch protection on `main` requires these checks by name:
 
 - `checks (ubuntu-latest)`, `checks (macos-latest)`, `checks (windows-latest)`
 - `package`
-- `storage`
+- `storage`, and `postgres 16`, `postgres 17` and `postgres 18` beside it
+- `python`
 - `analyze` and `CodeQL`, from `.github/workflows/codeql.yml`
 - `scan` and `gitleaks`, from `.github/workflows/gitleaks.yml`
 - `CodeRabbit`
 
-`storage` is new, and needs adding once:
+A maintainer adds a check to them once, by its name:
 
 ```bash
 gh api --method POST \
   repos/quantforge-rs/quantforge/branches/main/protection/required_status_checks/contexts \
-  -f 'contexts[]=storage'
+  -f 'contexts[]=python'
 ```
 
-`python`, the Python package's job, runs on every pull request and is not
-required yet. The same command with `contexts[]=python` makes it hold up a
-merge.
+**`python` is required for the golden parity test,** which runs in it: an
+SMA cross written in Python has to make the trades, the final equity and
+the drawdown of the Rust one's frozen run, digit for digit
+([golden-parity.md](golden-parity.md)). The crate's half of the goldens,
+the engine and the Rust strategy held to the same files, runs in the three
+`checks` legs.
 
-The `postgres` legs are not required themselves: `storage` stands for them.
-A major added to the matrix, or dropped from it, then needs no change to
-branch protection, and a dropped leg cannot leave a required check waiting
-forever. `storage` runs even when a leg failed or was cancelled
+**`storage` stands for the `postgres` legs.** It passes only when every leg
+passed, and it runs even when a leg failed or was cancelled
 (`if: always()`), because GitHub counts a skipped required check as passed.
-A renamed job is different: every merge waits until its new name replaces
-the old one in branch protection. That is why the runner of a `checks` leg
-is changed through the matrix's `runner`, never by changing the `os` its
-check is named after.
+With `storage` alone required, a major added to the matrix or dropped from
+it would need no change to branch protection. Branch protection names the
+three legs as well, so a major that is dropped has to be taken out of
+branch protection in the same change: a required check that no job reports
+is waited for forever.
+
+A renamed job is waited for the same way: every merge waits until its new
+name replaces the old one in branch protection. That is why the runner of
+a `checks` leg is changed through the matrix's `runner`, never by changing
+the `os` its check is named after.
 
 ## PostgreSQL
 
@@ -159,6 +166,11 @@ python3.15`, which runs, in order:
   `QUANTFORGE_PY_TEST_SQLITE_ONLY=1` telling the tests which build it is.
 - **The in-place install**: `maturin develop` in a virtualenv, the import,
   and the tests again, as a contributor runs them.
+
+The tests are the package's whole suite each time, the golden parity test
+among them ([golden-parity.md](golden-parity.md)), so a strategy written in
+Python is held to the Rust one's frozen results on the oldest Python and
+on the newest, and in the SQLite-only wheel as well.
 
 maturin and pytest come from PyPI, at the versions `pyproject.toml` asks
 for. The wheels are built in the `dev` profile, on Linux only: release
@@ -242,3 +254,13 @@ records in `evidence.jsonl`.
 
 `data.history`'s release evidence on both exchanges is ALG-703's, and the
 server and Python surfaces of `config.storage` wait for their stories.
+
+**The goldens are evidence of their own.** The matrix names them, as
+ALG-383, for `strategy.backtest_local`: the frozen SMA-cross results
+reproduced from candles stored for each venue in each store, from the
+command line and from Python ([golden-parity.md](golden-parity.md)).
+`tests/golden/` holds the engine to them in every `checks` leg, and the
+Rust strategy for as long as it exists; `test_golden_parity.py` holds a
+strategy written in Python to them in `python`. Neither reads the candles
+from a store: the same results from candles stored for each venue in each
+store are QUA-458's.

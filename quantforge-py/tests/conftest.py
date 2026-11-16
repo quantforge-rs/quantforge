@@ -1,6 +1,6 @@
 """What the package's tests share: where the checkout is, its manifests, the
-distribution under test, how a refusal and a `repr` are checked, and how a
-strategy is run in the engine.
+distribution under test, how a refusal and a `repr` are checked, how a
+strategy is run in the engine, and how a result is compared with a fixture's.
 
 The tests run against `quantforge_py` as it is installed, from a wheel or by
 `maturin develop`, and hold it to the files of the checkout they are in.
@@ -188,6 +188,46 @@ def evaluated():
         return eval(text, {"__builtins__": {}}, names)
 
     return evaluated
+
+
+@pytest.fixture(scope="session")
+def as_given():
+    """Writes a result as the shared fixtures write one, to be compared with
+    what the engine's own tests wrote: every amount as the text of its
+    decimal, with every digit it has and no exponent."""
+
+    def written(value) -> str:
+        assert type(value) is decimal.Decimal, value
+        return format(value, "f")
+
+    def as_given(result) -> dict:
+        assert type(result) is quantforge_py.BacktestResult, result
+        given = {
+            field: written(getattr(result, field))
+            for field in ("initial_cash", "final_equity", "total_return_pct", "max_drawdown_pct")
+        }
+        given["trade_count"] = result.trade_count
+        given["trades"] = [
+            dict(
+                symbol=str(trade.symbol),
+                entry_time_ms=trade.entry_time_ms,
+                exit_time_ms=trade.exit_time_ms,
+                entry_order_id=trade.entry_order_id,
+                exit_order_id=trade.exit_order_id,
+                **{
+                    field: written(getattr(trade, field))
+                    for field in ("entry_price", "exit_price", "qty", "gross_quote_pnl")
+                },
+            )
+            for trade in result.trades
+        ]
+        given["equity_curve"] = [
+            dict(open_time_ms=point.open_time_ms, equity=written(point.equity))
+            for point in result.equity_curve
+        ]
+        return given
+
+    return as_given
 
 
 @pytest.fixture(scope="session")

@@ -564,6 +564,13 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   the engine makes them: every callback in order, with the state it was
   handed, and the result. The Python package's tests hold a strategy
   written in Python to the same file
+- `tests/golden/`: the goldens of [golden-parity.md](golden-parity.md),
+  one frozen day of candles and what the built-in SMA cross made of them,
+  in `tests/fixtures/golden/`: the generator that made the candles, the
+  Rust strategy held to the results byte for byte for as long as it
+  exists, the engine's replay of the recorded decisions, which needs no
+  strategy, and the page held to the files. The Python package's tests
+  hold the same strategy written in Python to the same files
 - `tests/workers/`: the job workers of
   [worker-isolation.md](worker-isolation.md), this build's binary started as
   `quantforge worker` and running the synthetic workloads: each limit run
@@ -664,8 +671,9 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   decimal ↔ float64 conformance cases of
   [decimal-float-policy.md](decimal-float-policy.md), the strategy
   boundary's cases, the shared cases of the bundle, segment and result
-  specs, the storage identity cases, the execution store's cases, and the
-  SQLite databases of every earlier schema under `sqlite/`
+  specs, the storage identity cases, the execution store's cases, the
+  goldens under `golden/`, which are frozen, and the SQLite databases of
+  every earlier schema under `sqlite/`
 - unit tests sit at the bottom of the module they test, in
   `#[cfg(test)] mod tests`, or in a `tests.rs` beside it once they would
   push the file over its line budget (`src/cli/tests.rs`)
