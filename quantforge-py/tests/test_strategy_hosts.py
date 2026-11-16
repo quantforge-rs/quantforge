@@ -22,9 +22,12 @@ import quantforge_py as qf
 # How long a wait on another thread may take before the test fails.
 PATIENCE = 30
 
-# A switch interval, in seconds, that no run of these tests lasts: a thread
-# that waits for the interpreter is given it only if the run hands it over.
-NO_SWITCH = 5.0
+# A switch interval, in seconds, longer than a test is given
+# (`faulthandler_timeout`). Python asks the thread that holds the interpreter
+# to give it up only once another has waited that long, so while this is
+# set a thread that waits is handed the interpreter only where the one that
+# holds it lets go, however slowly a test runs.
+NO_SWITCH = 600.0
 
 
 class Watches(qf.Strategy):
@@ -65,16 +68,19 @@ def test_hosted_by_python_every_callback_runs_on_the_thread_that_asked(bench, ma
     assert strategy.own.mark == "set in on_start"
 
 
-def test_hosted_by_python_a_run_keeps_the_interpreter_between_its_callbacks(bench, market, minutes):
-    spun = 0
-    ready, spinning, stop = threading.Event(), threading.Event(), threading.Event()
+def test_hosted_by_python_a_run_keeps_the_interpreter_between_its_callbacks(
+    bench, market, minutes, pytestconfig
+):
+    # The limit of a test is what keeps the interval from running out in one.
+    assert float(pytestconfig.getini("faulthandler_timeout")) < NO_SWITCH
+    ready, handed, stop = threading.Event(), threading.Event(), threading.Event()
 
-    def spin():
-        nonlocal spun
+    def wait_for_the_interpreter():
         ready.wait(PATIENCE)
-        while not stop.is_set():
-            spun += 1
-            spinning.set()
+        # Here this thread has the interpreter. It says so and lets go of it
+        # at once, so that a run that handed it over goes on, and fails.
+        handed.set()
+        stop.wait(PATIENCE)
 
     class Looks(qf.Strategy):
         def __init__(self):
@@ -82,8 +88,8 @@ def test_hosted_by_python_a_run_keeps_the_interpreter_between_its_callbacks(benc
 
         def on_bar(self, ctx, bar):
             self.bars += 1
-            if spun:
-                raise AssertionError(f"another thread was given the interpreter by bar {self.bars}")
+            if handed.is_set():
+                raise AssertionError(f"the interpreter was given up by bar {self.bars}")
 
     # Enough bars that a thread waiting for the interpreter would take it at
     # one of them, were it given up after every callback: it is taken at
@@ -92,26 +98,29 @@ def test_hosted_by_python_a_run_keeps_the_interpreter_between_its_callbacks(benc
     strategy = Looks()
     config = qf.BacktestConfig(initial_cash=1000, fee_bps=0, close_out_at_end=True)
     candles = minutes(*[(100, 100)] * bars)
-    busy = threading.Thread(target=spin, daemon=True)
-    busy.start()
+    waiting = threading.Thread(target=wait_for_the_interpreter, daemon=True)
     interval = sys.getswitchinterval()
+    # Set before the other thread starts: it never waits for the interpreter
+    # under a shorter interval, which could run out during the run.
     sys.setswitchinterval(NO_SWITCH)
     try:
-        # From here the other thread is busy and wants the interpreter,
-        # which Python makes no thread give up for the length of the run.
+        waiting.start()
+        # From here the other thread wants the interpreter, and is handed it
+        # only if the run lets go of it.
         ready.set()
         bench(market, candles, strategy, config)
-        during = spun
+        during = handed.is_set()
     finally:
         sys.setswitchinterval(interval)
-        # It was waiting all along: it runs as soon as this thread waits
-        # for it, and is stopped whatever became of the run.
-        ran = spinning.wait(PATIENCE)
+        # It was waiting all along: it is handed the interpreter as soon as
+        # this thread waits for it, and is stopped whatever became of the
+        # run.
+        ran = handed.wait(PATIENCE)
         stop.set()
-        busy.join(PATIENCE)
-    assert ran and not busy.is_alive()
+        waiting.join(PATIENCE)
+    assert ran and not waiting.is_alive()
     assert strategy.bars == bars
-    assert during == 0
+    assert not during
 
 
 def test_embedded_every_callback_runs_on_one_thread_of_the_engines_own(bench, market, minutes):
