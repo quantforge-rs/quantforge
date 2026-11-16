@@ -350,6 +350,7 @@ def test_a_results_fields_are_named_required_and_of_their_own_types(refused):
     message = f"invalid trade_count -1: must be between 0 and {2 * sys.maxsize + 1}"
     refused(ValueError, message, result, trade_count=-1)
     refused(TypeError, "trades must be an iterable of ClosedTrade, not int", result, trades=1)
+    refused(TypeError, "trades must be an iterable of ClosedTrade, not str", result, trades="")
     message = "trades[1] must be a ClosedTrade, not EquityPoint"
     refused(TypeError, message, result, trades=[trade(), point(0, "1")])
     message = "equity_curve must be an iterable of EquityPoint, not NoneType"

@@ -16,7 +16,8 @@ from quantforge_py import _native
 ENGINE_VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
 # What the package publishes, in the order `__all__` gives it: what it says
-# about itself, the engine's types, and the two conversions.
+# about itself, the engine's types, the function that runs a backtest, and
+# the two conversions.
 ABOUT = ["__version__", "ENGINE_VERSION", "STORAGE_BACKENDS"]
 TYPES = [
     "Symbol",
@@ -34,7 +35,7 @@ TYPES = [
     "StrategyContext",
     "Strategy",
 ]
-FUNCTIONS = ["decimal_to_f64", "decimal_from_f64"]
+FUNCTIONS = ["run_backtest", "decimal_to_f64", "decimal_from_f64"]
 
 # The one class that exists to be derived from.
 DERIVED_FROM = "Strategy"
@@ -88,15 +89,16 @@ def test_the_extension_module_is_private_and_built_for_the_stable_abi():
 
 def test_the_extension_module_holds_one_private_entry_which_the_package_does_not_publish():
     private = [name for name in vars(_native) if name.startswith("_") and not name.startswith("__")]
-    # The engine run on a strategy, for the package's own tests: the
-    # function a user calls is bound by the story that follows.
-    assert private == ["_backtest"]
-    assert not hasattr(quantforge_py, "_backtest")
-    assert "_backtest" not in quantforge_py.__all__
-    assert str(inspect.signature(_native._backtest)) == (
-        "(market, candles, strategy, config, *, embedded=False)"
-    )
-    assert _native._backtest.__doc__
+    # A backtest as a host that embeds Python runs one, for the package's own
+    # tests: the run Python hosts is `run_backtest`, which is published.
+    assert private == ["_embedded_backtest"]
+    assert not hasattr(quantforge_py, "_embedded_backtest")
+    assert "_embedded_backtest" not in quantforge_py.__all__
+    # It takes what the published function takes.
+    taken = inspect.signature(_native._embedded_backtest)
+    assert str(taken) == "(candles, strategy, config, *, market)"
+    assert taken == inspect.signature(quantforge_py.run_backtest)
+    assert _native._embedded_backtest.__doc__
 
 
 def test_the_version_is_the_crates_own(crate):

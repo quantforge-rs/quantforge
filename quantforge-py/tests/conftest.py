@@ -192,17 +192,22 @@ def evaluated():
 
 @pytest.fixture(scope="session")
 def bench():
-    """The engine run on a Python strategy, through the adapter:
+    """The engine run on a Python strategy, on either kind of host:
     `bench(market, candles, strategy, config, *, embedded=False)` gives the
-    result. It is the extension module's private entry, which the function a
-    user calls is built on by the story that binds it.
+    result.
 
-    A run is hosted one of two ways. As Python hosts one, it is on the
-    calling thread, and a callback that fails raises its own exception. As a
-    host that embeds Python runs one (`embedded=True`), it is on a thread of
-    the engine's own, and a failure is a `RuntimeError` of the engine's
-    error text, which is all such a host has."""
-    return _native._backtest
+    As Python hosts a run, it is `run_backtest` itself, the function a user
+    calls: on the calling thread, where a callback that fails raises its own
+    exception. As a host that embeds Python runs one (`embedded=True`), it
+    is the extension module's private entry, which takes the same arguments:
+    on a thread of the engine's own, where a failure is a `RuntimeError` of
+    the engine's error text, which is all such a host has."""
+
+    def bench(market, candles, strategy, config, *, embedded=False):
+        run = _native._embedded_backtest if embedded else quantforge_py.run_backtest
+        return run(candles, strategy, config, market=market)
+
+    return bench
 
 
 @pytest.fixture(params=[False, True], ids=["hosted by python", "embedded"])

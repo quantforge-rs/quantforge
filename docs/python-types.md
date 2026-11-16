@@ -4,10 +4,13 @@
 is, a candle and a batch of candles, a backtest's settings and result, and
 the strategy a class implements. Each class holds the engine's own value.
 It is built by the engine's own rule and refused in the engine's own
-words, so that a value Python built is a value the engine takes.
+words, so that a value Python built is a value the engine takes. And it
+has the function that runs a backtest, `run_backtest`: the engine's own
+run of a strategy written in Python.
 
-This page is what each type takes and gives. How the package is named,
-built and tested is [the Python package](python-package.md).
+This page is what each type takes and gives, and how a backtest is run.
+How the package is named, built and tested is
+[the Python package](python-package.md).
 
 ```python
 >>> from decimal import Decimal
@@ -25,6 +28,7 @@ built and tested is [the Python package](python-package.md).
 - [Candles](#candles)
 - [Backtests](#backtests)
 - [Strategies](#strategies)
+- [Running a backtest](#running-a-backtest)
 - [Decimal and float](#decimal-and-float)
 - [Fields](#fields)
 - [Equality, keys and repr](#equality-keys-and-repr)
@@ -50,6 +54,7 @@ built and tested is [the Python package](python-package.md).
 | `TargetPosition` | `quantforge::TargetPosition` | The position a strategy asks for |
 | `StrategyContext` | `quantforge::StrategyContext` | The engine's state as a strategy's callback is handed it |
 | `Strategy` | `quantforge::Strategy` | The strategy a class implements: three callbacks an engine drives |
+| `run_backtest` | `quantforge::BacktestEngine::run` | Runs a strategy over candles in the engine, and gives the result |
 | `decimal_to_f64` | `quantforge::decimal_to_f64` | The float nearest to a decimal |
 | `decimal_from_f64` | `quantforge::decimal_from_f64` | The decimal of a float's shortest text |
 <!-- end: bound types -->
@@ -134,6 +139,12 @@ A message of the package's own names the field it refuses, and a
 column's names the row: `open[3]`. [Refusals](#refusals) lists one of each
 kind.
 
+**Where a field takes anything that iterates its values,** a list, a
+tuple or a generator will do, and text will not: a `str` iterates too, one
+character at a time, and is never taken for a sequence of values. What
+reading the values raises is raised as it is, so a source that fails to
+open fails with its own error.
+
 ## Signatures
 
 Every way to build a value, and every method there is, as Python's
@@ -159,6 +170,7 @@ Strategy(*args, **kwargs)
 Strategy.on_start(ctx)
 Strategy.on_bar(ctx, bar)
 Strategy.on_finish(ctx)
+run_backtest(candles, strategy, config, *, market)
 decimal_to_f64(value, /)
 decimal_from_f64(value, /)
 ```
@@ -168,7 +180,8 @@ A type of one part takes it by position. A record takes its fields by
 name, so that no price is taken for another, and every field is required
 but the three that may be unknown. `Strategy` takes whatever the class
 derived from it does, and a `TargetPosition` is not built at all: it is
-one of two constants.
+one of two constants. `run_backtest` takes what a run is made of by
+position, and the market the candles are of by name alone.
 
 ## Market identity
 
@@ -222,8 +235,9 @@ ValueError: invalid exchange "binance": expected one of binance_spot, binance_li
 
 **A market of any product line can be named,** since it is the key that
 line's candles are stored under. That says nothing of what runs on it: a
-candle strategy is a Spot strategy, and the story that binds the backtest
-entry point refuses a linear or an inverse market there.
+candle strategy is a Spot strategy, and
+[`run_backtest`](#running-a-backtest) refuses a linear or an inverse
+market.
 
 Every interval, family and product line is a constant of its class, as
 is each [target a strategy asks for](#strategies), and `ALL` is a tuple of
@@ -291,8 +305,9 @@ their order. NumPy arrays of its columns are bound by a later story.
 ## Backtests
 
 These four are the candle strategy's backtest on Spot, as the engine has
-it. The function that runs one is bound by a later story; until then a
-result is built by hand, as the tests do.
+it: what [`run_backtest`](#running-a-backtest) is given and what it gives.
+Each is built by hand as well, as the code around a backtest builds one in
+its tests.
 
 **A `BacktestConfig` is refused where the engine would refuse to run
 it,** when it is built and in the engine's words: `initial_cash` must be
@@ -395,10 +410,9 @@ TargetPosition.FLAT
 ```
 
 The callbacks are called here by hand, with a context built by hand, as a
-test of a strategy calls them. **The function that runs a strategy in the
-engine is bound by the story that follows.** Until then the engine is
-reached by the package's own tests alone, which hold every rule of this
-section to it.
+test of a strategy calls them. The engine calls them in
+[`run_backtest`](#running-a-backtest), and the package's tests hold every
+rule of this section to it there.
 
 **The class is the strategy's own.** It takes whatever arguments its
 `__init__` does, which is how a [strategy bundle's](bundle-spec.md#params)
@@ -491,6 +505,169 @@ The package's tests hold a strategy written in Python to the cases the
 engine's own tests write from one written in Rust,
 `tests/fixtures/strategy_cases.json`: every callback in order, with the
 state it was handed digit for digit, and the result.
+
+## Running a backtest
+
+**`run_backtest` runs a strategy over candles in the engine, and gives the
+result.** The run is the engine's own, `BacktestEngine::run`, which the
+`quantforge backtest` command runs too: nothing of it is computed in
+Python but what the strategy's callbacks compute.
+
+```python
+>>> def minute(index, open, close):
+...     return qf.Candle(
+...         open_time_ms=index * 60_000,
+...         close_time_ms=index * 60_000 + 59_999,
+...         open=open,
+...         high=max(open, close),
+...         low=min(open, close),
+...         close=close,
+...         volume=1,
+...     )
+...
+>>> candles = [minute(0, 100, 100), minute(1, 100, 110), minute(2, 110, 120), minute(3, 125, 125)]
+>>> config = qf.BacktestConfig(initial_cash=1000, fee_bps=0, close_out_at_end=True)
+>>> result = qf.run_backtest(candles, EnterThenExit(), config, market=market)
+>>> result
+BacktestResult(initial_cash=Decimal('1000'), final_equity=Decimal('1250'), total_return_pct=Decimal('25.00'), trade_count=1, max_drawdown_pct=Decimal('0'), trades=<1 trade>, equity_curve=<4 points>)
+>>> result.trades[0].entry_price, result.trades[0].exit_price
+(Decimal('100'), Decimal('125'))
+>>> [point.equity for point in result.equity_curve]
+[Decimal('1000'), Decimal('1100'), Decimal('1200'), Decimal('1250')]
+```
+
+The strategy went long on the first bar, which filled at the second bar's
+open, 100, and flat on the third, which filled at the fourth's, 125.
+
+<!-- begin: run arguments -->
+| Argument | Given | Takes | What it is |
+| --- | --- | --- | --- |
+| `candles` | By position or by name | A `CandleBatch`, or anything that iterates `Candle`s | The bars of the run, replayed in the order given |
+| `strategy` | By position or by name | An object of a class derived from `Strategy` | What decides, called as [Strategies](#strategies) says |
+| `config` | By position or by name | A `BacktestConfig` | The cash the run starts with, the fee on every fill, and whether a position left open is closed out |
+| `market` | By name alone | A `MarketId` of a Spot product line | The market the candles are of: every callback is handed it, and every trade takes its symbol from it |
+<!-- end: run arguments -->
+
+**The market is named, and never assumed.** A batch of candles holds no
+market, so nothing is read from the candles, and a run without `market=`
+is a `TypeError`. It is a `MarketId`, which names its product line and
+with it its family: `binance_spot`, never a venue's name alone.
+
+**A candle strategy runs on Spot,** and the engine refuses any other
+market before a callback is called:
+
+```python
+>>> qf.run_backtest(candles, EnterThenExit(), config, market=qf.MarketId("bybit_linear", "BTCUSDT", "1m"))
+Traceback (most recent call last):
+    ...
+ValueError: candle strategies run on spot markets only, and bybit_linear trades linear futures
+```
+
+**There is no futures backtest.** The run fills, charges and marks by
+Spot's rules: one position, long or flat, bought with all the cash. A
+linear or an inverse series run by them would be a result that means
+nothing, with no contract, no margin and no funding in it, so it is
+refused and never run. Execution on futures is the engine's own, on
+external signals, and is not reached from Python
+([what is not bound](#what-is-not-bound)).
+
+**The execution model is the engine's,** and
+[`src/engine/backtest.rs`](../src/engine/backtest.rs) states it in full:
+
+- **A decision is made at a bar's close.** `on_bar` is called once for
+  every candle, in the order given, with the complete bar.
+- **It is filled at the next bar's open,** a price the strategy had not
+  seen when it decided: there is no look-ahead. A decision on the last bar
+  never fills.
+- **One position, long or flat.** `TargetPosition.LONG_ALL_IN` spends all
+  the cash, and `TargetPosition.FLAT` sells all that is held. There is no
+  shorting, leverage, partial size or slippage, and no exchange rule such
+  as a step size or a minimum notional.
+- **Every fill pays the config's fee,** `fee_bps` basis points of its
+  notional, in the quote currency.
+- **A position still open after the last bar** is sold at that bar's
+  close, fee included, where `close_out_at_end` is `True`, and is only
+  valued at that close otherwise.
+- **Equity is marked at every bar's close,** after the bar's fill: the
+  curve has one point for every bar.
+
+**The candles are replayed as they are given.** Nothing checks their
+order, their spacing or their prices: a bar out of place is handed over
+out of place, and the bar after it is the one a decision fills at. What
+iterates once, such as a generator, is read to its end before the run
+starts, and what reading it raises is raised as it is.
+
+**The result is the engine's `BacktestResult`, field for field.** It has
+the fields of the engine's own type, by the same names in the same order,
+and each means what it means there ([Fields](#fields)); so have the
+`ClosedTrade`s and the `EquityPoint`s it holds. Nothing is renamed, left
+out, or worked out again in Python.
+
+**The same run gives the same result,** on every run and on every
+machine, digit for digit: a run is a function of its candles, its config
+and its strategy, and the engine reads no clock, draws no random number
+and does no I/O. That holds for a strategy that starts each run in the
+same state and itself
+[decides from its bars and its own state](#strategies), with no clock and
+no randomness, in what it is built with as in what it decides. The engine
+keeps nothing between two runs, but a strategy keeps its state: each run
+is given a strategy built for it, the same way each time.
+
+**A run that is not made, or does not end, raises:**
+
+<!-- begin: run failures -->
+| What | Raised | When |
+| --- | --- | --- |
+| An argument of a type it does not take | `TypeError` | Before any callback, each argument in the order written |
+| A market that is not Spot | `ValueError` | Before any callback, in the engine's words |
+| No candles | `ValueError` | Before any callback, in the engine's words |
+| An amount beyond the engine's decimal | `OverflowError` | In the run, at the fill or the mark that could not be computed, or after the last callback, where the result's figures are worked out |
+| A callback that raises | The callback's own exception | In the run, at that callback |
+| A callback that returns what it may not | `TypeError` | In the run, at that callback |
+<!-- end: run failures -->
+
+The candles are read first, to their end, and then the other arguments
+are held to their types. Once all four are of their types, the engine
+looks at the market before it looks at the candles.
+
+**An amount is beyond the engine's decimal when its whole part is.** The
+largest decimal is 79228162514264337593543950335, of 29 digits, and at a
+price of `1E-28`, 1000 buys a quantity of 32. Decimal places that do not
+fit are no error: the engine rounds a quantity or a fee to the digits a
+decimal holds, the same way on every run.
+
+<!-- begin: run refusals -->
+| Run | Raises |
+| --- | --- |
+| `qf.run_backtest(5, strategy, config, market=market)` | `TypeError: candles must be a CandleBatch or an iterable of Candle, not int` |
+| `qf.run_backtest("candles.csv", strategy, config, market=market)` | `TypeError: candles must be a CandleBatch or an iterable of Candle, not str` |
+| `qf.run_backtest([candle, 100], strategy, config, market=market)` | `TypeError: candles[1] must be a Candle, not int` |
+| `qf.run_backtest(candles, EnterThenExit, config, market=market)` | `TypeError: strategy must be a Strategy, not the class EnterThenExit: build one from it` |
+| `qf.run_backtest(candles, strategy, {"initial_cash": 1000}, market=market)` | `TypeError: config must be a BacktestConfig, not dict` |
+| `qf.run_backtest(candles, strategy, config, market="binance_spot")` | `TypeError: market must be a MarketId, not str` |
+| `qf.run_backtest(candles, strategy, config, market=qf.MarketId("binance_inverse", "BTCUSD", "1m"))` | `ValueError: candle strategies run on spot markets only, and binance_inverse trades inverse futures` |
+| `qf.run_backtest([], strategy, config, market=market)` | `ValueError: no candles provided` |
+| `qf.run_backtest([minute(0, 1, 1), minute(1, Decimal("1E-28"), 1)], EnterThenExit(), config, market=market)` | `OverflowError: decimal overflow computing the entry` |
+<!-- end: run refusals -->
+
+`candle`, `candles`, `strategy`, `config` and `market` are those of the
+examples above.
+
+**A callback that fails ends the run with its own exception,** as
+[Strategies](#strategies) says: the object it raised, with its traceback
+and one note that says where the strategy failed. A callback that returns
+what it may not has failed too, with the `TypeError` that names what it
+returned.
+
+**The run is on the thread that asked for it.** The callbacks run where
+the caller is, one after another, and the call returns when the run is
+over. `KeyboardInterrupt` interrupts it at the next callback, as it
+interrupts any Python code.
+
+The package's tests run a strategy that decides from its bars over four
+hours of fixture candles, and hold it to the engine's run of the same rule
+written in Rust: the decision on every bar, every callback, and the
+result, digit for digit (`quantforge-py/tests/test_end_to_end.py`).
 
 ## Decimal and float
 
@@ -652,6 +829,7 @@ One refusal of each kind, as it is written and as it is refused:
 | `qf.CandleBatch.from_columns(open_time_ms=[0, 1], close_time_ms=[1, 2], open=[1, 2], high=[1, 2], low=[1], close=[1, 2], volume=[1, 2], trades=[None, 3])` | ``ValueError: candle column `low` has 1 rows, expected 2`` |
 | `qf.CandleBatch.from_columns(open_time_ms=[0, 1], close_time_ms=[1, 2], open=[1, 2.5], high=[1, 2], low=[1, 2], close=[1, 2], volume=[1, 2], trades=[None, 3])` | `TypeError: open[1] must be a decimal.Decimal or an int, not float: a float is never read as a decimal; convert it with decimal_from_f64` |
 | `qf.CandleBatch.from_candles([1])` | `TypeError: candles[0] must be a Candle, not int` |
+| `qf.CandleBatch.from_candles("BTCUSDT")` | `TypeError: candles must be an iterable of Candle, not str` |
 | `qf.BacktestConfig(initial_cash=0, fee_bps=10, close_out_at_end=True)` | `ValueError: invalid configuration: initial_cash must be greater than 0, got 0` |
 | `qf.BacktestConfig(initial_cash=1, fee_bps=-1, close_out_at_end=True)` | `ValueError: invalid configuration: fee_bps must be zero or greater, got -1` |
 | `qf.BacktestConfig(initial_cash=1, fee_bps=0, close_out_at_end=1)` | `TypeError: close_out_at_end must be a bool, not int` |
@@ -710,9 +888,8 @@ change these two.
 **No credential crosses.** These are values: none holds an exchange key, a
 database password or a connection, and building one opens nothing.
 
-Two more parts of the engine belong to the stories that follow:
+One more part of the engine belongs to a story that follows:
 
 | What | Story |
 | --- | --- |
-| `run_backtest`, the function that runs a strategy, and its refusal of a market that is not Spot | QUA-470 |
 | NumPy arrays of a batch's columns, and a batch's market kept with it | QUA-475 |

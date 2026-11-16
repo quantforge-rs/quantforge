@@ -87,6 +87,18 @@ def test_the_readme_shows_only_names_the_package_publishes_and_its_example_runs(
     names = {}
     for example in examples:
         exec(compile(example, readme.name, "exec"), names)
+    # The run it shows brings what it says beside it.
+    result = names["result"]
+    assert type(result) is quantforge_py.BacktestResult
+    shown = dict(re.findall(r"^result\.([\w.\[\]]+) +# (Decimal\('[\d.]+'\))", readme.text, re.M))
+    assert set(shown) == {
+        "final_equity",
+        "total_return_pct",
+        "trades[0].entry_price",
+        "trades[0].exit_price",
+    }
+    for field, value in shown.items():
+        assert repr(eval(f"result.{field}", {"result": result})) == value, field
 
 
 def test_the_crate_and_the_distribution_are_described_alike(crate, pyproject):

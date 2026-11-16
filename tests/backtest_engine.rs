@@ -1,5 +1,5 @@
 //! Black-box tests for `BacktestEngine`, driven through the crate's public
-//! API the way the Python bindings will drive it. Moved out of
+//! API the way the Python bindings drive it. Moved out of
 //! `src/engine/backtest.rs`, together with one test per guarantee its module
 //! docs state: fill timing, the fee model, close-out, equity marking, the
 //! strategy lifecycle, determinism, and the errors.
@@ -706,4 +706,117 @@ fn no_candles_is_an_error() {
         .expect_err("no candles");
     assert!(matches!(error, EngineError::NoCandles), "got {error:?}");
     assert!(strategy.seen.is_empty(), "no callback ran");
+}
+
+/// The market of `exchange` the tests' candles could be of.
+fn market_of(exchange: ExchangeId) -> MarketId {
+    MarketId::new(
+        exchange,
+        Symbol::new("BTCUSDT").expect("symbol"),
+        Interval::M1,
+    )
+}
+
+#[test]
+fn a_market_that_is_not_spot_is_refused_before_the_strategy_is_called() {
+    let candles = vec![ohlc_candle(0, "100", "100"), ohlc_candle(1, "100", "110")];
+    let futures: Vec<ExchangeId> = ExchangeId::all()
+        .filter(|exchange| exchange.category().is_futures())
+        .collect();
+    assert!(futures.len() >= 4, "linear and inverse lines of two venues");
+    for exchange in futures {
+        let mut strategy = Recorder::deciding(vec![Some(TargetPosition::LongAllIn)]);
+        let error = engine("1000", "0", true)
+            .run(&market_of(exchange), &candles, &mut strategy)
+            .expect_err("not spot");
+        assert!(
+            matches!(error, EngineError::NotSpot { exchange: refused } if refused == exchange),
+            "got {error:?}"
+        );
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "candle strategies run on spot markets only, and {exchange} trades {} futures",
+                exchange.category()
+            )
+        );
+        assert!(strategy.seen.is_empty(), "no callback ran on {exchange}");
+    }
+    // The words written out, for a line of each family.
+    let said = |exchange| EngineError::NotSpot { exchange }.to_string();
+    assert_eq!(
+        said(ExchangeId::BybitLinear),
+        "candle strategies run on spot markets only, and bybit_linear trades linear futures"
+    );
+    assert_eq!(
+        said(ExchangeId::BinanceInverse),
+        "candle strategies run on spot markets only, and binance_inverse trades inverse futures"
+    );
+}
+
+#[test]
+fn every_spot_product_line_runs_and_names_its_market() {
+    let candles = vec![
+        ohlc_candle(0, "100", "100"),
+        ohlc_candle(1, "100", "110"),
+        ohlc_candle(2, "110", "110"),
+    ];
+    let spot: Vec<ExchangeId> = ExchangeId::all()
+        .filter(|exchange| !exchange.category().is_futures())
+        .collect();
+    assert!(spot.len() >= 2, "the spot line of two venues");
+    let mut results = Vec::new();
+    for exchange in spot {
+        let market = market_of(exchange);
+        let mut strategy = Recorder::deciding(vec![Some(TargetPosition::LongAllIn)]);
+        let result = engine("1000", "0", true)
+            .run(&market, &candles, &mut strategy)
+            .expect("backtest");
+        assert_eq!(result.trade_count, 1, "{exchange}");
+        assert_eq!(result.trades[0].symbol, market.symbol);
+        assert_eq!(strategy.labels().len(), 5, "{exchange}");
+        results.push(result);
+    }
+    // Nothing of a run depends on which Spot line its market is of.
+    assert!(results.windows(2).all(|pair| pair[0] == pair[1]));
+}
+
+// What a run refuses before the strategy is called, in the order the module
+// docs give: the market, then the candles, then the config.
+#[test]
+fn a_run_refuses_its_market_before_its_candles_and_its_candles_before_its_config() {
+    let futures = ExchangeId::all()
+        .find(|exchange| exchange.category().is_futures())
+        .expect("a futures line");
+    let bad = BacktestEngine::new(BacktestConfig {
+        initial_cash: Decimal::ZERO,
+        fee_bps: Decimal::from(-1),
+        close_out_at_end: true,
+    });
+    let candles = vec![ohlc_candle(0, "100", "100")];
+    let refused = |market: &MarketId, candles: &[Candle]| {
+        let mut strategy = Recorder::default();
+        let error = bad
+            .run(market, candles, &mut strategy)
+            .expect_err("refused");
+        assert!(strategy.seen.is_empty(), "no callback ran");
+        error
+    };
+
+    let error = refused(&market_of(futures), &[]);
+    assert!(
+        matches!(error, EngineError::NotSpot { .. }),
+        "got {error:?}"
+    );
+    let error = refused(&market(), &[]);
+    assert!(matches!(error, EngineError::NoCandles), "got {error:?}");
+    let error = refused(&market(), &candles);
+    assert!(
+        matches!(error, EngineError::InvalidConfig(_)),
+        "got {error:?}"
+    );
+    assert_eq!(
+        error.to_string(),
+        "invalid configuration: initial_cash must be greater than 0, got 0"
+    );
 }

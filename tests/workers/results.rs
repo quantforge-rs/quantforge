@@ -119,4 +119,20 @@ fn a_backtest_that_cannot_run_fails_its_job_as_the_requests_fault() {
         message.starts_with("the strategy cannot be built: "),
         "{message}"
     );
+
+    // A futures series: a candle strategy runs on Spot only, and the engine
+    // refuses the job's market before the strategy is called.
+    for category in ["linear", "inverse"] {
+        let mut job = input(r#"workload = "backtest""#, candles(10));
+        job.submission.data.category = Some(category.to_string());
+        let line = format!("{}_{category}", job.submission.data.exchange);
+        let (code, message) = failure(&pool.run(job));
+        assert_eq!(code, ErrorCode::InvalidRequest, "{category}");
+        assert_eq!(
+            message,
+            format!(
+                "candle strategies run on spot markets only, and {line} trades {category} futures"
+            )
+        );
+    }
 }

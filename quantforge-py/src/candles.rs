@@ -4,8 +4,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 
 use crate::convert::{
-    column, decimal, decimal_object, decimal_tuple, each, integer, optional_integer, refused,
-    repr_of,
+    column, decimal, decimal_object, decimal_tuple, each, each_in, integer, optional_integer,
+    refused, repr_of,
 };
 
 /// One candle: a bar's times, its prices, its volume and its trade count.
@@ -251,4 +251,19 @@ impl CandleBatch {
             count => format!("CandleBatch(<{count} candles>)"),
         }
     }
+}
+
+/// The candles a run is given, in order: a `CandleBatch`'s own, or those of
+/// anything that iterates `Candle`s, read to its end.
+pub(crate) fn taken(candles: &Bound<'_, PyAny>) -> PyResult<Vec<quantforge::Candle>> {
+    if let Ok(batch) = candles.cast::<CandleBatch>() {
+        return Ok(batch.get().0.to_candles());
+    }
+    each_in(
+        candles,
+        "candles",
+        "a CandleBatch or an iterable of Candle",
+        "a Candle",
+        |candle: &Candle| candle.0.clone(),
+    )
 }

@@ -13,8 +13,9 @@ QUA-37 (ALG-734 in the previous workspace) the storage, the wire's
 profile's policy and its store, QUA-35 (ALG-736) the sizing of an entry
 from it, and QUA-207 (ALG-737) the payload of an alert and what its signal
 resolves to. QUA-469 (ALG-377) bound to Python what the tables below say
-reaches it, and QUA-464 (ALG-378) the candle strategy itself. The rest
-lands with the stories named below.
+reaches it, QUA-464 (ALG-378) the candle strategy itself, and QUA-470
+(ALG-379) the function that runs one, with the backtest's refusal of a
+series that is not Spot. The rest lands with the stories named below.
 
 ## Changed in Rust by ALG-733
 
@@ -80,7 +81,7 @@ package has it ([python-types.md](python-types.md)):
 | What | In Python |
 | --- | --- |
 | `ExchangeId` with every product line | `ExchangeId`, read from a line's storage name such as `bybit_linear`. A venue's name alone is refused: nothing takes it for the venue's Spot line |
-| `Category`, and `MarketId::category()` | `Category`, and `MarketId.category`, which is its product line's. A market of any line can be named, as the key its candles are stored under; the backtest entry point is what refuses one that is not Spot (QUA-470) |
+| `Category`, and `MarketId::category()` | `Category`, and `MarketId.category`, which is its product line's. A market of any line can be named, as the key its candles are stored under; `run_backtest` is what refuses one that is not Spot ([below](#bound-to-python-by-qua-470)) |
 | Spot's venue order IDs as text | `ClosedTrade.entry_order_id` and `ClosedTrade.exit_order_id`: a `str`, or `None` where no order reached a venue |
 
 `Venue` is not bound: a product line's name begins with its venue's, and
@@ -119,11 +120,40 @@ engine's runs of a strategy written in Rust (`tests/strategy_cases.rs`),
 and the package's tests hold one written in Python to it, call for call
 and digit for digit.
 
+## Bound to Python by QUA-470
+
+The candle strategy's backtest, as the Python package runs it
+([python-types.md](python-types.md#running-a-backtest)):
+
+| What | In Python |
+| --- | --- |
+| `BacktestEngine::run`, with the market, the candles and the strategy of a run, under a `BacktestConfig` | `run_backtest(candles, strategy, config, *, market)`: the engine's own run, on the thread that called. `candles` is a `CandleBatch` or anything that iterates `Candle`s |
+| The market of a run, a `MarketId` | `market`, given by name alone and never assumed: it names its product line, and so its family |
+| `BacktestResult`, with its `ClosedTrade`s and `EquityPoint`s | The result of a run, with the engine's fields under the engine's names, each meaning what it means in Rust |
+| `EngineError` | A `ValueError` in the engine's words for what it refuses before the strategy is called, a market that is not Spot or no candles; an `OverflowError` for an amount beyond its decimal; and, for a `StrategyError`, the exception the callback raised |
+
+A linear or an inverse series is refused by the engine itself, so no host
+of a backtest runs one by Spot's rules. For it, the crate gained:
+
+| Change | Where |
+| --- | --- |
+| `BacktestEngine::run` refuses a market that is not Spot, before it looks at the candles or the config and before the strategy is called | `quantforge::EngineError::NotSpot` |
+
+Nothing else of the candle-strategy contract changed, and no futures type
+crossed: the release adds no futures backtest, and execution on futures
+stays the engine's own, on external signals.
+
+`tests/fixtures/strategy_cases.json` gained a case a rule decides, where
+every other lists its decisions: the crate's tests run the rule written in
+Rust over four hours of generated candles, and the package's tests hold
+the same rule written in Python to it through `run_backtest`, decision for
+decision and digit for digit.
+
 ## Changing next
 
 | Change | Story | Consumers |
 | --- | --- | --- |
-| Candle strategies refuse a linear or inverse series | QUA-37's successors: ALG-532, ALG-379, ALG-509 | Backtests, `trade run`, Python, remote jobs |
+| `trade run` refuses a linear or inverse series, and a remote job on one is refused when it is submitted. A submission for one is still taken today; the engine's refusal waits for it in the job's worker, once workers run backtests | QUA-37's successors: ALG-532, ALG-509 | `trade run`, remote jobs |
 | `SignalInbox`, the server's only view of the executor | ALG-743 | The webhook route |
 | `Notifier`, which delivers from the outbox | ALG-749 | ALG-751 |
 

@@ -1,12 +1,12 @@
 """What becomes of a callback that raises, or that returns what it may not,
 and what the adapter refuses before a run starts.
 
-A run that Python hosts raises the callback's own exception: the object the
-callback raised, its traceback as it was, and one note that says where the
-strategy failed. A host that is not Python has the engine's error, a
-`StrategyError`, whose text is that line and then the exception as Python
-itself writes it, traceback included; the bench's `embedded` runs raise that
-text as a `RuntimeError`."""
+A run that Python hosts, which is `run_backtest`, raises the callback's own
+exception: the object the callback raised, its traceback as it was, and one
+note that says where the strategy failed. A host that is not Python has the
+engine's error, a `StrategyError`, whose text is that line and then the
+exception as Python itself writes it, traceback included; the bench's
+`embedded` runs raise that text as a `RuntimeError`."""
 
 import gc
 import traceback
@@ -112,8 +112,10 @@ def test_a_callback_that_raises_ends_the_run_with_its_own_exception(where, bench
     config = qf.BacktestConfig(initial_cash=1000, fee_bps=0, close_out_at_end=True)
     raised = ZeroDivisionError("division by zero")
     strategy = Raises(raised, where)
+    # Called as a user calls it, so that nothing of the tests' own lies
+    # between this frame and the callback's.
     with pytest.raises(ZeroDivisionError) as caught:
-        bench(market, candles, strategy, config)
+        qf.run_backtest(candles, strategy, config, market=market)
     # The object the callback raised, and nothing wrapped around it.
     assert caught.value is raised
     assert caught.value.__cause__ is None and caught.value.__context__ is None
