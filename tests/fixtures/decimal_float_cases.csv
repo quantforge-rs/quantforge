@@ -26,6 +26,15 @@ from_f64,3e7ad7f29abcaf48,0.0000001,no exponent notation
 from_f64,444b1ae4d6e2ef50,1000000000000000000000,large integer
 from_f64,4340000000000000,9007199254740992,2^53
 from_f64,3a1fb0f6be506019,0.0000000000000000000000000001,smallest positive decimal
+from_f64,430674be6f1865b2,790101343014070.2,halfway between two shortest forms; the even last digit is the smaller
+from_f64,430674be6f1865b6,790101343014070.8,halfway between two shortest forms; the even last digit is the larger
+from_f64,c300000000000002,-562949953421312.2,negative; halfway between two shortest forms
+from_f64,42d3f8e6ca9b5f48,87838979419517.12,halfway at two decimal places
+from_f64,41622dc036880000,9530881.704101562,halfway at nine decimal places
+from_f64,40f440df0b000000,82957.94018554688,a price-sized float halfway; the even last digit is the larger
+from_f64,403ae4c500000000,26.893630981445312,halfway at fifteen decimal places
+from_f64,3f95828000000000,0.021005630493164062,below one; halfway between two shortest forms
+from_f64,3e70000000000000,0.00000005960464477539063,a power of two; halfway but only the odd last digit reads back
 from_f64,39e95a5efea6b347,error:more than 28 decimal places,too small for 28 decimal places
 from_f64,0000000000000001,error:more than 28 decimal places,smallest subnormal
 from_f64,45efe86896aa2af2,79000000000000000000000000000,just inside the decimal maximum

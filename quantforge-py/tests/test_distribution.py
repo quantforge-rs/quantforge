@@ -5,6 +5,9 @@ import pathlib
 import re
 import sys
 
+from packaging.requirements import Requirement
+from packaging.specifiers import SpecifierSet
+
 import quantforge_py
 
 
@@ -71,6 +74,31 @@ def test_the_distribution_carries_the_repositorys_license(distribution, reposito
     assert distribution.metadata.get_all("License-File") == ["LICENSE"]
     text = (repository / "LICENSE").read_text(encoding="utf-8")
     assert distribution.read_text("licenses/LICENSE") == text
+
+
+def test_the_distribution_requires_nothing_and_offers_numpy_as_its_one_extra(
+    distribution, pyproject
+):
+    # Nothing is required of whoever installs the package as it is.
+    assert "dependencies" not in pyproject["project"]
+    assert pyproject["project"]["optional-dependencies"] == {"numpy": ["numpy>=2.0,<3"]}
+    assert distribution.metadata.get_all("Provides-Extra") == ["numpy"]
+    # NumPy is all the installed distribution names, and it asks for it only
+    # with the extra: `pip install quantforge-py` brings the package alone.
+    (required,) = map(Requirement, distribution.metadata.get_all("Requires-Dist"))
+    assert (required.name, required.specifier) == ("numpy", SpecifierSet(">=2.0,<3"))
+    assert required.marker is not None
+    assert required.marker.evaluate({"extra": "numpy"})
+    assert not required.marker.evaluate({"extra": ""})
+
+
+def test_the_run_has_a_numpy_exactly_where_it_was_not_said_to_have_none(without_numpy):
+    # The run is told when the package was installed without its extra, and
+    # is stopped before any test where that is not so (`conftest.py`): the
+    # tests of the arrays are skipped without NumPy, and would be missed.
+    import importlib.util
+
+    assert (importlib.util.find_spec("numpy") is None) == without_numpy
 
 
 def test_the_distribution_brings_the_package_and_nothing_beside_it(distribution, editable):

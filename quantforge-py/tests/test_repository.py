@@ -6,6 +6,8 @@ and `<!-- end: name -->` markers."""
 import re
 import subprocess
 
+import pytest
+
 import quantforge_py
 from quantforge_py import _native
 
@@ -75,18 +77,74 @@ def test_the_page_maps_every_file_of_the_package(page, repository):
     assert set(documented_files(page)) == files_of_the_package(repository)
 
 
-def test_the_readme_shows_only_names_the_package_publishes_and_its_example_runs(page):
+def test_the_page_states_the_extra_the_distribution_offers(page, quoted, pyproject):
+    project = pyproject["project"]
+    # The package requires nothing, and NumPy is its one extra.
+    assert "dependencies" not in project
+    rows = [[quoted(cell) for cell in row] for row in page(PAGE).rows("extras")]
+    assert rows == [
+        [extra, *required, f'pip install "{project["name"]}[{extra}]"']
+        for extra, required in project["optional-dependencies"].items()
+    ]
+    assert rows == [["numpy", "numpy>=2.0,<3", 'pip install "quantforge-py[numpy]"']]
+
+
+def test_ci_names_the_oldest_python_first_where_the_oldest_numpy_is_tested(repository, pyproject):
+    # The check script tests the oldest NumPy on the first Python it is
+    # given, if that is the oldest the package supports: the oldest NumPy has
+    # a wheel for it, and none for the newest Python. CI is where that has
+    # to hold.
+    workflow = (repository / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    (named,) = re.findall(r"^\s+run: \./scripts/python-package-check\.sh (.+)$", workflow, re.M)
+    interpreters = named.split()
+    oldest = pyproject["project"]["requires-python"].removeprefix(">=")
+    assert interpreters[0] == f"python{oldest}"
+    assert len(interpreters) >= 2, "the oldest Python and the newest"
+    script = (repository / "scripts" / "python-package-check.sh").read_text(encoding="utf-8")
+    assert 'if [[ $first_python == "$oldest_python" ]]; then' in script
+    assert 'tested "$1" "$work/wheel" oldest-numpy' in script
+
+
+def test_the_check_script_tests_the_package_without_its_extra(repository, pyproject):
+    # One run installs the wheel alone, and is told that it has no NumPy.
+    # Every other run installs it with the extras pyproject.toml names, as
+    # the in-place install does.
+    script = (repository / "scripts" / "python-package-check.sh").read_text(encoding="utf-8")
+    assert 'tested "$1" "$work/wheel" without-numpy' in script
+    assert "QUANTFORGE_PY_TEST_WITHOUT_NUMPY=1" in script
+    assert 'maturin develop --extras "$extras"' in script
+    assert list(pyproject["project"]["optional-dependencies"]) == ["numpy"]
+
+
+def test_the_readme_shows_only_names_the_package_publishes_and_its_example_runs(
+    page, pyproject, without_numpy
+):
     readme = page("quantforge-py/README.md")
     shown = re.findall(r"\bqf\.(\w+)", readme.text)
     assert shown, "the readme shows the package at work"
     assert set(shown) <= set(quantforge_py.__all__)
     # What PyPI shows is what a reader copies: every example runs as it is
-    # written, one after another.
-    examples = readme.fences("python")
-    assert examples
+    # written, one after another. The last one is of the arrays, and the
+    # only one that needs NumPy.
+    *examples, of_the_arrays = readme.fences("python")
+    assert examples and "to_numpy" in of_the_arrays
+    assert not any("numpy" in example for example in examples)
     names = {}
     for example in examples:
         exec(compile(example, readme.name, "exec"), names)
+    # The readme says how the package is installed with its extra, as
+    # pyproject.toml names both.
+    install = f'pip install "{pyproject["project"]["name"]}[numpy]"'
+    assert f"`{install}`" in readme.text
+    if without_numpy:
+        # Installed without the extra, the example of the arrays says what
+        # to install, at its first conversion.
+        with pytest.raises(ModuleNotFoundError) as caught:
+            exec(compile(of_the_arrays, readme.name, "exec"), names)
+        assert str(caught.value).endswith(f": {install}")
+        assert "arrays" not in names and "batch" in names
+    else:
+        exec(compile(of_the_arrays, readme.name, "exec"), names)
     # The run it shows brings what it says beside it.
     result = names["result"]
     assert type(result) is quantforge_py.BacktestResult
@@ -99,6 +157,22 @@ def test_the_readme_shows_only_names_the_package_publishes_and_its_example_runs(
     }
     for field, value in shown.items():
         assert repr(eval(f"result.{field}", {"result": result})) == value, field
+    if without_numpy:
+        return
+    # And the arrays it shows are what it says beside them.
+    arrays, batch = names["arrays"], names["batch"]
+    assert f'arrays["close"]             # float64: {arrays["close"]!r}' in readme.text
+    assert [str(arrays[column].dtype) for column in ("close", "open_time_ms", "trades")] == [
+        "float64",
+        "int64",
+        "uint64",
+    ]
+    assert arrays["trades"].mask.all(), "no candle of the example has a trade count"
+    assert names["again"] == batch and names["again"].market == batch.market
+    assert (
+        quantforge_py.run_backtest(names["again"], names["EnterThenExit"](), names["config"])
+        == result
+    )
 
 
 def test_the_crate_and_the_distribution_are_described_alike(crate, pyproject):

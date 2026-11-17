@@ -21,13 +21,13 @@ use crate::run::Run;
 /// so every failure is a `RuntimeError` of that error's text: a callback's
 /// with its traceback, and a refusal in the engine's words.
 #[pyfunction]
-#[pyo3(name = "_embedded_backtest", signature = (candles, strategy, config, *, market))]
+#[pyo3(name = "_embedded_backtest", signature = (candles, strategy, config, *, market=None))]
 pub(crate) fn embedded_backtest(
     py: Python<'_>,
     candles: &Bound<'_, PyAny>,
     strategy: &Bound<'_, PyAny>,
     config: &Bound<'_, PyAny>,
-    market: &Bound<'_, PyAny>,
+    market: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<BacktestResult> {
     let Run {
         market,

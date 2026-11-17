@@ -3,7 +3,9 @@
 A candle holds what it is given: its times as integers, its prices and its
 volume as exact decimals, and a trade count that may be unknown. A batch
 splits candles into columns and gives them back without converting a
-value."""
+value, and names the market its candles are of, or none.
+
+A batch's columns as NumPy arrays are held in `test_numpy.py`."""
 
 from decimal import Decimal
 
@@ -291,6 +293,106 @@ def test_a_batchs_repr_counts_its_candles():
     assert repr(two) == "CandleBatch(<2 candles>)"
 
 
+def test_a_batch_names_the_market_its_candles_are_of_or_none():
+    candles = [minute(0, "100"), minute(1, "101")]
+    columns = {column: [getattr(made, column) for made in candles] for column in COLUMNS}
+    market = qf.MarketId("binance_spot", "BTCUSDT", "1m")
+    for build in [
+        lambda **named: qf.CandleBatch.from_candles(candles, **named),
+        lambda **named: qf.CandleBatch.from_columns(**columns, **named),
+    ]:
+        # None is named unless one is given, and `None` given is none named.
+        assert build().market is None
+        assert build(market=None).market is None
+        named = build(market=market)
+        assert type(named.market) is qf.MarketId
+        assert named.market == market
+        # A batch of any product line can be built: it says what candles
+        # are of, and nothing of what may run on them.
+        for exchange in qf.ExchangeId.ALL:
+            of_line = qf.MarketId(exchange, "BTCUSDT", "8h")
+            assert build(market=of_line).market == of_line
+            assert build(market=of_line).market.category == exchange.category
+        # The candles are the same with a market and without.
+        assert named.to_candles() == build().to_candles() == candles
+
+
+def test_a_batchs_market_is_a_market_id_given_by_name(refused):
+    candles = [minute(0, "100")]
+    columns = {column: [getattr(made, column) for made in candles] for column in COLUMNS}
+    for value, named in [
+        ("binance_spot", "str"),
+        (("binance_spot", "BTCUSDT", "1m"), "tuple"),
+        (qf.ExchangeId.BINANCE_SPOT, "ExchangeId"),
+        (qf.Symbol("BTCUSDT"), "Symbol"),
+        (qf.MarketId, "type"),
+        (False, "bool"),
+    ]:
+        message = f"market must be a MarketId or None, not {named}"
+        refused(TypeError, message, qf.CandleBatch.from_candles, candles, market=value)
+        refused(TypeError, message, qf.CandleBatch.from_columns, **columns, market=value)
+    market = qf.MarketId("binance_spot", "BTCUSDT", "1m")
+    with pytest.raises(TypeError, match="takes 1 positional arguments but 2 were given"):
+        qf.CandleBatch.from_candles(candles, market)
+    # The candles and the columns are read before the market is looked at.
+    message = "candles[0] must be a Candle, not int"
+    refused(TypeError, message, qf.CandleBatch.from_candles, [5], market="binance_spot")
+    message = "open[0] must be a decimal.Decimal or an int, not NoneType"
+    wrong = {**columns, "open": [None]}
+    refused(TypeError, message, qf.CandleBatch.from_columns, **wrong, market="binance_spot")
+    # A market that is not one is refused before the columns' lengths are
+    # compared: every argument is held to its type first.
+    short = {**columns, "close": []}
+    message = "market must be a MarketId or None, not str"
+    refused(TypeError, message, qf.CandleBatch.from_columns, **short, market="binance_spot")
+    message = "candle column `close` has 0 rows, expected 1"
+    refused(ValueError, message, qf.CandleBatch.from_columns, **short, market=market)
+
+
+def test_batches_of_the_same_candles_are_equal_only_where_they_name_the_same_market():
+    candles = [minute(0, "100.00"), minute(1, "101")]
+    spot = qf.MarketId("binance_spot", "BTCUSDT", "1m")
+    one = qf.CandleBatch.from_candles(candles, market=spot)
+    assert one == qf.CandleBatch.from_candles(candles, market=spot)
+    # An equal market built another way is the same market.
+    assert one == qf.CandleBatch.from_candles(
+        candles, market=qf.MarketId(qf.ExchangeId.BINANCE_SPOT, " btcusdt ", qf.Interval.M1)
+    )
+    # A batch that names none is equal to no batch that names one.
+    unnamed = qf.CandleBatch.from_candles(candles)
+    assert unnamed == qf.CandleBatch.from_candles(candles, market=None)
+    assert one != unnamed and unnamed != one
+    # Another product line, another symbol or another interval is another
+    # series, whatever the candles are.
+    for other in [
+        qf.MarketId("binance_linear", "BTCUSDT", "1m"),
+        qf.MarketId("binance_inverse", "BTCUSDT", "1m"),
+        qf.MarketId("bybit_spot", "BTCUSDT", "1m"),
+        qf.MarketId("binance_spot", "ETHUSDT", "1m"),
+        qf.MarketId("binance_spot", "BTCUSDT", "3m"),
+    ]:
+        assert one != qf.CandleBatch.from_candles(candles, market=other), other
+    # And the same market does not make other candles equal.
+    assert one != qf.CandleBatch.from_candles(candles[:1], market=spot)
+    with pytest.raises(TypeError, match="unhashable"):
+        hash(one)
+
+
+def test_a_batchs_repr_writes_the_market_it_names():
+    market = qf.MarketId("bybit_linear", "ETHUSDT", "8h")
+    written = "MarketId(ExchangeId('bybit_linear'), Symbol('ETHUSDT'), Interval('8h'))"
+    assert repr(market) == written
+    assert repr(qf.CandleBatch.from_candles([], market=market)) == (
+        f"CandleBatch(<0 candles>, market={written})"
+    )
+    one = qf.CandleBatch.from_candles([minute(0, "1")], market=market)
+    assert repr(one) == f"CandleBatch(<1 candle>, market={written})"
+    two = qf.CandleBatch.from_candles([minute(0, "1"), minute(1, "1")], market=market)
+    assert repr(two) == f"CandleBatch(<2 candles>, market={written})"
+    # A batch that names none is written as before.
+    assert repr(qf.CandleBatch.from_candles([minute(0, "1")])) == "CandleBatch(<1 candle>)"
+
+
 def test_a_column_of_another_length_is_refused_in_the_engines_words(refused):
     full = {column: [FIELDS[column]] * 3 for column in COLUMNS}
     # Every column is held to the open times' length, and the first that
@@ -498,8 +600,13 @@ def test_a_batch_is_built_from_candles_or_columns_and_cannot_be_changed():
     for column in COLUMNS:
         with pytest.raises(AttributeError):
             setattr(batch, column, ())
+    # Nor is its market: a batch of another market is another batch, built
+    # with it.
     with pytest.raises(AttributeError):
-        batch.market = "binance_spot"
+        batch.market = qf.MarketId("binance_spot", "BTCUSDT", "1m")
+    assert batch.market is None
+    with pytest.raises(AttributeError):
+        batch.venue = "binance"
     # A column read is the reader's own: changing what it was built from
     # changes nothing in the batch.
     opens = [Decimal("1"), Decimal("2")]

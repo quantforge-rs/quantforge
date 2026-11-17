@@ -263,6 +263,38 @@ impl MarketId {
     }
 }
 
+impl MarketId {
+    /// The market an argument names: a `MarketId`, and nothing that stands
+    /// for one. `takes` is what a refusal says the argument takes.
+    pub(crate) fn taken(value: &Bound<'_, PyAny>, takes: &str) -> PyResult<quantforge::MarketId> {
+        match value.cast::<Self>() {
+            Ok(market) => Ok(market.get().0.clone()),
+            Err(_) => Err(wrong_type("market", takes, value)),
+        }
+    }
+
+    /// The market a batch is built with: the `MarketId` its candles are of,
+    /// or none where `market` is left out or is `None`.
+    pub(crate) fn of_a_batch(
+        market: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Option<quantforge::MarketId>> {
+        market
+            .map(|market| Self::taken(market, "a MarketId or None"))
+            .transpose()
+    }
+
+    /// A market as a message names it: its product line, its symbol and its
+    /// interval, such as `binance_spot BTCUSDT 1m`.
+    pub(crate) fn named(market: &quantforge::MarketId) -> String {
+        format!(
+            "{} {} {}",
+            market.exchange.as_str(),
+            market.symbol.as_str(),
+            market.interval.as_str()
+        )
+    }
+}
+
 /// Gives a class one constant for each of `values`, named by `name`, and
 /// `ALL`, a tuple of them in the order given.
 pub(crate) fn name_each<T: PyClass>(

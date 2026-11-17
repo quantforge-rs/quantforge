@@ -9,8 +9,9 @@ has the function that runs a backtest, `run_backtest`: the engine's own
 run of a strategy written in Python.
 
 This page is what each type takes and gives, and how a backtest is run.
-How the package is named, built and tested is
-[the Python package](python-package.md).
+A batch of candles as NumPy arrays has a page of its own,
+[candles as NumPy arrays](python-numpy.md), and how the package is named,
+built and tested is [the Python package](python-package.md).
 
 ```python
 >>> from decimal import Decimal
@@ -88,7 +89,9 @@ number it is.
   crosses by the number it holds, whatever its own `__format__` or
   `__str__` writes of it, and comes back a plain `Decimal`.
 - **A float is never read as a decimal.** It is a `TypeError` that names
-  [`decimal_from_f64`](#decimal-and-float), the one way across.
+  [`decimal_from_f64`](#decimal-and-float), the one way across for a value.
+  A batch's columns cross to float64 arrays and back as a whole, by the
+  same conversion ([python-numpy.md](python-numpy.md)).
 
 ```python
 >>> candle = qf.Candle(
@@ -158,9 +161,11 @@ Category(value, /)
 ExchangeId(value, /)
 MarketId(exchange, symbol, interval)
 Candle(*, open_time_ms, close_time_ms, open, high, low, close, volume, trades=None)
-CandleBatch.from_candles(candles, /)
-CandleBatch.from_columns(*, open_time_ms, close_time_ms, open, high, low, close, volume, trades)
+CandleBatch.from_candles(candles, /, *, market=None)
+CandleBatch.from_columns(*, open_time_ms, close_time_ms, open, high, low, close, volume, trades, market=None)
+CandleBatch.from_numpy(*, open_time_ms, close_time_ms, open, high, low, close, volume, trades, market=None)
 CandleBatch.to_candles()
+CandleBatch.to_numpy()
 BacktestConfig(*, initial_cash, fee_bps, close_out_at_end)
 ClosedTrade(*, symbol, entry_time_ms, exit_time_ms, entry_price, exit_price, qty, gross_quote_pnl, entry_order_id=None, exit_order_id=None)
 EquityPoint(*, open_time_ms, equity)
@@ -170,7 +175,7 @@ Strategy(*args, **kwargs)
 Strategy.on_start(ctx)
 Strategy.on_bar(ctx, bar)
 Strategy.on_finish(ctx)
-run_backtest(candles, strategy, config, *, market)
+run_backtest(candles, strategy, config, *, market=None)
 decimal_to_f64(value, /)
 decimal_from_f64(value, /)
 ```
@@ -178,10 +183,12 @@ decimal_from_f64(value, /)
 
 A type of one part takes it by position. A record takes its fields by
 name, so that no price is taken for another, and every field is required
-but the three that may be unknown. `Strategy` takes whatever the class
-derived from it does, and a `TargetPosition` is not built at all: it is
-one of two constants. `run_backtest` takes what a run is made of by
-position, and the market the candles are of by name alone.
+but the three that may be unknown. A batch takes the market its candles
+are of by name alone, and names none unless it is given one. `Strategy`
+takes whatever the class derived from it does, and a `TargetPosition` is
+not built at all: it is one of two constants. `run_backtest` takes what a
+run is made of by position, and the market the candles are of by name
+alone, which a batch that names its own stands in for.
 
 ## Market identity
 
@@ -272,8 +279,9 @@ duplicates and impossible prices is the engine's own separate pass, which
 is not bound yet.
 
 **A `CandleBatch` is candles held column by column,** the shape candles
-are exchanged in. It is built from candles or from eight columns, never
-directly, and converts no value either way:
+are exchanged in. It is built from candles, from eight columns or from
+eight NumPy arrays, and never directly. The first two convert no value,
+either way:
 
 ```python
 >>> batch = qf.CandleBatch.from_candles([candle, candle])
@@ -299,8 +307,42 @@ True
   it in a name, and do not read it in a loop.
 - **`len()`** is the number of candles, and an empty batch is false.
 
-A batch holds candles and nothing about them: no market, and no check of
-their order. NumPy arrays of its columns are bound by a later story.
+**A batch names the market its candles are of, or none.** Each way of
+building one takes `market=`, a `MarketId` given by name alone, and
+`market` gives it back: `None` where none was given.
+
+```python
+>>> named = qf.CandleBatch.from_candles([candle, candle], market=market)
+>>> named
+CandleBatch(<2 candles>, market=MarketId(ExchangeId('binance_spot'), Symbol('BTCUSDT'), Interval('1m')))
+>>> named.market == market
+True
+>>> batch.market is None
+True
+>>> named == batch
+False
+```
+
+- **The market is part of what a batch is.** Two batches of the same
+  candles are equal when they name the same market, or both none. The same
+  candles of `binance_spot` and of `binance_linear` are two batches, and
+  so are those of two intervals.
+- **A batch of any product line can be built,** as a market of any line
+  can be named. What runs on it is another matter:
+  [`run_backtest`](#running-a-backtest) runs a batch on the market it
+  names, and the engine refuses one that is not Spot.
+- **Nothing is checked against the market,** nor anything else about the
+  candles: a batch does not hold their times to its market's interval, and
+  does not check their order.
+
+**A batch's columns cross to NumPy arrays and back.** `to_numpy()` gives a
+dict of eight arrays, and `from_numpy` builds a batch from eight. It is the
+one place a batch's decimals become floats, and
+[candles as NumPy arrays](python-numpy.md) is its contract: what each array
+is, what crosses exactly, and what is refused. The two are all of the
+package that needs NumPy, which is its one extra:
+`pip install "quantforge-py[numpy]"`. Without it they raise an
+`ImportError` that says so, and everything else on this page works.
 
 ## Backtests
 
@@ -548,13 +590,34 @@ open, 100, and flat on the third, which filled at the fourth's, 125.
 | `candles` | By position or by name | A `CandleBatch`, or anything that iterates `Candle`s | The bars of the run, replayed in the order given |
 | `strategy` | By position or by name | An object of a class derived from `Strategy` | What decides, called as [Strategies](#strategies) says |
 | `config` | By position or by name | A `BacktestConfig` | The cash the run starts with, the fee on every fill, and whether a position left open is closed out |
-| `market` | By name alone | A `MarketId` of a Spot product line | The market the candles are of: every callback is handed it, and every trade takes its symbol from it |
+| `market` | By name alone | A `MarketId` of a Spot product line, or nothing where `candles` is a batch that names its market | The market the candles are of: every callback is handed it, and every trade takes its symbol from it |
 <!-- end: run arguments -->
 
-**The market is named, and never assumed.** A batch of candles holds no
-market, so nothing is read from the candles, and a run without `market=`
-is a `TypeError`. It is a `MarketId`, which names its product line and
-with it its family: `binance_spot`, never a venue's name alone.
+**The market is named, and never assumed.** It is a `MarketId`, which
+names its product line and with it its family: `binance_spot`, never a
+venue's name alone. It is named by `market=`, or by the candles where they
+are [a batch that names its market](#candles): such a batch is run on the
+market it names, and needs none beside it. Candles that name no market, a
+list of them or a batch built without one, are a `TypeError` without
+`market=`. Nothing is read from the candles themselves.
+
+```python
+>>> qf.run_backtest(qf.CandleBatch.from_candles(candles, market=market), EnterThenExit(), config) == result
+True
+```
+
+**A batch is never run on a market other than the one it names.** Where
+`market=` is given beside such a batch, the two are the same market:
+product line, symbol and interval. Another is refused before the engine is
+asked anything, so a linear series is never run as its Spot namesake, nor
+one symbol's candles as another's:
+
+```python
+>>> qf.run_backtest(named, EnterThenExit(), config, market=qf.MarketId("binance_linear", "BTCUSDT", "1m"))
+Traceback (most recent call last):
+    ...
+ValueError: the candles are of binance_spot BTCUSDT 1m, and market names binance_linear BTCUSDT 1m
+```
 
 **A candle strategy runs on Spot,** and the engine refuses any other
 market before a callback is called:
@@ -622,6 +685,8 @@ is given a strategy built for it, the same way each time.
 | What | Raised | When |
 | --- | --- | --- |
 | An argument of a type it does not take | `TypeError` | Before any callback, each argument in the order written |
+| No market named, by `market=` or by a batch | `TypeError` | Before any callback, once every argument is of its type |
+| A market other than the one a batch names | `ValueError` | Before any callback, and before the engine is asked anything |
 | A market that is not Spot | `ValueError` | Before any callback, in the engine's words |
 | No candles | `ValueError` | Before any callback, in the engine's words |
 | An amount beyond the engine's decimal | `OverflowError` | In the run, at the fill or the mark that could not be computed, or after the last callback, where the result's figures are worked out |
@@ -630,8 +695,9 @@ is given a strategy built for it, the same way each time.
 <!-- end: run failures -->
 
 The candles are read first, to their end, and then the other arguments
-are held to their types. Once all four are of their types, the engine
-looks at the market before it looks at the candles.
+are held to their types. Once all four are of their types, the market of
+the run is settled: one has to be named, and two that differ are refused.
+Then the engine looks at the market before it looks at the candles.
 
 **An amount is beyond the engine's decimal when its whole part is.** The
 largest decimal is 79228162514264337593543950335, of 29 digits, and at a
@@ -648,13 +714,16 @@ decimal holds, the same way on every run.
 | `qf.run_backtest(candles, EnterThenExit, config, market=market)` | `TypeError: strategy must be a Strategy, not the class EnterThenExit: build one from it` |
 | `qf.run_backtest(candles, strategy, {"initial_cash": 1000}, market=market)` | `TypeError: config must be a BacktestConfig, not dict` |
 | `qf.run_backtest(candles, strategy, config, market="binance_spot")` | `TypeError: market must be a MarketId, not str` |
+| `qf.run_backtest(candles, strategy, config)` | `TypeError: market is required: the candles name no market` |
+| `qf.run_backtest(named, strategy, config, market=qf.MarketId("bybit_spot", "BTCUSDT", "1m"))` | `ValueError: the candles are of binance_spot BTCUSDT 1m, and market names bybit_spot BTCUSDT 1m` |
+| `qf.run_backtest(qf.CandleBatch.from_candles(candles, market=qf.MarketId("bybit_linear", "BTCUSDT", "1m")), strategy, config)` | `ValueError: candle strategies run on spot markets only, and bybit_linear trades linear futures` |
 | `qf.run_backtest(candles, strategy, config, market=qf.MarketId("binance_inverse", "BTCUSD", "1m"))` | `ValueError: candle strategies run on spot markets only, and binance_inverse trades inverse futures` |
 | `qf.run_backtest([], strategy, config, market=market)` | `ValueError: no candles provided` |
 | `qf.run_backtest([minute(0, 1, 1), minute(1, Decimal("1E-28"), 1)], EnterThenExit(), config, market=market)` | `OverflowError: decimal overflow computing the entry` |
 <!-- end: run refusals -->
 
-`candle`, `candles`, `strategy`, `config` and `market` are those of the
-examples above.
+`candle`, `candles`, `named`, `strategy`, `config` and `market` are those
+of the examples above.
 
 **A callback that fails ends the run with its own exception,** as
 [Strategies](#strategies) says: the object it raised, with its traceback
@@ -682,9 +751,11 @@ equity and the same drawdown, each compared as the text of its decimal
 ## Decimal and float
 
 The engine computes in exact decimals, and Python's numeric libraries in
-floats. The two meet in two functions, the engine's own, which follow the
-[decimal and float64 policy](decimal-float-policy.md). Nothing else in the
-package turns one into the other.
+floats. The two meet in the engine's own two conversions, which follow the
+[decimal and float64 policy](decimal-float-policy.md). The package
+publishes them as two functions, and applies them to a batch's columns as
+a whole in [`to_numpy` and `from_numpy`](python-numpy.md). Nothing else in
+the package turns one into the other.
 
 ```python
 >>> qf.decimal_to_f64(Decimal("81940.01000000"))
@@ -700,9 +771,10 @@ ValueError: cannot convert NaN to a decimal: not finite
 - **`decimal_to_f64`** gives the float nearest to a decimal: Python's
   `float(str(value))`, but for a negative zero, which gives `0.0`.
 - **`decimal_from_f64`** gives the decimal of a float's shortest text,
-  `Decimal(repr(value))`, with a negative zero made zero. It refuses NaN,
-  the infinities, and a float whose shortest text does not fit the
-  engine's decimal.
+  `Decimal(repr(value))`, with a negative zero made zero. Where two texts
+  of that length are equally near the float, it is the one `repr` writes,
+  whose last digit is even. It refuses NaN, the infinities, and a float
+  whose shortest text does not fit the engine's decimal.
 
 The package's tests hold both to the cases the engine's own tests hold
 them to, `tests/fixtures/decimal_float_cases.csv`.
@@ -737,6 +809,7 @@ Everything a value gives, by the name it is read with:
 | `CandleBatch` | `close` | `tuple of Decimal` | Every candle's last price |
 | `CandleBatch` | `volume` | `tuple of Decimal` | Every candle's volume |
 | `CandleBatch` | `trades` | `tuple of int or None` | Every candle's trade count |
+| `CandleBatch` | `market` | `MarketId or None` | The market the candles are of, `None` where the batch names none |
 | `BacktestConfig` | `initial_cash` | `Decimal` | Quote currency to start with, above zero |
 | `BacktestConfig` | `fee_bps` | `Decimal` | The fee on every fill, in basis points of its notional: 10 is 0.1% |
 | `BacktestConfig` | `close_out_at_end` | `bool` | Whether a position still open after the last bar is sold at that bar's close; otherwise it is only valued there |
@@ -780,7 +853,7 @@ backtest is in the quote currency. A `TargetPosition` has no field, and a
 | `ExchangeId` | It is the same product line | yes |
 | `MarketId` | All three parts are | yes |
 | `Candle` | Every field is | no |
-| `CandleBatch` | Every candle is, in order | no |
+| `CandleBatch` | Every candle is, in order, and both name the same market or none | no |
 | `BacktestConfig` | All three settings are | no |
 | `ClosedTrade` | Every field is | no |
 | `EquityPoint` | Both fields are | no |
@@ -804,8 +877,10 @@ records have no hash either.
 digit, wherever that is short enough to read. The two that hold
 sequences count them instead, and their `repr` cannot be evaluated:
 `CandleBatch(<1440 candles>)`, and a result's `trades=<3 trades>,
-equity_curve=<1440 points>`. A target's `repr` names its constant,
-`TargetPosition.FLAT`, which is the target itself.
+equity_curve=<1440 points>`. A batch that names its market writes it after
+the count, as it is given: `CandleBatch(<1440 candles>, market=MarketId(...))`.
+A target's `repr` names its constant, `TargetPosition.FLAT`, which is the
+target itself.
 
 **A value cannot be pickled or deep-copied yet.** No story has asked for
 it; one that needs to send a value between processes adds it.
@@ -840,6 +915,7 @@ One refusal of each kind, as it is written and as it is refused:
 | `qf.CandleBatch.from_columns(open_time_ms=[0, 1], close_time_ms=[1, 2], open=[1, 2.5], high=[1, 2], low=[1, 2], close=[1, 2], volume=[1, 2], trades=[None, 3])` | `TypeError: open[1] must be a decimal.Decimal or an int, not float: a float is never read as a decimal; convert it with decimal_from_f64` |
 | `qf.CandleBatch.from_candles([1])` | `TypeError: candles[0] must be a Candle, not int` |
 | `qf.CandleBatch.from_candles("BTCUSDT")` | `TypeError: candles must be an iterable of Candle, not str` |
+| `qf.CandleBatch.from_candles([], market="binance_spot")` | `TypeError: market must be a MarketId or None, not str` |
 | `qf.BacktestConfig(initial_cash=0, fee_bps=10, close_out_at_end=True)` | `ValueError: invalid configuration: initial_cash must be greater than 0, got 0` |
 | `qf.BacktestConfig(initial_cash=1, fee_bps=-1, close_out_at_end=True)` | `ValueError: invalid configuration: fee_bps must be zero or greater, got -1` |
 | `qf.BacktestConfig(initial_cash=1, fee_bps=0, close_out_at_end=1)` | `TypeError: close_out_at_end must be a bool, not int` |
@@ -897,9 +973,3 @@ change these two.
 
 **No credential crosses.** These are values: none holds an exchange key, a
 database password or a connection, and building one opens nothing.
-
-One more part of the engine belongs to a story that follows:
-
-| What | Story |
-| --- | --- |
-| NumPy arrays of a batch's columns, and a batch's market kept with it | QUA-475 |

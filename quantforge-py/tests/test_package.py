@@ -96,7 +96,7 @@ def test_the_extension_module_holds_one_private_entry_which_the_package_does_not
     assert "_embedded_backtest" not in quantforge_py.__all__
     # It takes what the published function takes.
     taken = inspect.signature(_native._embedded_backtest)
-    assert str(taken) == "(candles, strategy, config, *, market)"
+    assert str(taken) == "(candles, strategy, config, *, market=None)"
     assert taken == inspect.signature(quantforge_py.run_backtest)
     assert _native._embedded_backtest.__doc__
 

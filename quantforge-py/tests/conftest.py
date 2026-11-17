@@ -8,6 +8,7 @@ The tests run against `quantforge_py` as it is installed, from a wheel or by
 
 import decimal
 import importlib.metadata
+import importlib.util
 import json
 import os
 import pathlib
@@ -28,6 +29,16 @@ DISTRIBUTION = "quantforge-py"
 # (`--no-default-features`). Unset, the tests expect the package as it is
 # published, with both stores.
 SQLITE_ONLY = "QUANTFORGE_PY_TEST_SQLITE_ONLY"
+
+# Says that the run is on the oldest NumPy the package takes, the one
+# `pyproject.toml` pins for it. Unset, the tests take any NumPy the package
+# does.
+OLDEST_NUMPY = "QUANTFORGE_PY_TEST_OLDEST_NUMPY"
+
+# Says that the package under test is installed without its `numpy` extra,
+# where there is no NumPy to import. Unset, the tests expect a NumPy, and
+# the tests of the arrays run.
+WITHOUT_NUMPY = "QUANTFORGE_PY_TEST_WITHOUT_NUMPY"
 
 
 def read(path: pathlib.Path) -> str:
@@ -147,11 +158,39 @@ def quoted():
 
 
 def pytest_configure(config):
-    """Stops the run on a value of the variable that says neither build."""
-    said = os.environ.get(SQLITE_ONLY)
-    if said not in (None, "1"):
+    """Stops the run on a value of a variable that says neither of the two
+    things it can, and on a run that is not what it was said to be: one with
+    a NumPy that was said to have none, or one without that was not.
+
+    The tests of the arrays are skipped where NumPy is not there, so a run
+    that lacked it by mistake would pass without them. It is stopped here
+    instead."""
+    for variable, means in [
+        (SQLITE_ONLY, "for the SQLite-only build"),
+        (OLDEST_NUMPY, "for a run on the oldest NumPy"),
+        (WITHOUT_NUMPY, "for a run of the package installed without NumPy"),
+    ]:
+        said = os.environ.get(variable)
+        if said not in (None, "1"):
+            raise pytest.UsageError(
+                f"{variable} is {said!r}: set it to 1 {means}, or leave it unset"
+            )
+    without = os.environ.get(WITHOUT_NUMPY) == "1"
+    # Looked for, and not imported: the tests hold the package to importing
+    # NumPy only when a conversion is asked for.
+    found = importlib.util.find_spec("numpy") is not None
+    if without and os.environ.get(OLDEST_NUMPY) == "1":
         raise pytest.UsageError(
-            f"{SQLITE_ONLY} is {said!r}: set it to 1 for the SQLite-only build, or leave it unset"
+            f"{WITHOUT_NUMPY} and {OLDEST_NUMPY} are both 1: a run is one or the other"
+        )
+    if without and found:
+        raise pytest.UsageError(
+            f"{WITHOUT_NUMPY} is 1, and NumPy is installed: unset it, or run where there is none"
+        )
+    if not without and not found:
+        raise pytest.UsageError(
+            "NumPy is not installed, and the tests of the arrays need it: install the package's "
+            f"numpy extra, or set {WITHOUT_NUMPY}=1 to test the package without it"
         )
 
 
@@ -161,6 +200,20 @@ def storage_backends() -> tuple[str, ...]:
     if os.environ.get(SQLITE_ONLY) == "1":
         return ("sqlite",)
     return ("sqlite", "postgres")
+
+
+@pytest.fixture(scope="session")
+def oldest_numpy() -> bool:
+    """Whether the run was told that it is on the oldest NumPy the package
+    takes."""
+    return os.environ.get(OLDEST_NUMPY) == "1"
+
+
+@pytest.fixture(scope="session")
+def without_numpy() -> bool:
+    """Whether the run is of the package installed without its `numpy`
+    extra, with no NumPy to import."""
+    return os.environ.get(WITHOUT_NUMPY) == "1"
 
 
 @pytest.fixture(scope="session")

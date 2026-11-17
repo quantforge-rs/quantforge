@@ -11,6 +11,8 @@ the engine's own tests hold them to (docs/decimal-float-policy.md)."""
 import csv
 import decimal
 import fractions
+import math
+import random
 import struct
 import sys
 import tracemalloc
@@ -354,7 +356,7 @@ def test_every_shared_case_of_the_float_policy_holds(repository, refused):
             assert format(result, "f") == expected, note
             assert parts(result) == parts(Decimal(expected)), note
             from_f64 += 1
-    assert (to_f64, from_f64) == (17, 19)
+    assert (to_f64, from_f64) == (17, 28)
 
 
 def test_a_float_that_has_no_decimal_is_refused_in_the_engines_words(refused):
@@ -407,3 +409,91 @@ def test_a_float_comes_back_bit_for_bit_and_python_agrees_on_the_way():
         assert bits(qf.decimal_to_f64(exact)) == bits(float(str(exact)))
     assert bits(qf.decimal_to_f64(Decimal("-0"))) == bits(0.0)
     assert parts(qf.decimal_from_f64(-0.0)) == parts(Decimal("0"))
+
+
+def test_a_float_halfway_between_two_shortest_texts_gives_the_one_python_writes():
+    # Such a float has two shortest texts, equally near it, and both read
+    # back as it. Python's `repr` writes the one whose last digit is even,
+    # and so does the engine, in whichever direction that one lies.
+    for value, text, other in [
+        (790101343014070.25, "790101343014070.2", "790101343014070.3"),
+        (790101343014070.75, "790101343014070.8", "790101343014070.7"),
+        (-562949953421312.25, "-562949953421312.2", "-562949953421312.3"),
+        (87838979419517.125, "87838979419517.12", "87838979419517.13"),
+        (82957.940185546875, "82957.94018554688", "82957.94018554687"),
+        (0.0210056304931640625, "0.021005630493164062", "0.021005630493164063"),
+    ]:
+        exact = fractions.Fraction(value)
+        # The two are equally near, and both read back as the float.
+        assert abs(fractions.Fraction(text) - exact) == abs(fractions.Fraction(other) - exact)
+        assert float(text) == float(other) == value
+        assert repr(value) == text
+        assert format(qf.decimal_from_f64(value), "f") == text
+        assert int(text[-1]) % 2 == 0 and int(other[-1]) % 2 == 1
+
+
+def test_next_to_a_power_of_two_a_text_that_does_not_read_back_is_never_taken():
+    # The floats below a power of two lie twice as close as those above it.
+    # 2^-24 is exactly halfway between two texts of sixteen digits, and only
+    # the larger reads back as it: the smaller, whose last digit is even,
+    # reads back as the float below.
+    value = 2.0**-24
+    larger, smaller = "0.00000005960464477539063", "0.00000005960464477539062"
+    exact = fractions.Fraction(value)
+    assert abs(fractions.Fraction(larger) - exact) == abs(fractions.Fraction(smaller) - exact)
+    assert float(larger) == value and float(smaller) != value
+    assert format(Decimal(repr(value)), "f") == larger
+    assert format(qf.decimal_from_f64(value), "f") == larger
+    assert format(qf.decimal_from_f64(-value), "f") == "-" + larger
+    # And so for every power of two a decimal holds, and its neighbours.
+    compared = 0
+    for power in range(-93, 96):
+        for value in [
+            2.0**power,
+            math.nextafter(2.0**power, 0.0),
+            math.nextafter(2.0**power, 2.0**97),
+        ]:
+            written = Decimal(repr(value))
+            if -written.as_tuple().exponent > 28 or abs(written) > 2**96 - 1:
+                continue
+            assert qf.decimal_from_f64(value) == written, power
+            assert bits(qf.decimal_to_f64(qf.decimal_from_f64(value))) == bits(value), power
+            compared += 1
+    assert compared > 400
+
+
+def test_the_decimal_of_a_float_is_the_number_pythons_repr_writes():
+    drawn = random.Random(475)
+    halfway = compared = 0
+    for _ in range(20_000):
+        # Floats with a short binary fraction, where the ties are, and
+        # floats of every size a decimal holds.
+        if drawn.random() < 0.5:
+            fraction_bits = drawn.randint(1, 40)
+            whole = drawn.randrange(2 ** drawn.randint(1, 52))
+            odd = 2 * drawn.randrange(2 ** (fraction_bits - 1)) + 1
+            value = float(whole) + odd / 2.0**fraction_bits
+        else:
+            value = drawn.random() * 10.0 ** drawn.randint(-12, 28)
+        value *= drawn.choice([1, -1])
+        written = Decimal(repr(value))
+        try:
+            exact = qf.decimal_from_f64(value)
+        except ValueError:
+            # Beyond the decimal's range, or more than 28 places.
+            assert abs(written) > 2**96 - 1 or -written.as_tuple().exponent > 28, value
+            continue
+        compared += 1
+        assert exact == written, value
+        assert bits(qf.decimal_to_f64(exact)) == bits(value), value
+        # A neighbour of the same length that reads back as the float and
+        # is exactly as near: a tie, which the even digit decides.
+        unit = Decimal(1).scaleb(written.as_tuple().exponent)
+        near = abs(fractions.Fraction(written) - fractions.Fraction(value))
+        for neighbour in (written - unit, written + unit):
+            as_near = abs(fractions.Fraction(neighbour) - fractions.Fraction(value)) == near
+            if as_near and float(neighbour) == value:
+                assert exact.as_tuple().digits[-1] % 2 == 0, value
+                halfway += 1
+    assert compared > 18_000
+    assert halfway > 100

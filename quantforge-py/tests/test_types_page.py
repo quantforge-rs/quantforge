@@ -84,7 +84,10 @@ def samples() -> dict[str, list]:
         "ExchangeId": [qf.ExchangeId.BYBIT_INVERSE],
         "MarketId": [market],
         "Candle": [known, unknown],
-        "CandleBatch": [qf.CandleBatch.from_candles([known, unknown])],
+        "CandleBatch": [
+            qf.CandleBatch.from_candles([known, unknown], market=market),
+            qf.CandleBatch.from_candles([known, unknown]),
+        ],
         "BacktestConfig": [
             qf.BacktestConfig(initial_cash=1000, fee_bps=10, close_out_at_end=True)
         ],
@@ -275,13 +278,20 @@ def test_the_page_lists_what_a_run_takes(page, quoted):
     rows = page(PAGE).rows("run arguments")
     taken = inspect.signature(qf.run_backtest).parameters
     assert [quoted(name) for name, _, _, _ in rows] == list(taken)
+    left_out = "or nothing where `candles` is a batch that names its market"
     for name, given, takes, described in rows:
         argument = taken[quoted(name)]
         by_name_alone = argument.kind is inspect.Parameter.KEYWORD_ONLY
         assert given == ("By name alone" if by_name_alone else "By position or by name"), name
-        assert argument.default is inspect.Parameter.empty, "every argument is required"
+        # An argument that may be left out is said to be, and where.
+        required = argument.default is inspect.Parameter.empty
+        assert required == (left_out not in takes), name
+        assert required or argument.default is None, name
         assert takes and described
     assert [quoted(name) for name, given, _, _ in rows if given == "By name alone"] == ["market"]
+    # The market alone may be left out, and only beside a batch that names
+    # one.
+    assert [name for name, argument in taken.items() if argument.default is None] == ["market"]
 
 
 def test_every_run_the_page_shows_refused_raises_so(page, quoted, session):
@@ -311,6 +321,11 @@ def test_every_run_the_page_shows_refused_raises_so(page, quoted, session):
                 "config must be ",
                 "market must be ",
             ],
+        ),
+        "No market named, by `market=` or by a batch": ("TypeError", ["market is required: "]),
+        "A market other than the one a batch names": (
+            "ValueError",
+            ["the candles are of binance_spot BTCUSDT 1m, and market names "],
         ),
         "A market that is not Spot": ("ValueError", ["candle strategies run on spot markets only"]),
         "No candles": ("ValueError", ["no candles provided"]),
