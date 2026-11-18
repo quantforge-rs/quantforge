@@ -6,11 +6,13 @@
 //! Python classes: market identity, candles, and a backtest's settings and
 //! result, each built by the engine's own rule and refused in the engine's
 //! own words; the strategy a class implements, which an engine drives
-//! through the adapter (`adapter.rs`); and `run_backtest`, which runs such
-//! a strategy over candles in the engine (`run.rs`).
+//! through the adapter (`adapter.rs`); `run_backtest`, which runs such a
+//! strategy over candles in the engine (`run.rs`); and a batch of candles
+//! as NumPy arrays, and back (`arrays.rs`).
 //! `docs/python-package.md` says how the package is named, built and
-//! tested, and `docs/python-types.md` what each type takes and gives and
-//! how a backtest is run.
+//! tested, `docs/python-types.md` what each type takes and gives and how a
+//! backtest is run, and `docs/python-numpy.md` what crosses to NumPy and
+//! how.
 
 // As in the `quantforge` crate. The unsafe code an extension module needs is
 // what PyO3's macros expand to, which the lint leaves alone.
@@ -20,6 +22,7 @@
 use pyo3::prelude::*;
 
 mod adapter;
+mod arrays;
 mod backtest;
 mod bench;
 mod candles;

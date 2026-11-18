@@ -14,7 +14,11 @@ refused in the engine's own words:
 
 - ``Symbol``, ``Interval``, ``Category``, ``ExchangeId`` and ``MarketId``:
   what a market is.
-- ``Candle`` and ``CandleBatch``: one bar, and bars held column by column.
+- ``Candle`` and ``CandleBatch``: one bar, and bars held column by column
+  with the market they are of. ``CandleBatch.to_numpy`` gives the columns
+  as NumPy arrays, and ``CandleBatch.from_numpy`` takes arrays back. Those
+  two need NumPy, the package's one extra:
+  ``pip install "quantforge-py[numpy]"``. Nothing else does.
 - ``BacktestConfig``, ``ClosedTrade``, ``EquityPoint`` and
   ``BacktestResult``: a backtest's settings and what one produces.
 - ``Strategy``, ``StrategyContext`` and ``TargetPosition``: the strategy a
@@ -26,7 +30,9 @@ refused in the engine's own words:
   exact decimal and a float.
 
 A price, a quantity or an amount is a ``decimal.Decimal`` on both sides of
-every one of them, and never a float.
+every one of them, and never a float. It becomes one only where it is asked
+to, by the engine's own conversion: ``decimal_to_f64`` for one value, and
+``CandleBatch.to_numpy`` for the columns of a batch.
 
 The names come from the compiled extension module, ``quantforge_py._native``,
 which is private: import them from here.

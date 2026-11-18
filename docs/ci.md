@@ -24,7 +24,7 @@ conformance suite runs live against the exchanges on a schedule
 | `package` | Linux | `cargo check` with Rust 1.85, the oldest the crate declares (`rust-version`), with and without the default features; then `cargo publish --dry-run` |
 | `postgres 16`, `postgres 17`, `postgres 18` | Linux | The whole suite against each PostgreSQL major [ADR 0001](adr/0001-postgres-client-strategy.md) supports: see [PostgreSQL](#postgresql) |
 | `storage` | Linux | Passes only when every `postgres` leg passed |
-| `python` | Linux | The Python package, `quantforge-py/`: clippy for its crate with and without the default features, `cargo check` with Rust 1.85, then the wheel maturin builds, installed and tested on Python 3.11 and 3.15, the SQLite-only wheel, and the in-place install: see [The Python package](#the-python-package) |
+| `python` | Linux | The Python package, `quantforge-py/`: clippy for its crate with and without the default features, `cargo check` with Rust 1.85, then the wheel maturin builds, installed with its `numpy` extra and tested on Python 3.11 and 3.15, on the oldest NumPy the extra takes, and without the extra, the SQLite-only wheel, and the in-place install: see [The Python package](#the-python-package) |
 
 Every check runs on every pull request; none has a path filter. A pull
 request that changes only documentation can still break the PostgreSQL
@@ -158,22 +158,42 @@ python3.15`, which runs, in order:
 - **Clippy for the crate**, with and without the default features, and
   `cargo check` with Rust 1.85.
 - **The wheel**: `maturin build` once, then the tests against it in a fresh
-  virtualenv of each Python named. Nothing is rebuilt between them: the
-  package promises one wheel for Python 3.11 and every later version, and
-  the two are the oldest it supports and the newest released. The newest
-  is raised by hand as a new Python is released.
+  virtualenv of each Python named, where it is installed with its `numpy`
+  extra, as `pip install "quantforge-py[numpy]"` installs it. Nothing is
+  rebuilt between them: the package promises one wheel for Python 3.11 and
+  every later version, and the two are the oldest it supports and the
+  newest released. The newest is raised by hand as a new Python is
+  released.
+- **The wheel on the oldest NumPy** the extra takes, 2.0.0, which
+  `pyproject.toml` pins in a dependency group, with
+  `QUANTFORGE_PY_TEST_OLDEST_NUMPY=1` telling the tests so. Every other
+  run with NumPy has the newest `pip` finds for its Python. Neither Python
+  named here has a wheel of both: NumPy 2.0 runs on Python up to 3.12, and
+  the newest from 3.12 on. So this run is on the first Python named, where
+  that is the oldest the package supports, as it is here: the script says
+  so where it is not, and tests the oldest NumPy nowhere.
+- **The wheel without its extra**, as `pip install quantforge-py` installs
+  it, on the first Python named, with
+  `QUANTFORGE_PY_TEST_WITHOUT_NUMPY=1` telling the tests that there is no
+  NumPy. The tests of the arrays are skipped there, and every other test
+  holds the package to working without NumPy.
 - **The SQLite-only wheel** (`--no-default-features`), with
   `QUANTFORGE_PY_TEST_SQLITE_ONLY=1` telling the tests which build it is.
-- **The in-place install**: `maturin develop` in a virtualenv, the import,
-  and the tests again, as a contributor runs them.
+- **The in-place install**: `maturin develop --extras numpy` in a
+  virtualenv, the import, and the tests again, as a contributor runs them.
 
-The tests are the package's whole suite each time, the golden parity test
-among them ([golden-parity.md](golden-parity.md)), so a strategy written in
-Python is held to the Rust one's frozen results on the oldest Python and
-on the newest, and in the SQLite-only wheel as well.
+The tests are the package's whole suite each time, but for the tests of
+the arrays where there is no NumPy. The golden parity test is among them
+([golden-parity.md](golden-parity.md)), so a strategy written in Python is
+held to the Rust one's frozen results on the oldest Python and on the
+newest, without NumPy, and in the SQLite-only wheel as well. A run that is
+not what the tests were told, one with a NumPy that was said to have none
+or one without that was not, stops before its first test.
 
-maturin and pytest come from PyPI, at the versions `pyproject.toml` asks
-for. The wheels are built in the `dev` profile, on Linux only: release
+maturin, pytest and NumPy come from PyPI, at the versions `pyproject.toml`
+asks for, and NumPy as a wheel or not at all: the script installs it into
+every virtualenv that has one itself, the in-place install's among them,
+and compiles none. The wheels are built in the `dev` profile, on Linux only: release
 wheels for Linux, macOS and Windows are QUA-474's.
 
 ## Running them locally
@@ -218,8 +238,10 @@ the `python` job's script: the crate is released without the Python
 package's tools.
 
 `scripts/python-package-check.sh` without arguments tests on `python3`
-alone. It makes its virtualenvs with `python -m venv`, which on Debian and
-Ubuntu needs the `python3-venv` package.
+alone, with NumPy and without it, and on the oldest NumPy only where that
+`python3` is Python 3.11.
+It makes its virtualenvs with `python -m venv`, which on Debian and Ubuntu
+needs the `python3-venv` package.
 
 ## How long they take
 

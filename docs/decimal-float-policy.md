@@ -9,7 +9,9 @@ Python process, and in a remote worker.
 
 The policy is implemented once, by `quantforge::decimal_to_f64` and
 `quantforge::decimal_from_f64`, which the Python package binds under the
-same names ([python-types.md](python-types.md#decimal-and-float)). Every
+same names ([python-types.md](python-types.md#decimal-and-float)) and
+applies to a batch's columns as a whole in `CandleBatch.to_numpy` and
+`CandleBatch.from_numpy` ([python-numpy.md](python-numpy.md)). Every
 conversion between the two types goes through them — never through NumPy,
 `rust_decimal`'s own `to_f64` or `from_f64`, or ad-hoc Python.
 
@@ -33,8 +35,16 @@ more than 22 decimal places, such as `66633140290.84541427` and
 ## Float64 to decimal
 
 - The result is the decimal value of the shortest digit string that reads
-  back as the same float64: Python's `repr`, Rust's `Display`. `0.1` becomes
-  `0.1`, not `0.1000000000000000055511151231`.
+  back as the same float64: Python's `repr`. `0.1` becomes `0.1`, not
+  `0.1000000000000000055511151231`.
+- Where two such strings of the same length are equally near the float64,
+  the one whose last digit is even is taken, as `repr` takes it. The float64
+  `790101343014070.25` lies halfway between `790101343014070.2` and
+  `790101343014070.3`, which both read back as it, and becomes
+  `790101343014070.2`. Rust's `Display` writes the same digits as `repr`
+  everywhere but at such a tie, where it wrote the one of larger magnitude
+  when this was found (Rust 1.99). The conversion therefore decides a tie
+  itself, in exact integer arithmetic, whatever `Display` writes there.
 - Trailing zeros are not restored: the decimal `81940.01000000` becomes the
   float64 `81940.01`, which comes back as `81940.01`.
 - Negative zero becomes `0`.
@@ -45,14 +55,16 @@ more than 22 decimal places, such as `66633140290.84541427` and
   magnitude, and some below 1e-12 whose shortest form has many digits;
   round them in Python first if they are intended.
 - In Python this is `Decimal(repr(x))`, with the same zero handling and the
-  same errors.
+  same errors, compared by value: a whole float64 such as `100.0` becomes
+  `100`, with no decimal place.
 
 ## Values that never become float64
 
 - `open_time_ms` and `close_time_ms` are int64 milliseconds since the Unix
   epoch, UTC.
 - `trades` is an unsigned trade count, or null when the exchange did not
-  report it. A null is never written as NaN, 0, or -1.
+  report it. A null is never written as NaN, 0, or -1. As a NumPy array it
+  is a masked entry of a `numpy.ma.MaskedArray` of uint64.
 
 ## What survives a round trip
 
@@ -67,6 +79,9 @@ more than 22 decimal places, such as `66633140290.84541427` and
   decimal range and is refused.
 - `Vec<Candle>` to `CandleBatch` and back converts nothing, so it is exact,
   trailing zeros included.
+- A `CandleBatch` to NumPy arrays and back is the two conversions above for
+  every price and volume, and exact for every time and trade count
+  ([python-numpy.md](python-numpy.md#what-crosses-exactly-and-what-as-a-float)).
 
 Compare decimals by value, never as strings: `81940.01000000` and
 `81940.01` are the same price.

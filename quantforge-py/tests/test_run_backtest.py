@@ -97,8 +97,8 @@ RESULT_FIELDS = [
 ]
 
 
-def test_it_takes_three_arguments_by_position_and_the_market_by_name(four, config, market):
-    assert str(inspect.signature(qf.run_backtest)) == "(candles, strategy, config, *, market)"
+def test_it_takes_three_arguments_by_position_and_the_market_by_name(four, config, market, refused):
+    assert str(inspect.signature(qf.run_backtest)) == "(candles, strategy, config, *, market=None)"
     result = qf.run_backtest(four, Notes(), config, market=market)
     assert type(result) is qf.BacktestResult
     assert result.final_equity == 1250
@@ -106,11 +106,12 @@ def test_it_takes_three_arguments_by_position_and_the_market_by_name(four, confi
     named = qf.run_backtest(market=market, config=config, strategy=Notes(), candles=four)
     assert named == result
     # The market is given by name alone: nothing is taken for it by its
-    # place, and nothing is assumed where it is left out.
+    # place, and nothing is assumed where candles that name none are given
+    # without it.
     with pytest.raises(TypeError, match="takes 3 positional arguments but 4 were given"):
         qf.run_backtest(four, Notes(), config, market)
-    with pytest.raises(TypeError, match="missing 1 required keyword argument: 'market'"):
-        qf.run_backtest(four, Notes(), config)
+    message = "market is required: the candles name no market"
+    refused(TypeError, message, qf.run_backtest, four, Notes(), config)
     for field, given in [
         ("candles", dict(strategy=Notes(), config=config)),
         ("strategy", dict(candles=four, config=config)),
@@ -125,7 +126,7 @@ def test_it_takes_three_arguments_by_position_and_the_market_by_name(four, confi
 def test_it_says_what_it_is_and_how_it_is_called():
     assert qf.run_backtest.__name__ == "run_backtest"
     said = " ".join(qf.run_backtest.__doc__.split())
-    assert "`run_backtest(candles, strategy, config, *, market)`" in said
+    assert "`run_backtest(candles, strategy, config, *, market=None)`" in said
     # Each argument is named with the type it takes, and each failure with
     # the exception it is.
     for words in [
@@ -133,6 +134,8 @@ def test_it_says_what_it_is_and_how_it_is_called():
         "`strategy` is an object of a class derived from `Strategy`",
         "`config` is a `BacktestConfig`",
         "`market` is the `MarketId` the candles are of, a Spot market",
+        "A batch that names its market is run on it, and `market` may be left out",
+        "a batch is never run on a market other than the one it names",
         "`TypeError`",
         "`ValueError`",
         "`OverflowError`",
@@ -249,6 +252,123 @@ def test_a_batch_runs_as_its_candles_do_digit_for_digit(config, market):
     # with its places, and a trade count that is unknown still unknown.
     assert [repr(bar) for bar in batched.bars] == [repr(candle) for candle in exact]
     assert [bar.trades for bar in batched.bars] == [None, 412, 0]
+
+
+# The run a user calls, and the one a host that embeds Python makes: both
+# read their arguments the same way.
+RUNS = [qf.run_backtest, _native._embedded_backtest]
+
+
+def test_a_batch_that_names_its_market_is_run_on_it(four, config, market):
+    batch = qf.CandleBatch.from_candles(four, market=market)
+    expected = qf.run_backtest(four, Notes(), config, market=market)
+    for run in RUNS:
+        strategy = Notes()
+        # No market is given beside the batch: it is run on the one it names.
+        result = run(batch, strategy, config)
+        assert result == expected
+        assert written(result) == written(expected)
+        assert len(strategy.contexts) == 6
+        assert all(ctx.market == market for ctx in strategy.contexts)
+        # Named beside it as well, it is the same run, however the equal
+        # market was built; and `None` is no market given.
+        assert run(batch, Notes(), config, market=market) == expected
+        again = qf.MarketId(qf.ExchangeId.BINANCE_SPOT, " btcusdt ", qf.Interval.M1)
+        assert again is not market and again == market
+        assert run(batch, Notes(), config, market=again) == expected
+        assert run(batch, Notes(), config, market=None) == expected
+    # Whichever Spot market a batch names: a trade takes its symbol from it.
+    other = qf.MarketId("bybit_spot", "ETHUSDT", "8h")
+    strategy = Notes()
+    result = qf.run_backtest(qf.CandleBatch.from_candles(four, market=other), strategy, config)
+    assert str(result.trades[0].symbol) == "ETHUSDT"
+    assert all(ctx.market == other for ctx in strategy.contexts)
+
+
+def test_a_batch_is_never_run_on_a_market_other_than_the_one_it_names(four, config, refused):
+    batch = qf.CandleBatch.from_candles(four, market=qf.MarketId("binance_spot", "BTCUSDT", "1m"))
+    for other, named in [
+        # The same symbol on the venue's futures lines, on another venue's
+        # Spot line, another symbol, and the same market at another interval.
+        (qf.MarketId("binance_linear", "BTCUSDT", "1m"), "binance_linear BTCUSDT 1m"),
+        (qf.MarketId("binance_inverse", "BTCUSDT", "1m"), "binance_inverse BTCUSDT 1m"),
+        (qf.MarketId("bybit_spot", "BTCUSDT", "1m"), "bybit_spot BTCUSDT 1m"),
+        (qf.MarketId("binance_spot", "ETHUSDT", "1m"), "binance_spot ETHUSDT 1m"),
+        (qf.MarketId("binance_spot", "BTCUSDT", "5m"), "binance_spot BTCUSDT 5m"),
+    ]:
+        message = f"the candles are of binance_spot BTCUSDT 1m, and market names {named}"
+        for run in RUNS:
+            strategy = Notes()
+            refused(ValueError, message, run, batch, strategy, config, market=other)
+            assert strategy.calls == []
+        # The other way round as well: neither market is taken for the other.
+        swapped = qf.CandleBatch.from_candles(four, market=other)
+        message = f"the candles are of {named}, and market names binance_spot BTCUSDT 1m"
+        refused(ValueError, message, qf.run_backtest, swapped, Notes(), config, market=batch.market)
+
+
+def test_candles_that_name_no_market_are_run_on_the_one_given_and_on_none_without_it(
+    four, config, market, refused
+):
+    message = "market is required: the candles name no market"
+    for candles in [four, tuple(four), qf.CandleBatch.from_candles(four), []]:
+        for run in RUNS:
+            strategy = Notes()
+            refused(TypeError, message, run, candles, strategy, config)
+            refused(TypeError, message, run, candles, strategy, config, market=None)
+            assert strategy.calls == []
+    # What is read once is read to its end before the market is missed.
+    once = iter(four)
+    refused(TypeError, message, qf.run_backtest, once, Notes(), config)
+    assert list(once) == []
+    # A batch that names none is of whatever market the run is given.
+    unnamed = qf.CandleBatch.from_candles(four)
+    assert unnamed.market is None
+    for spot in [market, qf.MarketId("bybit_spot", "ETHUSDT", "8h")]:
+        strategy = Notes()
+        qf.run_backtest(unnamed, strategy, config, market=spot)
+        assert all(ctx.market == spot for ctx in strategy.contexts)
+
+
+def test_the_market_is_settled_once_every_argument_is_of_its_type_and_before_the_engine_is_asked(
+    four, config, market, refused
+):
+    linear = qf.MarketId("binance_linear", "BTCUSDT", "1m")
+    of_spot = qf.CandleBatch.from_candles(four, market=market)
+    of_linear = qf.CandleBatch.from_candles(four, market=linear)
+    not_spot = NOT_SPOT.format(exchange="binance_linear", category="linear")
+    differ = (
+        "the candles are of binance_spot BTCUSDT 1m, and market names binance_linear BTCUSDT 1m"
+    )
+    for run in RUNS:
+        # An argument of the wrong type is refused first, whatever the
+        # markets are.
+        message = "config must be a BacktestConfig, not NoneType"
+        refused(TypeError, message, run, of_spot, Notes(), None, market=linear)
+        refused(
+            TypeError,
+            "market must be a MarketId, not str",
+            run,
+            of_spot,
+            Notes(),
+            config,
+            market="x",
+        )
+        # Two markets that differ are refused before the engine looks at
+        # either: the run is on neither.
+        refused(ValueError, differ, run, of_spot, Notes(), config, market=linear)
+        empty = qf.CandleBatch.from_candles([], market=market)
+        refused(ValueError, differ, run, empty, Notes(), config, market=linear)
+    # One market, and the engine is asked: it refuses a futures line whether
+    # the batch names it, the run does, or both.
+    refused(ValueError, not_spot, qf.run_backtest, of_linear, Notes(), config)
+    refused(ValueError, not_spot, qf.run_backtest, of_linear, Notes(), config, market=linear)
+    refused(ValueError, not_spot, qf.run_backtest, four, Notes(), config, market=linear)
+    with pytest.raises(RuntimeError, match=re.escape(not_spot)):
+        _native._embedded_backtest(of_linear, Notes(), config)
+    # And no candles, of a batch that names its market.
+    empty = qf.CandleBatch.from_candles([], market=market)
+    refused(ValueError, NO_CANDLES, qf.run_backtest, empty, Notes(), config)
 
 
 def test_the_candles_are_replayed_in_the_order_given_and_are_not_checked(minutes, config, market):
@@ -503,11 +623,17 @@ def test_the_market_is_a_market_id_and_nothing_that_names_one(four, config, refu
         (("binance_spot", "BTCUSDT", "1m"), "tuple"),
         (qf.ExchangeId.BINANCE_SPOT, "ExchangeId"),
         (qf.Symbol("BTCUSDT"), "Symbol"),
-        (None, "NoneType"),
         (qf.MarketId, "type"),
+        (0, "int"),
     ]:
         message = f"market must be a MarketId, not {named}"
         refused(TypeError, message, qf.run_backtest, four, strategy, config, market=value)
+        # Beside a batch that names its market as well: what is given for
+        # the market is held to its type whatever the candles say.
+        batch = qf.CandleBatch.from_candles(
+            four, market=qf.MarketId("binance_spot", "BTCUSDT", "1m")
+        )
+        refused(TypeError, message, qf.run_backtest, batch, strategy, config, market=value)
     assert strategy.calls == []
 
 

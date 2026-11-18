@@ -100,11 +100,36 @@ the trades, the final equity and the drawdown of the engine's own Rust one
 over a frozen day of candles, digit for digit, on every pull request
 ([the goldens](https://github.com/quantforge-rs/quantforge/blob/main/docs/golden-parity.md)).
 
+For computing with, a batch of candles gives its columns as NumPy arrays,
+and takes arrays back. NumPy is the package's one extra, which
+`pip install "quantforge-py[numpy]"` installs with it:
+
+```python
+batch = qf.CandleBatch.from_candles(candles, market=market)
+arrays = batch.to_numpy()   # a dict of eight arrays, one for each column
+arrays["close"]             # float64: array([100., 110., 120., 125.])
+arrays["open_time_ms"]      # int64: exact
+arrays["trades"]            # uint64, masked where the exchange reported no count
+
+again = qf.CandleBatch.from_numpy(**arrays, market=batch.market)
+again == batch              # True: these prices are numbers a float holds
+qf.run_backtest(again, EnterThenExit(), config) == result  # on the market the batch names
+```
+
+A price becomes a float there by the engine's own conversion and no other:
+the float nearest to its decimal, and a float is read back as the decimal
+of its shortest text, or refused. A time and a trade count cross exactly.
+The arrays hold no market: it stays with the batch, and a batch is never
+run on a market other than the one it names
+([candles as NumPy arrays](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-numpy.md)).
+
 The package installs as `quantforge-py` and imports as `quantforge_py`.
 `quantforge` on PyPI is another project.
 
 One wheel per platform, built against Python's stable ABI, loads on CPython
-3.11 and every later version.
+3.11 and every later version. It requires nothing but Python: the arrays
+alone need NumPy 2, from 2.0 on, and without it they say what to install
+while everything else works.
 
 [The Python package](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-package.md)
 says how it is named, built and tested, and

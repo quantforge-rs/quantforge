@@ -6,7 +6,7 @@
 //! properties use std's own correctly rounded float parser as the oracle.
 
 use quantforge::{decimal_from_f64, decimal_to_f64};
-use rust_decimal::Decimal;
+use rust_decimal::{Decimal, RoundingStrategy};
 
 const CASES: &str = include_str!("fixtures/decimal_float_cases.csv");
 
@@ -162,4 +162,80 @@ fn decimals_with_at_most_15_significant_digits_survive_float64() {
             "{decimal}"
         );
     }
+}
+
+// Floats with a short binary fraction, n + k/2^b: the ones that can lie
+// exactly halfway between two decimal strings of the same length. Their
+// exact value is a decimal too, built here from whole numbers alone, so the
+// test decides "shortest", "nearest" and "halfway" itself, in exact decimal
+// arithmetic: no decimal with a place fewer reads back as the float, the
+// result is never farther from the float than a neighbour that reads back
+// as it, and where one is exactly as near, the result ends in an even
+// digit, as Python's `repr` does.
+#[test]
+fn the_decimal_of_a_float_is_the_nearest_shortest_and_even_at_a_tie() {
+    let mut rng = Rng(0x0475_1F2E_3D4C_5B6A);
+    let (mut ties, mut ties_below) = (0, 0);
+    for _ in 0..200_000 {
+        // n * 2^b + k stays below 2^53, so the float holds it exactly, and
+        // times 5^b below 2^96, so a decimal holds its exact value.
+        let b = 1 + rng.below(18) as u32;
+        let width = 1 + rng.below(52 - u64::from(b));
+        let whole = rng.below(1 << width);
+        let odd = 2 * rng.below(1 << (b - 1)) + 1;
+        let scaled = (whole << b) + odd;
+        let sign = rng.sign();
+        let float = sign as f64 * (scaled as f64 / (1u64 << b) as f64);
+        assert_eq!(float.abs() * (1u64 << b) as f64, scaled as f64, "exact");
+        let exact = Decimal::try_from_i128_with_scale(sign * i128::from(scaled) * 5i128.pow(b), b)
+            .expect("the float's exact value");
+
+        let decimal = decimal_from_f64(float).expect("converts");
+        assert_eq!(
+            decimal_to_f64(decimal).to_bits(),
+            float.to_bits(),
+            "{float:?} via {decimal}"
+        );
+        // It is the shortest: with one decimal place fewer, neither the
+        // decimal below it nor the one above it reads back as the float.
+        if decimal.scale() > 0 {
+            for strategy in [RoundingStrategy::ToZero, RoundingStrategy::AwayFromZero] {
+                let shorter = decimal.round_dp_with_strategy(decimal.scale() - 1, strategy);
+                assert_ne!(
+                    decimal_to_f64(shorter).to_bits(),
+                    float.to_bits(),
+                    "{float:?}: {shorter} is shorter than {decimal}"
+                );
+            }
+        }
+        let unit = Decimal::new(1, decimal.scale());
+        let distance = (decimal - exact).abs();
+        for neighbour in [decimal - unit, decimal + unit] {
+            if decimal_to_f64(neighbour).to_bits() != float.to_bits() {
+                continue;
+            }
+            let other = (neighbour - exact).abs();
+            assert!(
+                distance <= other,
+                "{float:?}: {neighbour} is nearer than {decimal}"
+            );
+            if distance == other {
+                assert_eq!(
+                    decimal.mantissa() % 2,
+                    0,
+                    "{float:?} lies halfway between {decimal} and {neighbour}"
+                );
+                ties += 1;
+                if neighbour.abs() > decimal.abs() {
+                    ties_below += 1;
+                }
+            }
+        }
+    }
+    // Both kinds are met: the even digit below the float, where `Display`
+    // would give the one above, and the even digit above it.
+    assert!(
+        ties_below >= 1_000 && ties - ties_below >= 1_000,
+        "{ties} ties, {ties_below} of them decided downwards"
+    );
 }

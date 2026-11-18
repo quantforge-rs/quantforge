@@ -15,7 +15,9 @@ from it, and QUA-207 (ALG-737) the payload of an alert and what its signal
 resolves to. QUA-469 (ALG-377) bound to Python what the tables below say
 reaches it, QUA-464 (ALG-378) the candle strategy itself, and QUA-470
 (ALG-379) the function that runs one, with the backtest's refusal of a
-series that is not Spot. The rest lands with the stories named below.
+series that is not Spot, and QUA-475 (ALG-380) a batch of candles as NumPy
+arrays, with the market a batch names. The rest lands with the stories
+named below.
 
 ## Changed in Rust by ALG-733
 
@@ -127,8 +129,8 @@ The candle strategy's backtest, as the Python package runs it
 
 | What | In Python |
 | --- | --- |
-| `BacktestEngine::run`, with the market, the candles and the strategy of a run, under a `BacktestConfig` | `run_backtest(candles, strategy, config, *, market)`: the engine's own run, on the thread that called. `candles` is a `CandleBatch` or anything that iterates `Candle`s |
-| The market of a run, a `MarketId` | `market`, given by name alone and never assumed: it names its product line, and so its family |
+| `BacktestEngine::run`, with the market, the candles and the strategy of a run, under a `BacktestConfig` | `run_backtest(candles, strategy, config, *, market=None)`: the engine's own run, on the thread that called. `candles` is a `CandleBatch` or anything that iterates `Candle`s |
+| The market of a run, a `MarketId` | `market`, given by name alone and never assumed: it names its product line, and so its family. Since QUA-475 a batch that names its market stands in for it ([below](#bound-to-python-by-qua-475)) |
 | `BacktestResult`, with its `ClosedTrade`s and `EquityPoint`s | The result of a run, with the engine's fields under the engine's names, each meaning what it means in Rust |
 | `EngineError` | A `ValueError` in the engine's words for what it refuses before the strategy is called, a market that is not Spot or no candles; an `OverflowError` for an amount beyond its decimal; and, for a `StrategyError`, the exception the callback raised |
 
@@ -148,6 +150,39 @@ every other lists its decisions: the crate's tests run the rule written in
 Rust over four hours of generated candles, and the package's tests hold
 the same rule written in Python to it through `run_backtest`, decision for
 decision and digit for digit.
+
+## Bound to Python by QUA-475
+
+A batch of candles as NumPy arrays, as the Python package has it
+([python-numpy.md](python-numpy.md)):
+
+| What | In Python |
+| --- | --- |
+| `CandleBatch`'s columns, each one array | `CandleBatch.to_numpy()`, a dict of eight arrays of one dimension, and `CandleBatch.from_numpy(...)`, which takes eight back. A time is int64 and a trade count uint64, both exact, and a count the exchange did not report is a masked entry, never a number |
+| `decimal_to_f64` and `decimal_from_f64`, the decimal ↔ float64 policy | Applied to a batch's prices and volumes as a whole, and nowhere else: a float64 array is the float nearest to each decimal, and a float is read as the decimal of its shortest text, or refused by its row |
+| The data-series key a batch's candles are of, a `MarketId` | `CandleBatch.market`, given by `market=` where a batch is built and `None` where it is not. Two batches of the same candles are equal only where they name the same market. The arrays hold no market: whoever builds a batch from arrays names what they are of |
+| The market of a run | `run_backtest` runs a batch on the market it names, so `market=` may be left out beside one, and refuses a market other than that one: a linear series is never run as its Spot namesake. Candles that name no market still need `market=` |
+
+`CandleBatch` did not change in Rust: it holds columns and no market. The
+market a batch names is the Python class's own, kept beside the engine's
+batch, and the policy is the one it [was](#not-changing).
+
+One thing of the engine's was corrected for it:
+
+| Change | Where |
+| --- | --- |
+| A float64 that lies exactly halfway between two shortest decimal strings becomes the one whose last digit is even, as Python's `repr` writes it, which the policy names as what the conversion is. It became the one of larger magnitude, which is what Rust's `Display` wrote there | `quantforge::decimal_from_f64` |
+
+`tests/fixtures/decimal_float_cases.csv` gained nine floats that lie
+halfway, with the decimals Python gives them: eight that become the one of
+the even digit, and 2^-24, of whose two candidates only the odd one reads
+back as it, so that it keeps the odd one. The package's tests hold a whole
+column to the same cases, and to Python's own `float(str(d))` and
+`Decimal(repr(x))` over thousands of values. They take the fixtures there
+were to NumPy and back as well: every product line of
+`storage_identity_cases.json` kept with its batch and apart from its
+namesakes, and the goldens' frozen day, which comes back the same batch by
+value and backtests to the frozen result by value.
 
 ## Changing next
 
