@@ -566,32 +566,38 @@ lost the decimal places an exchange wrote, and holds a decimal of more than
 - **A sum over a frame is a sum of floats.**
   `trades["gross_quote_pnl"].sum()` is near the exact total, and need not
   be it.
-- **A sum over a result's decimals is exact while it fits Python's decimal
-  context,** which keeps 28 digits unless it was told otherwise. Each
-  amount in a result is exact, and
-  `sum(trade.gross_quote_pnl for trade in result.trades)` adds them as
-  Python adds decimals: a total of more digits than the context keeps is
-  rounded to that many, and nothing says so.
+- **A sum over a result's decimals is exact while every sum on the way
+  fits Python's decimal context,** which keeps 28 digits unless it was told
+  otherwise. Each amount in a result is exact, and
+  `sum(trade.gross_quote_pnl for trade in result.trades)` adds them one
+  after another as Python adds decimals: a sum of more digits than the
+  context keeps is rounded to that many, and nothing says so. That is so of
+  each sum on the way and not of the total alone: a gain and a loss that
+  cancel leave a total of few digits behind sums of many.
 
 A context that keeps more digits and traps `Inexact` gives the exact total,
-or raises where it could not. An amount of the engine's has at most 29
-digits before the point and 28 after it, so 80 digits hold the total of any
-run:
+or raises where a sum on the way could not be kept. An amount of the
+engine's has at most 29 digits before the point and 28 after it, so 80
+digits hold every sum of any run:
 
 ```python
 >>> import decimal
->>> amounts = [Decimal("1"), Decimal("0.0000000000000000000000000001")]
+>>> amounts = [Decimal("1e28"), Decimal("1"), Decimal("-1e28")]
 >>> decimal.getcontext().prec
 28
 >>> sum(amounts)
-Decimal('1.000000000000000000000000000')
+Decimal('0E+1')
 >>> with decimal.localcontext() as context:
 ...     context.prec = 80
 ...     context.traps[decimal.Inexact] = True
 ...     sum(amounts)
 ...
-Decimal('1.0000000000000000000000000001')
+Decimal('1')
 ```
+
+The exact total is 1, and the first answer is zero: the first two amounts
+add up to 29 digits, of which 28 were kept, and the third took the rest
+away.
 
 The package's tests take the goldens' frozen day of candles to a frame and
 back, where it is the same batch by value and its backtest the frozen
