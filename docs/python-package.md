@@ -14,8 +14,10 @@ over candles in the engine, which drives it through
 [the strategy adapter](#the-strategy-adapter). An SMA cross written in
 Python is held to the frozen results of the engine's own, digit for digit
 ([the goldens](golden-parity.md)). A batch of candles crosses to NumPy
-arrays and back ([candles as NumPy arrays](python-numpy.md)). The candle
-reader and the pandas helpers are bound by the stories that follow.
+arrays and back ([candles as NumPy arrays](python-numpy.md)), and candles
+and a backtest's result are given as pandas DataFrames
+([candles and results as pandas DataFrames](python-pandas.md)). The candle
+reader is bound by the story that follows.
 
 ## Contents
 
@@ -24,7 +26,7 @@ reader and the pandas helpers are bound by the stories that follow.
 - [Two versions](#two-versions)
 - [Python versions](#python-versions)
 - [Storage backends](#storage-backends)
-- [NumPy](#numpy)
+- [Extras](#extras)
 - [The strategy adapter](#the-strategy-adapter)
 - [Layout](#layout)
 - [Building it](#building-it)
@@ -71,8 +73,9 @@ directory.
 ## What it holds
 
 What the package says about itself, the engine's types, the strategy a
-class implements, the function that runs one, and the two conversions
-between a decimal and a float:
+class implements, the function that runs one, the two conversions between a
+decimal and a float, and the four functions that give or take a pandas
+DataFrame:
 
 <!-- begin: public names -->
 | Name | What it is |
@@ -97,6 +100,10 @@ between a decimal and a float:
 | `run_backtest` | Runs a strategy over candles in the engine, and gives the result |
 | `decimal_to_f64` | The float nearest to a decimal |
 | `decimal_from_f64` | The decimal of a float's shortest text |
+| `candles_to_dataframe` | A batch of candles as a pandas DataFrame |
+| `dataframe_to_candles` | A pandas DataFrame of candles as a batch |
+| `trades_to_dataframe` | The closed trades of a backtest's result as a pandas DataFrame |
+| `equity_to_dataframe` | The equity curve of a backtest's result as a pandas DataFrame |
 <!-- end: public names -->
 
 ```python
@@ -119,8 +126,11 @@ a decimal crosses, every signature and field, what each refuses, how a
 strategy is called, and how a backtest is run. A price, a quantity or an
 amount is a `decimal.Decimal` on both sides, and never a float. It becomes
 one only where it is asked to, by the engine's own conversion:
-`decimal_to_f64` for one value, and a batch's columns as NumPy arrays,
-which [candles as NumPy arrays](python-numpy.md) is the contract of.
+`decimal_to_f64` for one value, a batch's columns as NumPy arrays, which
+[candles as NumPy arrays](python-numpy.md) is the contract of, and the
+frames of candles and of a result, which
+[candles and results as pandas DataFrames](python-pandas.md) is the
+contract of.
 
 ## Two versions
 
@@ -159,6 +169,7 @@ same, so `pip` refuses an older one.
 in October 2026), the oldest that pandas and pyarrow release for, and the
 first whose stable ABI has the buffer protocol. NumPy's current series, 2.5,
 needs Python 3.12; on 3.11 `pip` installs 2.4, the last that runs there.
+pandas' current series, 3.1, runs on both.
 
 Two kinds of interpreter are left out:
 
@@ -177,43 +188,58 @@ published artifact is ([parity](parity/README.md#artifacts)), so
 PostgreSQL code and says so: `STORAGE_BACKENDS` is `("sqlite",)`. It is
 built and tested, and never published as `quantforge-py`.
 
-## NumPy
+## Extras
 
-**The package requires nothing but Python.** NumPy is its one extra, which
-`pip` installs where the package is asked for with it:
+**The package requires nothing but Python.** It has two extras, which `pip`
+installs where the package is asked for with one:
 
 <!-- begin: extras -->
 | Extra | Requires | Installed by |
 | --- | --- | --- |
 | `numpy` | `numpy>=2.0,<3` | `pip install "quantforge-py[numpy]"` |
+| `pandas` | `numpy>=2.0,<3`, `pandas>=2.2.2,<4` | `pip install "quantforge-py[pandas]"` |
 <!-- end: extras -->
 
-`CandleBatch.to_numpy` and `CandleBatch.from_numpy` are what need it
-([candles as NumPy arrays](python-numpy.md)).
+`CandleBatch.to_numpy` and `CandleBatch.from_numpy` are what need NumPy
+([candles as NumPy arrays](python-numpy.md)). The four functions that give
+or take a DataFrame are what need pandas, and NumPy with it: a frame is
+made of a batch's arrays, so the `pandas` extra asks for the NumPy the
+`numpy` extra asks for, in the same words
+([candles and results as pandas DataFrames](python-pandas.md)).
 
-- **Without NumPy, everything else works.** The two raise an `ImportError`
-  that says what to install, where Python finds no NumPy and where the one
-  it finds is one the extra does not take, older than 2.0 or from 3 on
-  ([NumPy itself](python-numpy.md#numpy-itself)).
-- **NumPy is imported when one of the two is first called,** and never
-  when the package is. Importing `quantforge_py`, building its types and
-  running a backtest import none of it.
-- **The package brings no NumPy of its own into an environment.** A
-  strategy bundle pins the packages it imports, NumPy among them
+- **Without either, everything else works.** What needs one raises an
+  `ImportError` that says what to install, where Python finds none and
+  where the one it finds is one the extra does not take: a NumPy older than
+  2.0 or from 3 on ([NumPy itself](python-numpy.md#numpy-itself)), a pandas
+  older than 2.2.2 or from 4 on
+  ([pandas itself](python-pandas.md#pandas-itself)).
+- **Each is imported when something that needs it is first called,** and
+  never when the package is. Importing `quantforge_py`, building its types
+  and running a backtest import neither, and a batch's arrays import no
+  pandas.
+- **The package brings neither into an environment of its own accord.** A
+  strategy bundle pins the packages it imports, NumPy and pandas among them
   ([bundle-spec.md](bundle-spec.md#deps)), and a worker that runs it has
-  that one: a package that required a NumPy would have a say in which.
-- **The extension is not built against a NumPy.** It finds the one that is
-  installed as it runs, through the `numpy` crate, so the one wheel of a
+  those: a package that required one would have a say in which.
+- **The extension is not built against either.** It finds the NumPy that
+  is installed as it runs, through the `numpy` crate, so the one wheel of a
   platform serves every NumPy the tests run on, from 2.0.0 to the newest,
-  as it serves every Python from 3.11 on. Building a wheel needs no NumPy
-  at all.
-- **The tests run on the oldest NumPy the extra takes, on the newest, and
-  with none.** The oldest Python the package supports has no wheel of the
-  newest NumPy, and the newest Python none of the oldest: NumPy 2.0 runs on
-  Python up to 3.12, and the current series from 3.12 on. So the oldest
-  NumPy is tested on the oldest Python, the newest NumPy `pip` finds on
-  each Python, and the package installed without its extra on the oldest
-  Python once more ([testing it](#testing-it)).
+  as it serves every Python from 3.11 on. pandas is reached through its
+  own Python calls, from the one module of the package that is written in
+  Python. Building a wheel needs neither.
+- **How an extra is found is one piece of the extension for both**
+  (`src/extra.rs`): whether Python finds it, which version it states, and
+  whether the extra takes that version, read as `pip` reads the extra's
+  bounds.
+- **The tests run on the oldest NumPy and the oldest pandas the extras
+  take, on the newest, with NumPy alone, and with neither.** The oldest
+  Python the package supports has no wheel of the newest NumPy, and the
+  newest Python none of the oldest NumPy or the oldest pandas: NumPy 2.0.0
+  and pandas 2.2.2 run on Python up to 3.12, and the current NumPy from
+  3.12 on. So the two oldest are tested together on the oldest Python, the
+  newest of each that `pip` finds on each Python, and on the oldest Python
+  twice more: the package installed with its `numpy` extra alone, and
+  without its extras ([testing it](#testing-it)).
 
 ## The strategy adapter
 
@@ -282,24 +308,27 @@ extension module, and the Python package the extension is built into.
 quantforge-py/
 ├── Cargo.toml              the crate: PyO3 with the stable ABI of 3.11, the `numpy` crate, the `postgres` feature, never published to crates.io
 ├── README.md               what PyPI shows for the package
-├── pyproject.toml          the distribution: its name and metadata, NumPy as its one extra, maturin as the build backend, where the package and the extension go
+├── pyproject.toml          the distribution: its name and metadata, NumPy and pandas as its extras, maturin as the build backend, where the package and the extension go
 ├── benches/
 │   └── candle_arrays.py    how long a batch of candles takes to cross to NumPy arrays and back: figures to read, which no test holds a run to
 ├── python/
 │   └── quantforge_py/
-│       └── __init__.py     the package: publishes the extension module's names
+│       ├── __init__.py     the package: publishes the extension module's names, and the four functions of the module beside it
+│       └── _frames.py      candles and a backtest's result as pandas DataFrames, and a frame of candles as a batch: written in Python, with pandas' own calls
 ├── src/
 │   ├── adapter.rs          the engine's Strategy over a Python object: a thread attached for each callback, a failure with its traceback
 │   ├── arrays.rs           a batch's columns as NumPy arrays, and arrays as a batch: what crosses exactly, what as a float64, and what is refused
 │   ├── arrays/
 │   │   ├── column.rs       one array as a column: held to the column's type as it is taken and again as its cells are read, read where it lies or through a copy NumPy makes
 │   │   ├── counts.rs       the trade counts: a plain array or a masked one made over a plain array, and its mask read as bytes
-│   │   └── installed.rs    NumPy as it is found: imported when a conversion is first asked for, and what is said where there is none or one the extra does not take
+│   │   └── installed.rs    NumPy as it is found: the versions its extra takes, and what is said of a module that has NumPy's name and not its arrays
 │   ├── backtest.rs         BacktestConfig, EquityPoint and BacktestResult: a backtest's settings and its result
 │   ├── bench.rs            the private entry a host that embeds Python is tested through: one backtest, run as such a host runs one
 │   ├── candles.rs          Candle and CandleBatch: one bar, and bars held column by column with the market they are of
 │   ├── convert.rs          how a value crosses: an exact decimal, an integer, text, and a refusal in the engine's words
+│   ├── extra.rs            an extra of the package as it is found: imported when something that needs it is first asked for, held to the versions the extra takes, and what is said where there is none
 │   ├── floats.rs           decimal_to_f64 and decimal_from_f64: the one crossing between a decimal and a float
+│   ├── frames.rs           what the pandas functions are built on, each private: pandas and NumPy as they are found, and a result's trades and equity curve column by column
 │   ├── lib.rs              the extension module, quantforge_py._native
 │   ├── market.rs           Symbol, Interval, Category, ExchangeId and MarketId: what a market is
 │   ├── run.rs              run_backtest: a run's arguments read, the market of the run settled, the engine run on the calling thread, and what it refused raised in its words
@@ -316,9 +345,13 @@ quantforge-py/
     ├── test_market.py      a symbol, an interval, a product family, a product line and a market
     ├── test_numpy.py       a batch's columns as NumPy arrays and arrays as a batch: each array's type and shape, what crosses exactly and what as a float, and every refusal
     ├── test_numpy_fixtures.py  the repository's fixtures through a batch that names its market and through NumPy: every product line kept apart, a store's decimals, the frozen day of candles and its backtest
-    ├── test_numpy_optional.py  NumPy as the package's one extra: when it is imported, and what the two conversions say where Python finds none or one the extra does not take
+    ├── test_numpy_optional.py  NumPy as an extra of the package: when it is imported, and what the two conversions say where Python finds none or one the extra does not take
     ├── test_numpy_page.py  the page of the NumPy arrays, held to the package
     ├── test_package.py     the imported package: its names, its classes, its versions, its storage backends
+    ├── test_pandas.py      candles and a result as pandas DataFrames, and a frame as a batch: each frame's index and columns, every time exact, what crosses as a float, and every refusal
+    ├── test_pandas_fixtures.py  the repository's Spot fixtures through frames: the frozen day of candles and its backtest, the frames of the frozen result, the shared strategy cases, a store's decimals, every product line
+    ├── test_pandas_optional.py  pandas as an extra of the package: when it is imported, what the four functions say where Python finds none or one the extra does not take, and the NumPy asked for beside it
+    ├── test_pandas_page.py  the page of the DataFrames, held to the package
     ├── test_repository.py  this page, the readme and the manifests, held to the package
     ├── test_run_backtest.py  run_backtest: what it takes, the order it checks that in, the market a batch names, what the engine refuses, and that a run repeats
     ├── test_strategy.py    a target, a context, and the class a strategy derives from
@@ -342,7 +375,7 @@ cd quantforge-py
 python -m venv .venv
 . .venv/bin/activate
 pip install maturin pytest
-maturin develop --extras numpy
+maturin develop --extras numpy,pandas
 python -c "import quantforge_py"
 ```
 
@@ -350,9 +383,10 @@ python -c "import quantforge_py"
 the package into the virtualenv in place: the virtualenv imports
 `quantforge-py/python/quantforge_py/`, so a change to a Python file needs
 no rebuild, and a change to the Rust code needs `maturin develop` again.
-`--extras numpy` installs NumPy with it, as the package's extra asks for
-it, which the tests of the arrays need. Without the flag the package is
-installed alone, as `pip install quantforge-py` installs it.
+`--extras numpy,pandas` installs NumPy and pandas with it, as the package's
+extras ask for them, which the tests of the arrays and of the frames need.
+Without the flag the package is installed alone, as `pip install
+quantforge-py` installs it.
 
 `maturin build` writes a wheel to the repository's `target/wheels/`
 instead:
@@ -457,6 +491,43 @@ They hold the installed package to the checkout they are in:
   is the same batch by value and its backtest the frozen result by value.
   And every table and example of
   [python-numpy.md](python-numpy.md).
+- **pandas** (`test_pandas.py`, `test_pandas_fixtures.py`,
+  `test_pandas_page.py`): candles and a backtest's result as DataFrames,
+  and a frame of candles as a batch. The index and the columns of each
+  frame, by name and by type, the same on every pandas the extra takes and
+  whatever pandas is told to make of text, the names of the columns among
+  it, and a frame beside the one pandas makes of its cells, equal to it but
+  for the type of those names; every time the engine's own millisecond,
+  shown as a UTC time and checked against Python's own dates, the one
+  integer pandas reads as no time refused, and whole milliseconds in a
+  finer unit read as integers; a price and an amount as the float Python
+  reads from its text, and a float as the decimal of Python's `repr` of
+  it; a count that is unknown missing, and never a number; a frame read
+  whatever the order of its columns, the zone and the unit of its times and
+  the place of its rows, with any other column left unread; and every
+  refusal, each type held in the columns' order before a value is read, a
+  frame and an index of a derived type among them, and the first time that
+  is refused named whatever it is refused for. Every call of the four
+  functions, the page's examples' among them, is held to drawing no warning
+  from pandas or NumPy, which is how either says that what was asked of it
+  will change. That each docstring states its frame's index and columns.
+  Then the repository's fixtures, none of which is changed: the goldens'
+  frozen day taken to a frame and
+  back, where it is the same batch by value and its backtest the frozen
+  result by value; the frames of the frozen result held to Python's reading
+  of the frozen file's text, cell for cell; the candles and the results of
+  the shared strategy cases; a store's decimals; and every product line,
+  whose frames are one frame and whose batches are six. And every table
+  and example of [python-pandas.md](python-pandas.md).
+- **pandas as an extra** (`test_pandas_optional.py`): that pandas is
+  imported only when a frame is asked for; what each of the four functions
+  says where Python finds none, with everything else at work beside them,
+  a batch's arrays among it; a pandas taken or refused by its version as
+  `pip` reads the extra's bounds, with `packaging` as the judge; a pandas
+  that fails as it is imported, which raises its own error; and NumPy asked
+  for after pandas and before any argument is looked at. Each asks a fresh
+  interpreter that is kept from pandas or handed a module in its place, so
+  these run where pandas is installed and where it is not.
 - **NumPy as an extra** (`test_numpy_optional.py`): that NumPy is imported
   only when a conversion is asked for, and what the two conversions say
   where Python finds none, with everything else at work beside them; a
@@ -492,31 +563,36 @@ QUANTFORGE_PY_TEST_SQLITE_ONLY=1 pytest
 Unset, they expect the package as it is published, with both stores. Any
 other value stops the run.
 
-They are told as well when they run on the oldest NumPy the extra takes,
-which `pyproject.toml` pins in a dependency group of its own:
+They are told as well when they run on the oldest NumPy and the oldest
+pandas the extras take, each of which `pyproject.toml` pins in a dependency
+group of its own:
 
 ```bash
-pip install "numpy==2.0.0"
-QUANTFORGE_PY_TEST_OLDEST_NUMPY=1 pytest
+pip install "numpy==2.0.0" "pandas==2.2.2"
+QUANTFORGE_PY_TEST_OLDEST_NUMPY=1 QUANTFORGE_PY_TEST_OLDEST_PANDAS=1 pytest
 ```
 
-Told so, they hold the NumPy of the run to that pin. Unset, they take any
-NumPy the extra does.
+Told so, they hold the NumPy and the pandas of the run to those pins.
+Unset, they take any NumPy and any pandas the extras do.
 
-And they are told when the package is installed without its extra, where
-there is no NumPy to import:
+And they are told when the package is installed without its extras, where
+there is no NumPy and no pandas to import:
 
 ```bash
-pip uninstall --yes numpy
-QUANTFORGE_PY_TEST_WITHOUT_NUMPY=1 pytest
+pip uninstall --yes numpy pandas
+QUANTFORGE_PY_TEST_WITHOUT_NUMPY=1 QUANTFORGE_PY_TEST_WITHOUT_PANDAS=1 pytest
 ```
 
-Told so, the tests of the arrays are skipped, and the rest hold the
-package to working without NumPy: the readme's example of the arrays has
-to say what to install. A run stops before its first test where it is not
-what it was said to be, one with a NumPy that was said to have none or one
-without that was not, so that no run passes for want of the tests it
-skipped.
+Told so, the tests of the arrays and of the frames are skipped, and the
+rest hold the package to working without either: the readme's examples of
+the arrays and of the frames have to say what to install. Each extra has a
+variable of its own, so a run with NumPy and without pandas, as
+`pip install "quantforge-py[numpy]"` leaves an environment, is told the
+second alone, and has the tests of the arrays; a run without NumPy is one
+without pandas, which does not import without it, and is told both. A run
+stops before its first test where it is not what it was said to be, one
+with a NumPy or a pandas that was said to have none or one without that was
+not, so that no run passes for want of the tests it skipped.
 
 Some tests wait on another thread, which a fault in how the interpreter is
 held could leave waiting for good. A test that takes longer than a minute
@@ -539,10 +615,11 @@ formats it, and its files are held to the same
 [size budget](../CONTRIBUTING.md#file-size-budget).
 
 `scripts/python-package-check.sh` runs all of it: the lints, the crate's
-check with Rust 1.85, the wheel with its extra on every Python it is
-given, the wheel on the oldest NumPy, the wheel without its extra, the
-SQLite-only wheel, and the in-place install. It is CI's `python` job, which
-names the oldest Python and the newest:
+check with Rust 1.85, the wheel with its extras on every Python it is
+given, the wheel on the oldest NumPy and the oldest pandas, the wheel with
+NumPy alone, the wheel without its extras, the SQLite-only wheel, and the
+in-place install. It is CI's `python` job, which names the oldest Python
+and the newest:
 [ci.md](ci.md#the-python-package).
 
 ## The workspace
@@ -573,7 +650,7 @@ The spikes under `spikes/` are workspaces of their own, as before.
 
 | What | Story |
 | --- | --- |
-| The pandas helpers, and the candle reader | QUA-473, QUA-472 |
+| The candle reader | QUA-472 |
 | The goldens reproduced from candles read out of each store, and by a server's job | QUA-458 |
 | A Python strategy run by a server's worker and by the command line | QUA-353, QUA-461 |
 | Wheels built and tested on Linux, macOS and Windows | QUA-474 |

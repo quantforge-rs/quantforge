@@ -7,12 +7,13 @@
 //! result, each built by the engine's own rule and refused in the engine's
 //! own words; the strategy a class implements, which an engine drives
 //! through the adapter (`adapter.rs`); `run_backtest`, which runs such a
-//! strategy over candles in the engine (`run.rs`); and a batch of candles
-//! as NumPy arrays, and back (`arrays.rs`).
+//! strategy over candles in the engine (`run.rs`); a batch of candles as
+//! NumPy arrays, and back (`arrays.rs`); and what the package's pandas
+//! functions, which are written in Python, are built on (`frames.rs`).
 //! `docs/python-package.md` says how the package is named, built and
 //! tested, `docs/python-types.md` what each type takes and gives and how a
-//! backtest is run, and `docs/python-numpy.md` what crosses to NumPy and
-//! how.
+//! backtest is run, `docs/python-numpy.md` what crosses to NumPy and how,
+//! and `docs/python-pandas.md` what a frame of candles and of a result is.
 
 // As in the `quantforge` crate. The unsafe code an extension module needs is
 // what PyO3's macros expand to, which the lint leaves alone.
@@ -27,7 +28,9 @@ mod backtest;
 mod bench;
 mod candles;
 mod convert;
+mod extra;
 mod floats;
+mod frames;
 mod market;
 mod run;
 mod strategy;
@@ -52,6 +55,10 @@ mod native {
     use crate::candles::{Candle, CandleBatch};
     #[pymodule_export]
     use crate::floats::{decimal_from_f64, decimal_to_f64};
+    // Private: what the package's pandas functions, written in Python, are
+    // built on.
+    #[pymodule_export]
+    use crate::frames::{equity_columns, found_numpy, found_pandas, trade_columns};
     #[pymodule_export]
     use crate::market::{Category, ExchangeId, Interval, MarketId, Symbol};
     #[pymodule_export]

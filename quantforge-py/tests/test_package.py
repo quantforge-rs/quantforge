@@ -9,15 +9,15 @@ import sys
 import pytest
 
 import quantforge_py
-from quantforge_py import _native
+from quantforge_py import _frames, _native
 
 # MAJOR.MINOR.PATCH without leading zeros: an engine version as a strategy
 # bundle's `engine` requirement names one (docs/bundle-spec.md).
 ENGINE_VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
 # What the package publishes, in the order `__all__` gives it: what it says
-# about itself, the engine's types, the function that runs a backtest, and
-# the two conversions.
+# about itself, the engine's types, the function that runs a backtest, the
+# two conversions, and the functions that give or take a pandas DataFrame.
 ABOUT = ["__version__", "ENGINE_VERSION", "STORAGE_BACKENDS"]
 TYPES = [
     "Symbol",
@@ -36,6 +36,14 @@ TYPES = [
     "Strategy",
 ]
 FUNCTIONS = ["run_backtest", "decimal_to_f64", "decimal_from_f64"]
+# Written in Python, in the package's private `_frames` module: pandas is at
+# home there.
+FRAMES = [
+    "candles_to_dataframe",
+    "dataframe_to_candles",
+    "trades_to_dataframe",
+    "equity_to_dataframe",
+]
 
 # The one class that exists to be derived from.
 DERIVED_FROM = "Strategy"
@@ -46,16 +54,24 @@ def public(module) -> list[str]:
 
 
 def test_the_package_publishes_its_names_and_holds_no_other_public_one():
-    assert quantforge_py.__all__ == ABOUT + TYPES + FUNCTIONS
+    assert quantforge_py.__all__ == ABOUT + TYPES + FUNCTIONS + FRAMES
     published = sorted(name for name in quantforge_py.__all__ if not name.startswith("_"))
     assert public(quantforge_py) == published
-    # The extension module holds the same names and no other.
-    assert public(_native) == published
+    # The extension module holds the same names and no other, but for the
+    # functions written in Python.
+    assert public(_native) == sorted(set(published) - set(FRAMES))
 
 
-def test_every_published_name_is_the_extension_modules_own():
+def test_every_published_name_is_the_extension_modules_own_or_the_frame_modules():
     for name in quantforge_py.__all__:
-        assert getattr(quantforge_py, name) is getattr(_native, name), name
+        home = _frames if name in FRAMES else _native
+        assert getattr(quantforge_py, name) is getattr(home, name), name
+    # A function written in Python says which module it is written in, which
+    # is private as the extension module is.
+    for name in FRAMES:
+        assert getattr(quantforge_py, name).__module__ == _frames.__name__, name
+    assert _frames.__name__ == "quantforge_py._frames"
+    assert pathlib.Path(_frames.__file__).parent == pathlib.Path(quantforge_py.__file__).parent
 
 
 def test_every_type_is_a_class_of_the_package_and_a_strategy_alone_is_derived_from():
@@ -72,7 +88,7 @@ def test_every_type_is_a_class_of_the_package_and_a_strategy_alone_is_derived_fr
             continue
         with pytest.raises(TypeError, match="not an acceptable base type"):
             type("Derived", (bound,), {})
-    for name in FUNCTIONS:
+    for name in FUNCTIONS + FRAMES:
         bound = getattr(quantforge_py, name)
         assert callable(bound) and not isinstance(bound, type), name
         assert bound.__name__ == name
@@ -87,13 +103,31 @@ def test_the_extension_module_is_private_and_built_for_the_stable_abi():
     assert extension.parent == pathlib.Path(quantforge_py.__file__).parent
 
 
-def test_the_extension_module_holds_one_private_entry_which_the_package_does_not_publish():
+def test_the_extension_module_holds_five_private_entries_which_the_package_does_not_publish():
     private = [name for name in vars(_native) if name.startswith("_") and not name.startswith("__")]
-    # A backtest as a host that embeds Python runs one, for the package's own
-    # tests: the run Python hosts is `run_backtest`, which is published.
-    assert private == ["_embedded_backtest"]
-    assert not hasattr(quantforge_py, "_embedded_backtest")
-    assert "_embedded_backtest" not in quantforge_py.__all__
+    assert sorted(private) == [
+        # A backtest as a host that embeds Python runs one, for the package's
+        # own tests: the run Python hosts is `run_backtest`, which is
+        # published.
+        "_embedded_backtest",
+        # What the functions that give or take a DataFrame are built on: a
+        # result's equity curve and its trades column by column, and NumPy
+        # and pandas as they are found.
+        "_equity_columns",
+        "_numpy",
+        "_pandas",
+        "_trade_columns",
+    ]
+    for name in private:
+        assert not hasattr(quantforge_py, name), name
+        assert name not in quantforge_py.__all__
+        assert getattr(_native, name).__doc__, name
+    assert [str(inspect.signature(getattr(_native, name))) for name in sorted(private)[1:]] == [
+        "(result, /)",
+        "()",
+        "()",
+        "(result, /)",
+    ]
     # It takes what the published function takes.
     taken = inspect.signature(_native._embedded_backtest)
     assert str(taken) == "(candles, strategy, config, *, market=None)"

@@ -30,7 +30,7 @@ import pytest
 
 import quantforge_py as qf
 
-# The arrays need NumPy, the package's one extra. Where the package is
+# The arrays need NumPy, an extra of the package. Where the package is
 # installed without it there is nothing of them to test, and the run says so:
 # `test_numpy_optional.py` holds what the package says there.
 np = pytest.importorskip("numpy")
@@ -1702,7 +1702,7 @@ def test_the_numpy_of_the_run_is_one_the_package_takes(pyproject, oldest_numpy):
     from packaging.requirements import Requirement
     from packaging.version import Version
 
-    # NumPy is the package's one extra, and the extra requires NumPy alone.
+    # The package's `numpy` extra requires NumPy alone.
     (required,) = map(Requirement, pyproject["project"]["optional-dependencies"]["numpy"])
     assert required.name == "numpy"
     assert required.specifier.contains(np.__version__), np.__version__

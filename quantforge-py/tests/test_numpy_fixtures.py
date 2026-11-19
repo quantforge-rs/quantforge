@@ -29,7 +29,7 @@ import pytest
 
 import quantforge_py as qf
 
-# The arrays need NumPy, the package's one extra. Where the package is
+# The arrays need NumPy, an extra of the package. Where the package is
 # installed without it there is nothing of them to test, and the run says so:
 # `test_numpy_optional.py` holds what the package says there.
 np = pytest.importorskip("numpy")

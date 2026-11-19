@@ -2,23 +2,24 @@
 # What CI's `python` job checks of the Python package (docs/ci.md,
 # docs/python-package.md): the extension crate's lints, with and without
 # PostgreSQL, and its oldest Rust; then the wheel maturin builds, installed
-# with its `numpy` extra and tested on every Python named, once more on the
-# oldest NumPy the extra takes, and once without the extra, where there is
-# no NumPy; the SQLite-only wheel; and the in-place install a contributor
-# works with.
+# with its extras, NumPy and pandas, and tested on every Python named, once
+# more on the oldest NumPy and the oldest pandas the extras take, once with
+# the `numpy` extra alone, where there is no pandas, and once without the
+# extras, where there is neither; the SQLite-only wheel; and the in-place
+# install a contributor works with.
 #
 #   scripts/python-package-check.sh [<python>...]
 #
 # Each <python> is an interpreter the one wheel is tested on, `python3` when
 # none is named, and the first one builds. CI names the oldest Python the
-# package supports and the newest. The oldest NumPy has a wheel for the
-# oldest Python and for none of the newest, so it is tested where the first
-# <python> is that oldest one, as in CI, and the script says so where it is
-# not. The script needs `rustup toolchain install 1.85`, takes maturin,
-# pytest and NumPy from PyPI as pyproject.toml asks for them, into
-# virtualenvs it removes, and leaves the extension built in place in
-# quantforge-py/python/, where git ignores it. It is written for Linux and
-# macOS: a virtualenv's programs are looked for in its bin/.
+# package supports and the newest. The oldest NumPy and the oldest pandas
+# have a wheel for the oldest Python and for none of the newest, so they
+# are tested where the first <python> is that oldest one, as in CI, and the
+# script says so where it is not. The script needs `rustup toolchain install
+# 1.85`, takes maturin, pytest, NumPy and pandas from PyPI as pyproject.toml
+# asks for them, into virtualenvs it removes, and leaves the extension built
+# in place in quantforge-py/python/, where git ignores it. It is written for
+# Linux and macOS: a virtualenv's programs are looked for in its bin/.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -29,10 +30,11 @@ fi
 
 # PyO3's build script asks a Python for its configuration: the one that builds.
 export PYO3_PYTHON=$1
-# Each run below says itself which build it tests, and on which NumPy or
-# on none.
+# Each run below says itself which build it tests, and on which NumPy and
+# which pandas, or on none.
 unset QUANTFORGE_PY_TEST_SQLITE_ONLY QUANTFORGE_PY_TEST_OLDEST_NUMPY \
-    QUANTFORGE_PY_TEST_WITHOUT_NUMPY
+    QUANTFORGE_PY_TEST_WITHOUT_NUMPY QUANTFORGE_PY_TEST_OLDEST_PANDAS \
+    QUANTFORGE_PY_TEST_WITHOUT_PANDAS
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -42,11 +44,12 @@ cargo clippy -p quantforge-py --all-targets --no-default-features -- -D warnings
 cargo +1.85 check --locked -p quantforge-py
 
 # What pyproject.toml asks for, one requirement a line: its build backend,
-# what the package's extras require (`extras-require`), or the dependency
-# group named. `extras` is the names of the extras, as `pip` takes them
-# between brackets. `oldest-python` is the oldest Python the package
-# supports, written as `3.11`, and `python` the version of the Python that
-# builds, written the same way.
+# what the package's extras require (`extras-require`, each requirement
+# once, though two extras ask for it), or the dependency group named.
+# `extras` is the names of the extras, as `pip` takes them between brackets.
+# `oldest-python` is the oldest Python the package supports, written as
+# `3.11`, and `python` the version of the Python that builds, written the
+# same way.
 requirements() {
     "$PYO3_PYTHON" - "$1" <<'EOF'
 import sys
@@ -59,8 +62,8 @@ if sys.argv[1] == "build":
 elif sys.argv[1] == "extras":
     print(",".join(pyproject["project"]["optional-dependencies"]))
 elif sys.argv[1] == "extras-require":
-    for required in pyproject["project"]["optional-dependencies"].values():
-        print(*required, sep="\n")
+    required = pyproject["project"]["optional-dependencies"].values()
+    print(*dict.fromkeys(one for extra in required for one in extra), sep="\n")
 elif sys.argv[1] == "oldest-python":
     print(pyproject["project"]["requires-python"].removeprefix(">="))
 elif sys.argv[1] == "python":
@@ -77,6 +80,7 @@ extras=$(requirements extras)
 extras_requirements=$(requirements extras-require)
 test_requirements=$(requirements test)
 oldest_numpy=$(requirements oldest-numpy)
+oldest_pandas=$(requirements oldest-pandas)
 oldest_python=$(requirements oldest-python)
 first_python=$(requirements python)
 
@@ -87,9 +91,10 @@ virtualenv() {
     shift 3
     "$python" -m venv "$directory"
     printf '%s\n' "$requirements" >"$directory/requirements.txt"
-    # NumPy comes as a wheel or not at all: it is never compiled here.
+    # NumPy and pandas come as wheels or not at all: neither is ever
+    # compiled here.
     "$directory/bin/python" -m pip install --quiet --disable-pip-version-check \
-        --only-binary numpy --requirement "$directory/requirements.txt" ${1+"$@"}
+        --only-binary numpy,pandas --requirement "$directory/requirements.txt" ${1+"$@"}
 }
 
 virtualenv "$1" "$work/build" "$build_requirements"
@@ -101,12 +106,15 @@ virtualenv "$1" "$work/build" "$build_requirements"
 )
 
 # Installs the wheel in <directory> into a fresh virtualenv of <python>, with
-# its extras, and runs the tests against it, with the newest NumPy pip finds
-# for that Python. What is particular to a run is named, and the tests are
-# told: `sqlite-only` is the build without PostgreSQL, `oldest-numpy` installs
-# the oldest NumPy the extra takes, which pyproject.toml pins, in place of
-# the newest, and `without-numpy` installs the wheel without its extras, as
-# `pip install quantforge-py` does, so that there is no NumPy.
+# its extras, and runs the tests against it, with the newest NumPy and the
+# newest pandas pip finds for that Python. What is particular to a run is
+# named, and the tests are told: `sqlite-only` is the build without
+# PostgreSQL, `oldest-extras` installs the oldest NumPy and the oldest pandas
+# the extras take, which pyproject.toml pins, in place of the newest,
+# `without-pandas` installs the wheel with its `numpy` extra alone, as `pip
+# install "quantforge-py[numpy]"` does, so that there is NumPy and no pandas,
+# and `without-extras` installs the wheel without its extras, as `pip install
+# quantforge-py` does, so that there is neither.
 runs=0
 tested() {
     local python=$1 directory=$2 particular=${3:-}
@@ -115,26 +123,37 @@ tested() {
     # The one wheel of the directory.
     for wheel in "$directory"/*.whl; do :; done
     case $particular in
-    oldest-numpy)
-        requirements+=$'\n'$oldest_numpy
+    oldest-extras)
+        requirements+=$'\n'$oldest_numpy$'\n'$oldest_pandas
         ;;
     esac
-    if [[ $particular == without-numpy ]]; then
+    case $particular in
+    without-extras)
         virtualenv "$python" "$work/test-$runs" "$requirements" "$wheel"
-    else
+        ;;
+    without-pandas)
+        virtualenv "$python" "$work/test-$runs" "$requirements" "${wheel}[numpy]"
+        ;;
+    *)
         virtualenv "$python" "$work/test-$runs" "$requirements" "${wheel}[${extras}]"
-    fi
+        ;;
+    esac
     (
         cd quantforge-py
         case $particular in
         sqlite-only)
             QUANTFORGE_PY_TEST_SQLITE_ONLY=1 "$work/test-$runs/bin/python" -m pytest
             ;;
-        oldest-numpy)
-            QUANTFORGE_PY_TEST_OLDEST_NUMPY=1 "$work/test-$runs/bin/python" -m pytest
+        oldest-extras)
+            QUANTFORGE_PY_TEST_OLDEST_NUMPY=1 QUANTFORGE_PY_TEST_OLDEST_PANDAS=1 \
+                "$work/test-$runs/bin/python" -m pytest
             ;;
-        without-numpy)
-            QUANTFORGE_PY_TEST_WITHOUT_NUMPY=1 "$work/test-$runs/bin/python" -m pytest
+        without-pandas)
+            QUANTFORGE_PY_TEST_WITHOUT_PANDAS=1 "$work/test-$runs/bin/python" -m pytest
+            ;;
+        without-extras)
+            QUANTFORGE_PY_TEST_WITHOUT_NUMPY=1 QUANTFORGE_PY_TEST_WITHOUT_PANDAS=1 \
+                "$work/test-$runs/bin/python" -m pytest
             ;;
         *)
             "$work/test-$runs/bin/python" -m pytest
@@ -147,21 +166,24 @@ tested() {
 for python in "$@"; do
     tested "$python" "$work/wheel"
 done
-# And on the oldest NumPy, where the Python is the one it has a wheel for.
+# And on the oldest NumPy and the oldest pandas, where the Python is the one
+# they have a wheel for.
 if [[ $first_python == "$oldest_python" ]]; then
-    tested "$1" "$work/wheel" oldest-numpy
-    numpy="and on the oldest numpy"
+    tested "$1" "$work/wheel" oldest-extras
+    oldest="and on the oldest numpy and pandas"
 else
-    numpy="the oldest numpy not tested: $1 is python $first_python, not $oldest_python"
+    oldest="the oldest numpy and pandas not tested: $1 is python $first_python, not $oldest_python"
 fi
-# And without its extras: the package alone, where there is no NumPy.
-tested "$1" "$work/wheel" without-numpy
+# And with its `numpy` extra alone, where there is NumPy and no pandas; and
+# without its extras: the package alone, where there is neither.
+tested "$1" "$work/wheel" without-pandas
+tested "$1" "$work/wheel" without-extras
 tested "$1" "$work/wheel-sqlite" sqlite-only
 
 # The in-place install, as docs/python-package.md gives it. maturin installs
 # into the virtualenv that is active, and what the extras require with it:
 # that is put there first, by the same pip as everywhere else here, so that
-# NumPy is a wheel in this virtualenv too.
+# NumPy and pandas are wheels in this virtualenv too.
 virtualenv "$1" "$work/develop" \
     "$build_requirements"$'\n'"$test_requirements"$'\n'"$extras_requirements"
 (
@@ -172,4 +194,4 @@ virtualenv "$1" "$work/develop" \
     python -m pytest
 )
 
-echo "python package: the wheel on $# interpreters ($numpy), the wheel without numpy, the sqlite-only wheel and the in-place install passed"
+echo "python package: the wheel on $# interpreters ($oldest), the wheel without pandas, the wheel without its extras, the sqlite-only wheel and the in-place install passed"

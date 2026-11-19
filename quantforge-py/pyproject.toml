@@ -29,22 +29,35 @@ Repository = "https://github.com/quantforge-rs/quantforge"
 Documentation = "https://github.com/quantforge-rs/quantforge/blob/main/docs/python-package.md"
 Changelog = "https://github.com/quantforge-rs/quantforge/blob/main/CHANGELOG.md"
 
-# The package itself requires nothing but Python. NumPy is its one extra,
-# `pip install "quantforge-py[numpy]"`, for `CandleBatch.to_numpy`, which
-# gives arrays of it, and `from_numpy`, which reads them. 2.0 is the oldest
-# the tests run on, and 3 is left out until there is one to test on: the
-# array bindings would read it as a NumPy 2. The package imports NumPy when
-# one of the two is first called and never before, and without it, or with
-# one outside these bounds, those two say what to install.
+# The package itself requires nothing but Python. It has two extras.
+#
+# NumPy, `pip install "quantforge-py[numpy]"`, is for `CandleBatch.to_numpy`,
+# which gives arrays of it, and `from_numpy`, which reads them. 2.0 is the
+# oldest the tests run on, and 3 is left out until there is one to test on:
+# the array bindings would read it as a NumPy 2.
+#
+# pandas, `pip install "quantforge-py[pandas]"`, is for the four functions
+# that give or take a DataFrame. A frame is made of a batch's arrays, so the
+# extra asks for the NumPy they need as well, in the `numpy` extra's own
+# words. 2.2.2 is the first pandas that runs beside NumPy 2, and the oldest
+# the tests run on; 4 is left out until there is one to test on, since what
+# a frame's columns are is stated type by type and pandas 3 changed what a
+# column of text is.
+#
+# The package imports each when something that needs it is first called and
+# never before, and without it, or with one outside these bounds, what needs
+# it says what to install.
 [project.optional-dependencies]
 numpy = ["numpy>=2.0,<3"]
+pandas = ["numpy>=2.0,<3", "pandas>=2.2.2,<4"]
 
 [dependency-groups]
 test = ["pytest>=9"]
-# The oldest NumPy the extra takes, which the tests run on once beside the
-# newest: on the oldest Python, which it has a wheel for, as it has none for
-# the newest.
+# The oldest NumPy and the oldest pandas the extras take, which the tests
+# run on once, together, beside the newest: on the oldest Python, which both
+# have a wheel for, as neither has one for the newest.
 oldest-numpy = ["numpy==2.0.0"]
+oldest-pandas = ["pandas==2.2.2"]
 
 # The tests run against the installed package (docs/python-package.md).
 [tool.pytest.ini_options]

@@ -146,9 +146,13 @@ impl Candle {
 /// `CandleBatch.from_numpy(...)` takes eight arrays back. That is the one
 /// place a batch's decimals become floats, by the engine's own conversion:
 /// a float there is the float nearest to its decimal, and a float that is
-/// read is the decimal of its shortest text. The two need NumPy, the
-/// package's one extra, `pip install "quantforge-py[numpy]"`, and say so
-/// where there is none. Nothing else of a batch does.
+/// read is the decimal of its shortest text. The two need NumPy, an extra
+/// of the package, `pip install "quantforge-py[numpy]"`, and say so where
+/// there is none. Nothing else of a batch does.
+///
+/// The package's `candles_to_dataframe(batch)` gives the same columns as a
+/// pandas DataFrame, indexed by the UTC time each bar opened, and
+/// `dataframe_to_candles(frame, market=...)` builds a batch from one.
 ///
 /// Each of the three takes `market=`, the `MarketId` the candles are of,
 /// which `market` gives back: `None` where the batch names none. `len()` is
@@ -229,7 +233,7 @@ impl CandleBatch {
     /// The arrays are read and not kept: changing one afterwards changes
     /// nothing in the batch.
     ///
-    /// It needs NumPy 2, from 2.0 on, the package's one extra, and raises
+    /// It needs NumPy 2, from 2.0 on, an extra of the package, and raises
     /// an `ImportError` that says what to install where there is none.
     #[staticmethod]
     #[pyo3(signature = (*, open_time_ms, close_time_ms, open, high, low, close, volume, trades, market=None))]
@@ -280,7 +284,7 @@ impl CandleBatch {
     /// caller's own: changing one changes nothing in the batch. They hold
     /// no market, which stays with the batch.
     ///
-    /// It needs NumPy 2, from 2.0 on, the package's one extra, and raises
+    /// It needs NumPy 2, from 2.0 on, an extra of the package, and raises
     /// an `ImportError` that says what to install where there is none.
     fn to_numpy<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         arrays::to_numpy(py, &self.candles)

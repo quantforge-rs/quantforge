@@ -10,8 +10,11 @@ run of a strategy written in Python.
 
 This page is what each type takes and gives, and how a backtest is run.
 A batch of candles as NumPy arrays has a page of its own,
-[candles as NumPy arrays](python-numpy.md), and how the package is named,
-built and tested is [the Python package](python-package.md).
+[candles as NumPy arrays](python-numpy.md), and so have candles and a
+backtest's result as pandas DataFrames,
+[candles and results as pandas DataFrames](python-pandas.md). How the
+package is named, built and tested is
+[the Python package](python-package.md).
 
 ```python
 >>> from decimal import Decimal
@@ -65,6 +68,14 @@ built: there is no setter, and nothing can be added to one. `Strategy` is
 the exception to both. It exists to be derived from, and an object of a
 class derived from it holds a state of its own.
 
+**The package publishes four functions more, which bind no type of the
+engine's:** `candles_to_dataframe`, `dataframe_to_candles`,
+`trades_to_dataframe` and `equity_to_dataframe` give a batch's candles and
+a result's trades and equity curve as pandas DataFrames, and take a frame
+of candles back. They are written in Python, over the types of this page,
+and [candles and results as pandas DataFrames](python-pandas.md) is their
+contract, with their signatures.
+
 ## How a value crosses
 
 **A price, a quantity or an amount is a `decimal.Decimal`,** on the way in
@@ -91,7 +102,8 @@ number it is.
 - **A float is never read as a decimal.** It is a `TypeError` that names
   [`decimal_from_f64`](#decimal-and-float), the one way across for a value.
   A batch's columns cross to float64 arrays and back as a whole, by the
-  same conversion ([python-numpy.md](python-numpy.md)).
+  same conversion ([python-numpy.md](python-numpy.md)), and so do the
+  columns of a pandas DataFrame ([python-pandas.md](python-pandas.md)).
 
 ```python
 >>> candle = qf.Candle(
@@ -339,10 +351,16 @@ False
 dict of eight arrays, and `from_numpy` builds a batch from eight. It is the
 one place a batch's decimals become floats, and
 [candles as NumPy arrays](python-numpy.md) is its contract: what each array
-is, what crosses exactly, and what is refused. The two are all of the
-package that needs NumPy, which is its one extra:
-`pip install "quantforge-py[numpy]"`. Without it they raise an
-`ImportError` that says so, and everything else on this page works.
+is, what crosses exactly, and what is refused. The two need NumPy, an extra
+of the package: `pip install "quantforge-py[numpy]"`. Without it they raise
+an `ImportError` that says so, and everything else on this page works.
+
+**A batch's candles are a pandas DataFrame through the same arrays.**
+`candles_to_dataframe(batch)` gives a frame indexed by the UTC time each
+bar opened, and `dataframe_to_candles(frame, market=...)` builds a batch
+from one ([candles and results as pandas DataFrames](python-pandas.md)).
+They need pandas, the package's other extra:
+`pip install "quantforge-py[pandas]"`.
 
 ## Backtests
 
@@ -408,6 +426,12 @@ funding ([shared-model.md](shared-model.md#not-changing)).
 
 **A result's equity curve has one point for every bar,** and its trades
 and its curve read as tuples, built anew each time they are read.
+
+**For computing with, a result's trades and its curve are pandas
+DataFrames:** `trades_to_dataframe(result)` and
+`equity_to_dataframe(result)`, each amount as the float nearest to its
+decimal ([candles and results as pandas DataFrames](python-pandas.md)).
+The exact values are the ones read here.
 
 ## Strategies
 
@@ -753,9 +777,11 @@ equity and the same drawdown, each compared as the text of its decimal
 The engine computes in exact decimals, and Python's numeric libraries in
 floats. The two meet in the engine's own two conversions, which follow the
 [decimal and float64 policy](decimal-float-policy.md). The package
-publishes them as two functions, and applies them to a batch's columns as
-a whole in [`to_numpy` and `from_numpy`](python-numpy.md). Nothing else in
-the package turns one into the other.
+publishes them as two functions, applies them to a batch's columns as a
+whole in [`to_numpy` and `from_numpy`](python-numpy.md), and to the amounts
+of a result where it is given as a
+[pandas DataFrame](python-pandas.md). Nothing else in the package turns one
+into the other.
 
 ```python
 >>> qf.decimal_to_f64(Decimal("81940.01000000"))
@@ -969,7 +995,9 @@ three places,** and nowhere else
 they have always had, and are not versioned. No authoritative execution
 result is bound: when one is, it is a type of its own with a format
 number of its own, as the engine's stored records have, and it does not
-change these two.
+change these two. The frames of a result are views of these two as well,
+under their fields' own names: none is a frame of futures execution
+([a result's trades](python-pandas.md#a-results-trades)).
 
 **No credential crosses.** These are values: none holds an exchange key, a
 database password or a connection, and building one opens nothing.

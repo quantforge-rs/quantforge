@@ -11,9 +11,11 @@ The policy is implemented once, by `quantforge::decimal_to_f64` and
 `quantforge::decimal_from_f64`, which the Python package binds under the
 same names ([python-types.md](python-types.md#decimal-and-float)) and
 applies to a batch's columns as a whole in `CandleBatch.to_numpy` and
-`CandleBatch.from_numpy` ([python-numpy.md](python-numpy.md)). Every
-conversion between the two types goes through them — never through NumPy,
-`rust_decimal`'s own `to_f64` or `from_f64`, or ad-hoc Python.
+`CandleBatch.from_numpy` ([python-numpy.md](python-numpy.md)), and to the
+columns of a pandas DataFrame of candles or of a backtest's result
+([python-pandas.md](python-pandas.md)). Every conversion between the two
+types goes through them — never through NumPy, pandas, `rust_decimal`'s own
+`to_f64` or `from_f64`, or ad-hoc Python.
 
 ## Decimal to float64
 
@@ -61,10 +63,12 @@ more than 22 decimal places, such as `66633140290.84541427` and
 ## Values that never become float64
 
 - `open_time_ms` and `close_time_ms` are int64 milliseconds since the Unix
-  epoch, UTC.
+  epoch, UTC. In a pandas DataFrame each is a `datetime64[ms, UTC]`, which
+  is the same integer shown as a UTC time, and is never rounded.
 - `trades` is an unsigned trade count, or null when the exchange did not
   report it. A null is never written as NaN, 0, or -1. As a NumPy array it
-  is a masked entry of a `numpy.ma.MaskedArray` of uint64.
+  is a masked entry of a `numpy.ma.MaskedArray` of uint64, and in a pandas
+  DataFrame a missing value, `<NA>`, of a `UInt64` column.
 
 ## What survives a round trip
 
@@ -82,6 +86,11 @@ more than 22 decimal places, such as `66633140290.84541427` and
 - A `CandleBatch` to NumPy arrays and back is the two conversions above for
   every price and volume, and exact for every time and trade count
   ([python-numpy.md](python-numpy.md#what-crosses-exactly-and-what-as-a-float)).
+- A `CandleBatch` to a pandas DataFrame and back is the same, cell for
+  cell: a frame is made of the batch's arrays, and read back through them
+  ([python-pandas.md](python-pandas.md#what-crosses-exactly-and-what-as-a-float)).
+- A backtest's result to a pandas DataFrame is one way: each amount is the
+  float64 nearest to its decimal, and the exact amounts stay in the result.
 
 Compare decimals by value, never as strings: `81940.01000000` and
 `81940.01` are the same price.
@@ -92,8 +101,9 @@ Float64 arithmetic in a strategy can differ from decimal arithmetic in the
 engine, so parity fixtures store exact decimal strings, and results are
 compared as decimals, never as float64s. A remote worker converts with the
 same functions, through the same bindings, as a local run. It must also pin
-the NumPy version used locally, so that float64 arithmetic in strategies
-matches too.
+the NumPy version used locally, and the pandas version where a strategy
+computes with one, so that float64 arithmetic in strategies matches too. A
+result is never compared as a DataFrame: its frames hold floats.
 
 ## Conformance cases
 

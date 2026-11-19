@@ -15,8 +15,9 @@ from it, and QUA-207 (ALG-737) the payload of an alert and what its signal
 resolves to. QUA-469 (ALG-377) bound to Python what the tables below say
 reaches it, QUA-464 (ALG-378) the candle strategy itself, and QUA-470
 (ALG-379) the function that runs one, with the backtest's refusal of a
-series that is not Spot, and QUA-475 (ALG-380) a batch of candles as NumPy
-arrays, with the market a batch names. The rest lands with the stories
+series that is not Spot, QUA-475 (ALG-380) a batch of candles as NumPy
+arrays, with the market a batch names, and QUA-473 (ALG-381) candles and a
+backtest's result as pandas DataFrames. The rest lands with the stories
 named below.
 
 ## Changed in Rust by ALG-733
@@ -183,6 +184,33 @@ were to NumPy and back as well: every product line of
 `storage_identity_cases.json` kept with its batch and apart from its
 namesakes, and the goldens' frozen day, which comes back the same batch by
 value and backtests to the frozen result by value.
+
+## Bound to Python by QUA-473
+
+Candles and a backtest's result as pandas DataFrames, as the Python package
+has them ([python-pandas.md](python-pandas.md)):
+
+| What | In Python |
+| --- | --- |
+| `CandleBatch`'s columns, as a table | `candles_to_dataframe(batch)`, a frame with one row for each candle, indexed by the time each bar opened, and `dataframe_to_candles(frame, market=...)`, which builds a batch from one. A frame is made of the arrays `to_numpy` gives and read back through `from_numpy`, so the same contract holds of it cell for cell |
+| A time, int64 milliseconds since the Unix epoch, UTC | A `datetime64[ms, UTC]`: the same integer, shown as a UTC time, on every pandas. Read back from any time zone and any of pandas' units, exactly, and refused where it has no zone, is missing, is no whole millisecond or, held in seconds, has milliseconds that do not fit 64 bits |
+| A trade count the exchange did not report | A missing value, `<NA>`, of a `UInt64` column, never NaN, 0 or -1 |
+| The data-series key a batch's candles are of, a `MarketId` | Stays with the batch: a frame holds no market, in a column or in its `attrs`, and whoever builds a batch from a frame names what it is of, by `market=` |
+| `BacktestResult`, with its `ClosedTrade`s and `EquityPoint`s | `trades_to_dataframe(result)`, every field of a trade as a column under the field's own name, and `equity_to_dataframe(result)`, indexed as a frame of candles is. Each amount is the float nearest to its decimal, by `decimal_to_f64` |
+| `ClosedTrade.gross_quote_pnl`, Spot's PnL field | The column `gross_quote_pnl`, under that name and with the meanings it [keeps](#not-changing). No column is a net PnL, a fee or a futures PnL, and there is no frame of futures execution |
+
+The crate did not change for it: the four functions are written in Python,
+over the bound types, and what they are built on is in the extension
+module alone. Identity reaches a frame nowhere: a frame of
+`binance_spot` candles and one of the same candles of `binance_linear` are
+equal, and the batches built from them are of the market each is told.
+
+The package's tests take the Spot fixtures there were through frames, and
+change none: the goldens' frozen day comes back the same batch by value and
+backtests to the frozen result by value, the frames of that result hold
+Python's own reading of the frozen file's text, and the candles and the
+results of `tests/fixtures/strategy_cases.json` do the same. A frame is for
+computing with, and is never what is compared for parity.
 
 ## Changing next
 

@@ -136,6 +136,11 @@ impl EquityPoint {
 /// as given: `trades` is anything that iterates `ClosedTrade`s, and
 /// `equity_curve` anything that iterates `EquityPoint`s. Both read back as
 /// tuples, built anew each time they are read.
+///
+/// For computing with, the package's `trades_to_dataframe(result)` and
+/// `equity_to_dataframe(result)` give the two as pandas DataFrames, each
+/// amount as the float nearest to its decimal. The exact amounts are the
+/// ones read here.
 #[pyclass(frozen, eq, module = "quantforge_py")]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BacktestResult(pub(crate) quantforge::BacktestResult);

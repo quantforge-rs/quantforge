@@ -37,7 +37,8 @@ postgres = ["quantforge/postgres"]
 # loads on 3.11 and every later version. maturin tells PyO3 it is building an
 # extension module, so the `extension-module` feature stays off.
 pyo3 = { version = "0.30", features = ["abi3-py311"] }
-# NumPy's arrays, for `CandleBatch.to_numpy` and `from_numpy`. It finds NumPy
+# NumPy's arrays, for `CandleBatch.to_numpy` and `from_numpy`, and for the
+# columns of a result that the pandas functions are made of. It finds NumPy
 # when the extension first asks it for an array, never when the wheel is
 # built, so the package builds, installs and imports without NumPy.
 numpy = "0.30"
