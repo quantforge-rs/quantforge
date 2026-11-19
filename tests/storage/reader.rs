@@ -761,7 +761,7 @@ fn a_missing_file_says_where_it_was_looked_for_and_debug_shows_no_secret() {
     let told = format!("{secret:?} {secret}");
     assert!(
         !told.contains("WORD") && !told.contains("SOMEONE"),
-        "{told}"
+        "redaction failed: credentials were exposed"
     );
 }
 
