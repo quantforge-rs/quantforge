@@ -148,6 +148,24 @@ jobs:
   python:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      # the candle reader's tests write a store here with the command line,
+      # beside the sqlite one, and read both from python
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: quant
+          POSTGRES_PASSWORD: test-pw
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        # over tcp: on its first start the image runs a server on its socket
+        # alone, and stops it before starting the real one
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U quant"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
     steps:
       - uses: actions/checkout@v4
       # the oldest python the package supports and the newest released: one
@@ -165,3 +183,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: check
         run: ./scripts/python-package-check.sh python3.11 python3.15
+        env:
+          QUANTFORGE_TEST_POSTGRES_REQUIRED: "1"
+          QUANTFORGE_TEST_POSTGRES_URL: postgres://quant:test-pw@127.0.0.1:5432/postgres?sslmode=disable

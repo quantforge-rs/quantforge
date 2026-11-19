@@ -66,7 +66,7 @@ use tracing::info;
 
 use crate::ports::StorageError;
 use crate::storage::settings::PostgresSettings;
-use bridge::{Bridge, Effect};
+use bridge::{Bridge, Effect, Sessions};
 
 /// A limit as PostgreSQL takes it; one beyond `i64` is no limit at all.
 fn limit(value: usize) -> i64 {
@@ -86,12 +86,31 @@ impl PostgresStore {
     /// Builds the pool on the bridge and checks, from the bridge, that the
     /// database answers, so that a wrong URL, password or CA fails here.
     pub fn connect(settings: &PostgresSettings) -> Result<Self, StorageError> {
+        Self::connected(settings, Sessions::Writing)
+    }
+
+    /// The same database, read and never written: every session of its pool
+    /// is read-only, so no call through it creates the schema, changes it or
+    /// writes a row, and a call that would is refused by the server itself.
+    /// Its durability is not judged, since it commits nothing.
+    pub fn connect_read_only(settings: &PostgresSettings) -> Result<Self, StorageError> {
+        Self::connected(settings, Sessions::ReadOnly)
+    }
+
+    fn connected(settings: &PostgresSettings, sessions: Sessions) -> Result<Self, StorageError> {
         let store = Self {
-            bridge: Bridge::new(settings)?,
+            bridge: Bridge::new(settings, sessions)?,
             shown: settings.connection.to_string(),
         };
         store.ping()?;
         Ok(store)
+    }
+
+    /// The schema version the database records, 0 for one that holds none
+    /// of our tables, read without changing anything. Tables of ours
+    /// without a recorded version are refused.
+    pub(crate) fn recorded_version(&self) -> Result<u32, StorageError> {
+        migrate::recorded_version(&self.bridge)
     }
 
     /// Creates the schema in a database that holds none and brings an

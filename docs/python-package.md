@@ -16,8 +16,9 @@ Python is held to the frozen results of the engine's own, digit for digit
 ([the goldens](golden-parity.md)). A batch of candles crosses to NumPy
 arrays and back ([candles as NumPy arrays](python-numpy.md)), and candles
 and a backtest's result are given as pandas DataFrames
-([candles and results as pandas DataFrames](python-pandas.md)). The candle
-reader is bound by the story that follows.
+([candles and results as pandas DataFrames](python-pandas.md)). The candles
+themselves are read from the store the command line wrote, SQLite or
+PostgreSQL, by `CandleReader` ([the candle reader](python-reader.md)).
 
 ## Contents
 
@@ -74,8 +75,8 @@ directory.
 
 What the package says about itself, the engine's types, the strategy a
 class implements, the function that runs one, the two conversions between a
-decimal and a float, and the four functions that give or take a pandas
-DataFrame:
+decimal and a float, the reader of the candles a store holds, and the four
+functions that give or take a pandas DataFrame:
 
 <!-- begin: public names -->
 | Name | What it is |
@@ -100,6 +101,7 @@ DataFrame:
 | `run_backtest` | Runs a strategy over candles in the engine, and gives the result |
 | `decimal_to_f64` | The float nearest to a decimal |
 | `decimal_from_f64` | The decimal of a float's shortest text |
+| `CandleReader` | The candles a store holds, read by market and time range: the store `quantforge data sync` wrote, opened to read and never written |
 | `candles_to_dataframe` | A batch of candles as a pandas DataFrame |
 | `dataframe_to_candles` | A pandas DataFrame of candles as a batch |
 | `trades_to_dataframe` | The closed trades of a backtest's result as a pandas DataFrame |
@@ -117,9 +119,10 @@ DataFrame:
 ```
 
 These are `quantforge_py.__all__`, and the package holds no other public
-name. Importing it opens no store and no connection, and none of its types
-holds a credential. A backtest opens none either: it runs on the candles
-it is handed.
+name. Importing it opens no store and no connection. A `CandleReader` is
+the one object that holds a store, and with PostgreSQL the one that holds a
+credential: no other type does, what a reader gives carries neither, and a
+backtest opens no store: it runs on the candles it is handed.
 
 [The Python types](python-types.md) is what each type takes and gives: how
 a decimal crosses, every signature and field, what each refuses, how a
@@ -130,7 +133,9 @@ one only where it is asked to, by the engine's own conversion:
 [candles as NumPy arrays](python-numpy.md) is the contract of, and the
 frames of candles and of a result, which
 [candles and results as pandas DataFrames](python-pandas.md) is the
-contract of.
+contract of. [The candle reader](python-reader.md) is the contract of
+`CandleReader`: which store it opens, what it reads, and what it never does
+to a store.
 
 ## Two versions
 
@@ -187,6 +192,13 @@ published artifact is ([parity](parity/README.md#artifacts)), so
 `--no-default-features` builds the SQLite-only package, which holds no
 PostgreSQL code and says so: `STORAGE_BACKENDS` is `("sqlite",)`. It is
 built and tested, and never published as `quantforge-py`.
+
+`CandleReader` is what opens a store, of either backend, by the settings
+the `quantforge` command line resolves: its flags as arguments, its
+variables where an argument is left out, SQLite at `data/market.sqlite`
+where nothing is set ([the candle reader](python-reader.md)). The
+SQLite-only package refuses `postgres` as not in the build, and opens no
+SQLite file in its place.
 
 ## Extras
 
@@ -331,11 +343,16 @@ quantforge-py/
 │   ├── frames.rs           what the pandas functions are built on, each private: pandas and NumPy as they are found, and a result's trades and equity curve column by column
 │   ├── lib.rs              the extension module, quantforge_py._native
 │   ├── market.rs           Symbol, Interval, Category, ExchangeId and MarketId: what a market is
+│   ├── reader.rs           CandleReader: the engine's own reader of a store's candles, opened read-only, a call that waits without the interpreter, and a store's failure as the exception Python is raised for it
+│   ├── reader/
+│   │   ├── range.rs        the bounds of a range of candles: an int of milliseconds, a datetime with a time zone or RFC 3339 text, each as the engine's millisecond
+│   │   └── settings.rs     which store a reader opens: the command line's settings, from the reader's arguments and the variables behind them, refused by where a value came from and never by the value
 │   ├── run.rs              run_backtest: a run's arguments read, the market of the run settled, the engine run on the calling thread, and what it refused raised in its words
 │   ├── strategy.rs         Strategy, StrategyContext and TargetPosition: the class a strategy derives from, what its callbacks are handed, what they hand back
 │   └── trade.rs            ClosedTrade: one closed round trip, with the venue's order IDs as text
 └── tests/
-    ├── conftest.py         what the tests share: the checkout's manifests, the installed distribution, how a page and a refusal are read, how a strategy is run on either host, how a result is compared with a fixture's
+    ├── conftest.py         what the tests share: the checkout's manifests, the installed distribution, how a page and a refusal are read, how a strategy is run on either host, how a result is compared with a fixture's, and where a store lives on each backend
+    ├── stores.py           what the reader's tests share: stores the quantforge command line wrote from an exchange that answers on this machine, a SQLite file and a PostgreSQL database of its own, and the server spoken to with the standard library alone
     ├── test_backtest.py    a backtest's config, a closed trade, an equity point and a result
     ├── test_candles.py     a candle, and a batch of candles by its candles and by its columns, with the market it names
     ├── test_decimals.py    how a decimal crosses, what is refused, and the float policy's shared cases
@@ -352,6 +369,9 @@ quantforge-py/
     ├── test_pandas_fixtures.py  the repository's Spot fixtures through frames: the frozen day of candles and its backtest, the frames of the frozen result, the shared strategy cases, a store's decimals, every product line
     ├── test_pandas_optional.py  pandas as an extra of the package: when it is imported, what the four functions say where Python finds none or one the extra does not take, and the NumPy asked for beside it
     ├── test_pandas_page.py  the page of the DataFrames, held to the package
+    ├── test_reader.py      the candle reader before it reads: the class it is, which store its settings select, an argument over its variable over the default, every refusal by where a value came from, and a reader closed, shared between threads or carried into another process
+    ├── test_reader_page.py  the page of the candle reader, held to the package
+    ├── test_reader_stores.py  what the reader reads on each backend, from stores the command line wrote: every candle digit for digit and oldest first, a range in each way a time is written, the sentence for a range that held nothing, product lines kept apart, and a store it refuses and leaves as it was
     ├── test_repository.py  this page, the readme and the manifests, held to the package
     ├── test_run_backtest.py  run_backtest: what it takes, the order it checks that in, the market a batch names, what the engine refuses, and that a run repeats
     ├── test_strategy.py    a target, a context, and the class a strategy derives from
@@ -420,9 +440,14 @@ The tests are Python's, run with pytest against the package as it is
 installed, from a wheel or by `maturin develop`:
 
 ```bash
+cargo build
 cd quantforge-py
 pytest
 ```
+
+`cargo build`, at the repository's root, builds the `quantforge` binary:
+the tests of the candle reader read stores the command line itself wrote,
+and look for it in `target/debug/`, or where `QUANTFORGE_PY_TEST_CLI` says.
 
 They hold the installed package to the checkout they are in:
 
@@ -540,6 +565,38 @@ They hold the installed package to the checkout they are in:
   without one. Each asks a fresh interpreter that is kept from NumPy or
   handed a module in its place, so these run where NumPy is installed and
   where it is not.
+- **The candle reader** (`test_reader.py`, `test_reader_stores.py`,
+  `test_reader_page.py`): the reader against stores the `quantforge`
+  binary wrote, by `data sync` from an exchange that answers on the test's
+  own machine with the candles the test gives it. The class it is, and
+  which store its settings select: the command line's default path, an
+  argument over its variable and a variable over the default, and every
+  refusal, which names the argument or the variable a value came from and
+  never the value, a password least of all. Then what it reads, on SQLite
+  and on PostgreSQL: every candle digit for digit as the exchange wrote it,
+  oldest first, the goldens' frozen day among them, which takes the
+  exchange more than one answer to give; a range that takes both of its
+  ends, bounded by an integer, by a time in any zone and by text; an empty
+  batch and one warning for a market or a range that holds nothing, with
+  what the store holds instead; every product line of one symbol read
+  alone; and the same batch from either backend. That it never writes: a
+  store it read is the same byte
+  for byte, a file that is not there stays so, a database without a store
+  stays empty, and a store at another schema is refused and left there,
+  until the command the refusal names has brought it forward; candles a
+  killed writer left in a SQLite store's log are read and left there, a
+  store in rollback mode stays in it, and a journal a writer left
+  unfinished is refused, until the command the refusal names has rolled it
+  back. Another process's lock on a SQLite store, waited for, and held past
+  the wait, a `ConnectionError`; a reader alone, beside a command line that
+  writes all the while, reading whole batches only. What is no file, a
+  pipe or a device, refused before it is opened. The pool's size and the
+  connect timeout by what they do, against a server that holds its tables
+  locked or never answers, and the environment as Python has it. A reader
+  closed, used by many threads at once, waiting on a lock without the
+  interpreter, and carried into a forked process. And every table and
+  example of [python-reader.md](python-reader.md), its PostgreSQL commands
+  among them.
 - **The page of the types** (`test_types_page.py`): every table of
   [python-types.md](python-types.md), every signature, every refusal it
   shows, and its examples, which run as they are written.
@@ -594,6 +651,24 @@ stops before its first test where it is not what it was said to be, one
 with a NumPy or a pandas that was said to have none or one without that was
 not, so that no run passes for want of the tests it skipped.
 
+The reader's tests on PostgreSQL need a server: the one
+`QUANTFORGE_TEST_POSTGRES_URL` names, the variable the crate's own tests
+read, reached over plain TCP on this machine by a user allowed to create
+databases. Each test has a database of its own there, which it drops.
+
+```bash
+eval "$(scripts/postgres-test-servers.sh start 18)"
+cd quantforge-py
+pytest
+```
+
+Without the variable those tests skip, and the same tests still run on
+SQLite. Where `QUANTFORGE_TEST_POSTGRES_REQUIRED` is `1`, as in CI, a test
+that would skip fails instead, so that no run passes there for want of a
+server. The SQLite-only build opens no PostgreSQL store, and skips them
+whatever it is told. The tests speak to the server with the standard
+library alone, and need no driver.
+
 Some tests wait on another thread, which a fault in how the interpreter is
 held could leave waiting for good. A test that takes longer than a minute
 ends the run, with the traceback of every thread (`faulthandler_timeout`
@@ -615,11 +690,12 @@ formats it, and its files are held to the same
 [size budget](../CONTRIBUTING.md#file-size-budget).
 
 `scripts/python-package-check.sh` runs all of it: the lints, the crate's
-check with Rust 1.85, the wheel with its extras on every Python it is
-given, the wheel on the oldest NumPy and the oldest pandas, the wheel with
-NumPy alone, the wheel without its extras, the SQLite-only wheel, and the
+check with Rust 1.85, the `quantforge` binary, which it builds for the
+reader's tests, the wheel with its extras on every Python it is given, the
+wheel on the oldest NumPy and the oldest pandas, the wheel with NumPy
+alone, the wheel without its extras, the SQLite-only wheel, and the
 in-place install. It is CI's `python` job, which names the oldest Python
-and the newest:
+and the newest, and has a PostgreSQL server for the reader's tests:
 [ci.md](ci.md#the-python-package).
 
 ## The workspace
@@ -650,7 +726,6 @@ The spikes under `spikes/` are workspaces of their own, as before.
 
 | What | Story |
 | --- | --- |
-| The candle reader | QUA-472 |
 | The goldens reproduced from candles read out of each store, and by a server's job | QUA-458 |
 | A Python strategy run by a server's worker and by the command line | QUA-353, QUA-461 |
 | Wheels built and tested on Linux, macOS and Windows | QUA-474 |

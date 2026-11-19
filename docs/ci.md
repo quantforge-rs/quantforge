@@ -24,7 +24,7 @@ conformance suite runs live against the exchanges on a schedule
 | `package` | Linux | `cargo check` with Rust 1.85, the oldest the crate declares (`rust-version`), with and without the default features; then `cargo publish --dry-run` |
 | `postgres 16`, `postgres 17`, `postgres 18` | Linux | The whole suite against each PostgreSQL major [ADR 0001](adr/0001-postgres-client-strategy.md) supports: see [PostgreSQL](#postgresql) |
 | `storage` | Linux | Passes only when every `postgres` leg passed |
-| `python` | Linux | The Python package, `quantforge-py/`: clippy for its crate with and without the default features, `cargo check` with Rust 1.85, then the wheel maturin builds, installed with its extras, NumPy and pandas, and tested on Python 3.11 and 3.15, on the oldest NumPy and the oldest pandas the extras take, with NumPy alone, and without the extras, the SQLite-only wheel, and the in-place install: see [The Python package](#the-python-package) |
+| `python` | Linux | The Python package, `quantforge-py/`: clippy for its crate with and without the default features, `cargo check` with Rust 1.85, then the wheel maturin builds, installed with its extras, NumPy and pandas, and tested on Python 3.11 and 3.15, on the oldest NumPy and the oldest pandas the extras take, with NumPy alone, and without the extras, the SQLite-only wheel, and the in-place install; the `quantforge` binary is built for the candle reader's tests, which read stores it wrote, on SQLite and on the job's PostgreSQL server: see [The Python package](#the-python-package) |
 
 Every check runs on every pull request; none has a path filter. A pull
 request that changes only documentation can still break the PostgreSQL
@@ -157,6 +157,9 @@ python3.15`, which runs, in order:
 
 - **Clippy for the crate**, with and without the default features, and
   `cargo check` with Rust 1.85.
+- **The `quantforge` binary**: `cargo build`, since the tests of the candle
+  reader read stores the command line itself wrote. The script tells every
+  run below where it is, in `QUANTFORGE_PY_TEST_CLI`.
 - **The wheel**: `maturin build` once, then the tests against it in a fresh
   virtualenv of each Python named, where it is installed with its two
   extras, as `pip install "quantforge-py[numpy,pandas]"` installs it.
@@ -200,6 +203,19 @@ newest, without the extras, and in the SQLite-only wheel as well. A run
 that is not what the tests were told, one with a NumPy or a pandas that was
 said to have none or one without that was not, stops before its first test.
 
+**The job has a PostgreSQL server,** one service container of
+`postgres:18`, for the tests of the candle reader
+([python-reader.md](python-reader.md)): each writes a store with the
+binary, a SQLite file and a database of its own on the server, and reads
+both from Python. The step sets `QUANTFORGE_TEST_POSTGRES_URL`, the
+variable the crate's tests read, and `QUANTFORGE_TEST_POSTGRES_REQUIRED=1`,
+so a test that could not reach the server fails where it would otherwise
+skip. The SQLite-only wheel opens no PostgreSQL store, and its run skips
+those tests whatever it is told. The server is the newest major of the
+three the `postgres` legs cover: the reader's statements are the store's
+own, which those legs run on every major, and this job holds the Python
+side of them.
+
 maturin, pytest, NumPy and pandas come from PyPI, at the versions
 `pyproject.toml` asks for, and NumPy and pandas as wheels or not at all:
 the script installs them into every virtualenv that has them itself, the
@@ -230,7 +246,9 @@ cargo test --all-features --locked --no-fail-fast
 scripts/postgres-test-servers.sh leftovers
 scripts/postgres-test-servers.sh stop
 
-# python, with CPython 3.11 or later; name each interpreter to test on
+# python, with CPython 3.11 or later; name each interpreter to test on.
+# with the variables of `start` exported, the reader's tests run on
+# postgresql too
 scripts/python-package-check.sh python3.11 python3.15
 ```
 
@@ -283,11 +301,19 @@ records in `evidence.jsonl`.
 | `data.segments`, `data.backend_identity` | The segment groups and the segment spec's cases on both backends, and `both_backends_tell_the_same_story` (`tests/e2e/backends.rs`) |
 | `data.sync`, `data.validate` | The command scenarios of `tests/e2e/offline.rs` on both backends, against the mock exchange |
 | `data.history` | `tests/e2e/history.rs`: `serve run`'s history routes read back against the store on both backends, and `both_backends_answer_byte_for_byte_alike`; the routes' own tests in `src/server/tests/` run on SQLite |
-| `config.storage`, `release.no_hidden_sqlite` | `tests/e2e/backends.rs`, and every command scenario on PostgreSQL |
+| `config.storage`, `release.no_hidden_sqlite` | `tests/e2e/backends.rs`, and every command scenario on PostgreSQL; for Python, `test_reader.py` and `test_reader_stores.py` in `python`: an argument over its variable over the default, and no SQLite file made, opened or read where PostgreSQL is selected |
 | `release.artifact` (`sqlite-build`) | The SQLite-only lines of `checks` and `package` |
 
 `data.history`'s release evidence on both exchanges is ALG-703's, and the
-server and Python surfaces of `config.storage` wait for their stories.
+server surface of `config.storage` waits for its story.
+
+**The candle reader's own capability, `strategy.python_reader`, has ALG-530
+for its evidence,** the parity run that reads the goldens' candles out of
+each store. Until it lands, what holds the reader is `tests/storage/reader.rs`
+on both backends in every leg, and `test_reader_stores.py` in `python`:
+stores the command line wrote, read from Python on SQLite and on the job's
+PostgreSQL, the same batch from either. They are on Binance's Spot line,
+the one a command stores candles of today.
 
 **The goldens are evidence of their own.** The matrix names them, as
 ALG-383, for `strategy.backtest_local`: the frozen SMA-cross results

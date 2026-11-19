@@ -258,6 +258,7 @@ mod postgres {
         };
         assert_eq!(owned(StoreOwner::Command), 2);
         assert_eq!(owned(StoreOwner::Server), 8);
+        assert_eq!(owned(StoreOwner::Reader), 2);
 
         let mut request = postgres_request("postgres://u@localhost/db");
         request.postgres_pool_size = supplied(5, "--postgres-pool-size");
@@ -281,6 +282,25 @@ mod postgres {
             resolve(request).expect_err("zero").to_string(),
             "--postgres-connect-timeout-secs must be at least 1"
         );
+    }
+
+    /// A pool is given room for all its connections as it is built: one of
+    /// four billion asked for memory there was none of, and the process
+    /// ended.
+    #[test]
+    fn a_pool_larger_than_a_server_serves_is_refused_naming_its_label() {
+        let mut request = postgres_request("postgres://u@localhost/db");
+        request.postgres_pool_size = supplied(MAX_POOL_SIZE, "--postgres-pool-size");
+        assert_eq!(resolve(request).expect("the most").pool_size, MAX_POOL_SIZE);
+        for size in [MAX_POOL_SIZE + 1, u32::MAX] {
+            let mut request = postgres_request("postgres://u@localhost/db");
+            request.postgres_pool_size = supplied(size, "QF_POSTGRES_POOL_SIZE");
+            assert_eq!(
+                resolve(request).expect_err("too large").to_string(),
+                "QF_POSTGRES_POOL_SIZE must be at most 262143, the most connections a PostgreSQL \
+                 server serves"
+            );
+        }
     }
 
     #[test]

@@ -6,7 +6,8 @@ the `quantforge` command line.
 
 **Not released yet.** The package is being built in the open. So far it
 says what it is, holds the engine's types, each built by the engine's own
-rule, has the class a strategy derives from, and runs a backtest:
+rule, has the class a strategy derives from, runs a backtest, and reads the
+candles the command line stored:
 
 ```python
 from decimal import Decimal
@@ -99,6 +100,31 @@ The result is exact, and held to be: an SMA cross written in Python makes
 the trades, the final equity and the drawdown of the engine's own Rust one
 over a frozen day of candles, digit for digit, on every pull request
 ([the goldens](https://github.com/quantforge-rs/quantforge/blob/main/docs/golden-parity.md)).
+
+The candles of a real run come from the store the `quantforge` command
+line keeps. `quantforge data sync` stores them, in SQLite at
+`data/market.sqlite` unless it is told otherwise, or in PostgreSQL, and a
+`CandleReader` reads them back, by market and time range:
+
+```python
+with qf.CandleReader() as reader:  # the store the command line's settings select
+    stored = reader.load(market, start="2026-01-01T00:00:00Z")
+
+stored.market == market  # True: a batch names the market it was read for
+stored.close[0]          # the exchange's own digits, such as Decimal('81940.01000000')
+rerun = qf.run_backtest(stored, EnterThenExit(), config)  # on the market the batch names
+```
+
+A reader takes the command line's settings: `storage`, `db` and
+`postgres_url` as arguments, and `QF_STORAGE`, `QF_DB` and
+`QF_POSTGRES_URL` where an argument is left out, so Python reads the store
+the command line wrote without being told twice. It opens the store
+read-only, and creates, migrates and writes nothing. A market or a range
+that holds no candle gives an empty batch, and a warning on the
+`quantforge_py` logger that says what the store holds instead. The package
+carries its own copy of SQLite: in a process that reads a SQLite store
+this way, do not open the same file with Python's `sqlite3` module as well
+([the candle reader](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-reader.md)).
 
 For computing with, a batch of candles gives its columns as NumPy arrays,
 and takes arrays back. NumPy is an extra of the package, which

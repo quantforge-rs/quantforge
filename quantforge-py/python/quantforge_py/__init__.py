@@ -26,6 +26,10 @@ refused in the engine's own words:
   the result.
 - ``decimal_to_f64`` and ``decimal_from_f64``: the one crossing between an
   exact decimal and a float.
+- ``CandleReader``: the candles ``quantforge data sync`` stored, read by
+  market and time range into a ``CandleBatch``. It opens the store the
+  command line's settings select, SQLite at ``data/market.sqlite`` unless
+  told otherwise, and never writes to it.
 - ``candles_to_dataframe`` and ``dataframe_to_candles``: a batch of candles
   as a pandas DataFrame, indexed by the UTC time each bar opened, and such
   a frame as a batch.
@@ -37,6 +41,10 @@ every type, and never a float. It becomes one only where it is asked to, by
 the engine's own conversion: ``decimal_to_f64`` for one value,
 ``CandleBatch.to_numpy`` for the columns of a batch, and the four functions
 that give or take a DataFrame, which are for computing with.
+
+Importing the package opens no store. A ``CandleReader`` is the one object
+that holds one, and the one that holds a database's credentials: it is for
+the process that reads its own store, and nothing it reads carries them.
 
 The package requires nothing but Python. NumPy and pandas are its two
 extras: ``pip install "quantforge-py[numpy]"`` for the arrays, and
@@ -56,6 +64,7 @@ from ._native import (
     BacktestResult,
     Candle,
     CandleBatch,
+    CandleReader,
     Category,
     ClosedTrade,
     EquityPoint,
@@ -99,6 +108,7 @@ __all__ = [
     "run_backtest",
     "decimal_to_f64",
     "decimal_from_f64",
+    "CandleReader",
     "candles_to_dataframe",
     "dataframe_to_candles",
     "trades_to_dataframe",

@@ -17,7 +17,8 @@ ENGINE_VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 
 # What the package publishes, in the order `__all__` gives it: what it says
 # about itself, the engine's types, the function that runs a backtest, the
-# two conversions, and the functions that give or take a pandas DataFrame.
+# two conversions, the reader of a store's candles, and the functions that
+# give or take a pandas DataFrame.
 ABOUT = ["__version__", "ENGINE_VERSION", "STORAGE_BACKENDS"]
 TYPES = [
     "Symbol",
@@ -36,6 +37,8 @@ TYPES = [
     "Strategy",
 ]
 FUNCTIONS = ["run_backtest", "decimal_to_f64", "decimal_from_f64"]
+# A class as the types are, and no value: it holds a store that is open.
+READER = ["CandleReader"]
 # Written in Python, in the package's private `_frames` module: pandas is at
 # home there.
 FRAMES = [
@@ -54,7 +57,7 @@ def public(module) -> list[str]:
 
 
 def test_the_package_publishes_its_names_and_holds_no_other_public_one():
-    assert quantforge_py.__all__ == ABOUT + TYPES + FUNCTIONS + FRAMES
+    assert quantforge_py.__all__ == ABOUT + TYPES + FUNCTIONS + READER + FRAMES
     published = sorted(name for name in quantforge_py.__all__ if not name.startswith("_"))
     assert public(quantforge_py) == published
     # The extension module holds the same names and no other, but for the
@@ -75,7 +78,7 @@ def test_every_published_name_is_the_extension_modules_own_or_the_frame_modules(
 
 
 def test_every_type_is_a_class_of_the_package_and_a_strategy_alone_is_derived_from():
-    for name in TYPES:
+    for name in TYPES + READER:
         bound = getattr(quantforge_py, name)
         assert isinstance(bound, type), name
         # A class says where it is imported from, not where it is compiled.

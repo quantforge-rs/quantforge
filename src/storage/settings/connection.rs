@@ -4,8 +4,11 @@
 //! The form is libpq's: `postgres://USER:PASSWORD@HOST:PORT/DATABASE`,
 //! with `postgresql://` accepted too. One host, a user and a database are
 //! required; the port defaults to 5432; user, password and database are
-//! percent-decoded. Of libpq's query parameters only the two TLS ones are
-//! read, and anything else is refused rather than silently dropped:
+//! percent-decoded. A database name with an `@` that is not percent-encoded
+//! is refused: a password whose own `@` or `/` was left unencoded puts the
+//! rest of itself there, where the URL's `Display` would show it. Of
+//! libpq's query parameters only the two TLS ones are read, and anything
+//! else is refused rather than silently dropped:
 //!
 //! - `sslmode`: tokio-postgres knows `disable`, `prefer` and `require`,
 //!   and its rustls connector always checks the certificate chain and the
@@ -140,6 +143,8 @@ impl PostgresConnection {
         }
         let password = url.password().map(decode).transpose()?.map(Password);
         let dbname = match url.path().strip_prefix('/') {
+            // The path as written: an `@` there was not percent-encoded.
+            Some(segment) if segment.contains('@') => return Err(UrlProblem::UnencodedAt),
             Some(segment) if !segment.contains('/') => decode(segment)?,
             _ => return Err(UrlProblem::NoDatabase),
         };
@@ -294,6 +299,7 @@ pub enum UrlProblem {
     PortZero,
     NoUser,
     NoDatabase,
+    UnencodedAt,
     Encoding,
     Parameter { key: Option<String> },
     Repeated { key: &'static str },
@@ -315,6 +321,11 @@ impl fmt::Display for UrlProblem {
             Self::PortZero => f.write_str("its port is 0"),
             Self::NoUser => write!(f, "it names no user; write {FORM}"),
             Self::NoDatabase => write!(f, "it names no single database; write {FORM}"),
+            Self::UnencodedAt => f.write_str(
+                "its database name holds an @ that is not percent-encoded, as a password with \
+                 an unencoded @ or / leaves there; percent-encode @, :, / and % inside the \
+                 user, the password and the database",
+            ),
             Self::Encoding => {
                 f.write_str("its host, user, password or database is not percent-encoded UTF-8")
             }

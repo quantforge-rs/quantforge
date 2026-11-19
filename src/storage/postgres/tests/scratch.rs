@@ -31,6 +31,11 @@ impl Scratch {
         PostgresStore::connect(&settings(&self.url, &unique("store"))).expect("a store")
     }
 
+    /// The same database opened to read, each of its sessions read-only.
+    pub(super) fn reader(&self) -> PostgresStore {
+        PostgresStore::connect_read_only(&settings(&self.url, &unique("reader"))).expect("a reader")
+    }
+
     /// A store that gives up on any lock long before a slow step ends.
     pub(super) fn impatient_store(&self) -> PostgresStore {
         let mut settings = settings(&self.url, &unique("store"));

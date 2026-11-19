@@ -2,25 +2,28 @@
 //! the provider registered for its backend. A host builds it, opens one
 //! store with it, and owns that store, its pool and its credentials for the
 //! life of the process (ADR 0001): the CLI's context, the server's parent
-//! process, later the Python reader. A job worker never receives settings,
-//! and never opens a store.
+//! process, the Python package's reader. A job worker never receives
+//! settings, and never opens a store.
 //!
 //! A backend with no provider is refused, and no other provider is asked
 //! instead: selecting PostgreSQL never ends in a SQLite file. The built-in
 //! factory registers SQLite and, with the `postgres` feature, PostgreSQL.
 //! The execution store (ALG-738) is the next thing a host opens from the
 //! same settings, in the same process, through this factory. The source of
-//! a transfer is opened here too, read-only, beside the selected store.
+//! a transfer is opened here too, read-only, beside the selected store, and
+//! so is a store a host only reads ([`StoreFactory::open_reader`]).
 
 use crate::ports::{CandleStore, StorageError, TransferSnapshot};
 use crate::storage::SqliteStore;
 use crate::storage::any::AnyStore;
 #[cfg(feature = "postgres")]
 use crate::storage::postgres::PostgresStore;
+use crate::storage::reader::CandleReader;
 use crate::storage::settings::{StorageBackend, StorageConfigError, StorageSettings};
 use crate::storage::sqlite::SqliteSnapshot;
+use std::borrow::Cow;
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -77,6 +80,74 @@ impl StoreFactory {
         Ok(provider(settings)?)
     }
 
+    /// Opens the store `settings` describe to read its candles and nothing
+    /// else: no file or schema is created, no schema migrated, and every
+    /// connection is read-only ([`CandleReader`]). A SQLite file that does
+    /// not exist is [`StoreOpenError::NoSuchFile`]; a database that holds no
+    /// store, a store at another schema than this build reads, and one that
+    /// holds an unfinished copy are refused as storage errors. A backend
+    /// with no provider is refused as it is for [`open`](Self::open). A
+    /// SQLite path is settled as the reader opens: one that does not start
+    /// at the root names the file it finds where the process runs then.
+    pub fn open_reader(&self, settings: &StorageSettings) -> Result<CandleReader, StoreOpenError> {
+        let backend = settings.backend();
+        let no_adapter = || StorageConfigError::NoAdapter { backend };
+        if !self.registered().any(|registered| registered == backend) {
+            return Err(no_adapter().into());
+        }
+        let store = match settings {
+            StorageSettings::Sqlite(sqlite) => {
+                // What is there, through any link: a file is read; anything
+                // else, such as a directory or a pipe, which opening would
+                // wait on for good, is refused.
+                match std::fs::metadata(&sqlite.path) {
+                    Ok(found) if found.is_file() => {}
+                    Ok(found) => {
+                        let kind = if found.is_dir() {
+                            "a directory"
+                        } else {
+                            "no file"
+                        };
+                        return Err(StorageError::InvalidArgument(format!(
+                            "{} is {kind}, and a SQLite database is a file",
+                            named(&sqlite.path)
+                        ))
+                        .into());
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        return Err(StoreOpenError::NoSuchFile {
+                            path: sqlite.path.clone(),
+                        });
+                    }
+                    // A directory on the way that may not be entered, say,
+                    // where the file may well be; or a name the system
+                    // refuses, as Windows refuses a URL's `:`.
+                    Err(error) => {
+                        return Err(StorageError::InvalidArgument(format!(
+                            "cannot reach {}: {error}",
+                            named(&sqlite.path)
+                        ))
+                        .into());
+                    }
+                }
+                // A path that does not start at the root is looked for
+                // where the process runs now, and the reader keeps reading
+                // the file it found there wherever the process goes later:
+                // each of its calls opens the file anew.
+                let path = std::path::absolute(&sqlite.path).map_err(StorageError::other)?;
+                AnyStore::Sqlite(SqliteStore::read_only(path, sqlite.limits))
+            }
+            #[cfg(feature = "postgres")]
+            StorageSettings::Postgres(postgres) => {
+                AnyStore::Postgres(PostgresStore::connect_read_only(postgres)?)
+            }
+            // No build without the feature resolves such settings.
+            #[cfg(not(feature = "postgres"))]
+            StorageSettings::Postgres(_) => return Err(no_adapter().into()),
+        };
+        Ok(CandleReader::over(store, settings)?)
+    }
+
     /// Opens the SQLite store at `path` as the source of a transfer: one
     /// snapshot, read-only, so the file keeps every byte it had
     /// (`docs/storage-migration.md`). Nothing migrates it: a store at an
@@ -100,8 +171,8 @@ impl fmt::Debug for StoreFactory {
     }
 }
 
-/// Why a store could not be opened: its settings were refused, or its
-/// backend failed.
+/// Why a store could not be opened: its settings were refused, its backend
+/// failed, or, for a reader, its file is not there.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum StoreOpenError {
@@ -109,6 +180,48 @@ pub enum StoreOpenError {
     Config(#[from] StorageConfigError),
     #[error(transparent)]
     Storage(#[from] StorageError),
+    /// A reader was asked for a SQLite store whose file does not exist. A
+    /// command would create it empty; a reader creates nothing. The path is
+    /// shown unless it holds an `@` or an `=`, which a URL or a connection
+    /// string with a password given in its place holds, and a path to a
+    /// file rarely does.
+    #[error(
+        "there is no SQLite database at {}; a reader creates none, and `quantforge data sync` \
+         does",
+        shown(path)
+    )]
+    NoSuchFile { path: PathBuf },
+}
+
+/// Whether a path may be a secret given in a path's place: a URL or a
+/// connection string with a password holds an `@` or an `=`, and a path to
+/// a file rarely does.
+fn may_be_a_secret(text: &str) -> bool {
+    text.contains(['@', '='])
+}
+
+/// A path as a refusal of what is at it names it: whole, or as `the path
+/// given` where it may be a secret.
+fn named(path: &Path) -> Cow<'_, str> {
+    let text = path.to_string_lossy();
+    if may_be_a_secret(&text) {
+        Cow::Borrowed("the path given")
+    } else {
+        text
+    }
+}
+
+/// A path as the refusal of a missing file shows it: whole, or not at all
+/// where it may be a secret, with why.
+fn shown(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    if may_be_a_secret(&text) {
+        "the path given, which is not shown: it holds an @ or an =, as a URL or a connection \
+         string with a password does"
+            .to_string()
+    } else {
+        text.into_owned()
+    }
 }
 
 /// SQLite: the file's parent directory is created if missing, then the file

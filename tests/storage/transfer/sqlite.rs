@@ -292,6 +292,45 @@ fn anything_but_a_store_is_refused_as_what_it_is() {
 }
 
 #[test]
+fn a_write_its_writer_never_finished_is_refused_with_the_command_that_rolls_it_back() {
+    let (dir, path, _) = seeded();
+    // A writer in rollback mode, part way through a write too large for its
+    // cache: the pages it changed are in the file, and their old contents in
+    // the journal beside it.
+    let writer = rusqlite::Connection::open(&path).expect("open");
+    let mode: String = writer
+        .pragma_update_and_check(None, "journal_mode", "DELETE", |row| row.get(0))
+        .expect("rollback mode");
+    assert_eq!(mode, "delete");
+    writer
+        .execute_batch(
+            "PRAGMA cache_size = 10; BEGIN; CREATE TABLE ballast (body BLOB); \
+             WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 400) \
+             INSERT INTO ballast SELECT randomblob(4000) FROM n",
+        )
+        .expect("a write under way");
+    // The file and its journal as a writer that stopped there left them.
+    let left = dir.path().join("left.sqlite");
+    let journal = dir.path().join("left.sqlite-journal");
+    std::fs::copy(&path, &left).expect("the file");
+    std::fs::copy(dir.path().join("source.sqlite-journal"), &journal).expect("the journal");
+    drop(writer);
+    let before = (sha256(&left), sha256(&journal));
+    assert_eq!(
+        refusal(&left),
+        format!(
+            "{} holds the journal of a write that never finished, which only a writer rolls \
+             back; let a command of the quantforge command line open it first, such as \
+             `quantforge --db {} store status`",
+            left.display(),
+            left.display()
+        )
+    );
+    // Nothing was rolled back: that is the writer's to do.
+    assert_eq!((sha256(&left), sha256(&journal)), before);
+}
+
+#[test]
 fn a_value_no_target_can_hold_is_refused_naming_its_row() {
     let cases = [
         ("X'00'", "candles.open holds a blob"),

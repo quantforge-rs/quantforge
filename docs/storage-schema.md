@@ -1598,9 +1598,29 @@ store, and only the CLI's context asks it to. The one file opened beside
 the selected store is the source of a transfer, which the operator names
 with `data migrate --from`, and the factory opens read-only.
 
+**A host that only reads candles opens a reader.** `StoreFactory::open_reader`
+opens the store the same settings select as a `CandleReader`, which serves
+no port: it reads a market's candles by the time each opened, and says of a
+range that held none what the store holds instead. Its connections are
+read-only on both backends, SQLite's by how the file is opened and
+PostgreSQL's by its session, and it leaves the store as it found it:
+
+- a SQLite file that is not there is refused, and not created;
+- a database that holds no store is refused, and gains no table;
+- a store at an earlier schema than the build's is refused with the command
+  that brings it forward, and is not migrated: the chain runs only for a
+  host that opens the store to write. One at a later schema is refused as
+  it is for a command;
+- a store that holds an unfinished copy
+  ([storage-migration.md](storage-migration.md)) is refused, as every
+  command but the copy refuses it.
+
+The Python package's reader is that host
+([python-reader.md](python-reader.md)).
+
 The process that opens a store owns it, its pool and its credentials, for
 its whole life, and no other process receives them (ADR 0001): a CLI
-command, the server's parent process, later the Python reader. A job
+command, the server's parent process, the Python package's reader. A job
 worker never opens a store and never receives its settings; the parent
 reads the candles a job needs and passes them on. The execution store is
 one of the selected store's ports, opened the same way, from the same

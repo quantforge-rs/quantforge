@@ -6,7 +6,9 @@
 //! implements `JobStore`, `policies` implements `PolicyStore`, `execution`
 //! implements `ExecutionStore`, and
 //! `migrate` brings every earlier schema to [`SCHEMA_VERSION`]; `snapshot`
-//! reads a store read-only as the source of a transfer. Only
+//! reads a store read-only as the source of a transfer, and `reading` is
+//! the connection that cannot write, which a store opened to read
+//! ([`SqliteStore::read_only`]) makes every call through. Only
 //! [`SqliteStore`], [`SqliteSnapshot`] and the version leave this
 //! namespace; the schema and the row decoders are not API.
 
@@ -18,6 +20,7 @@ mod jobs;
 mod journal;
 mod migrate;
 mod policies;
+mod reading;
 mod segments;
 mod snapshot;
 mod wait;
@@ -75,6 +78,18 @@ pub struct SqliteStore {
     lock_wait: Duration,
     /// Whether each of its waits has that long, or all of them.
     waits: Waits,
+    /// Whether its connections may write.
+    access: Access,
+}
+
+/// What a store's connections may do to its file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Access {
+    /// Everything a command does: the file is created if missing, and its
+    /// journal and commit settings are those of the durability contract.
+    Write,
+    /// Reading alone, through connections that cannot write (`reading`).
+    Read,
 }
 
 impl SqliteStore {
@@ -89,6 +104,7 @@ impl SqliteStore {
             durability: limits.durability,
             lock_wait: limits.wait_budget,
             waits: Waits::Apart,
+            access: Access::Write,
         }
     }
 
@@ -110,8 +126,13 @@ impl SqliteStore {
 
     /// A connection with the settings of the durability contract, checked
     /// when the store enforces them. The wait for a lock goes first, so that
-    /// applying the rest already waits as it should.
+    /// applying the rest already waits as it should. A store opened to read
+    /// gets a connection that cannot write instead, and sets none of them:
+    /// they are a writer's.
     fn open(&self) -> Result<Connection, StorageError> {
+        if self.access == Access::Read {
+            return reading::connection(&self.path, self.lock_wait, self.waits);
+        }
         let connection = Connection::open(&self.path).map_err(failed)?;
         wait::at_most(&connection, self.lock_wait, self.waits).map_err(failed)?;
         connection

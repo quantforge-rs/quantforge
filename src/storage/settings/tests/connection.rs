@@ -63,6 +63,10 @@ fn the_url_reads_its_parts_with_defaults_and_decoding() {
     assert_eq!(connection.dbname(), "my/db");
     assert_eq!(connection.to_string(), "postgres://[::1]:5432/my/db");
 
+    // An `@` in the database's name is written percent-encoded.
+    let encoded = parse("postgres://u@localhost/a%40b").expect("connection");
+    assert_eq!(encoded.dbname(), "a@b");
+
     let without = parse("postgres://u@localhost:5433/db").expect("connection");
     assert!(!without.has_password());
     assert_eq!(without.to_string(), "postgres://localhost:5433/db");
@@ -106,6 +110,14 @@ fn every_malformed_url_is_refused_with_its_problem() {
         }),
         ("postgres://u@localhost/a/b", |p| {
             matches!(p, UrlProblem::NoDatabase)
+        }),
+        // A password `p@ss/word` written unencoded: `ss` becomes the host,
+        // and `word@...` the database.
+        ("postgres://u:p@ss/word@db.example.com", |p| {
+            matches!(p, UrlProblem::UnencodedAt)
+        }),
+        ("postgres://u@localhost/a@b", |p| {
+            matches!(p, UrlProblem::UnencodedAt)
         }),
         ("postgres://u%FF@localhost/db", |p| {
             matches!(p, UrlProblem::Encoding)
@@ -194,6 +206,9 @@ fn no_display_debug_or_error_shows_the_password_or_the_url() {
         format!("postgres://quant:{SENTINEL}@db.example.com"),
         format!("postgres://quant:{SENTINEL}@db.example.com:99999/market"),
         format!("ftp://quant:{SENTINEL}@db.example.com/market"),
+        // The password's own `@` and `/` left unencoded: what follows the
+        // `/` would be the database's name.
+        format!("postgres://quant:pa@ss/{SENTINEL}@db.example.com"),
     ] {
         let problem = parse(&bad).expect_err("refused");
         shown.push(problem.to_string());

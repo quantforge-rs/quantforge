@@ -50,6 +50,12 @@ Then run any command, `store status` for one:
 quantforge --db data/market.sqlite store status
 ```
 
+**Only a command upgrades a database.** The Python package's candle reader
+opens a store read-only ([python-reader.md](python-reader.md)): it refuses
+one at an earlier schema than its own build reads, untouched, and names
+this command. So after a release that changes the schema, run a command of
+the new command line once before reading the store from Python.
+
 ## What the upgrade does
 
 Each step runs in one transaction with its version stamp, and
