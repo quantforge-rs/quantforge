@@ -7,12 +7,14 @@ The tests run against `quantforge_py` as it is installed, from a wheel or by
 """
 
 import decimal
+import functools
 import importlib.metadata
 import importlib.util
 import json
 import os
 import pathlib
 import tomllib
+import warnings
 
 import pytest
 
@@ -39,6 +41,17 @@ OLDEST_NUMPY = "QUANTFORGE_PY_TEST_OLDEST_NUMPY"
 # where there is no NumPy to import. Unset, the tests expect a NumPy, and
 # the tests of the arrays run.
 WITHOUT_NUMPY = "QUANTFORGE_PY_TEST_WITHOUT_NUMPY"
+
+# Says that the run is on the oldest pandas the package takes, the one
+# `pyproject.toml` pins for it. Unset, the tests take any pandas the package
+# does.
+OLDEST_PANDAS = "QUANTFORGE_PY_TEST_OLDEST_PANDAS"
+
+# Says that the package under test is installed without its `pandas` extra,
+# where there is no pandas to import. Unset, the tests expect a pandas, and
+# the tests of the frames run. A run without NumPy is one without pandas
+# too: pandas does not import without it.
+WITHOUT_PANDAS = "QUANTFORGE_PY_TEST_WITHOUT_PANDAS"
 
 
 def read(path: pathlib.Path) -> str:
@@ -157,40 +170,56 @@ def quoted():
     return code
 
 
+# Each extra of the package as a run is told of it: the module it brings,
+# how the library is written, what of the tests needs it, and the variables
+# that say a run has none of it or the oldest of it.
+EXTRAS = [
+    ("numpy", "NumPy", "arrays", WITHOUT_NUMPY, OLDEST_NUMPY),
+    ("pandas", "pandas", "frames", WITHOUT_PANDAS, OLDEST_PANDAS),
+]
+
+
 def pytest_configure(config):
     """Stops the run on a value of a variable that says neither of the two
     things it can, and on a run that is not what it was said to be: one with
-    a NumPy that was said to have none, or one without that was not.
+    a NumPy or a pandas that was said to have none, or one without that was
+    not.
 
-    The tests of the arrays are skipped where NumPy is not there, so a run
-    that lacked it by mistake would pass without them. It is stopped here
-    instead."""
+    The tests of the arrays are skipped where NumPy is not there, and those
+    of the frames where pandas is not, so a run that lacked one by mistake
+    would pass without them. It is stopped here instead."""
     for variable, means in [
         (SQLITE_ONLY, "for the SQLite-only build"),
         (OLDEST_NUMPY, "for a run on the oldest NumPy"),
         (WITHOUT_NUMPY, "for a run of the package installed without NumPy"),
+        (OLDEST_PANDAS, "for a run on the oldest pandas"),
+        (WITHOUT_PANDAS, "for a run of the package installed without pandas"),
     ]:
         said = os.environ.get(variable)
         if said not in (None, "1"):
             raise pytest.UsageError(
                 f"{variable} is {said!r}: set it to 1 {means}, or leave it unset"
             )
-    without = os.environ.get(WITHOUT_NUMPY) == "1"
-    # Looked for, and not imported: the tests hold the package to importing
-    # NumPy only when a conversion is asked for.
-    found = importlib.util.find_spec("numpy") is not None
-    if without and os.environ.get(OLDEST_NUMPY) == "1":
+    for module, library, tested, without, oldest in EXTRAS:
+        none = os.environ.get(without) == "1"
+        # Looked for, and not imported: the tests hold the package to
+        # importing an extra only when something that needs it is asked for.
+        found = importlib.util.find_spec(module) is not None
+        if none and os.environ.get(oldest) == "1":
+            raise pytest.UsageError(f"{without} and {oldest} are both 1: a run is one or the other")
+        if none and found:
+            raise pytest.UsageError(
+                f"{without} is 1, and {library} is installed: unset it, or run where there is none"
+            )
+        if not none and not found:
+            raise pytest.UsageError(
+                f"{library} is not installed, and the tests of the {tested} need it: install the "
+                f"package's {module} extra, or set {without}=1 to test the package without it"
+            )
+    if os.environ.get(WITHOUT_NUMPY) == "1" and os.environ.get(WITHOUT_PANDAS) != "1":
         raise pytest.UsageError(
-            f"{WITHOUT_NUMPY} and {OLDEST_NUMPY} are both 1: a run is one or the other"
-        )
-    if without and found:
-        raise pytest.UsageError(
-            f"{WITHOUT_NUMPY} is 1, and NumPy is installed: unset it, or run where there is none"
-        )
-    if not without and not found:
-        raise pytest.UsageError(
-            "NumPy is not installed, and the tests of the arrays need it: install the package's "
-            f"numpy extra, or set {WITHOUT_NUMPY}=1 to test the package without it"
+            f"{WITHOUT_NUMPY} is 1 and {WITHOUT_PANDAS} is not: pandas does not import without "
+            "NumPy, so a run without NumPy is one without pandas, and is told both"
         )
 
 
@@ -214,6 +243,63 @@ def without_numpy() -> bool:
     """Whether the run is of the package installed without its `numpy`
     extra, with no NumPy to import."""
     return os.environ.get(WITHOUT_NUMPY) == "1"
+
+
+@pytest.fixture(scope="session")
+def oldest_pandas() -> bool:
+    """Whether the run was told that it is on the oldest pandas the package
+    takes."""
+    return os.environ.get(OLDEST_PANDAS) == "1"
+
+
+@pytest.fixture(scope="session")
+def without_pandas() -> bool:
+    """Whether the run is of the package installed without its `pandas`
+    extra, with no pandas to import."""
+    return os.environ.get(WITHOUT_PANDAS) == "1"
+
+
+# The functions that give or take a pandas DataFrame, in the order `__all__`
+# gives them.
+FRAMES = [
+    "candles_to_dataframe",
+    "dataframe_to_candles",
+    "trades_to_dataframe",
+    "equity_to_dataframe",
+]
+
+
+@pytest.fixture(scope="module")
+def no_warning_drawn_by_the_package():
+    """Makes any warning drawn while one of the four frame functions runs an
+    error, for the length of a module's tests.
+
+    pandas and NumPy say with a warning that what was asked of them is going
+    to change. A frame is the same on every pandas because nothing it is
+    made with is, so making one or reading one draws no warning: whichever
+    code the warning names, the package's own, pandas' or NumPy's, and
+    whatever is asked on the way, a batch's arrays among it. A warning a
+    test's own code draws, outside those four, is the test's own, and is
+    left a warning: a test may use what pandas is about to change.
+
+    The four are held so under the names the package publishes them by, so
+    a test calls each through `quantforge_py`, looked up as the test runs:
+    one taken from the package as a module of tests is imported is the
+    function as it was before."""
+
+    def strict(function):
+        @functools.wraps(function)
+        def called(*args, **kwargs):
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                return function(*args, **kwargs)
+
+        return called
+
+    with pytest.MonkeyPatch.context() as patched:
+        for name in FRAMES:
+            patched.setattr(quantforge_py, name, strict(getattr(quantforge_py, name)))
+        yield
 
 
 @pytest.fixture(scope="session")

@@ -15,7 +15,7 @@ import pytest
 
 import quantforge_py as qf
 
-# The arrays need NumPy, the package's one extra. Where the package is
+# The arrays need NumPy, an extra of the package. Where the package is
 # installed without it there is nothing of them to test, and the run says so:
 # `test_numpy_optional.py` holds what the package says there.
 np = pytest.importorskip("numpy")
@@ -146,13 +146,14 @@ def test_every_refusal_the_page_shows_is_refused_so(page, quoted, session):
 def test_the_page_states_the_numpy_the_packages_extra_requires(page, quoted, pyproject):
     stated = {what: quoted(which) for what, which in page(PAGE).rows("numpy")}
     (oldest,) = pyproject["dependency-groups"]["oldest-numpy"]
-    ((extra, (required,)),) = pyproject["project"]["optional-dependencies"].items()
+    extra = "numpy"
+    (required,) = pyproject["project"]["optional-dependencies"][extra]
     assert stated == {
         "The package with its extra, as `pip` is asked for it": f"{pyproject['project']['name']}[{extra}]",
         "What the extra requires": required,
         "The oldest NumPy the tests run on": oldest.removeprefix("numpy=="),
     }
-    assert (extra, required) == ("numpy", "numpy>=2.0,<3")
+    assert required == "numpy>=2.0,<3"
     # NumPy is asked of nobody who did not ask for it.
     assert "dependencies" not in pyproject["project"]
 

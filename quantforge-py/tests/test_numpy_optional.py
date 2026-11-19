@@ -1,4 +1,4 @@
-"""NumPy as the package's one extra: when the package imports it, and what
+"""NumPy as an extra of the package: when the package imports it, and what
 `CandleBatch.to_numpy` and `CandleBatch.from_numpy` say where Python finds
 none to import, or one the extra does not take: one older than its lower
 bound, or one from its upper bound on.
@@ -160,8 +160,10 @@ def in_a_fresh_interpreter(*parts: str) -> subprocess.CompletedProcess:
 
 @pytest.fixture(scope="module")
 def extra(pyproject) -> tuple[str, Requirement]:
-    """The package's one extra: its name, and the one requirement it has."""
-    ((name, (required,)),) = pyproject["project"]["optional-dependencies"].items()
+    """The package's `numpy` extra: its name, and the one requirement it
+    has."""
+    name = "numpy"
+    (required,) = pyproject["project"]["optional-dependencies"][name]
     return name, Requirement(required)
 
 

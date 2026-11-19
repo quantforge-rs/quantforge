@@ -76,29 +76,53 @@ def test_the_distribution_carries_the_repositorys_license(distribution, reposito
     assert distribution.read_text("licenses/LICENSE") == text
 
 
-def test_the_distribution_requires_nothing_and_offers_numpy_as_its_one_extra(
+def test_the_distribution_requires_nothing_and_offers_numpy_and_pandas_as_its_extras(
     distribution, pyproject
 ):
     # Nothing is required of whoever installs the package as it is.
     assert "dependencies" not in pyproject["project"]
-    assert pyproject["project"]["optional-dependencies"] == {"numpy": ["numpy>=2.0,<3"]}
-    assert distribution.metadata.get_all("Provides-Extra") == ["numpy"]
-    # NumPy is all the installed distribution names, and it asks for it only
-    # with the extra: `pip install quantforge-py` brings the package alone.
-    (required,) = map(Requirement, distribution.metadata.get_all("Requires-Dist"))
-    assert (required.name, required.specifier) == ("numpy", SpecifierSet(">=2.0,<3"))
-    assert required.marker is not None
-    assert required.marker.evaluate({"extra": "numpy"})
-    assert not required.marker.evaluate({"extra": ""})
+    assert pyproject["project"]["optional-dependencies"] == {
+        "numpy": ["numpy>=2.0,<3"],
+        "pandas": ["numpy>=2.0,<3", "pandas>=2.2.2,<4"],
+    }
+    assert distribution.metadata.get_all("Provides-Extra") == ["numpy", "pandas"]
+    # NumPy and pandas are all the installed distribution names, and it asks
+    # for each only with an extra: `pip install quantforge-py` brings the
+    # package alone.
+    required = list(map(Requirement, distribution.metadata.get_all("Requires-Dist")))
+    assert all(one.marker is not None for one in required)
+    assert not any(one.marker.evaluate({"extra": ""}) for one in required)
+    asked = {
+        extra: sorted(
+            (one.name, str(one.specifier))
+            for one in required
+            if one.marker.evaluate({"extra": extra})
+        )
+        for extra in ("numpy", "pandas")
+    }
+    numpy = ("numpy", str(SpecifierSet(">=2.0,<3")))
+    assert asked == {
+        "numpy": [numpy],
+        # A frame is made of a batch's arrays: the `pandas` extra asks for
+        # the NumPy the `numpy` extra asks for, in the same words.
+        "pandas": [numpy, ("pandas", str(SpecifierSet(">=2.2.2,<4")))],
+    }
+    assert len(required) == 3
 
 
-def test_the_run_has_a_numpy_exactly_where_it_was_not_said_to_have_none(without_numpy):
-    # The run is told when the package was installed without its extra, and
+def test_the_run_has_each_extra_exactly_where_it_was_not_said_to_have_none(
+    without_numpy, without_pandas
+):
+    # The run is told when the package was installed without an extra, and
     # is stopped before any test where that is not so (`conftest.py`): the
-    # tests of the arrays are skipped without NumPy, and would be missed.
+    # tests of the arrays are skipped without NumPy and those of the frames
+    # without pandas, and would be missed.
     import importlib.util
 
     assert (importlib.util.find_spec("numpy") is None) == without_numpy
+    assert (importlib.util.find_spec("pandas") is None) == without_pandas
+    # pandas does not import without NumPy.
+    assert without_pandas or not without_numpy
 
 
 def test_the_distribution_brings_the_package_and_nothing_beside_it(distribution, editable):
@@ -113,4 +137,8 @@ def test_the_distribution_brings_the_package_and_nothing_beside_it(distribution,
         assert brought == ["quantforge_py.pth"]
     else:
         extension = "_native.pyd" if sys.platform == "win32" else "_native.abi3.so"
-        assert brought == ["quantforge_py/__init__.py", f"quantforge_py/{extension}"]
+        assert brought == [
+            "quantforge_py/__init__.py",
+            "quantforge_py/_frames.py",
+            f"quantforge_py/{extension}",
+        ]

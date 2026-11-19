@@ -20,13 +20,17 @@
 //!   where its memory lies: it is borrowed last, and a refusal is worded
 //!   once the borrow is given back.
 //!
-//! NumPy is the package's one extra, and no requirement of it. It is
+//! NumPy is an extra of the package, and no requirement of it. It is
 //! imported when a conversion is first asked for, and never when the
 //! package is.
 //!
 //! `installed` is NumPy as it is found, and what is said where there is
-//! none or one too old; `column` is one array as a column, held to its type
-//! and read; and `counts` is the trade counts with their mask.
+//! none or one the extra does not take; `column` is one array as a column,
+//! held to its type and read; and `counts` is the trade counts with their
+//! mask.
+//!
+//! A backtest result's trades and equity curve are made into arrays the
+//! same way, for the package's pandas functions (`frames.rs`).
 
 mod column;
 mod counts;
@@ -44,7 +48,7 @@ use rust_decimal::Decimal;
 use crate::convert::{Row, refused};
 use column::{Column, allocated, plain, room_for, written};
 use counts::{Counts, TRADES, counts, known};
-use installed::imported;
+pub(crate) use installed::imported;
 
 static MASKED_ARRAY: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 
@@ -54,7 +58,7 @@ fn masked_array(py: Python<'_>) -> PyResult<&Bound<'_, PyType>> {
 }
 
 /// The type of a column's cells, by the name NumPy and a refusal give it.
-trait Cell: Element + Copy {
+pub(crate) trait Cell: Element + Copy {
     const NAME: &'static str;
 }
 
@@ -101,7 +105,7 @@ impl AsItLies for u8 {}
 /// bindings' constructors panic there. What `numpy.zeros` gave is held to
 /// what was asked of it, so that whatever stands in its place cannot give
 /// an array of another length or type.
-fn filled<'py, T: Cell, V>(
+pub(crate) fn filled<'py, T: Cell, V>(
     numpy: &Bound<'py, PyModule>,
     values: &[V],
     cell_of: impl Fn(&V) -> T,

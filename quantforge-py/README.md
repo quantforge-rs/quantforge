@@ -101,7 +101,7 @@ over a frozen day of candles, digit for digit, on every pull request
 ([the goldens](https://github.com/quantforge-rs/quantforge/blob/main/docs/golden-parity.md)).
 
 For computing with, a batch of candles gives its columns as NumPy arrays,
-and takes arrays back. NumPy is the package's one extra, which
+and takes arrays back. NumPy is an extra of the package, which
 `pip install "quantforge-py[numpy]"` installs with it:
 
 ```python
@@ -123,13 +123,35 @@ The arrays hold no market: it stays with the batch, and a batch is never
 run on a market other than the one it names
 ([candles as NumPy arrays](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-numpy.md)).
 
+For analysis, candles and a result are pandas DataFrames. pandas is the
+package's other extra, and `pip install "quantforge-py[pandas]"` installs it
+with the package, and NumPy with it:
+
+```python
+frame = qf.candles_to_dataframe(batch)  # one row for each candle, indexed by open_time, in UTC
+frame["close"].tolist()                 # [100.0, 110.0, 120.0, 125.0]: float64, as the arrays are
+frame["close"].rolling(2).mean()        # pandas from here on
+qf.dataframe_to_candles(frame, market=batch.market) == batch  # True
+
+trades = qf.trades_to_dataframe(result)  # one row for each closed trade
+equity = qf.equity_to_dataframe(result)  # one row for each bar, indexed as the candles are
+trades["gross_quote_pnl"].tolist()       # [250.0]
+equity["equity"].tolist()                # [1000.0, 1100.0, 1200.0, 1250.0]
+```
+
+Every time in a frame is the engine's own millisecond, shown as a UTC time,
+and a trade count the exchange did not report is missing, never a number.
+The frames are for computing with: their amounts are floats, and the exact
+decimals stay in the batch and in the result
+([candles and results as pandas DataFrames](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-pandas.md)).
+
 The package installs as `quantforge-py` and imports as `quantforge_py`.
 `quantforge` on PyPI is another project.
 
 One wheel per platform, built against Python's stable ABI, loads on CPython
 3.11 and every later version. It requires nothing but Python: the arrays
-alone need NumPy 2, from 2.0 on, and without it they say what to install
-while everything else works.
+need NumPy 2, from 2.0 on, and the DataFrames pandas, from 2.2.2 on, and
+without one what needs it says what to install while everything else works.
 
 [The Python package](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-package.md)
 says how it is named, built and tested, and

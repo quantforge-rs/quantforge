@@ -17,9 +17,16 @@ import quantforge_py as qf
 
 PAGE = "docs/python-types.md"
 
-# What the package says about itself comes first in `__all__`; the rest is
-# what this page is about.
+# What the package says about itself comes first in `__all__`, and the
+# functions that give or take a pandas DataFrame last, which have a page of
+# their own (`docs/python-pandas.md`); the rest is what this page is about.
 ABOUT = ["__version__", "ENGINE_VERSION", "STORAGE_BACKENDS"]
+FRAMES = [
+    "candles_to_dataframe",
+    "dataframe_to_candles",
+    "trades_to_dataframe",
+    "equity_to_dataframe",
+]
 
 # What the engine calls a name the package binds under another: a method of
 # a type the crate publishes, and the file that declares it.
@@ -36,7 +43,7 @@ INTERNAL = {
 
 
 def bound() -> list[str]:
-    return [name for name in qf.__all__ if name not in ABOUT]
+    return [name for name in qf.__all__ if name not in ABOUT + FRAMES]
 
 
 def classes() -> dict[str, type]:

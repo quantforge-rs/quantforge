@@ -5,9 +5,11 @@
 contract of the two: what each array is, what crosses exactly and what
 crosses as a float, what is refused, and where a batch's market stays.
 
-NumPy is the package's one extra, and the two are all that need it:
+NumPy is an extra of the package, and the two are what needs it:
 `pip install "quantforge-py[numpy]"` installs the package with it
-([NumPy itself](#numpy-itself)).
+([NumPy itself](#numpy-itself)). The frames of candles and of a result are
+made of the same arrays, and need it with pandas
+([candles and results as pandas DataFrames](python-pandas.md)).
 
 It applies two pages and restates neither. What a batch is, and every other
 type, is [the Python types](python-types.md). How a decimal becomes a float
@@ -386,10 +388,11 @@ arrays.
 
 ## NumPy itself
 
-**NumPy is the package's one extra, and no requirement of it.** The
-package installs, imports and runs a backtest without NumPy, and
-`to_numpy` and `from_numpy` are all that need one. `pip` installs it where
-the package is asked for with its extra:
+**NumPy is an extra of the package, and no requirement of it.** The
+package installs, imports and runs a backtest without NumPy. `to_numpy`
+and `from_numpy` are what need one, and with them the four functions that
+give or take a pandas DataFrame, which go through these two. `pip`
+installs it where the package is asked for with its extra:
 
 <!-- begin: numpy -->
 | What | Which |
