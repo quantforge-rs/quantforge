@@ -76,9 +76,23 @@ fn millisecond(py: Python<'_>) -> PyResult<&Bound<'_, PyAny>> {
     Ok(millisecond.bind(py))
 }
 
+/// A bound of a range: the engine's millisecond, and whether the time it
+/// was given as lay between two, so that the bound moved to a whole one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct At {
+    pub(crate) ms: i64,
+    pub(crate) rounded: bool,
+}
+
+impl At {
+    const fn whole(ms: i64) -> Self {
+        Self { ms, rounded: false }
+    }
+}
+
 /// The millisecond a bound names, or `None` where it is left out: the
 /// range has no such end then.
-pub(crate) fn bound(value: Option<&Bound<'_, PyAny>>, edge: Edge) -> PyResult<Option<i64>> {
+pub(crate) fn bound(value: Option<&Bound<'_, PyAny>>, edge: Edge) -> PyResult<Option<At>> {
     let name = edge.name();
     let Some(value) = value.filter(|value| !value.is_none()) else {
         return Ok(None);
@@ -89,17 +103,32 @@ pub(crate) fn bound(value: Option<&Bound<'_, PyAny>>, edge: Edge) -> PyResult<Op
         return quantforge::parse_rfc3339_to_ms(&text)
             // The engine's millisecond is the one a time lies in. A start
             // past its beginning is the next one.
-            .map(|ms| match edge {
-                Edge::Start if past_its_millisecond(&text) => Some(ms.saturating_add(1)),
-                _ => Some(ms),
+            .map(|ms| {
+                let rounded = past_its_millisecond(&text);
+                Some(At {
+                    ms: match edge {
+                        Edge::Start if rounded => ms.saturating_add(1),
+                        _ => ms,
+                    },
+                    rounded,
+                })
             })
             .map_err(|error| {
-                let shown = match text.char_indices().nth(SHOWN) {
-                    Some((cut, _)) => format!("{}...", &text[..cut]),
-                    None => text.to_string(),
+                // No time is written with an @ or an =, and a URL or a
+                // connection string with a password is: such text is not
+                // quoted.
+                let shown = if text.contains(['@', '=']) {
+                    " (not shown: it holds an @ or an =, as a URL or a connection string with a \
+                     password does)"
+                        .to_string()
+                } else {
+                    match text.char_indices().nth(SHOWN) {
+                        Some((cut, _)) => format!(" '{}...'", &text[..cut]),
+                        None => format!(" '{text}'"),
+                    }
                 };
                 PyValueError::new_err(format!(
-                    "invalid {name} '{shown}': {error}; write an RFC 3339 time, such as \
+                    "invalid {name}{shown}: {error}; write an RFC 3339 time, such as \
                      2026-01-01T00:00:00Z"
                 ))
             });
@@ -110,7 +139,7 @@ pub(crate) fn bound(value: Option<&Bound<'_, PyAny>>, edge: Edge) -> PyResult<Op
     // An integer as every other of the package is read: within the
     // engine's range, and never a flag, which is a number to Python.
     match integer::<i64>(value, name) {
-        Ok(ms) => Ok(Some(ms)),
+        Ok(ms) => Ok(Some(At::whole(ms))),
         Err(error) if error.is_instance_of::<PyTypeError>(py) => {
             Err(wrong_type(name, TAKES, value))
         }
@@ -138,7 +167,7 @@ fn past_its_millisecond(text: &str) -> bool {
 /// The arithmetic is the value's own, so a type derived from `datetime`
 /// that holds more than microseconds, as pandas' `Timestamp` does, is read
 /// with all it holds.
-fn instant(value: &Bound<'_, PyAny>, edge: Edge) -> PyResult<i64> {
+fn instant(value: &Bound<'_, PyAny>, edge: Edge) -> PyResult<At> {
     let py = value.py();
     let name = edge.name();
     if value.call_method0(intern!(py, "utcoffset"))?.is_none() {
@@ -150,14 +179,21 @@ fn instant(value: &Bound<'_, PyAny>, edge: Edge) -> PyResult<i64> {
     }
     let since = value.sub(epoch(py)?)?;
     let one = millisecond(py)?;
+    // The millisecond at or before the instant, and the one at or after it:
+    // floor division rounds down, so the one after is the one before its
+    // negation, negated. They are the same millisecond where the instant
+    // is a whole one.
+    let before = since.floor_div(one)?;
+    let after = since.neg()?.floor_div(one)?.neg()?;
     let whole = match edge {
-        // Floor division rounds down, so the millisecond after an instant
-        // is the one before its negation, negated.
-        Edge::Start => since.neg()?.floor_div(one)?.neg()?,
-        Edge::End => since.floor_div(one)?,
+        Edge::Start => &after,
+        Edge::End => &before,
     };
     match whole.extract::<i64>() {
-        Ok(ms) => Ok(ms),
+        Ok(ms) => Ok(At {
+            ms,
+            rounded: before.ne(&after)?,
+        }),
         // No `datetime` of Python's own is that far from the epoch: a type
         // derived from it may be.
         Err(error) if error.is_instance_of::<PyOverflowError>(py) => {

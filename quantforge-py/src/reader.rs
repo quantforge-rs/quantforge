@@ -4,8 +4,10 @@
 //! It is the engine's own reader (`quantforge::CandleReader`), opened by
 //! the engine's store factory from the settings the command line resolves
 //! (`settings.rs`), so Python and the command line agree on which store is
-//! selected. It opens the store read-only: it creates nothing, migrates
-//! nothing and writes nothing, on either backend.
+//! selected. It opens the store read-only: it creates no database and no
+//! schema, migrates nothing and writes nothing, on either backend. Beside a
+//! SQLite database in WAL mode it may leave the `-wal` and `-shm` files any
+//! reader of one leaves.
 //!
 //! - **The Python object owns its store** (ADR 0001): its file handles or
 //!   its pool of connections, with their credentials. `close`, the end of a
@@ -63,11 +65,14 @@ const LOGGER: &str = "quantforge_py";
 /// and no exception: a warning on the `quantforge_py` logger says which of
 /// the two it was.
 ///
-/// The store is opened read-only. The reader creates no file and no
+/// The store is opened read-only. The reader creates no database and no
 /// schema, migrates nothing and writes nothing: a SQLite file that does not
 /// exist is a `FileNotFoundError`, and a store at another schema than this
-/// build reads is a `ValueError` that names the command which brings it
-/// forward. Settings that are refused are a `ValueError` or a `TypeError`
+/// build reads is a `ValueError`, which names the command that brings an
+/// older one forward, and says that a newer one takes a newer release.
+/// Beside a SQLite database in WAL mode the reader may leave the `-wal` and
+/// `-shm` files any reader of one leaves. Settings that are refused are a
+/// `ValueError` or a `TypeError`
 /// before anything is opened, and a store that cannot be reached is a
 /// `ConnectionError`. No message holds a password.
 ///
@@ -149,12 +154,25 @@ impl CandleReader {
         let market = MarketId::taken(market, "a MarketId")?;
         let start = bound(start, Edge::Start)?;
         let end = bound(end, Edge::End)?;
+        // Two bounds that both lie inside one millisecond: the start moved
+        // to the next and the end to its own, which ends the range before
+        // it starts, and that is not what was asked.
+        let inside = match (start, end) {
+            (Some(start), Some(end))
+                if start.rounded && end.rounded && end.ms.checked_add(1) == Some(start.ms) =>
+            {
+                Some(end.ms)
+            }
+            _ => None,
+        };
+        let (start, end) = (start.map(|at| at.ms), end.map(|at| at.ms));
         let store = self.opened()?;
         let read = py.detach(|| -> Result<_, StorageError> {
             let candles = store.load(&market, start, end)?;
-            let nothing = match candles.is_empty() {
-                true => Some(store.nothing_found(&market, start, end)?),
-                false => None,
+            let nothing = match (candles.is_empty(), inside) {
+                (false, _) => None,
+                (true, Some(millisecond)) => Some(store.nothing_inside(&market, millisecond)),
+                (true, None) => Some(store.nothing_found(&market, start, end)),
             };
             Ok((quantforge::CandleBatch::from_candles(&candles), nothing))
         });
@@ -279,7 +297,7 @@ fn not_opened(error: StoreOpenError, settings: &StorageSettings) -> PyErr {
         )
     };
     match error {
-        StoreOpenError::NoSuchFile { path } => no_such_file(&path),
+        StoreOpenError::NoSuchFile { path, directory } => no_such_file(&path, directory.as_deref()),
         StoreOpenError::Config(refused) => PyValueError::new_err(refused.to_string()),
         StoreOpenError::Storage(failure) => match failure.kind() {
             StorageErrorKind::InvalidArgument | StorageErrorKind::SchemaUnsupported => {
@@ -295,17 +313,17 @@ fn not_opened(error: StoreOpenError, settings: &StorageSettings) -> PyErr {
 }
 
 /// A SQLite file that is not there: the reader creates none. A path that
-/// does not start at the root is looked for where the process runs, which
-/// the message says.
+/// does not start at the root was looked for in `directory`, where the
+/// process ran as the reader opened, which the message says.
 ///
 /// The path is shown unless it holds an `@` or an `=`. A path names a file
 /// and holds no secret, but a value given where the path belongs may be a
 /// URL with a user and a password before an `@`, or a connection string
 /// with one after an `=`, and is then no file at all.
-fn no_such_file(path: &Path) -> PyErr {
-    let directory = match std::env::current_dir() {
-        Ok(directory) if path.is_relative() => format!(" (in {})", directory.display()),
-        _ => String::new(),
+fn no_such_file(path: &Path, directory: Option<&Path>) -> PyErr {
+    let directory = match directory {
+        Some(directory) => format!(" (in {})", directory.display()),
+        None => String::new(),
     };
     let text = path.to_string_lossy();
     let shown = if text.contains(['@', '=']) {

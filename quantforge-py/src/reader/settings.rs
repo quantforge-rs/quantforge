@@ -209,15 +209,15 @@ fn path_text(value: &Bound<'_, PyAny>) -> PyResult<String> {
     if let Ok(text) = value.cast::<PyString>() {
         return utf8(text, DB.argument);
     }
-    // Looked at before it is called: a value whose type has no `__fspath__`
-    // is of the wrong type, and what one that has it raises is its own.
-    let own = value.get_type().getattr_opt(intern!(py, "__fspath__"));
-    if !matches!(own, Ok(Some(found)) if !found.is_none()) {
+    // Asked before the path is: a value that is no `os.PathLike` is of the
+    // wrong type, and what one that is raises is its own. `isinstance`
+    // looks for `__fspath__` where `os.fspath` does, in the type's own
+    // namespace, so a descriptor there counts whatever it gives the class.
+    let os = py.import(intern!(py, "os"))?;
+    if !value.is_instance(&os.getattr(intern!(py, "PathLike"))?)? {
         return Err(wrong_type(DB.argument, takes, value));
     }
-    let path = py
-        .import(intern!(py, "os"))?
-        .call_method1(intern!(py, "fspath"), (value,))?;
+    let path = os.call_method1(intern!(py, "fspath"), (value,))?;
     match path.cast::<PyString>() {
         Ok(text) => utf8(text, DB.argument),
         // A path of bytes names a file in an encoding nothing here knows.

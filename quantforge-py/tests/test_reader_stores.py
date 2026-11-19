@@ -220,10 +220,49 @@ def test_a_datetime_between_two_milliseconds_bounds_the_range_where_it_stands(st
         reader.load(MARKET, start=at(9) + 1, end="2026-01-01T12:09:00.001999Z").open_time_ms == odd
     )
     assert reader.load(MARKET, end="2026-01-01T12:09:00.000999Z").open_time_ms[-1] == at(4)
-    # The same before the epoch, where a bound rounds the same way.
+    # The same before the epoch, where a bound rounds the same way: half a
+    # millisecond before it lies between the candles that open at -1 and
+    # at 0, so a start there takes 0 and not -1, and an end the other way.
+    epoch = -stores.NOON // stores.MINUTE
+    stored.sql(stores.candle_row("binance_spot", "BTCUSDT", epoch, "6.00", late=-1))
+    stored.sql(stores.candle_row("binance_spot", "BTCUSDT", epoch, "7.00"))
     early = datetime.datetime(1969, 12, 31, 23, 59, 59, 999_500, tzinfo=UTC)
-    assert closes(reader.load(MARKET, start=early, end=minute(0))) == CLOSES[:1]
-    assert reader.load(MARKET, end=early) == qf.CandleBatch.from_candles([], market=MARKET)
+    for start, end in [
+        (early, "1969-12-31T23:59:59.9995Z"),
+        ("1969-12-31T23:59:59.9995Z", early),
+    ]:
+        assert reader.load(MARKET, start=start, end=minute(0)).open_time_ms == (0, at(0))
+        assert reader.load(MARKET, end=end).open_time_ms == (-1,)
+
+
+def test_two_bounds_inside_one_millisecond_hold_no_candle_and_say_so(reader, caplog):
+    inside = (
+        "holds no candles of binance_spot BTCUSDT 1m between two times inside the millisecond "
+        "that begins at 2026-01-01T12:02:00Z: a candle opens on a whole millisecond"
+    )
+    half = minute(2) + datetime.timedelta(microseconds=500)
+    for bounds, sentence in [
+        # Inside the millisecond after 12:02, in order, the same time, and
+        # the other way round, which only a finer clock than a millisecond
+        # tells apart: none holds a candle, and the sentence says why.
+        (dict(start="2026-01-01T12:02:00.0002Z", end="2026-01-01T12:02:00.0008Z"), inside),
+        (dict(start="2026-01-01T12:02:00.0005Z", end="2026-01-01T12:02:00.0005Z"), inside),
+        (dict(start="2026-01-01T12:02:00.0008Z", end="2026-01-01T12:02:00.0002Z"), inside),
+        (dict(start=half, end=half), inside),
+        (dict(start=half, end="2026-01-01T12:02:00.0007Z"), inside),
+        # An end on a whole millisecond before a start past it: the range
+        # does end before it starts.
+        (
+            dict(start="2026-01-01T12:02:00.0005Z", end="2026-01-01T12:02:00Z"),
+            "holds no candles of binance_spot BTCUSDT 1m from 2026-01-01T12:02:00.001Z to "
+            "2026-01-01T12:02:00Z: the range ends before it starts",
+        ),
+    ]:
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger="quantforge_py"):
+            assert len(reader.load(MARKET, **bounds)) == 0
+        (record,) = caplog.records
+        assert record.getMessage() == f"{reader.location} {sentence}", bounds
 
 
 def test_a_pandas_timestamp_bounds_a_range_with_its_nanoseconds(reader, without_pandas):
@@ -564,14 +603,18 @@ def test_both_backends_give_the_same_batch(tmp_path, postgres_server):
 
 def fingerprint(place: stores.Place) -> str:
     """What a store holds that a reader could have changed: its schema
-    version, its migrations, and every candle."""
+    version, every record of its migrations, and every candle, each column
+    of it."""
     rows = place.sql(
-        "SELECT CAST(open_time_ms AS TEXT), open, high, low, close, volume, "
-        "CAST(trades AS TEXT), exchange, symbol, interval FROM candles "
+        "SELECT CAST(open_time_ms AS TEXT), CAST(close_time_ms AS TEXT), open, high, low, close, "
+        "volume, CAST(trades AS TEXT), exchange, symbol, interval FROM candles "
         "ORDER BY exchange, symbol, interval, open_time_ms"
     )
     rows += place.sql("SELECT key, value FROM meta ORDER BY key")
-    rows += place.sql("SELECT CAST(count(*) AS TEXT) FROM schema_migrations")
+    rows += place.sql(
+        "SELECT CAST(version AS TEXT), CAST(from_version AS TEXT), CAST(applied_at_ms AS TEXT), "
+        "quantforge_version FROM schema_migrations ORDER BY version, from_version, applied_at_ms"
+    )
     return hashlib.sha256(repr(rows).encode()).hexdigest()
 
 
@@ -681,24 +724,28 @@ def test_a_lock_another_process_holds_is_waited_for_and_one_held_too_long_is_a_c
 def test_a_journal_a_writer_left_unfinished_is_refused_with_the_command_that_rolls_it_back(
     tmp_path, refused
 ):
-    place = stores.Place.sqlite(tmp_path)
+    # In a directory whose name has a space, which the command shown keeps
+    # in one word.
+    place = stores.Place.sqlite(tmp_path / "test stores")
+    place.directory.mkdir()
     place.store(five_minutes())
     rows = [
         stores.candle_row("binance_spot", "BTCUSDT", 10 + index, "5.00") for index in range(300)
     ]
     stores.die_writing(place.path, "journal", rows)
     assert (place.directory / "market.sqlite-journal").stat().st_size > 0
+    command = f"quantforge --db '{place.location}' store status"
     refused(
         ValueError,
         f"{place.location} holds the journal of a write that never finished, which only a writer "
-        "rolls back; let a command of the quantforge command line open it first, such as "
-        f"`quantforge --db {place.location} store status`",
+        f"rolls back; let a command of the quantforge command line open it first, such as "
+        f"`{command}`",
         qf.CandleReader,
         **place.arguments,
     )
-    # The command it names rolls the write back, and the reader reads what
-    # was there before it.
-    stores.quantforge("--db", place.location, "store", "status", cwd=tmp_path)
+    # The command it shows, run as it is shown, rolls the write back, and
+    # the reader reads what was there before it.
+    stores.shown(command, cwd=tmp_path)
     with qf.CandleReader(**place.arguments) as reader:
         assert closes(reader.load(MARKET)) == CLOSES
 
@@ -758,17 +805,26 @@ def test_a_reader_alone_reads_whole_right_batches_while_the_command_line_writes(
     writer = threading.Thread(target=storing, daemon=True)
     writer.start()
     seen, loads = 0, 0
-    with qf.CandleReader(**place.arguments) as reader:
-        deadline = time.monotonic() + 1.5
-        while time.monotonic() < deadline or loads < 20:
-            batch = reader.load(MARKET)
-            count = len(batch)
-            assert list(batch.open_time_ms) == [at(index) for index in range(count)]
-            assert closes(batch) == [f"{81000 + index}.00000000" for index in range(count)]
-            assert count >= seen
-            seen, loads = count, loads + 1
-    stop.set()
-    writer.join(60)
+    try:
+        with qf.CandleReader(**place.arguments) as reader:
+            # A second and a half and twenty loads at least, and then until
+            # a batch holds what a write stored, a first write that is slow
+            # included, for a minute at most.
+            started = time.monotonic()
+            while time.monotonic() < started + 60 and (
+                time.monotonic() < started + 1.5 or loads < 20 or seen <= 1
+            ):
+                batch = reader.load(MARKET)
+                count = len(batch)
+                assert list(batch.open_time_ms) == [at(index) for index in range(count)]
+                assert closes(batch) == [f"{81000 + index}.00000000" for index in range(count)]
+                assert count >= seen
+                seen, loads = count, loads + 1
+    finally:
+        # The writer stops before the store is torn down, whatever failed.
+        stop.set()
+        writer.join(60)
+    assert not writer.is_alive(), "the writer still stores after a minute"
     assert stored and seen > 1
 
 
@@ -828,8 +884,10 @@ def test_a_store_an_earlier_build_wrote_is_read_once_a_command_brought_it_forwar
     tmp_path, repository
 ):
     # A store an earlier build's command line wrote, as the crate's own
-    # tests keep one: three candles, at schema 9.
-    place = stores.Place.sqlite(tmp_path)
+    # tests keep one: three candles, at schema 9; in a directory whose name
+    # has a space, which the command shown keeps in one word.
+    place = stores.Place.sqlite(tmp_path / "test stores")
+    place.directory.mkdir()
     fixture = repository / "tests" / "fixtures" / "sqlite" / "schema-9.sql"
     connection = sqlite3.connect(place.path)
     connection.executescript(fixture.read_text(encoding="utf-8"))
@@ -839,11 +897,11 @@ def test_a_store_an_earlier_build_wrote_is_read_once_a_command_brought_it_forwar
         qf.CandleReader(**place.arguments)
     said = str(caught.value)
     assert said.startswith(f"{place.location} is at schema 9, and this build reads schema "), said
-    command = f"`quantforge --db {place.location} store status`"
-    assert said.endswith(f"where any command does it in place, such as {command}"), said
+    command = f"quantforge --db '{place.location}' store status"
+    assert said.endswith(f"where any command does it in place, such as `{command}`"), said
     assert place.path.read_bytes() == before
-    # The command the refusal names, run as it is written.
-    stores.quantforge("--db", place.location, "store", "status", cwd=tmp_path)
+    # The command the refusal shows, run as it is shown.
+    stores.shown(command, cwd=tmp_path)
     with qf.CandleReader(**place.arguments) as reader:
         assert written(reader.load(MARKET)) == [
             (
@@ -951,8 +1009,12 @@ def test_a_server_that_is_not_reached_is_a_connection_error_that_names_no_user(
     for url, said in cases:
         with pytest.raises(ConnectionError) as caught:
             qf.CandleReader(storage="postgres", postgres_url=url)
+        # The message word for word: none but the server's place and the
+        # database. The server's own password may well be a word the
+        # message holds anyway, such as `postgres`; the one this test made
+        # is not.
         assert type(caught.value) is ConnectionError and str(caught.value) == said
-        assert sentinel not in said and server.secret not in said
+        assert sentinel not in said
     # With PostgreSQL selected, no SQLite file was made, opened or read.
     assert list(tmp_path.iterdir()) == []
 
@@ -1003,9 +1065,11 @@ def test_with_postgresql_selected_no_sqlite_file_is_made_and_a_user_is_never_sho
         with qf.CandleReader() as reader:
             assert reader.backend == "postgres" and reader.location == place.location
             assert closes(reader.load(MARKET)) == CLOSES
-            shown = f"{reader!r} {reader.location} {reader.backend}"
-            assert postgres_server.secret not in shown
-            assert f"{postgres_server.user}:" not in shown and "@" not in shown
+            # What it shows, word for word: the server's place and the
+            # database, `postgres://HOST:PORT/DATABASE`, and no user or
+            # password. The server's own password may well be a word that
+            # holds anyway, such as `postgres`.
+            assert repr(reader) == f"<CandleReader postgres {place.location}>"
     # Neither the command nor the reader made a SQLite file there.
     assert list((tmp_path / "work").iterdir()) == []
 

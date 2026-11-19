@@ -340,7 +340,6 @@ fn says_why_a_range_held_nothing(place: &Place) {
         assert_eq!(reader.load(market, start, end).expect("candles"), []);
         reader
             .nothing_found(market, start, end)
-            .expect("a sentence")
             .strip_prefix(&format!("{location} "))
             .expect("the store's location first")
             .to_string()
@@ -415,6 +414,23 @@ fn says_why_a_range_held_nothing(place: &Place) {
             i64::MAX
         )
     );
+    // Two bounds inside one millisecond, which a host whose times can fall
+    // between two says so: the range it loads is from the millisecond after
+    // the first to the one before the second, and holds no candle.
+    assert_eq!(
+        reader
+            .load(&spot(), Some(at(2) + 1), Some(at(2)))
+            .expect("candles"),
+        []
+    );
+    assert_eq!(
+        reader.nothing_inside(&spot(), at(2)),
+        format!(
+            "{location} holds no candles of binance_spot BTCUSDT 1m between two times inside \
+             the millisecond that begins at 2026-01-01T12:02:00Z: a candle opens on a whole \
+             millisecond"
+        )
+    );
 }
 
 fn sees_what_a_writer_stored_since_it_opened(place: &Place) {
@@ -440,9 +456,7 @@ fn sees_what_a_writer_stored_since_it_opened(place: &Place) {
     );
     // With nothing in a range's way, a sentence asked for late says so.
     assert_eq!(
-        reader
-            .nothing_found(&spot(), None, None)
-            .expect("a sentence"),
+        reader.nothing_found(&spot(), None, None),
         format!(
             "{} held no candles of binance_spot BTCUSDT 1m as they were read; it holds them \
              from 2026-01-01T12:00:00Z to 2026-01-01T12:04:00Z now",
@@ -458,9 +472,7 @@ fn sees_what_a_writer_stored_since_it_opened(place: &Place) {
         .upsert_candles(&spot(), &[minute(5, "81920.00", Some(4))])
         .expect("a later candle");
     assert_eq!(
-        reader
-            .nothing_found(&spot(), later, None)
-            .expect("a sentence"),
+        reader.nothing_found(&spot(), later, None),
         format!(
             "{} held no candles of binance_spot BTCUSDT 1m from 2026-01-01T12:05:00Z on as they \
              were read; it holds them from 2026-01-01T12:00:00Z to 2026-01-01T12:05:00Z now",
@@ -474,9 +486,7 @@ fn sees_what_a_writer_stored_since_it_opened(place: &Place) {
     let hole = (Some(at(6)), Some(at(8)));
     assert_eq!(reader.load(&spot(), hole.0, hole.1).expect("candles"), []);
     assert_eq!(
-        reader
-            .nothing_found(&spot(), hole.0, hole.1)
-            .expect("a sentence"),
+        reader.nothing_found(&spot(), hole.0, hole.1),
         format!(
             "{} holds no candles of binance_spot BTCUSDT 1m from 2026-01-01T12:06:00Z to \
              2026-01-01T12:08:00Z; it holds them from 2026-01-01T12:00:00Z to \
@@ -599,7 +609,10 @@ fn a_sqlite_file_that_is_not_there_is_refused_and_not_created() {
     let place = Place::sqlite();
     let path = place.path();
     match place.open_reader() {
-        Err(StoreOpenError::NoSuchFile { path: missing }) => assert_eq!(&missing, path),
+        Err(StoreOpenError::NoSuchFile {
+            path: missing,
+            directory: None,
+        }) => assert_eq!(&missing, path),
         other => panic!("not a missing file: {other:?}"),
     }
     assert_eq!(
@@ -669,6 +682,89 @@ fn a_sqlite_file_that_is_not_there_is_refused_and_not_created() {
     assert_eq!(std::fs::read_dir(directory).expect("entries").count(), 0);
 }
 
+/// Where the store cannot be read again to say what it holds, the sentence
+/// says so, and why: the load that read nothing was an answer all the same.
+#[test]
+fn the_sentence_for_a_range_that_held_nothing_says_what_could_not_be_read() {
+    let place = Place::sqlite();
+    place
+        .store()
+        .upsert_candles(&spot(), &five_minutes())
+        .expect("candles");
+    let reader = place.reader();
+    let location = reader.location().to_string();
+    assert_eq!(
+        reader.load(&spot(), Some(at(9)), None).expect("candles"),
+        []
+    );
+    // The file goes before the sentence is asked for.
+    std::fs::remove_file(place.path()).expect("the file removed");
+    let said = reader.nothing_found(&spot(), Some(at(9)), None);
+    let lead = format!(
+        "{location} held no candles of binance_spot BTCUSDT 1m from 2026-01-01T12:09:00Z on as \
+         they were read, and what it holds besides could not be read: invalid argument: cannot \
+         open "
+    );
+    assert!(said.starts_with(&lead), "{said}");
+}
+
+/// A file at a path that may be a secret, which holds no SQLite database, is
+/// refused without the path: no SQLite database is found at it.
+#[test]
+fn a_file_that_is_no_database_at_a_path_that_may_be_a_secret_is_named_without_it() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let file = dir.path().join("user=SOMEONE password=WORD");
+    std::fs::write(
+        &file,
+        "not a database, and longer than a header\n".repeat(20),
+    )
+    .expect("a file");
+    let mut request = StorageRequest::default();
+    request.sqlite_path = Some(Supplied::new(file, "db"));
+    let settings = StorageSettings::resolve(request, StoreOwner::Reader).expect("settings");
+    assert_eq!(
+        refusal(StoreFactory::builtin().open_reader(&settings)),
+        "the path given is not a SQLite database"
+    );
+}
+
+/// A missing file whose path does not start at the root says where it was
+/// looked for, the directory the process ran in as the reader opened; and
+/// its `Debug`, as its `Display`, shows no path that may be a secret.
+#[test]
+fn a_missing_file_says_where_it_was_looked_for_and_debug_shows_no_secret() {
+    let relative = PathBuf::from("no-such-directory").join("market.sqlite");
+    let mut request = StorageRequest::default();
+    request.sqlite_path = Some(Supplied::new(relative.clone(), "db"));
+    let settings = StorageSettings::resolve(request, StoreOwner::Reader).expect("settings");
+    match StoreFactory::builtin().open_reader(&settings) {
+        Err(StoreOpenError::NoSuchFile { path, directory }) => {
+            assert_eq!(path, relative);
+            assert_eq!(
+                directory,
+                Some(std::env::current_dir().expect("the directory"))
+            );
+        }
+        other => panic!("not a missing file: {other:?}"),
+    }
+    assert!(!relative.exists() && !Path::new("no-such-directory").exists());
+
+    let shown = StoreOpenError::NoSuchFile {
+        path: relative,
+        directory: None,
+    };
+    assert!(format!("{shown:?}").contains("market.sqlite"), "{shown:?}");
+    let secret = StoreOpenError::NoSuchFile {
+        path: PathBuf::from("postgres://SOMEONE:WORD@db.example.com/market"),
+        directory: None,
+    };
+    let told = format!("{secret:?} {secret}");
+    assert!(
+        !told.contains("WORD") && !told.contains("SOMEONE"),
+        "{told}"
+    );
+}
+
 /// A path that may be a secret is not shown where it cannot be reached
 /// either: a file inside a directory that may not be entered may well be
 /// there, and is refused with the path left out.
@@ -699,6 +795,23 @@ fn a_path_that_may_be_a_secret_is_not_shown_where_it_cannot_be_reached() {
     let refused = refusal(opened);
     assert!(
         refused.starts_with("cannot reach the path given: "),
+        "{refused}"
+    );
+    assert!(
+        !refused.contains("WORD") && !refused.contains("SOMEONE"),
+        "{refused}"
+    );
+
+    // Nor where a file is there that SQLite cannot open.
+    let unreadable = dir.path().join("user=SOMEONE password=WORD.sqlite");
+    std::fs::write(&unreadable, b"").expect("a file");
+    std::fs::set_permissions(&unreadable, std::fs::Permissions::from_mode(0o000)).expect("chmod");
+    let mut request = StorageRequest::default();
+    request.sqlite_path = Some(Supplied::new(unreadable, "db"));
+    let settings = StorageSettings::resolve(request, StoreOwner::Reader).expect("settings");
+    let refused = refusal(StoreFactory::builtin().open_reader(&settings));
+    assert!(
+        refused.starts_with("cannot open the path given: "),
         "{refused}"
     );
     assert!(
@@ -959,9 +1072,7 @@ fn a_role_that_may_only_read_is_enough_for_a_reader() {
         .open_reader(&settings)
         .expect("a reader");
     assert_eq!(reader.load(&spot(), None, None).expect("candles"), candles);
-    let nothing = reader
-        .nothing_found(&market(ExchangeId::BybitSpot, "BTCUSDT"), None, None)
-        .expect("a sentence");
+    let nothing = reader.nothing_found(&market(ExchangeId::BybitSpot, "BTCUSDT"), None, None);
     assert!(nothing.ends_with("holds no candles of bybit_spot BTCUSDT 1m"));
     // The store's settings name the role nowhere they are shown.
     assert!(!reader.location().contains(name.as_str()));

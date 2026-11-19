@@ -178,6 +178,11 @@ def test_the_page_gives_the_sentence_for_each_range_that_holds_nothing(
             market,
             dict(start="2026-01-03T00:00:00Z", end="2026-01-02T00:00:00Z"),
         ),
+        (
+            "A range whose two bounds lie inside one millisecond",
+            market,
+            dict(start="2026-01-01T12:02:00.0002Z", end="2026-01-01T12:02:00.0008Z"),
+        ),
     ]
     rows = page(PAGE).rows("nothing found")
     assert [what for what, _ in rows] == [what for what, *_ in asked]

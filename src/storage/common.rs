@@ -1,8 +1,10 @@
 //! What every backend's stores share: reading a stored decimal back exactly,
-//! reading a stored market's key back, and the segment window a candle
-//! marks when it changes.
+//! reading a stored market's key back, the segment window a candle marks
+//! when it changes, and how a refusal names a SQLite file's path.
 
+use std::borrow::Cow;
 use std::fmt;
+use std::path::Path;
 use std::str::FromStr;
 
 use rust_decimal::Decimal;
@@ -88,9 +90,84 @@ pub(crate) fn out_of_range(open_time_ms: TimestampMs) -> StorageError {
     ))
 }
 
+/// Whether a path may be a secret given in a path's place: a URL or a
+/// connection string with a password holds an `@` or an `=`, and a path to
+/// a file rarely does.
+pub(crate) fn may_be_a_secret(text: &str) -> bool {
+    text.contains(['@', '='])
+}
+
+/// A path as a refusal that finds no SQLite database at it names it: whole,
+/// or as `the path given` where it may be a secret.
+pub(crate) fn path_named(path: &Path) -> Cow<'_, str> {
+    let text = path.to_string_lossy();
+    if may_be_a_secret(&text) {
+        Cow::Borrowed("the path given")
+    } else {
+        text
+    }
+}
+
+/// A path as one word of a command a message shows to be run: as it is
+/// where a POSIX shell takes it as one word, else in single quotes, as
+/// Python's `shlex.quote` writes one. On Windows a backslash is a path's own
+/// character.
+pub(crate) fn shell_word(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    let plain = |c: char| {
+        c.is_ascii_alphanumeric() || "_@%+=:,./-".contains(c) || (cfg!(windows) && c == '\\')
+    };
+    if !text.is_empty() && text.chars().all(plain) {
+        text.into_owned()
+    } else {
+        format!("'{}'", text.replace('\'', r#"'"'"'"#))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_path_that_may_be_a_secret_is_named_without_it() {
+        for (path, named) in [
+            ("data/market.sqlite", "data/market.sqlite"),
+            (
+                "/tmp/test stores/market.sqlite",
+                "/tmp/test stores/market.sqlite",
+            ),
+            (
+                "postgres://someone:word@db.example.com/market",
+                "the path given",
+            ),
+            ("host=db.example.com password=word", "the path given"),
+        ] {
+            assert_eq!(path_named(Path::new(path)), named);
+        }
+    }
+
+    #[test]
+    fn a_path_in_a_command_is_one_word_to_a_shell() {
+        for (path, word) in [
+            ("data/market.sqlite", "data/market.sqlite"),
+            (
+                "/tmp/a_b-c@d%e+f=g:h,i/market.sqlite",
+                "/tmp/a_b-c@d%e+f=g:h,i/market.sqlite",
+            ),
+            (
+                "/tmp/test stores/market.sqlite",
+                "'/tmp/test stores/market.sqlite'",
+            ),
+            (
+                "/tmp/it's/market.sqlite",
+                r#"'/tmp/it'"'"'s/market.sqlite'"#,
+            ),
+            ("/tmp/$HOME/*.sqlite", "'/tmp/$HOME/*.sqlite'"),
+            ("", "''"),
+        ] {
+            assert_eq!(shell_word(Path::new(path)), word, "{path}");
+        }
+    }
 
     #[test]
     fn a_stored_market_is_read_back_only_in_the_form_quantforge_writes() {

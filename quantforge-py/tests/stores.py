@@ -8,9 +8,10 @@ PostgreSQL server (`Server`). Nothing here writes a candle but that command,
 unless a test says so in SQL of its own, for what no command writes yet: a
 product line without an adapter, a candle without a trade count.
 
-- **The binary** is the one `QUANTFORGE_PY_TEST_CLI` names, or the one
-  `cargo build` leaves in the repository's `target/debug/`. A run that finds
-  neither fails, and skips nothing.
+- **The binary** is the one `QUANTFORGE_PY_TEST_CLI` names, a relative
+  path from where pytest runs, or the one `cargo build` leaves in the
+  repository's `target/debug/`. A run that finds neither fails, and skips
+  nothing.
 - **The PostgreSQL server** is the one `QUANTFORGE_TEST_POSTGRES_URL` names,
   the variable the crate's own tests read: a user allowed to create
   databases, over plain TCP on this machine. Without it the PostgreSQL
@@ -33,6 +34,7 @@ import json
 import os
 import pathlib
 import secrets
+import shlex
 import socket
 import sqlite3
 import struct
@@ -62,13 +64,18 @@ MINUTE = 60_000
 NOON = 1_767_268_800_000
 
 
+# Where pytest runs, as the tests start: a relative path in `CLI` names the
+# binary from there, whatever directory a test moves to before it writes.
+STARTED_IN = pathlib.Path.cwd()
+
+
 def binary() -> pathlib.Path:
     """The `quantforge` binary the tests write stores with."""
     named = os.environ.get(CLI)
     built = (
         REPOSITORY / "target" / "debug" / ("quantforge.exe" if os.name == "nt" else "quantforge")
     )
-    path = pathlib.Path(named) if named else built
+    path = STARTED_IN / named if named else built
     if not path.is_file():
         how = f"{CLI} names {path}" if named else f"there is none at {path}"
         raise FileNotFoundError(
@@ -93,6 +100,15 @@ def quantforge(*arguments, cwd, variables=None) -> subprocess.CompletedProcess:
     )
     assert done.returncode == 0, f"quantforge {' '.join(arguments)}: {done.stdout}{done.stderr}"
     return done
+
+
+def shown(command: str, *, cwd) -> subprocess.CompletedProcess:
+    """Runs a command line as a message shows it, split into words as a
+    POSIX shell splits it, and holds it to succeeding: what a person who
+    copies it into a shell runs, not a list the test made."""
+    program, *arguments = shlex.split(command)
+    assert program == "quantforge", command
+    return quantforge(*arguments, cwd=cwd)
 
 
 def kline(index: int, close: str, *, trades: int = 100, volume: str = "0.17235000") -> list:

@@ -3,6 +3,7 @@ page's tables and its tree are the package's own, and the workspace is wired
 as the page says. Each table and the tree sit between `<!-- begin: name -->`
 and `<!-- end: name -->` markers."""
 
+import os
 import re
 import subprocess
 
@@ -187,6 +188,20 @@ def test_the_check_script_builds_the_binary_and_ci_has_the_server_the_readers_te
 
 
 def test_the_binary_the_tests_write_stores_with_is_of_the_engine_the_package_has():
+    said = subprocess.run(
+        [str(stores.binary()), "--version"], check=True, capture_output=True, text=True
+    )
+    assert said.stdout == f"quantforge {quantforge_py.ENGINE_VERSION}\n"
+
+
+def test_a_binary_named_by_a_relative_path_is_found_from_where_the_tests_started(
+    monkeypatch, tmp_path
+):
+    found = stores.binary()
+    monkeypatch.setenv(stores.CLI, os.path.relpath(found, stores.STARTED_IN))
+    # A test that moved elsewhere still writes with it.
+    monkeypatch.chdir(tmp_path)
+    assert stores.binary().resolve() == found.resolve()
     said = subprocess.run(
         [str(stores.binary()), "--version"], check=True, capture_output=True, text=True
     )

@@ -16,12 +16,12 @@
 use crate::ports::{CandleStore, StorageError, TransferSnapshot};
 use crate::storage::SqliteStore;
 use crate::storage::any::AnyStore;
+use crate::storage::common::{may_be_a_secret, path_named};
 #[cfg(feature = "postgres")]
 use crate::storage::postgres::PostgresStore;
 use crate::storage::reader::CandleReader;
 use crate::storage::settings::{StorageBackend, StorageConfigError, StorageSettings};
 use crate::storage::sqlite::SqliteSnapshot;
-use std::borrow::Cow;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -97,10 +97,24 @@ impl StoreFactory {
         }
         let store = match settings {
             StorageSettings::Sqlite(sqlite) => {
+                // A path that does not start at the root names the file where
+                // the process runs now: the directory is read once, and the
+                // look, the store and a refusal all go by it, wherever another
+                // thread moves the process meanwhile or later. Each call of
+                // the store opens the file anew.
+                let directory = if sqlite.path.is_absolute() {
+                    None
+                } else {
+                    Some(std::env::current_dir().map_err(StorageError::other)?)
+                };
+                let path = match &directory {
+                    Some(directory) => directory.join(&sqlite.path),
+                    None => sqlite.path.clone(),
+                };
                 // What is there, through any link: a file is read; anything
                 // else, such as a directory or a pipe, which opening would
                 // wait on for good, is refused.
-                match std::fs::metadata(&sqlite.path) {
+                match std::fs::metadata(&path) {
                     Ok(found) if found.is_file() => {}
                     Ok(found) => {
                         let kind = if found.is_dir() {
@@ -110,13 +124,14 @@ impl StoreFactory {
                         };
                         return Err(StorageError::InvalidArgument(format!(
                             "{} is {kind}, and a SQLite database is a file",
-                            named(&sqlite.path)
+                            path_named(&sqlite.path)
                         ))
                         .into());
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                         return Err(StoreOpenError::NoSuchFile {
                             path: sqlite.path.clone(),
+                            directory,
                         });
                     }
                     // A directory on the way that may not be entered, say,
@@ -125,16 +140,11 @@ impl StoreFactory {
                     Err(error) => {
                         return Err(StorageError::InvalidArgument(format!(
                             "cannot reach {}: {error}",
-                            named(&sqlite.path)
+                            path_named(&sqlite.path)
                         ))
                         .into());
                     }
                 }
-                // A path that does not start at the root is looked for
-                // where the process runs now, and the reader keeps reading
-                // the file it found there wherever the process goes later:
-                // each of its calls opens the file anew.
-                let path = std::path::absolute(&sqlite.path).map_err(StorageError::other)?;
                 AnyStore::Sqlite(SqliteStore::read_only(path, sqlite.limits))
             }
             #[cfg(feature = "postgres")]
@@ -173,7 +183,7 @@ impl fmt::Debug for StoreFactory {
 
 /// Why a store could not be opened: its settings were refused, its backend
 /// failed, or, for a reader, its file is not there.
-#[derive(Debug, Error)]
+#[derive(Error)]
 #[non_exhaustive]
 pub enum StoreOpenError {
     #[error(transparent)]
@@ -181,33 +191,34 @@ pub enum StoreOpenError {
     #[error(transparent)]
     Storage(#[from] StorageError),
     /// A reader was asked for a SQLite store whose file does not exist. A
-    /// command would create it empty; a reader creates nothing. The path is
-    /// shown unless it holds an `@` or an `=`, which a URL or a connection
-    /// string with a password given in its place holds, and a path to a
-    /// file rarely does.
+    /// command would create it empty; a reader creates nothing. `path` is
+    /// the path as it was given, and `directory` the one a path that does
+    /// not start at the root was looked for in. The path is shown, by
+    /// `Display` and `Debug` alike, unless it holds an `@` or an `=`, which
+    /// a URL or a connection string with a password given in its place
+    /// holds, and a path to a file rarely does.
     #[error(
         "there is no SQLite database at {}; a reader creates none, and `quantforge data sync` \
          does",
         shown(path)
     )]
-    NoSuchFile { path: PathBuf },
+    NoSuchFile {
+        path: PathBuf,
+        directory: Option<PathBuf>,
+    },
 }
 
-/// Whether a path may be a secret given in a path's place: a URL or a
-/// connection string with a password holds an `@` or an `=`, and a path to
-/// a file rarely does.
-fn may_be_a_secret(text: &str) -> bool {
-    text.contains(['@', '='])
-}
-
-/// A path as a refusal of what is at it names it: whole, or as `the path
-/// given` where it may be a secret.
-fn named(path: &Path) -> Cow<'_, str> {
-    let text = path.to_string_lossy();
-    if may_be_a_secret(&text) {
-        Cow::Borrowed("the path given")
-    } else {
-        text
+impl fmt::Debug for StoreOpenError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Config(refused) => f.debug_tuple("Config").field(refused).finish(),
+            Self::Storage(failed) => f.debug_tuple("Storage").field(failed).finish(),
+            Self::NoSuchFile { path, directory } => f
+                .debug_struct("NoSuchFile")
+                .field("path", &path_named(path))
+                .field("directory", directory)
+                .finish(),
+        }
     }
 }
 

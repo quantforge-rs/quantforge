@@ -260,6 +260,7 @@ Each sentence starts with the store's location, and then says:
 | A range with a start alone | `holds no candles of binance_spot BTCUSDT 1m from 2026-01-02T00:00:00Z on; it holds them from 2026-01-01T12:00:00Z to 2026-01-01T12:04:00Z` |
 | A range with an end alone | `holds no candles of binance_spot BTCUSDT 1m up to 2025-12-31T00:00:00Z; it holds them from 2026-01-01T12:00:00Z to 2026-01-01T12:04:00Z` |
 | A range that ends before it starts | `holds no candles of binance_spot BTCUSDT 1m from 2026-01-03T00:00:00Z to 2026-01-02T00:00:00Z: the range ends before it starts` |
+| A range whose two bounds lie inside one millisecond | `holds no candles of binance_spot BTCUSDT 1m between two times inside the millisecond that begins at 2026-01-01T12:02:00Z: a candle opens on a whole millisecond` |
 <!-- end: nothing found -->
 
 - **A range inside what the store holds can hold nothing too:** a store
@@ -273,6 +274,10 @@ Each sentence starts with the store's location, and then says:
   and that second read, it says that the range held none as it was read:
   `held no candles of binance_spot BTCUSDT 1m from 2026-01-02T00:00:00Z on
   as they were read; it holds them from ... to ... now`.
+- **Where the store cannot be read again to say what it holds,** the
+  empty batch is given all the same, and the warning says why: `held no
+  candles of binance_spot BTCUSDT 1m as they were read, and what it holds
+  besides could not be read: ...`, with what the store said.
 - **It is a log record, and not a Python warning,** so no setting of the
   `warnings` module turns it into an exception.
 
@@ -306,18 +311,21 @@ under.
 **A reader opens the store read-only.** It differs from a command in what
 it leaves alone:
 
-- **It creates nothing.** A command creates a SQLite file that is not
-  there, and the schema in an empty PostgreSQL database. A reader refuses
-  both: a file that does not exist is a `FileNotFoundError`, and a database
-  that holds no store a `ValueError`. Opening a reader where there is no
-  store never leaves an empty one behind.
+- **It creates no database and no schema.** A command creates a SQLite
+  file that is not there, and the schema in an empty PostgreSQL database. A
+  reader refuses both: a file that does not exist is a `FileNotFoundError`,
+  and a database that holds no store a `ValueError`. Opening a reader where
+  there is no store never leaves an empty one behind.
 - **It migrates nothing.** A command brings a store an earlier release
   wrote to its own schema as it opens it. A reader refuses a store at
-  another schema than its build reads, with the command that brings it
-  forward: any command of the `quantforge` command line of that version,
-  such as `quantforge store status`. A package built on a newer engine
-  therefore never moves a store out from under the command line that
-  writes it.
+  another schema than its build reads. A store an earlier release wrote is
+  refused with the command that brings it forward: any command of the
+  `quantforge` command line of the reader's version, such as `quantforge
+  store status`. A store a later release wrote is refused as every command
+  of the reader's version refuses it, since none of them can read it: it
+  takes the package and the command line of that later release. A package
+  built on a newer engine therefore never moves a store out from under the
+  command line that writes it.
 - **It writes nothing.** Every connection is read-only, SQLite's by how the
   file is opened and PostgreSQL's by its session, so the backend itself
   refuses a statement that would write.
@@ -404,9 +412,10 @@ local client, which already holds what selects the store.
   forms it is written in elsewhere: in capitals, with a driver's name after
   a `+`, quoted, or with a `/` that `pathlib` took out of its `//`. A path
   that holds an `@` or an `=`, as a URL or a connection string with a
-  password does, is not shown where no SQLite file is found at it: where
-  nothing is there, where what is there is no file, and where the path
-  cannot be reached, as on Windows, which refuses a `:` in a name. Text that
+  password does, is not shown where no SQLite database is found at it:
+  where nothing is there, where what is there is no file or no SQLite
+  database, and where the path cannot be reached, as on Windows, which may
+  refuse a `:` in a name. Text that
   is no UTF-8 is refused without being quoted, since Python's own error
   would carry all of it.
 - **A password is written as the URL form asks:** `@`, `:`, `/` and `%`

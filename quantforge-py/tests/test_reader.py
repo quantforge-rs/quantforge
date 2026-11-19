@@ -227,20 +227,27 @@ def test_a_connect_timeout_bounds_the_wait_for_a_server_that_never_answers(
 ):
     if "postgres" not in storage_backends:
         pytest.skip("the SQLite-only build opens no PostgreSQL store")
-    # A server that takes connections and never says a word.
+    # A server that takes connections and never says a word. It looks at
+    # its stop every tenth of a second: closing a socket from another thread
+    # does not always wake a call that waits on it.
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     listener.listen(16)
+    listener.settimeout(0.1)
     taken = []
+    stop = threading.Event()
 
     def take():
-        while True:
+        while not stop.is_set():
             try:
                 taken.append(listener.accept()[0])
+            except TimeoutError:
+                continue
             except OSError:
                 return
 
-    threading.Thread(target=take, daemon=True).start()
+    taker = threading.Thread(target=take, daemon=True)
+    taker.start()
     silent = f"postgres://{USER}:{WORD}@127.0.0.1:{listener.getsockname()[1]}/market"
     said = (
         f"cannot open the postgres store at postgres://127.0.0.1:{listener.getsockname()[1]}/"
@@ -265,9 +272,12 @@ def test_a_connect_timeout_bounds_the_wait_for_a_server_that_never_answers(
             # The argument over the variable.
             waited(1, postgres_connect_timeout_secs=1)
     finally:
+        stop.set()
+        taker.join(5)
         listener.close()
         for connection in taken:
             connection.close()
+    assert not taker.is_alive()
 
 
 def test_an_argument_wins_over_its_variable_and_a_variable_over_the_default(
@@ -296,6 +306,28 @@ def test_an_argument_wins_over_its_variable_and_a_variable_over_the_default(
     # A path may be an `os.PathLike`.
     with qf.CandleReader(db=pathlib.Path(by_argument.location)) as reader:
         assert (reader.location, close_of(reader)) == (by_argument.location, "3.00000000")
+
+    # One whose `__fspath__` is a descriptor that gives its class nothing
+    # and an instance its method, which `os.fspath` takes, as the reader does.
+    class Lazily:
+        def __get__(self, instance, owner=None):
+            return None if instance is None else (lambda: by_argument.location)
+
+    class Located:
+        __fspath__ = Lazily()
+
+    assert Located.__fspath__ is None and os.fspath(Located()) == by_argument.location
+    with qf.CandleReader(db=Located()) as reader:
+        assert (reader.location, close_of(reader)) == (by_argument.location, "3.00000000")
+
+    # And one whose type says it has no `__fspath__` is no path.
+    class Unpathed:
+        __fspath__ = None
+
+    with pytest.raises(
+        TypeError, match="^db must be a str or an os.PathLike of one, not Unpathed$"
+    ):
+        qf.CandleReader(db=Unpathed())
 
     # The backend is settled the same way: the variable selects PostgreSQL,
     # and the argument SQLite, which is opened without PostgreSQL's URL
@@ -722,6 +754,18 @@ def test_text_that_is_no_time_is_quoted_to_eighty_characters(stored, market):
                 reader.load(market, start=text)
             said = str(caught.value)
             assert said.startswith(f"invalid start '{shown}': time parse error: "), said
+        # No time is written with an @ or an =, and a URL or a connection
+        # string with a password is: such text is not quoted at all.
+        for text in [NOWHERE, f"host=db.example.com user={USER} password={WORD}"]:
+            for edge in ("start", "end"):
+                with pytest.raises(ValueError) as caught:
+                    reader.load(market, **{edge: text})
+                said = everything_said(caught.value)
+                assert USER not in said and WORD not in said, said
+                assert str(caught.value).startswith(
+                    f"invalid {edge} (not shown: it holds an @ or an =, as a URL or a connection "
+                    "string with a password does): time parse error: "
+                ), str(caught.value)
 
 
 def everything_said(error: BaseException) -> str:
@@ -876,6 +920,17 @@ def test_a_path_that_may_be_a_secret_is_not_shown_where_no_file_is_there(
     for written in NOT_A_PATH + ["data/a=b.sqlite", "data/someone@example.sqlite"]:
         if written.lstrip(" \t\n'").lower().startswith("postgres"):
             # Refused before it is looked for, as a URL.
+            continue
+        if os.name == "nt" and any(character in written for character in ':*?"<>|'):
+            # Windows may refuse such a name before it looks for a file
+            # there: a path that cannot be reached, not shown either.
+            with pytest.raises((FileNotFoundError, ValueError)) as caught:
+                qf.CandleReader(db=written)
+            said = str(caught.value)
+            assert (type(caught.value) is FileNotFoundError and said == hidden(written)) or (
+                type(caught.value) is ValueError
+                and said.startswith("cannot reach the path given: ")
+            ), said
             continue
         refused(FileNotFoundError, hidden(written), qf.CandleReader, db=written)
     # Nor where what is there is no file.

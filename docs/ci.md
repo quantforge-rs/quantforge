@@ -243,13 +243,14 @@ CARGO_TARGET_DIR=target/publish cargo publish --dry-run --locked
 # postgres 16, 17 or 18, with Docker
 eval "$(scripts/postgres-test-servers.sh start 16)"
 cargo test --all-features --locked --no-fail-fast
-scripts/postgres-test-servers.sh leftovers
-scripts/postgres-test-servers.sh stop
 
 # python, with CPython 3.11 or later; name each interpreter to test on.
-# with the variables of `start` exported, the reader's tests run on
-# postgresql too
+# with the variables of `start` exported and its servers still up, as
+# here, the reader's tests run on postgresql too
 scripts/python-package-check.sh python3.11 python3.15
+
+scripts/postgres-test-servers.sh leftovers
+scripts/postgres-test-servers.sh stop
 ```
 
 `start` runs the two servers on `127.0.0.1:54329` and `127.0.0.1:54330`, set

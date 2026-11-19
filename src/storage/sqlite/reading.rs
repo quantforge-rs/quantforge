@@ -16,6 +16,7 @@ use super::errors::failed;
 use super::wait::{self, Waits};
 use super::{Access, SqliteStore, migrate};
 use crate::ports::StorageError;
+use crate::storage::common::{may_be_a_secret, path_named, shell_word};
 use crate::storage::settings::{Durability, StorageLimits};
 
 impl SqliteStore {
@@ -67,15 +68,23 @@ pub(super) fn connection(
     Ok(connection)
 }
 
-/// Why a file could not be read as a store, with what to do about it.
+/// Why a file could not be read as a store, with what to do about it. Where
+/// no SQLite database is found at the path, a path that may be a secret
+/// given in a path's place is not shown.
 pub(super) fn opening(path: &Path, error: rusqlite::Error) -> StorageError {
-    let path = path.display();
+    let shown = path.display();
     match error.sqlite_error_code() {
         Some(ErrorCode::CannotOpen | ErrorCode::NotFound) => {
-            StorageError::InvalidArgument(format!("cannot open {path}: {error}"))
+            // rusqlite's own words for a file it could not open end with the
+            // path: where that may be a secret, SQLite's code says why alone.
+            let why = match error.sqlite_error() {
+                Some(failure) if may_be_a_secret(&path.to_string_lossy()) => failure.to_string(),
+                _ => error.to_string(),
+            };
+            StorageError::InvalidArgument(format!("cannot open {}: {why}", path_named(path)))
         }
         Some(ErrorCode::NotADatabase) => {
-            StorageError::InvalidArgument(format!("{path} is not a SQLite database"))
+            StorageError::InvalidArgument(format!("{} is not a SQLite database", path_named(path)))
         }
         // A rollback journal a writer left when it stopped mid-write: the
         // database is read again only once a writer has rolled it back.
@@ -85,14 +94,15 @@ pub(super) fn opening(path: &Path, error: rusqlite::Error) -> StorageError {
                 .is_some_and(|failure| failure.extended_code == ffi::SQLITE_READONLY_ROLLBACK) =>
         {
             StorageError::InvalidArgument(format!(
-                "{path} holds the journal of a write that never finished, which only a writer \
+                "{shown} holds the journal of a write that never finished, which only a writer \
                  rolls back; let a command of the quantforge command line open it first, such as \
-                 `quantforge --db {path} store status`"
+                 `quantforge --db {} store status`",
+                shell_word(path)
             ))
         }
         Some(ErrorCode::ReadOnly | ErrorCode::PermissionDenied) => {
             StorageError::InvalidArgument(format!(
-                "cannot read {path} read-only: a reader of a WAL database writes the -shm file \
+                "cannot read {shown} read-only: a reader of a WAL database writes the -shm file \
                  beside it; make its directory writable, or copy the database, with its -wal \
                  file, somewhere writable"
             ))
