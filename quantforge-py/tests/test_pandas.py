@@ -13,7 +13,6 @@ nearest to a decimal is Python's own `float(str(d))`, the decimal of a float
 is `Decimal(repr(x))`, and a time is Python's own `datetime`."""
 
 import datetime
-import importlib.util
 import inspect
 import random
 import struct
@@ -222,11 +221,13 @@ def test_a_frame_is_the_same_whatever_pandas_is_told_to_make_of_text(told):
             # pandas itself follows it, for the names of a frame's columns:
             # where it is told to infer and cannot, for want of the library
             # it infers with before pandas 3, it makes no such frame at all.
+            # The refusal is pandas' own and names that library, whether
+            # Python finds none or pandas cannot use the one it finds.
             try:
                 left_to_pandas = pd.DataFrame({"close": [1.0]}).columns.dtype
-            except ImportError:
+            except ImportError as unable:
                 assert told and int(pd.__version__.split(".")[0]) < 3
-                assert importlib.util.find_spec("pyarrow") is None
+                assert "pyarrow" in str(unable).lower()
             else:
                 assert (left_to_pandas == np.dtype(object)) == (not told)
             other = frames_of_every_kind()

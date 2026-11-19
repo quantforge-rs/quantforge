@@ -80,12 +80,15 @@ def columns_of(rows) -> tuple[str | None, dict[str, str]]:
     index, if a row is marked as it, and each column's type by its name."""
     index, columns = None, {}
     for named, dtype, *_ in rows:
-        if named.endswith(THE_INDEX):
+        is_index = named.endswith(THE_INDEX)
+        name = code_of(named.removesuffix(THE_INDEX) if is_index else named)
+        # A table lists a column once: a row that names one again would
+        # take its place here, and pass for the row it repeats.
+        assert name not in columns, f"{name} is listed twice"
+        if is_index:
             assert index is None, "one row is the index"
-            index = code_of(named.removesuffix(THE_INDEX))
-            columns[index] = code_of(dtype)
-        else:
-            columns[code_of(named)] = code_of(dtype)
+            index = name
+        columns[name] = code_of(dtype)
     return index, columns
 
 

@@ -496,15 +496,18 @@ def test_the_decimals_a_store_keeps_cross_a_frame_as_floats_and_not_as_they_are_
     assert bits_of(frame["close"]) == [read(text) for text in texts]
     back = qf.dataframe_to_candles(frame).close
     for text, went, came in zip(texts, decimals, back, strict=True):
+        # What comes back is the decimal of the float Python reads from the
+        # same text, written with the places that float's shortest text
+        # has and no zero after them: `1.10` and `1.1` both come back `1.1`,
+        # and `0` comes back `0`, where Python writes the float `0.0`.
+        shortest = Decimal(repr(float(text))).normalize()
+        assert came == shortest and written(came) == written(shortest), text
         if len(went.as_tuple().digits) <= 15:
-            # The same number, written with the places a float's shortest
-            # text has: `1.10` and `1.1` both come back `1.1`.
+            # Up to 15 significant digits, that is the same number.
             assert came == went, text
-            assert written(came) == written(went.normalize()), text
-        else:
-            # More digits than a float holds: its nearest float's own text.
-            assert came != went, text
-            assert came == Decimal(repr(float(text))), text
+    # More digits than a float holds come back as the nearest float's own
+    # text, which is another number: the store keeps such decimals too.
+    assert any(came != went for went, came in zip(decimals, back, strict=True))
     # What a store keeps and a segment hashes is the text with its places,
     # which a float has lost.
     assert [written(came) for came in back] != texts
