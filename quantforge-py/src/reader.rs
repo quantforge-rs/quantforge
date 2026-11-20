@@ -335,7 +335,12 @@ fn no_such_file(path: &Path, resolved: Option<&Path>) -> PyErr {
             .to_string()
     } else {
         match resolved {
-            Some(resolved) => format!("{text} (looked for at {})", resolved.display()),
+            match resolved {
+                Some(resolved) if !may_be_a_secret(&resolved.to_string_lossy()) => {
+                    format!("{text} (looked for at {})", resolved.display())
+                }
+                _ => text.into_owned(),
+            }
             None => text.into_owned(),
         }
     };
