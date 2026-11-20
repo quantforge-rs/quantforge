@@ -33,7 +33,9 @@ use std::sync::{Arc, Mutex, PoisonError};
 use pyo3::exceptions::{PyConnectionError, PyFileNotFoundError, PyRuntimeError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
-use quantforge::{StorageError, StorageErrorKind, StorageSettings, StoreFactory, StoreOpenError};
+use quantforge::{
+    StorageBackend, StorageError, StorageErrorKind, StorageSettings, StoreFactory, StoreOpenError,
+};
 
 use crate::candles::CandleBatch;
 use crate::market::MarketId;
@@ -287,17 +289,20 @@ fn raised(error: StorageError) -> PyErr {
 
 /// Why a store could not be opened to read, as the exception Python is
 /// raised for it. A failure that names no store is told with the one the
-/// settings selected.
+/// settings selected: a SQLite file by its path, unless the path holds an
+/// `@` or an `=`, as a URL or a connection string given in its place does.
 fn not_opened(error: StoreOpenError, settings: &StorageSettings) -> PyErr {
     let selected = || {
-        format!(
-            "cannot open the {} store at {}",
-            settings.backend(),
-            settings.location()
-        )
+        let location = settings.location();
+        let shown = if settings.backend() == StorageBackend::Sqlite && may_be_a_secret(&location) {
+            "the path given".to_string()
+        } else {
+            location
+        };
+        format!("cannot open the {} store at {shown}", settings.backend())
     };
     match error {
-        StoreOpenError::NoSuchFile { path, directory } => no_such_file(&path, directory.as_deref()),
+        StoreOpenError::NoSuchFile { path, resolved } => no_such_file(&path, resolved.as_deref()),
         StoreOpenError::Config(refused) => PyValueError::new_err(refused.to_string()),
         StoreOpenError::Storage(failure) => match failure.kind() {
             StorageErrorKind::InvalidArgument | StorageErrorKind::SchemaUnsupported => {
@@ -313,28 +318,35 @@ fn not_opened(error: StoreOpenError, settings: &StorageSettings) -> PyErr {
 }
 
 /// A SQLite file that is not there: the reader creates none. A path that
-/// does not start at the root was looked for in `directory`, where the
-/// process ran as the reader opened, which the message says.
+/// does not start at the root was settled to `resolved` as the reader
+/// opened, where the process ran then, and the message says where it was
+/// looked for.
 ///
-/// The path is shown unless it holds an `@` or an `=`. A path names a file
-/// and holds no secret, but a value given where the path belongs may be a
-/// URL with a user and a password before an `@`, or a connection string
-/// with one after an `=`, and is then no file at all.
-fn no_such_file(path: &Path, directory: Option<&Path>) -> PyErr {
-    let directory = match directory {
-        Some(directory) => format!(" (in {})", directory.display()),
-        None => String::new(),
-    };
+/// The path is shown unless it holds an `@` or an `=`, and so is the full
+/// path, which holds it. A path names a file and holds no secret, but a
+/// value given where the path belongs may be a URL with a user and a
+/// password before an `@`, or a connection string with one after an `=`,
+/// and is then no file at all.
+fn no_such_file(path: &Path, resolved: Option<&Path>) -> PyErr {
     let text = path.to_string_lossy();
-    let shown = if text.contains(['@', '=']) {
+    let shown = if may_be_a_secret(&text) {
         "the path given, which is not shown: it holds an @ or an =, as a URL or a connection \
          string with a password does"
             .to_string()
     } else {
-        text.into_owned()
+        match resolved {
+            Some(resolved) => format!("{text} (looked for at {})", resolved.display()),
+            None => text.into_owned(),
+        }
     };
     PyFileNotFoundError::new_err(format!(
-        "there is no SQLite database at {shown}{directory}: a reader creates none, and \
-         `quantforge data sync` does; db, or QF_DB, names another file"
+        "there is no SQLite database at {shown}: a reader creates none, and `quantforge data \
+         sync` does; db, or QF_DB, names another file"
     ))
+}
+
+/// Whether text a path was given as may be a secret: a URL with a password
+/// holds an `@`, and a connection string an `=`.
+fn may_be_a_secret(text: &str) -> bool {
+    text.contains(['@', '='])
 }

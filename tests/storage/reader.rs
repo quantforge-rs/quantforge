@@ -611,7 +611,7 @@ fn a_sqlite_file_that_is_not_there_is_refused_and_not_created() {
     match place.open_reader() {
         Err(StoreOpenError::NoSuchFile {
             path: missing,
-            directory: None,
+            resolved: None,
         }) => assert_eq!(&missing, path),
         other => panic!("not a missing file: {other:?}"),
     }
@@ -729,40 +729,80 @@ fn a_file_that_is_no_database_at_a_path_that_may_be_a_secret_is_named_without_it
 }
 
 /// A missing file whose path does not start at the root says where it was
-/// looked for, the directory the process ran in as the reader opened; and
-/// its `Debug`, as its `Display`, shows no path that may be a secret.
+/// looked for, the full path it was settled to where the process ran as the
+/// reader opened; and its `Debug`, as its `Display`, shows no path that may
+/// be a secret, the full path included.
 #[test]
 fn a_missing_file_says_where_it_was_looked_for_and_debug_shows_no_secret() {
     let relative = PathBuf::from("no-such-directory").join("market.sqlite");
+    let here = std::env::current_dir().expect("the directory");
     let mut request = StorageRequest::default();
     request.sqlite_path = Some(Supplied::new(relative.clone(), "db"));
     let settings = StorageSettings::resolve(request, StoreOwner::Reader).expect("settings");
     match StoreFactory::builtin().open_reader(&settings) {
-        Err(StoreOpenError::NoSuchFile { path, directory }) => {
+        Err(StoreOpenError::NoSuchFile { path, resolved }) => {
             assert_eq!(path, relative);
-            assert_eq!(
-                directory,
-                Some(std::env::current_dir().expect("the directory"))
-            );
+            assert_eq!(resolved, Some(here.join(&relative)));
         }
         other => panic!("not a missing file: {other:?}"),
     }
     assert!(!relative.exists() && !Path::new("no-such-directory").exists());
 
     let shown = StoreOpenError::NoSuchFile {
-        path: relative,
-        directory: None,
+        path: relative.clone(),
+        resolved: Some(here.join(&relative)),
     };
-    assert!(format!("{shown:?}").contains("market.sqlite"), "{shown:?}");
-    let secret = StoreOpenError::NoSuchFile {
-        path: PathBuf::from("postgres://SOMEONE:WORD@db.example.com/market"),
-        directory: None,
+    let debug = format!("{shown:?}");
+    assert!(
+        debug.contains("market.sqlite") && debug.contains("no-such-directory"),
+        "{debug}"
+    );
+    let url = "postgres://SOMEONE:WORD@db.example.com/market";
+    let url_shaped = StoreOpenError::NoSuchFile {
+        path: PathBuf::from(url),
+        resolved: Some(here.join(url)),
     };
-    let told = format!("{secret:?} {secret}");
+    let told = format!("{url_shaped:?} {url_shaped}");
     assert!(
         !told.contains("WORD") && !told.contains("SOMEONE"),
         "redaction failed: credentials were exposed"
     );
+}
+
+/// On Windows a path with a drive and no root, such as `D:market.sqlite`,
+/// names a file in that drive's own current directory. A reader settles it
+/// to that full path as it opens, and keeps no path the system would settle
+/// again, elsewhere, once the process moves.
+#[cfg(windows)]
+#[test]
+fn a_path_with_a_drive_and_no_root_is_settled_to_a_full_path() {
+    use std::path::{Component, Prefix};
+
+    let here = std::env::current_dir().expect("the directory");
+    let Some(Component::Prefix(prefix)) = here.components().next() else {
+        panic!("no drive in {}", here.display());
+    };
+    let Prefix::Disk(letter) = prefix.kind() else {
+        panic!("not on a lettered drive: {}", here.display());
+    };
+    // The drive the process runs on, whose own directory is where it runs.
+    let tail = PathBuf::from("no-such-directory").join("market.sqlite");
+    let given = PathBuf::from(format!("{}:{}", char::from(letter), tail.display()));
+    assert!(
+        !given.is_absolute() && !given.has_root(),
+        "{}",
+        given.display()
+    );
+    let mut request = StorageRequest::default();
+    request.sqlite_path = Some(Supplied::new(given.clone(), "db"));
+    let settings = StorageSettings::resolve(request, StoreOwner::Reader).expect("settings");
+    match StoreFactory::builtin().open_reader(&settings) {
+        Err(StoreOpenError::NoSuchFile { path, resolved }) => {
+            assert_eq!(path, given);
+            assert_eq!(resolved, Some(here.join(&tail)));
+        }
+        other => panic!("not a missing file: {other:?}"),
+    }
 }
 
 /// A path that may be a secret is not shown where it cannot be reached

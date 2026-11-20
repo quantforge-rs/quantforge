@@ -111,13 +111,17 @@ pub(crate) fn path_named(path: &Path) -> Cow<'_, str> {
 /// A path as one word of a command a message shows to be run: as it is
 /// where a POSIX shell takes it as one word, else in single quotes, as
 /// Python's `shlex.quote` writes one. On Windows a backslash is a path's own
-/// character.
+/// character, and so is a tilde that does not begin the path, as in a short
+/// name such as `RUNNER~1`: no shell there reads it as anything else, and
+/// cmd does not take single quotes for quotes.
 pub(crate) fn shell_word(path: &Path) -> String {
     let text = path.to_string_lossy();
-    let plain = |c: char| {
-        c.is_ascii_alphanumeric() || "_@%+=:,./-".contains(c) || (cfg!(windows) && c == '\\')
+    let plain = |(at, c): (usize, char)| {
+        c.is_ascii_alphanumeric()
+            || "_@%+=:,./-".contains(c)
+            || (cfg!(windows) && (c == '\\' || (c == '~' && at > 0)))
     };
-    if !text.is_empty() && text.chars().all(plain) {
+    if !text.is_empty() && text.char_indices().all(plain) {
         text.into_owned()
     } else {
         format!("'{}'", text.replace('\'', r#"'"'"'"#))
@@ -164,7 +168,23 @@ mod tests {
             ),
             ("/tmp/$HOME/*.sqlite", "'/tmp/$HOME/*.sqlite'"),
             ("", "''"),
+            // A tilde that begins a path is a shell's on every platform.
+            ("~/market.sqlite", "'~/market.sqlite'"),
         ] {
+            assert_eq!(shell_word(Path::new(path)), word, "{path}");
+        }
+        // A backslash, and a tilde inside a path, as in a Windows short
+        // name: a path's own characters on Windows, quoted elsewhere.
+        for path in [
+            r"C:\Users\RUNNER~1\AppData\Local\Temp\market.sqlite",
+            "/tmp/RUNNER~1/market.sqlite",
+            r"C:\data\market.sqlite",
+        ] {
+            let word = if cfg!(windows) {
+                path.to_string()
+            } else {
+                format!("'{path}'")
+            };
             assert_eq!(shell_word(Path::new(path)), word, "{path}");
         }
     }

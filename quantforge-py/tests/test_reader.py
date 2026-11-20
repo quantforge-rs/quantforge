@@ -766,6 +766,22 @@ def test_text_that_is_no_time_is_quoted_to_eighty_characters(stored, market):
                     f"invalid {edge} (not shown: it holds an @ or an =, as a URL or a connection "
                     "string with a password does): time parse error: "
                 ), str(caught.value)
+        # Nor is text with a lone surrogate, which Python's own error would
+        # carry whole, as it would a setting: a time, a URL and a connection
+        # string, each with one.
+        for text in [
+            "2026-01-01T00:00:00Z\udcff",
+            NOWHERE + "\udcff",
+            f"host=db.example.com user={USER} password={WORD}\udcff",
+        ]:
+            for edge in ("start", "end"):
+                with pytest.raises(ValueError) as caught:
+                    reader.load(market, **{edge: text})
+                said = everything_said(caught.value)
+                assert USER not in said and WORD not in said and "2026-01-01" not in said, said
+                assert str(caught.value) == (
+                    f"{edge} is no text that can be written as UTF-8: it holds a lone surrogate"
+                )
 
 
 def everything_said(error: BaseException) -> str:
@@ -907,14 +923,13 @@ def test_a_path_that_may_be_a_secret_is_not_shown_where_no_file_is_there(
     monkeypatch.chdir(tmp_path)
 
     # What holds an @ or an = is not shown: a URL with a password, or a
-    # connection string, given in a path's place, is no file at all.
+    # connection string, given in a path's place, is no file at all. Nor is
+    # the full path it was looked for at, which holds it.
     def hidden(written):
-        # Where a path that does not start at the root was looked for.
-        where = "" if pathlib.Path(written).is_absolute() else f" (in {tmp_path})"
         return (
             "there is no SQLite database at the path given, which is not shown: it holds an @ or "
-            f"an =, as a URL or a connection string with a password does{where}: a reader creates "
-            "none, and `quantforge data sync` does; db, or QF_DB, names another file"
+            "an =, as a URL or a connection string with a password does: a reader creates none, "
+            "and `quantforge data sync` does; db, or QF_DB, names another file"
         )
 
     for written in NOT_A_PATH + ["data/a=b.sqlite", "data/someone@example.sqlite"]:
@@ -945,12 +960,38 @@ def test_a_path_that_may_be_a_secret_is_not_shown_where_no_file_is_there(
     # A path that holds neither is shown, and where it was looked for.
     refused(
         FileNotFoundError,
-        f"there is no SQLite database at data/x.sqlite (in {tmp_path}): a reader creates none, "
-        "and `quantforge data sync` does; db, or QF_DB, names another file",
+        f"there is no SQLite database at data/x.sqlite (looked for at "
+        f"{tmp_path / 'data' / 'x.sqlite'}): a reader creates none, and `quantforge data sync` "
+        "does; db, or QF_DB, names another file",
         qf.CandleReader,
         db="data/x.sqlite",
     )
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows removes no directory a process runs in")
+def test_a_path_that_may_be_a_secret_is_not_shown_where_the_process_has_no_directory(
+    tmp_path, monkeypatch
+):
+    # Where the process runs is gone, so a path that does not start at the
+    # root cannot be settled: the failure names the store without the path.
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    monkeypatch.chdir(gone)
+    gone.rmdir()
+    # A URL without its scheme, which is not refused as one, and a
+    # connection string: each is taken for a path.
+    for written in [
+        f"{USER}:{WORD}@127.0.0.1:9/market",
+        f"host=db.example.com user={USER} password={WORD}",
+    ]:
+        with pytest.raises(RuntimeError) as caught:
+            qf.CandleReader(db=written)
+        said = everything_said(caught.value)
+        assert USER not in said and WORD not in said, said
+        assert str(caught.value).startswith("cannot open the sqlite store at the path given: "), (
+            str(caught.value)
+        )
 
 
 def test_a_sqlite_file_that_is_not_there_is_refused_and_not_created(tmp_path, monkeypatch, refused):
@@ -959,8 +1000,9 @@ def test_a_sqlite_file_that_is_not_there_is_refused_and_not_created(tmp_path, mo
     # looked for where the process runs: the refusal says where that is.
     refused(
         FileNotFoundError,
-        f"there is no SQLite database at data/market.sqlite (in {tmp_path}): "
-        "a reader creates none, and `quantforge data sync` does; db, or QF_DB, names another file",
+        f"there is no SQLite database at data/market.sqlite (looked for at "
+        f"{tmp_path / 'data' / 'market.sqlite'}): a reader creates none, and `quantforge data "
+        "sync` does; db, or QF_DB, names another file",
         qf.CandleReader,
     )
     absolute = tmp_path / "elsewhere" / "market.sqlite"

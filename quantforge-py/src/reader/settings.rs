@@ -114,7 +114,10 @@ fn text(value: &Bound<'_, PyAny>, label: &str) -> PyResult<String> {
     }
 }
 
-fn utf8(text: &Bound<'_, PyString>, label: &str) -> PyResult<String> {
+/// A `str` as UTF-8, or, where it holds a lone surrogate, a refusal that
+/// holds none of it: Python's own error would carry all of it, a password
+/// with it. A setting and a bound of a range are read through it.
+pub(super) fn utf8(text: &Bound<'_, PyString>, label: &str) -> PyResult<String> {
     match text.to_cow() {
         Ok(text) => Ok(text.into_owned()),
         Err(_) => Err(PyValueError::new_err(format!(

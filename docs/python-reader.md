@@ -101,9 +101,11 @@ is left out is read from that flag's variable:
 - **With nothing set, it is SQLite at `data/market.sqlite`,** the command
   line's own default: a path that does not start at the root is looked for
   where the process runs, as the command line looks for it.
-- **The file is settled as the reader opens.** A reader keeps reading the
-  file it found then, wherever the process changes its directory to
-  afterwards.
+- **The file is settled to a full path as the reader opens,** by the
+  system's own rules: on Windows, a path with a drive and no root, such as
+  `C:market.sqlite`, names a file in that drive's own directory. A reader
+  keeps reading the file it found then, wherever the process changes its
+  directory to afterwards.
 - **A variable is read as Python has it,** from `os.environ`, when a reader
   is opened. Importing the package reads none.
 - **A variable that is read counts, though it is empty or belongs to the
@@ -222,7 +224,11 @@ A bound is written in one of the three ways QuantForge writes a time:
   left out. A type derived from `datetime` that holds more than
   microseconds, as a pandas `Timestamp` does, is read with all it holds.
 - **Text is read by the engine's own parser,** the one behind `--start` and
-  `--end`, and refused in its words where it is no RFC 3339 time.
+  `--end`, and refused in its words where it is no RFC 3339 time. The
+  refusal quotes the text, to its first 80 characters, but never text that
+  holds an `@` or an `=`, as a URL or a connection string with a password
+  does. Text with a lone surrogate is refused before it is read, and is not
+  quoted either.
 - **A `float` is no time,** and neither is a `bool` or a `datetime.date`.
 
 ## A range that holds nothing
@@ -332,9 +338,11 @@ it leaves alone:
 - **It reads no unfinished copy.** A store that holds part of another
   ([storage-migration.md](storage-migration.md)) is refused until the copy
   is finished, as every command but the copy refuses it: as a reader opens,
-  and again after every load, since a reader may be open as a copy begins.
-  A copy writes its record before its first row, so a load that read any
-  of its rows finds the record after.
+  and before and after every load, since a reader may be open while a copy
+  runs. A copy writes its record before its first row and finishes it after
+  its last, so a load counts only where the record was the same before it
+  and after it: a load that finds the copy unfinished is refused, and one
+  that a copy began and finished during is made again, after it.
 - **It finishes no writer's work.** Candles a writer committed to the log
   of a SQLite store, and that no one moved into the database since, are
   read where they are, and left there. A write a writer left unfinished, in
@@ -415,7 +423,9 @@ local client, which already holds what selects the store.
   password does, is not shown where no SQLite database is found at it:
   where nothing is there, where what is there is no file or no SQLite
   database, and where the path cannot be reached, as on Windows, which may
-  refuse a `:` in a name. Text that
+  refuse a `:` in a name. Nor is the full path it was looked for at, which
+  holds it, nor the path where it could not be looked for at all, as when
+  the directory the process runs in is gone. Text that
   is no UTF-8 is refused without being quoted, since Python's own error
   would carry all of it.
 - **A password is written as the URL form asks:** `@`, `:`, `/` and `%`
@@ -454,7 +464,7 @@ reader and `market` a `MarketId`:
 | `qf.CandleReader(storage="postgres", postgres_url="market")` | `ValueError: postgres_url is not a usable PostgreSQL URL: it does not parse as a URL (relative URL without a base); write postgres://USER:PASSWORD@HOST:PORT/DATABASE` |
 | `qf.CandleReader(storage="postgres", postgres_url=url, postgres_pool_size=0)` | `ValueError: postgres_pool_size must be a whole number from 1 to 262143, the most connections a PostgreSQL server serves` |
 | `qf.CandleReader(storage="postgres", postgres_url=url, postgres_pool_size="2")` | `TypeError: postgres_pool_size must be an int, not str` |
-| `qf.CandleReader(db="no/such.sqlite")` | ``FileNotFoundError: there is no SQLite database at no/such.sqlite (in ...): a reader creates none, and `quantforge data sync` does; db, or QF_DB, names another file`` |
+| `qf.CandleReader(db="no/such.sqlite")` | ``FileNotFoundError: there is no SQLite database at no/such.sqlite (looked for at ...): a reader creates none, and `quantforge data sync` does; db, or QF_DB, names another file`` |
 | `reader.load("binance_spot BTCUSDT 1m")` | `TypeError: market must be a MarketId, not str` |
 | `reader.load(market, start=1.5)` | `TypeError: start must be an int of milliseconds, a datetime.datetime with a time zone, a str or None, not float` |
 | `reader.load(market, end=datetime.datetime(2026, 1, 1))` | `TypeError: end must be a datetime.datetime with a time zone, not one without: a time without a zone is never read as an instant; give it one, such as datetime.timezone.utc` |
@@ -465,7 +475,7 @@ reader and `market` a `MarketId`:
 A refusal that comes from a variable names the variable in the argument's
 place: `QF_STORAGE must be sqlite or postgres`. A file that is not there is
 looked for where the process runs when its path does not start at the root,
-and the refusal says where that is: the directory the `...` above stands
+and the refusal says where it looked: the full path the `...` above stands
 for.
 
 ## What is raised

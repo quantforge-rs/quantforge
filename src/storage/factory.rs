@@ -87,8 +87,9 @@ impl StoreFactory {
     /// store, a store at another schema than this build reads, and one that
     /// holds an unfinished copy are refused as storage errors. A backend
     /// with no provider is refused as it is for [`open`](Self::open). A
-    /// SQLite path is settled as the reader opens: one that does not start
-    /// at the root names the file it finds where the process runs then.
+    /// SQLite path is settled to a full path as the reader opens, by the
+    /// system's own rules: one that does not start at the root names the
+    /// file it finds where the process runs then.
     pub fn open_reader(&self, settings: &StorageSettings) -> Result<CandleReader, StoreOpenError> {
         let backend = settings.backend();
         let no_adapter = || StorageConfigError::NoAdapter { backend };
@@ -98,19 +99,14 @@ impl StoreFactory {
         let store = match settings {
             StorageSettings::Sqlite(sqlite) => {
                 // A path that does not start at the root names the file where
-                // the process runs now: the directory is read once, and the
-                // look, the store and a refusal all go by it, wherever another
-                // thread moves the process meanwhile or later. Each call of
-                // the store opens the file anew.
-                let directory = if sqlite.path.is_absolute() {
-                    None
-                } else {
-                    Some(std::env::current_dir().map_err(StorageError::other)?)
-                };
-                let path = match &directory {
-                    Some(directory) => directory.join(&sqlite.path),
-                    None => sqlite.path.clone(),
-                };
+                // the process runs now, and is settled to it once, by the
+                // system's own rules: on Windows one with a drive and no root,
+                // such as `C:market.sqlite`, names a file in that drive's own
+                // directory. The look, the store and a refusal all go by the
+                // path it is settled to, wherever another thread moves the
+                // process meanwhile or later. Each call of the store opens
+                // the file anew.
+                let path = std::path::absolute(&sqlite.path).map_err(StorageError::other)?;
                 // What is there, through any link: a file is read; anything
                 // else, such as a directory or a pipe, which opening would
                 // wait on for good, is refused.
@@ -131,7 +127,7 @@ impl StoreFactory {
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                         return Err(StoreOpenError::NoSuchFile {
                             path: sqlite.path.clone(),
-                            directory,
+                            resolved: (!sqlite.path.is_absolute()).then_some(path),
                         });
                     }
                     // A directory on the way that may not be entered, say,
@@ -192,11 +188,12 @@ pub enum StoreOpenError {
     Storage(#[from] StorageError),
     /// A reader was asked for a SQLite store whose file does not exist. A
     /// command would create it empty; a reader creates nothing. `path` is
-    /// the path as it was given, and `directory` the one a path that does
-    /// not start at the root was looked for in. The path is shown, by
-    /// `Display` and `Debug` alike, unless it holds an `@` or an `=`, which
-    /// a URL or a connection string with a password given in its place
-    /// holds, and a path to a file rarely does.
+    /// the path as it was given, and `resolved` the full path one that does
+    /// not start at the root was settled to and looked for at. The path is
+    /// shown, by `Display` and `Debug` alike, unless it holds an `@` or an
+    /// `=`, which a URL or a connection string with a password given in its
+    /// place holds, and a path to a file rarely does; `Debug` shows the full
+    /// path by the same rule.
     #[error(
         "there is no SQLite database at {}; a reader creates none, and `quantforge data sync` \
          does",
@@ -204,7 +201,7 @@ pub enum StoreOpenError {
     )]
     NoSuchFile {
         path: PathBuf,
-        directory: Option<PathBuf>,
+        resolved: Option<PathBuf>,
     },
 }
 
@@ -213,10 +210,10 @@ impl fmt::Debug for StoreOpenError {
         match self {
             Self::Config(refused) => f.debug_tuple("Config").field(refused).finish(),
             Self::Storage(failed) => f.debug_tuple("Storage").field(failed).finish(),
-            Self::NoSuchFile { path, directory } => f
+            Self::NoSuchFile { path, resolved } => f
                 .debug_struct("NoSuchFile")
                 .field("path", &path_named(path))
-                .field("directory", directory)
+                .field("resolved", &resolved.as_deref().map(path_named))
                 .finish(),
         }
     }

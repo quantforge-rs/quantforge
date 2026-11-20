@@ -23,6 +23,7 @@ use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyString, PyType};
 
+use super::settings::utf8;
 use crate::convert::{integer, wrong_type};
 
 /// Which end of a range a bound is.
@@ -99,7 +100,9 @@ pub(crate) fn bound(value: Option<&Bound<'_, PyAny>>, edge: Edge) -> PyResult<Op
     };
     let py = value.py();
     if let Ok(text) = value.cast::<PyString>() {
-        let text = text.to_cow()?;
+        // Text with a lone surrogate is refused as a setting is, without
+        // any of it.
+        let text = utf8(text, name)?;
         return quantforge::parse_rfc3339_to_ms(&text)
             // The engine's millisecond is the one a time lies in. A start
             // past its beginning is the next one.
