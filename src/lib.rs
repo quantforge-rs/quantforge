@@ -90,7 +90,9 @@
 //! orchestration lives in the binary. The global `--storage` and its
 //! settings resolve to [`StorageSettings`], and [`StoreFactory`] opens the
 //! store they name as an [`AnyStore`] ([`SqliteStore`] at `--db` unless
-//! PostgreSQL is selected); `--exchange` selects an exchange by its registry
+//! PostgreSQL is selected), or, for a host that only reads its candles, as a
+//! [`CandleReader`], which no command holds; `--exchange` selects an
+//! exchange by its registry
 //! name ([`exchange::lookup`]), and `--base-url` with the credentials builds its
 //! connectors through [`exchange::connect`]; `--log-level` has no
 //! counterpart here, because this crate emits `tracing` events and the binary
@@ -124,7 +126,10 @@
 //!   binds: [`CandleBatch`], [`CandleColumns`], [`decimal_to_f64`] and
 //!   [`decimal_from_f64`], which follow the
 //!   [decimal and float64 policy](https://github.com/quantforge-rs/quantforge/blob/main/docs/decimal-float-policy.md);
-//!   and [`ENGINE_VERSION`], the engine the package says it was built with;
+//!   [`ENGINE_VERSION`], the engine the package says it was built with; and
+//!   [`CandleReader`], the store a host that only reads candles opens, which
+//!   is the package's
+//!   [candle reader](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-reader.md);
 //! - it is the conformance suite, published for adapters written outside
 //!   this repository: [`exchange::conformance`] runs against any connector
 //!   factory, not only the registered ones;
@@ -212,8 +217,10 @@ pub use storage::SqliteStore;
 
 /// How a host picks a storage backend and opens it: the settings it
 /// resolves from what its flags and variables held, and the factory that
-/// opens the store they describe behind every storage port.
+/// opens the store they describe behind every storage port, or, for a host
+/// that only reads its candles, as a `CandleReader`.
 pub use storage::AnyStore;
+pub use storage::CandleReader;
 pub use storage::factory::{StoreFactory, StoreOpenError};
 pub use storage::settings::{
     ConnectionString, DEFAULT_ROUTE_BUDGET, Durability, StorageBackend, StorageConfigError,

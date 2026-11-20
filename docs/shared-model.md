@@ -16,9 +16,9 @@ resolves to. QUA-469 (ALG-377) bound to Python what the tables below say
 reaches it, QUA-464 (ALG-378) the candle strategy itself, and QUA-470
 (ALG-379) the function that runs one, with the backtest's refusal of a
 series that is not Spot, QUA-475 (ALG-380) a batch of candles as NumPy
-arrays, with the market a batch names, and QUA-473 (ALG-381) candles and a
-backtest's result as pandas DataFrames. The rest lands with the stories
-named below.
+arrays, with the market a batch names, QUA-473 (ALG-381) candles and a
+backtest's result as pandas DataFrames, and QUA-472 (ALG-382) the reader of
+the candles a store holds. The rest lands with the stories named below.
 
 ## Changed in Rust by ALG-733
 
@@ -211,6 +211,39 @@ backtests to the frozen result by value, the frames of that result hold
 Python's own reading of the frozen file's text, and the candles and the
 results of `tests/fixtures/strategy_cases.json` do the same. A frame is for
 computing with, and is never what is compared for parity.
+
+## Bound to Python by QUA-472
+
+The candles a store holds, as the Python package reads them
+([python-reader.md](python-reader.md)):
+
+| What | In Python |
+| --- | --- |
+| The data-series key candles are stored under, a `MarketId`: product line, symbol and interval, with no settlement asset | What `CandleReader.load` takes, and nothing that stands for one. A product line names its venue and its family, so the Spot, linear and inverse candles of one symbol, and one symbol's candles on two venues, are each read alone, on either backend |
+| The Spot line's storage name, such as `binance_spot`, which a store has kept Spot candles under since before there were other families | The same key in Python: a store an earlier release wrote is read under it. A venue's name alone still names no market, and no family is assumed for one |
+| How a host selects a backend and opens it: `StorageSettings::resolve` and `StoreFactory` | `CandleReader(...)`: the command line's flags as arguments, its variables where an argument is left out, and SQLite at `data/market.sqlite` where nothing is set, resolved by the same code |
+| `CandleBatch`, with the market it names | What `load` gives: every decimal with the digits the store holds, oldest first, and the market that was asked for |
+| The decimal ↔ float64 policy | Unchanged: a store keeps a decimal as text, a reader reads the text, and nothing is a float until a batch is asked for arrays or a frame |
+
+For it, the crate gained:
+
+| Change | Where |
+| --- | --- |
+| A store opened to read its candles and nothing else: no file or schema created, no schema migrated, every connection read-only on both backends, and an unfinished copy refused; with the sentence that says what a store holds where a range held none | `quantforge::CandleReader`, `StoreFactory::open_reader`, `StoreOpenError::NoSuchFile` |
+| A reader as an owner of a store, with a command's pool of two connections (ADR 0001) | `quantforge::StoreOwner::Reader` |
+| Each backend's store opened to read | `SqliteStore::read_only`, `PostgresStore::connect_read_only` |
+
+Nothing of the model changed for it, and no futures type crossed. A reader
+reads the candles of any product line a store holds; a candle strategy
+still runs on Spot alone, which `run_backtest`
+[refuses otherwise](#bound-to-python-by-qua-470). A server's job worker is
+handed its candles by the server and opens no store, so no reader, URL or
+credential reaches a strategy that runs remotely.
+
+The crate's tests hold the reader on both backends
+(`tests/storage/reader.rs`), and the package's tests read stores the
+`quantforge` command line itself wrote, a SQLite file and a PostgreSQL
+database, from an exchange that answers on the test's own machine.
 
 ## Changing next
 

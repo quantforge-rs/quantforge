@@ -28,23 +28,27 @@ const BACKEND_NAMES: [&str; 7] = [
 /// once, so a stale one fails as well as a new line.
 const NAMES_A_BACKEND: [(&str, &str); 1] = [("src/lib.rs", "pub use storage::SqliteStore;")];
 
-/// What opens a store, or a store's file.
-const OPENS_A_STORE: [&str; 4] = [
+/// What opens a store, or a store's file, to write or only to read.
+const OPENS_A_STORE: [&str; 6] = [
     "SqliteStore::new(",
     "SqliteStore::with_limits(",
+    "SqliteStore::read_only(",
     "SqliteSnapshot::open(",
     "PostgresStore::connect(",
+    "PostgresStore::connect_read_only(",
 ];
 
 /// Where a store is defined, and what may call its own constructors.
 const ADAPTERS: [&str; 2] = ["src/storage/sqlite/", "src/storage/postgres/"];
 
-/// The opening calls the factory makes: one per backend, and the source of
-/// a transfer.
+/// The opening calls the factory makes: one per backend to write, one per
+/// backend to read, and the source of a transfer.
 const FACTORY: &str = "src/storage/factory.rs";
 
 /// What a host holds, and how it gets it: nothing below the CLI names them.
-const HOST_NAMES: [&str; 2] = ["AnyStore", "StoreFactory"];
+/// A reader is a host's as a store is, though no command holds one: the
+/// Python package's reader does.
+const HOST_NAMES: [&str; 3] = ["AnyStore", "StoreFactory", "CandleReader"];
 
 /// The lines that ask the factory for a store: the selected one, and the
 /// source of a transfer.
@@ -153,7 +157,7 @@ fn only_the_factory_opens_a_store() {
         &OPENS_A_STORE,
     );
     let opened_by: Vec<&str> = found.iter().map(|(path, _)| path.as_str()).collect();
-    assert_eq!(opened_by, [FACTORY, FACTORY, FACTORY], "{found:?}");
+    assert_eq!(opened_by, [FACTORY; 5], "{found:?}");
 }
 
 #[test]

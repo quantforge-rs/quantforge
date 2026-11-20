@@ -166,6 +166,17 @@ async fn run_pass(
     }))
 }
 
+/// The version the database records, read in a transaction that cannot
+/// write: what a store opened to read is held to, in place of the chain.
+pub(super) fn recorded_version(bridge: &Bridge) -> Result<u32, StorageError> {
+    bridge.execute(Effect::Read, |client| {
+        Box::pin(async move {
+            let transaction = client.build_transaction().read_only(true).start().await?;
+            current_version(&transaction).await
+        })
+    })?
+}
+
 /// The version the database records: 0 when its schema holds none of our
 /// tables. Tables of ours without a recorded version are refused, never
 /// taken for an empty database.
@@ -178,8 +189,8 @@ async fn current_version(
         .try_get(0)?;
     let Some(schema) = schema else {
         return Ok(Err(StorageError::InvalidArgument(
-            "the role's search_path names no schema that exists, so there is nowhere to create \
-             the tables"
+            "the role's search_path names no schema that exists, so there is none to hold \
+             QuantForge's tables, to create them in or to read them from"
                 .to_string(),
         )));
     };

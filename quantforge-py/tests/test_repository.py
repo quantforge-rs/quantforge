@@ -3,12 +3,14 @@ page's tables and its tree are the package's own, and the workspace is wired
 as the page says. Each table and the tree sit between `<!-- begin: name -->`
 and `<!-- end: name -->` markers."""
 
+import os
 import re
 import subprocess
 
 import pytest
 
 import quantforge_py
+import stores
 from quantforge_py import _native
 
 PAGE = "docs/python-package.md"
@@ -157,8 +159,57 @@ def test_the_check_script_tests_the_package_with_numpy_and_without_pandas(reposi
     assert script.count("    python -m pytest\n") == 1
 
 
+def test_the_check_script_builds_the_binary_and_ci_has_the_server_the_readers_tests_need(
+    repository,
+):
+    # The reader's tests read stores the command line wrote: the script
+    # builds it before any run of the tests, and tells each where it is.
+    script = (repository / "scripts" / "python-package-check.sh").read_text(encoding="utf-8")
+    built = "\ncargo build --locked\n"
+    named = f"\nexport {stores.CLI}=$target/debug/quantforge\n"
+    assert built in script and named in script
+    assert script.index(built) < script.index(named) < script.index('\nfor python in "$@"; do\n')
+    # Where cargo put it, which CARGO_TARGET_DIR can move out of ./target.
+    assert "\ntarget=$(cargo metadata --format-version 1 --no-deps |\n" in script
+    assert """print(json.load(sys.stdin)["target_directory"])')\n""" in script
+    # No run is told to go without PostgreSQL: what the caller exported
+    # reaches every one of them.
+    assert f"unset {stores.POSTGRES_URL}" not in script
+    assert stores.POSTGRES_URL in script and stores.POSTGRES_REQUIRED in script
+    # CI's job has a server for them, and says that it has to be tested, so
+    # a test that could not reach it fails where it would otherwise skip.
+    workflow = (repository / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    (job,) = re.findall(r"^  python:\n(?:(?:    .*)?\n)+", workflow, re.M)
+    assert "    services:\n" in job and "        image: postgres:18\n" in job
+    assert f'          {stores.POSTGRES_REQUIRED}: "1"\n' in job
+    served = rf"          {stores.POSTGRES_URL}: postgres://\S+@127\.0\.0\.1:5432/postgres\?sslmode=disable\n"
+    assert re.search(served, job)
+    assert job.index("run: ./scripts/python-package-check.sh") < job.index(stores.POSTGRES_REQUIRED)
+
+
+def test_the_binary_the_tests_write_stores_with_is_of_the_engine_the_package_has():
+    said = subprocess.run(
+        [str(stores.binary()), "--version"], check=True, capture_output=True, text=True
+    )
+    assert said.stdout == f"quantforge {quantforge_py.ENGINE_VERSION}\n"
+
+
+def test_a_binary_named_by_a_relative_path_is_found_from_where_the_tests_started(
+    monkeypatch, tmp_path
+):
+    found = stores.binary()
+    monkeypatch.setenv(stores.CLI, os.path.relpath(found, stores.STARTED_IN))
+    # A test that moved elsewhere still writes with it.
+    monkeypatch.chdir(tmp_path)
+    assert stores.binary().resolve() == found.resolve()
+    said = subprocess.run(
+        [str(stores.binary()), "--version"], check=True, capture_output=True, text=True
+    )
+    assert said.stdout == f"quantforge {quantforge_py.ENGINE_VERSION}\n"
+
+
 def test_the_readme_shows_only_names_the_package_publishes_and_its_example_runs(
-    page, pyproject, without_numpy, without_pandas
+    page, pyproject, without_numpy, without_pandas, tmp_path
 ):
     readme = page("quantforge-py/README.md")
     shown = re.findall(r"\bqf\.(\w+)", readme.text)
@@ -166,14 +217,36 @@ def test_the_readme_shows_only_names_the_package_publishes_and_its_example_runs(
     assert set(shown) <= set(quantforge_py.__all__)
     # What PyPI shows is what a reader copies: every example runs as it is
     # written, one after another. The last two are of the arrays and of the
-    # frames, the only ones that need NumPy, and pandas with it.
-    *examples, of_the_arrays, of_the_frames = readme.fences("python")
+    # frames, the only ones that need NumPy, and pandas with it, and the one
+    # before them is of the candle reader, the only one that needs a store.
+    *examples, of_the_reader, of_the_arrays, of_the_frames = readme.fences("python")
     assert examples and "to_numpy" in of_the_arrays and "to_dataframe" in of_the_frames
     assert not any("numpy" in example or "dataframe" in example for example in examples)
     assert "dataframe" not in of_the_arrays and "numpy" not in of_the_frames
+    assert "qf.CandleReader()" in of_the_reader
+    assert not any(
+        "CandleReader" in example for example in [*examples, of_the_arrays, of_the_frames]
+    )
     names = {}
     for example in examples:
         exec(compile(example, readme.name, "exec"), names)
+    # The reader's example reads the store the command line wrote where it
+    # runs, at its default path, of the market the examples before it named.
+    closes = ["81940.01000000", "81955.25000000", "81900.00000000", "81912.50000000"]
+    klines = [stores.kline(index, close) for index, close in enumerate(closes)]
+    with stores.Exchange({("BTCUSDT", "1m"): klines}) as exchange:
+        stores.sync(exchange, "BTCUSDT", "1m", cwd=tmp_path)
+    with pytest.MonkeyPatch.context() as patched:
+        patched.chdir(tmp_path)
+        exec(compile(of_the_reader, readme.name, "exec"), names)
+    stored = names["stored"]
+    assert type(stored) is quantforge_py.CandleBatch and stored.market == names["market"]
+    assert [format(close, "f") for close in stored.close] == closes
+    assert f"such as {stored.close[0]!r}" in readme.text
+    assert names["reader"].closed and type(names["rerun"]) is quantforge_py.BacktestResult
+    assert names["rerun"] == quantforge_py.run_backtest(
+        stored, names["EnterThenExit"](), names["config"], market=names["market"]
+    )
     # The readme says how the package is installed with each extra, as
     # pyproject.toml names them.
     install = f'pip install "{pyproject["project"]["name"]}[numpy]"'

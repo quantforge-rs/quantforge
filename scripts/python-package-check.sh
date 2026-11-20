@@ -8,6 +8,13 @@
 # extras, where there is neither; the SQLite-only wheel; and the in-place
 # install a contributor works with.
 #
+# The candle reader's tests read stores the `quantforge` command line wrote,
+# so the script builds the binary first and tells the tests where it is.
+# They write a SQLite file each, and a database of its own on the PostgreSQL
+# server QUANTFORGE_TEST_POSTGRES_URL names, the variable the crate's tests
+# read; without it the PostgreSQL tests skip, unless
+# QUANTFORGE_TEST_POSTGRES_REQUIRED is 1, as in CI, where they fail instead.
+#
 #   scripts/python-package-check.sh [<python>...]
 #
 # Each <python> is an interpreter the one wheel is tested on, `python3` when
@@ -42,6 +49,19 @@ trap 'rm -rf "$work"' EXIT
 cargo clippy -p quantforge-py --all-targets -- -D warnings
 cargo clippy -p quantforge-py --all-targets --no-default-features -- -D warnings
 cargo +1.85 check --locked -p quantforge-py
+
+# The command line itself, which writes the stores the reader's tests read,
+# found where cargo put it: CARGO_TARGET_DIR, or cargo's own configuration,
+# can move what it builds out of ./target.
+cargo build --locked
+target=$(cargo metadata --format-version 1 --no-deps |
+    "$PYO3_PYTHON" -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')
+export QUANTFORGE_PY_TEST_CLI=$target/debug/quantforge
+if [[ -n ${QUANTFORGE_TEST_POSTGRES_URL:-} ]]; then
+    stores="the reader on sqlite and on postgresql"
+else
+    stores="the reader on sqlite, and not on postgresql: QUANTFORGE_TEST_POSTGRES_URL is unset"
+fi
 
 # What pyproject.toml asks for, one requirement a line: its build backend,
 # what the package's extras require (`extras-require`, each requirement
@@ -194,4 +214,4 @@ virtualenv "$1" "$work/develop" \
     python -m pytest
 )
 
-echo "python package: the wheel on $# interpreters ($oldest), the wheel without pandas, the wheel without its extras, the sqlite-only wheel and the in-place install passed"
+echo "python package: the wheel on $# interpreters ($oldest), the wheel without pandas, the wheel without its extras, the sqlite-only wheel and the in-place install passed, $stores"

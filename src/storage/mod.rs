@@ -1,7 +1,9 @@
 //! Persistence: one adapter namespace per backend, the segment format every
 //! backend packs its candles into, and how a host picks a backend and opens
 //! it: [`settings`] resolves the backend and its settings, [`factory`]
-//! opens the store they describe as an [`AnyStore`]. SQLite and PostgreSQL,
+//! opens the store they describe as an [`AnyStore`], or, for a host that
+//! only reads, as a [`CandleReader`] ([`reader`]), which creates, migrates
+//! and writes nothing. SQLite and PostgreSQL,
 //! the latter in `postgres` and built with the `postgres` feature, have
 //! every store. `common`, `runs`, `jobs`, `policies`, `execution` and
 //! `refresh` hold what both backends share, the execution store's every
@@ -18,6 +20,7 @@ mod policies;
 pub mod postgres;
 #[cfg(test)]
 mod races;
+pub mod reader;
 mod refresh;
 mod retry;
 mod runs;
@@ -26,5 +29,6 @@ pub mod settings;
 pub mod sqlite;
 
 pub use any::AnyStore;
+pub use reader::CandleReader;
 pub use retry::retry_conflicts;
 pub use sqlite::SqliteStore;

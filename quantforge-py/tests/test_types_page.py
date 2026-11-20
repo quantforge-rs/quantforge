@@ -17,10 +17,12 @@ import quantforge_py as qf
 
 PAGE = "docs/python-types.md"
 
-# What the package says about itself comes first in `__all__`, and the
-# functions that give or take a pandas DataFrame last, which have a page of
-# their own (`docs/python-pandas.md`); the rest is what this page is about.
+# What the package says about itself comes first in `__all__`, and last the
+# reader of a store's candles and the functions that give or take a pandas
+# DataFrame, which have pages of their own (`docs/python-reader.md`,
+# `docs/python-pandas.md`); the rest is what this page is about.
 ABOUT = ["__version__", "ENGINE_VERSION", "STORAGE_BACKENDS"]
+READER = ["CandleReader"]
 FRAMES = [
     "candles_to_dataframe",
     "dataframe_to_candles",
@@ -43,7 +45,7 @@ INTERNAL = {
 
 
 def bound() -> list[str]:
-    return [name for name in qf.__all__ if name not in ABOUT + FRAMES]
+    return [name for name in qf.__all__ if name not in ABOUT + READER + FRAMES]
 
 
 def classes() -> dict[str, type]:

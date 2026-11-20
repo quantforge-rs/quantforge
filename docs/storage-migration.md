@@ -130,7 +130,10 @@ copy it holds.
 The source is opened read-only. Its database file keeps every byte, and so
 does its `-wal` file. SQLite may leave an empty `-wal` file and a `-shm`
 file beside a database a reader opened, as any reader does; the next
-process that writes to the file uses them.
+process that writes to the file uses them. A source whose rollback journal
+holds a write its writer never finished is refused, since only a writer
+rolls that write back: any command of this build does, such as
+`quantforge --db data/market.sqlite store status`.
 
 ## Running a copy
 

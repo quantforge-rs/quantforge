@@ -15,10 +15,11 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use rusqlite::types::{Value, ValueRef};
-use rusqlite::{Connection, ErrorCode, OpenFlags, params_from_iter};
+use rusqlite::{Connection, params_from_iter};
 
 use super::errors::failed;
-use super::wait::{self, Waits};
+use super::reading::{self, opening};
+use super::wait::Waits;
 use super::{SCHEMA_VERSION, control, migrate};
 use crate::model::{
     ColumnKind, StoreIdentity, TRANSFER_SCHEMA, TransferColumn, TransferMarket, TransferRow,
@@ -101,44 +102,14 @@ impl std::fmt::Debug for SqliteSnapshot {
     }
 }
 
-/// A connection that cannot write: opened read-only and asked to stay so.
-/// A file that does not exist is not created.
+/// A connection that cannot write (`reading`), each of its waits for a
+/// lock its own.
 fn read_only(path: &Path) -> Result<Connection, StorageError> {
-    let connection = Connection::open_with_flags(
-        path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .map_err(|error| opening(path, error))?;
-    wait::at_most(&connection, LOCK_WAIT, Waits::Apart).map_err(failed)?;
-    connection
-        .pragma_update(None, "query_only", "ON")
-        .map_err(failed)?;
-    Ok(connection)
+    reading::connection(path, LOCK_WAIT, Waits::Apart)
 }
 
 fn data_version(connection: &Connection) -> Result<i64, rusqlite::Error> {
     connection.pragma_query_value(None, "data_version", |row| row.get(0))
-}
-
-/// Why a file could not be read as a store, with what to do about it.
-fn opening(path: &Path, error: rusqlite::Error) -> StorageError {
-    let path = path.display();
-    match error.sqlite_error_code() {
-        Some(ErrorCode::CannotOpen | ErrorCode::NotFound) => {
-            StorageError::InvalidArgument(format!("cannot open {path}: {error}"))
-        }
-        Some(ErrorCode::NotADatabase) => {
-            StorageError::InvalidArgument(format!("{path} is not a SQLite database"))
-        }
-        Some(ErrorCode::ReadOnly | ErrorCode::PermissionDenied) => {
-            StorageError::InvalidArgument(format!(
-                "cannot read {path} read-only: a reader of a WAL database writes the -shm file \
-                 beside it; make its directory writable, or copy the database, with its -wal \
-                 file, somewhere writable"
-            ))
-        }
-        _ => failed(error),
-    }
 }
 
 /// A value as a statement binds it.

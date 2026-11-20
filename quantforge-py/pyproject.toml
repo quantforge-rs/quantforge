@@ -63,6 +63,8 @@ oldest-pandas = ["pandas==2.2.2"]
 [tool.pytest.ini_options]
 minversion = "9"
 testpaths = ["tests"]
+# `stores.py`, what the reader's tests share, is imported by its name.
+pythonpath = ["tests"]
 addopts = ["-ra", "--strict-config", "--strict-markers", "--import-mode=importlib"]
 # Some tests wait on another thread. One that waits for good ends the run
 # after this many seconds, with every thread's traceback, instead of holding

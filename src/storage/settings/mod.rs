@@ -1,6 +1,6 @@
 //! Which backend keeps the data, and how to reach it: the settings every
-//! host (the CLI and its server today, the Python reader later) resolves
-//! the same way. The library reads no environment variable. A host passes
+//! host (the CLI, its server and the Python package's reader) resolves the
+//! same way. The library reads no environment variable. A host passes
 //! the values its flags and variables held, each labelled with where it
 //! came from, and every error names that label, never the value.
 //!
@@ -38,6 +38,12 @@ pub const DEFAULT_SQLITE_PATH: &str = "data/market.sqlite";
 /// How long opening a PostgreSQL connection, TLS included, may take when
 /// nothing sets it (ADR 0001).
 pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The most connections a PostgreSQL pool may hold: the most a PostgreSQL
+/// server serves (its `max_connections` stops at 2^18 - 1). A pool is
+/// given room for all of them as it is built, so a larger one would only
+/// ask for memory there is none of.
+pub const MAX_POOL_SIZE: u32 = 262_143;
 
 // The rest of ADR 0001's connection table, fixed until a story needs them
 // settable.
@@ -99,8 +105,7 @@ impl FromStr for StorageBackend {
 /// The process that opens a store and owns it, its pool and its
 /// credentials (ADR 0001: one store per process). It decides the pool's
 /// size when nothing sets it. A job worker is never an owner: it receives
-/// candles, never settings. The Python reader and the execution service
-/// would join as variants.
+/// candles, never settings. The execution service would join as a variant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum StoreOwner {
@@ -108,13 +113,17 @@ pub enum StoreOwner {
     Command,
     /// `serve run`, which serves many requests at once.
     Server,
+    /// A trusted reader in its caller's own process, such as the Python
+    /// package's: it opens the store to read, and writes nothing.
+    Reader,
 }
 
 impl StoreOwner {
-    /// ADR 0001's pool sizes: 2 for a command, 8 for the server.
+    /// ADR 0001's pool sizes: 2 for a command and for a reader, 8 for the
+    /// server.
     pub const fn default_pool_size(self) -> u32 {
         match self {
-            Self::Command => 2,
+            Self::Command | Self::Reader => 2,
             Self::Server => 8,
         }
     }
@@ -285,6 +294,9 @@ impl StorageSettings {
             }
         })?;
         let pool_size = match request.postgres_pool_size {
+            Some(size) if size.value > MAX_POOL_SIZE => {
+                return Err(StorageConfigError::PoolTooLarge { label: size.label });
+            }
             Some(size) => at_least_one(size)?,
             None => owner.default_pool_size(),
         };
@@ -375,6 +387,11 @@ pub enum StorageConfigError {
 
     #[error("{label} must be at least 1")]
     BelowOne { label: String },
+
+    #[error(
+        "{label} must be at most {MAX_POOL_SIZE}, the most connections a PostgreSQL server serves"
+    )]
+    PoolTooLarge { label: String },
 
     #[error("{backend} storage has no adapter yet")]
     NoAdapter { backend: StorageBackend },

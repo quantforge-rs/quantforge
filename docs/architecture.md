@@ -274,7 +274,7 @@ src/
 │       ├── types.rs            wire DTOs, the shapes the REST API returns
 │       └── venue.rs            the connector implementations and declared capabilities
 ├── storage/                    persistence: one namespace per backend, the segment format, and opening one
-│   ├── mod.rs                  declares them; re-exports SqliteStore and AnyStore
+│   ├── mod.rs                  declares them; re-exports SqliteStore, AnyStore and CandleReader
 │   ├── settings/               which backend, and how to reach it: resolved, checked, never shown
 │   │   ├── mod.rs              StorageBackend, StoreOwner, StorageRequest, StorageSettings, StorageConfigError
 │   │   ├── connection.rs       the PostgreSQL URL: libpq's form, the sslmode table, the password redacted
@@ -301,11 +301,12 @@ src/
 │   ├── refresh.rs              what both backends' segment stores share: the refresh loop, packing, a plan
 │   ├── races.rs                the shared cases' races, stepped through any backend's read and write-back
 │   ├── retry.rs                retry_conflicts: running a transaction again, within the caller's budget
-│   ├── factory.rs              StoreFactory: opens the selected backend through its registered provider
+│   ├── factory.rs              StoreFactory: opens the selected backend through its registered provider, as a store or, to read only, as a reader
 │   ├── factory/                the factory's unit tests
 │   │   └── tests.rs            dispatch to test providers, and no fallback for a backend without one
+│   ├── reader.rs               CandleReader: a store opened to read its candles, which creates, migrates and writes nothing, and its sentence for a range that held none
 │   ├── postgres/               PostgreSQL: the bridge of ADR 0001, the schema chain and the stores, built with the postgres feature
-│   │   ├── mod.rs              PostgresStore: connect, ping and init
+│   │   ├── mod.rs              PostgresStore: connect, to write or only to read, ping and init
 │   │   ├── runner.rs           the bridge's own runtime, and the reply channel callers block on
 │   │   ├── bridge.rs           the bounded pool, each call's deadline and cancel, what each failure means
 │   │   ├── durability.rs       what every connection is given, and what it found
@@ -338,6 +339,7 @@ src/
 │   │       ├── execution.rs    what a unit of the execution store waits for before it reads, and what it never does
 │   │       ├── lock_order.rs   the one order a unit takes its locks in, however it lists its changes
 │   │       ├── migrate.rs      the chain over steps no build has: an upgrade, a failure, stores together
+│   │       ├── reading.rs      a store opened to read: what it reads, the server's refusal of its writes, no schema created
 │   │       ├── scratch.rs      a database of its own for a test
 │   │       ├── seeds.rs        one row in every table of each schema, for the chain's tests to keep
 │   │       ├── segments.rs     the races, a write-back waiting on a lock, reads that stay one snapshot
@@ -351,6 +353,7 @@ src/
 │       ├── control.rs          store_control and schema_migrations: the StoreControl implementation
 │       ├── errors.rs           SQLite's failures as the categories every backend shares
 │       ├── wait.rs             how a connection waits for another writer's lock, by the clock
+│       ├── reading.rs          connections that cannot write, and the store opened to read through them
 │       ├── snapshot.rs         SqliteSnapshot: a store read-only from one snapshot, the source of a transfer
 │       ├── candles.rs          candle table and the CandleStore implementation; marks changed windows
 │       ├── jobs.rs             bundles and jobs: their DDL and JobStore, each move one statement
@@ -599,7 +602,10 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   [postgres-query-plans.md](postgres-query-plans.md) (`postgres/`);
   acknowledged writes outliving a killed writer and, on demand, a crashed
   server (`crash.rs`); the documents held to the code; the factory as the
-  only way to a store (`boundary.rs`); a store copied from a read-only
+  only way to a store (`boundary.rs`); the reader a host opens to read
+  candles and nothing else, on each backend: what it reads of a store a
+  command wrote, and the store it refuses and leaves as it was
+  (`reader.rs`); a store copied from a read-only
   SQLite snapshot into PostgreSQL and verified, held to the checksums of
   `tests/fixtures/storage_transfer_cases.json`, with the execution store's
   records read back from the copy and none of the source's authority in it
