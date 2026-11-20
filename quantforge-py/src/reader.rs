@@ -322,11 +322,12 @@ fn not_opened(error: StoreOpenError, settings: &StorageSettings) -> PyErr {
 /// opened, where the process ran then, and the message says where it was
 /// looked for.
 ///
-/// The path is shown unless it holds an `@` or an `=`, and so is the full
-/// path, which holds it. A path names a file and holds no secret, but a
-/// value given where the path belongs may be a URL with a user and a
-/// password before an `@`, or a connection string with one after an `=`,
-/// and is then no file at all.
+/// The path is shown unless it holds an `@` or an `=`, and the full path
+/// by the same rule, which the directory the process runs in may break on
+/// its own. A path names a file and holds no secret, but a value given
+/// where the path belongs may be a URL with a user and a password before
+/// an `@`, or a connection string with one after an `=`, and is then no
+/// file at all.
 fn no_such_file(path: &Path, resolved: Option<&Path>) -> PyErr {
     let text = path.to_string_lossy();
     let shown = if may_be_a_secret(&text) {
@@ -335,13 +336,10 @@ fn no_such_file(path: &Path, resolved: Option<&Path>) -> PyErr {
             .to_string()
     } else {
         match resolved {
-            match resolved {
-                Some(resolved) if !may_be_a_secret(&resolved.to_string_lossy()) => {
-                    format!("{text} (looked for at {})", resolved.display())
-                }
-                _ => text.into_owned(),
+            Some(resolved) if !may_be_a_secret(&resolved.to_string_lossy()) => {
+                format!("{text} (looked for at {})", resolved.display())
             }
-            None => text.into_owned(),
+            _ => text.into_owned(),
         }
     };
     PyFileNotFoundError::new_err(format!(

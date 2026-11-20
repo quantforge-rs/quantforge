@@ -969,6 +969,28 @@ def test_a_path_that_may_be_a_secret_is_not_shown_where_no_file_is_there(
     assert list(tmp_path.iterdir()) == []
 
 
+def test_where_a_file_was_looked_for_is_not_shown_where_the_directory_may_be_a_secret(
+    tmp_path, monkeypatch, refused
+):
+    # The path is shown, but not the full path it was looked for at, where
+    # the directory the process runs in holds an @ or an =.
+    odd = tmp_path / f"user={USER} password={WORD}@db"
+    odd.mkdir()
+    monkeypatch.chdir(odd)
+    refused(
+        FileNotFoundError,
+        "there is no SQLite database at missing.sqlite: a reader creates none, and `quantforge "
+        "data sync` does; db, or QF_DB, names another file",
+        qf.CandleReader,
+        db="missing.sqlite",
+    )
+    with pytest.raises(FileNotFoundError) as caught:
+        qf.CandleReader(db="missing.sqlite")
+    said = everything_said(caught.value)
+    assert USER not in said and WORD not in said, said
+    assert list(odd.iterdir()) == []
+
+
 @pytest.mark.skipif(os.name == "nt", reason="Windows removes no directory a process runs in")
 def test_a_path_that_may_be_a_secret_is_not_shown_where_the_process_has_no_directory(
     tmp_path, monkeypatch

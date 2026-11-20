@@ -423,9 +423,10 @@ local client, which already holds what selects the store.
   password does, is not shown where no SQLite database is found at it:
   where nothing is there, where what is there is no file or no SQLite
   database, and where the path cannot be reached, as on Windows, which may
-  refuse a `:` in a name. Nor is the full path it was looked for at, which
-  holds it, nor the path where it could not be looked for at all, as when
-  the directory the process runs in is gone. Text that
+  refuse a `:` in a name. Nor is the full path a file was looked for at,
+  where it holds an `@` or an `=`, from the path or from the directory the
+  process runs in, nor the path where it could not be looked for at all,
+  as when that directory is gone. Text that
   is no UTF-8 is refused without being quoted, since Python's own error
   would carry all of it.
 - **A password is written as the URL form asks:** `@`, `:`, `/` and `%`
