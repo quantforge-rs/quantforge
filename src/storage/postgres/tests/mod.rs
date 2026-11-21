@@ -16,12 +16,13 @@ mod durability;
 mod execution;
 mod lock_order;
 mod migrate;
+mod reading;
 mod scratch;
 mod seeds;
 mod segments;
 mod steps;
 
-use super::bridge::{Bridge, Effect};
+use super::bridge::{Bridge, Effect, Sessions};
 use super::runner::{RunError, Runner};
 use super::*;
 use crate::storage::settings::{
@@ -151,10 +152,13 @@ const SENTINEL: &str = "pw-sentinel-417";
 #[test]
 fn the_bridges_work_runs_on_its_own_named_threads() {
     // Building the bridge connects nowhere.
-    let bridge = Bridge::new(&settings(
-        &format!("postgres://quant:{SENTINEL}@127.0.0.1:9/none"),
-        "nowhere",
-    ))
+    let bridge = Bridge::new(
+        &settings(
+            &format!("postgres://quant:{SENTINEL}@127.0.0.1:9/none"),
+            "nowhere",
+        ),
+        Sessions::Writing,
+    )
     .expect("a bridge");
     let name = bridge
         .shared
@@ -201,7 +205,7 @@ fn getting_a_connection_spends_the_calls_deadline_and_running_out_is_unavailable
     );
     settings.connect_timeout = Duration::from_secs(60);
     settings.call_deadline = Duration::from_millis(300);
-    let bridge = Bridge::new(&settings).expect("a bridge");
+    let bridge = Bridge::new(&settings, Sessions::Writing).expect("a bridge");
     let started = Instant::now();
     // Even a write: nothing was sent, so nothing can have been written.
     let refused = bridge

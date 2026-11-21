@@ -19,6 +19,7 @@ import warnings
 import pytest
 
 import quantforge_py
+import stores
 from quantforge_py import _native
 
 # quantforge-py/, and the repository it is a member of.
@@ -257,6 +258,43 @@ def without_pandas() -> bool:
     """Whether the run is of the package installed without its `pandas`
     extra, with no pandas to import."""
     return os.environ.get(WITHOUT_PANDAS) == "1"
+
+
+@pytest.fixture(autouse=True)
+def no_storage_setting_from_outside(monkeypatch):
+    """Every test starts without the variables the reader reads its
+    settings from, whatever the shell that runs the tests exports: a test
+    that wants one sets it."""
+    for variable in stores.SETTINGS:
+        monkeypatch.delenv(variable, raising=False)
+
+
+@pytest.fixture(scope="session")
+def postgres_server(storage_backends):
+    """The PostgreSQL server the reader's tests write and read stores on:
+    the one `QUANTFORGE_TEST_POSTGRES_URL` names. Without it a test that
+    needs it skips, unless the run was told that PostgreSQL has to be
+    tested, and the SQLite-only build, which opens no such store, always
+    skips."""
+    if "postgres" not in storage_backends:
+        pytest.skip("the SQLite-only build opens no PostgreSQL store")
+    server = stores.server()
+    if server is None:
+        pytest.skip(f"{stores.POSTGRES_URL} is unset")
+    return server
+
+
+@pytest.fixture(params=["sqlite", "postgres"])
+def place(request, tmp_path):
+    """Where a store lives, on each backend in turn: a SQLite file that is
+    not there yet, and a PostgreSQL database of its own with no table yet,
+    which is dropped after the test. A test writes it with the command
+    line, `place.store(klines)`."""
+    if request.param == "sqlite":
+        yield stores.Place.sqlite(tmp_path)
+        return
+    with stores.Database(request.getfixturevalue("postgres_server")) as database:
+        yield stores.Place.postgres(database, tmp_path)
 
 
 # The functions that give or take a pandas DataFrame, in the order `__all__`

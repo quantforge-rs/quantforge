@@ -67,7 +67,7 @@ Explanations belong in the Setting cell.
 | SQLite database path, relative to the working directory; a missing parent directory is created; refused with `--storage postgres` | `--db <path>` | `QF_DB` | `data/market.sqlite` | global |
 | Storage backend: `sqlite` or `postgres`; see [Storage backends](#storage-backends) | `--storage <backend>` | `QF_STORAGE` | `sqlite` | global |
 | PostgreSQL URL, `postgres://USER:PASSWORD@HOST:PORT/DATABASE` with optional `sslmode` and `sslrootcert`; prefer the variable, since command-line values can land in shell history and process listings, and `--help` never shows its value | `--postgres-url <url>` | `QF_POSTGRES_URL` | none | global |
-| Most PostgreSQL connections the process opens; omitted, 2, or 8 for `serve run`; at least 1 | `--postgres-pool-size <count>` | `QF_POSTGRES_POOL_SIZE` | none | global |
+| Most PostgreSQL connections the process opens; omitted, 2, or 8 for `serve run`; from 1 to 262143, the most a PostgreSQL server serves | `--postgres-pool-size <count>` | `QF_POSTGRES_POOL_SIZE` | none | global |
 | Seconds opening a PostgreSQL connection, TLS included, may take; at least 1 | `--postgres-connect-timeout-secs <seconds>` | `QF_POSTGRES_CONNECT_TIMEOUT_SECS` | `5` | global |
 | Exchange to connect to, by its registry name; `binance` (Binance Spot) is the only one, and output names it by its storage name, `binance_spot` | `--exchange <name>` | `QF_EXCHANGE` | `binance` | global |
 | Exchange API base URL; omitted, the exchange's production endpoint — `https://api.binance.com/` for `binance`, whose Spot testnet is `https://testnet.binance.vision/` | `--base-url <url>` | `QF_BASE_URL` | none | global |
@@ -144,6 +144,13 @@ Every command logs which store it uses, and `store status` and `serve run`
 print it, as `storage: sqlite data/market.sqlite` or `storage: postgres
 postgres://HOST:PORT/DATABASE`, never with a user or password.
 
+**The Python package's candle reader selects its store by these rules,**
+applied by the same code: its arguments are these flags by name, an
+argument left out is read from the flag's variable, and with nothing set it
+is SQLite at `data/market.sqlite` ([python-reader.md](python-reader.md)).
+It differs from a command in one thing: it opens the store read-only, so it
+creates no file and no schema, and brings no earlier schema forward.
+
 ### The PostgreSQL database
 
 The database must exist, and hold QuantForge alone: the first command that
@@ -173,7 +180,9 @@ keeps nothing beside it on the local disk.
 The URL has libpq's form, `postgres://USER:PASSWORD@HOST:PORT/DATABASE`
 (`postgresql://` works too). One host, a user and a database are required;
 the port defaults to 5432; percent-encode `@`, `:`, `/` and `%` inside the
-user, password or database. QuantForge reads two query parameters and
+user, password or database. A database name with an `@` that is not
+percent-encoded is refused: a password whose `@` and `/` were left as they
+are leaves the rest of itself there, where the database's name is shown. QuantForge reads two query parameters and
 refuses every other one, so a setting is never dropped in silence:
 
 | `sslmode` | This machine (`localhost`, `127.0.0.0/8`, `::1`) | Any other host |

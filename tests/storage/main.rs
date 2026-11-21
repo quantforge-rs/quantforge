@@ -22,6 +22,9 @@
 //! - [`docs`]: the documents held to the code and the fixtures;
 //! - [`boundary`]: nothing opens a store but the factory, and nothing asks
 //!   the factory but the CLI's context;
+//! - [`reader`]: the reader a host opens to read candles and nothing else,
+//!   on each backend: what it reads, what it says of a range that held
+//!   nothing, and what it refuses and leaves as it was;
 //! - [`transfer`]: a store copied into another and verified, from a
 //!   read-only snapshot of SQLite into PostgreSQL, held to the checksums an
 //!   independent oracle wrote;
@@ -37,5 +40,6 @@ mod migration;
 mod migration_execution;
 #[cfg(feature = "postgres")]
 mod postgres;
+mod reader;
 mod sqlite;
 mod transfer;

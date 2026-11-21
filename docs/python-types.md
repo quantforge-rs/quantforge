@@ -12,9 +12,10 @@ This page is what each type takes and gives, and how a backtest is run.
 A batch of candles as NumPy arrays has a page of its own,
 [candles as NumPy arrays](python-numpy.md), and so have candles and a
 backtest's result as pandas DataFrames,
-[candles and results as pandas DataFrames](python-pandas.md). How the
-package is named, built and tested is
-[the Python package](python-package.md).
+[candles and results as pandas DataFrames](python-pandas.md), and the
+reader of the candles a store holds,
+[the candle reader](python-reader.md). How the package is named, built and
+tested is [the Python package](python-package.md).
 
 ```python
 >>> from decimal import Decimal
@@ -75,6 +76,11 @@ a result's trades and equity curve as pandas DataFrames, and take a frame
 of candles back. They are written in Python, over the types of this page,
 and [candles and results as pandas DataFrames](python-pandas.md) is their
 contract, with their signatures.
+
+**And one class that is no value:** `CandleReader` is a store that is open,
+which reads the candles the command line stored into a `CandleBatch`. It is
+the engine's own reader, `quantforge::CandleReader`, and
+[the candle reader](python-reader.md) is its contract, with its signatures.
 
 ## How a value crosses
 
@@ -1000,4 +1006,7 @@ under their fields' own names: none is a frame of futures execution
 ([a result's trades](python-pandas.md#a-results-trades)).
 
 **No credential crosses.** These are values: none holds an exchange key, a
-database password or a connection, and building one opens nothing.
+database password or a connection, and building one opens nothing. A
+`CandleReader`, which is no value, is the one object that opens a store, and
+what it reads carries nothing of it
+([credentials](python-reader.md#credentials)).

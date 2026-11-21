@@ -43,6 +43,19 @@ pub(crate) enum Effect {
     Write,
 }
 
+/// What the sessions of a pool may do to the database.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Sessions {
+    /// Everything a command does, with commits that wait for their flush.
+    Writing,
+    /// Reading alone: every transaction of the session is read-only, so the
+    /// server itself refuses a statement that would write.
+    ReadOnly,
+}
+
+/// Makes every transaction a session starts read-only.
+const READ_ONLY: &str = "SET default_transaction_read_only = on;";
+
 /// The work of one call: a future over a pooled connection, which it may
 /// borrow mutably to open a transaction.
 pub(crate) type Work<'c, T> =
@@ -72,8 +85,12 @@ pub(super) struct Shared {
 }
 
 impl Bridge {
-    /// Builds the pool on a runtime of its own. Nothing connects yet.
-    pub(crate) fn new(settings: &PostgresSettings) -> Result<Self, StorageError> {
+    /// Builds the pool on a runtime of its own, each of its sessions as
+    /// `sessions` says. Nothing connects yet.
+    pub(crate) fn new(
+        settings: &PostgresSettings,
+        sessions: Sessions,
+    ) -> Result<Self, StorageError> {
         let connection = &settings.connection;
         let tls = tls::connector(connection.tls())?;
         let mut config = tokio_postgres::Config::new();
@@ -96,8 +113,14 @@ impl Bridge {
         }
 
         let limits = session_limits(settings.limits.wait_budget, settings.statement_timeout);
-        let setup = format!("{limits} {FLUSHED_COMMITS}");
-        let enforced = settings.limits.durability == Durability::Enforced;
+        // A session that only reads commits nothing, so nothing of a commit
+        // is set for it or asked of it.
+        let setup = match sessions {
+            Sessions::Writing => format!("{limits} {FLUSHED_COMMITS}"),
+            Sessions::ReadOnly => format!("{limits} {READ_ONLY}"),
+        };
+        let enforced =
+            sessions == Sessions::Writing && settings.limits.durability == Durability::Enforced;
         let post_create = Hook::async_fn(move |client: &mut ClientWrapper, _| {
             let setup = setup.clone();
             Box::pin(async move {

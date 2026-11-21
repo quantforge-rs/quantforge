@@ -219,6 +219,29 @@ fn a_postgres_setting_beside_an_omitted_backend_is_refused_naming_its_source() {
     }
 }
 
+/// A pool is given room for all its connections as it is built: this one
+/// used to ask for 962 GB, and the process ended without a word.
+#[cfg(feature = "postgres")]
+#[test]
+fn a_pool_larger_than_a_server_serves_is_refused_before_anything_is_built() {
+    let bed = TestBed::new();
+    let mut cmd = storage_cmd(&bed);
+    cmd.args([
+        "--storage",
+        "postgres",
+        "--postgres-pool-size",
+        "4294967295",
+    ])
+    .env("QF_POSTGRES_URL", good_url())
+    .args(STORE_STATUS);
+    refused(
+        &bed,
+        &mut cmd,
+        "--postgres-pool-size must be at most 262143, the most connections a PostgreSQL server \
+         serves",
+    );
+}
+
 #[test]
 fn an_explicit_sqlite_backend_leaves_the_postgres_settings_unused() {
     let bed = TestBed::new();
