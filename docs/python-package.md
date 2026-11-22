@@ -185,13 +185,28 @@ Two kinds of interpreter are left out:
 
 ## Storage backends
 
-The package is built with the crate's `postgres` feature, as every
-published artifact is ([parity](parity/README.md#artifacts)), so
-`STORAGE_BACKENDS` is `("sqlite", "postgres")`.
+The crate has one feature, `postgres`, and it is the default one, so the
+package has two builds:
 
-`--no-default-features` builds the SQLite-only package, which holds no
-PostgreSQL code and says so: `STORAGE_BACKENDS` is `("sqlite",)`. It is
-built and tested, and never published as `quantforge-py`.
+<!-- begin: builds -->
+| Build | Features | `STORAGE_BACKENDS` | Published | Built and tested in CI |
+| --- | --- | --- | --- | --- |
+| The package | The default: `postgres` | `("sqlite", "postgres")` | As `quantforge-py`, one wheel for each platform | For release on Linux, macOS and Windows, by the `wheel` legs; in the `dev` profile on Linux, by `python` |
+| The SQLite-only package | None: `--no-default-features` | `("sqlite",)` | Never | In the `dev` profile on Linux, by `python` |
+<!-- end: builds -->
+
+The package is built with the `postgres` feature, as every published
+artifact is ([parity](parity/README.md#artifacts)). The SQLite-only package
+holds no PostgreSQL code and says so; it is built and tested, and never
+published as `quantforge-py`.
+
+**No other build is supported, and neither passes for the other.** Cargo
+refuses a feature the crate does not have. A wheel is tested as the package
+unless the tests are told it is the SQLite-only one
+([testing it](#testing-it)), so a wheel built without PostgreSQL fails
+where the package is tested, as each release's wheel is
+([ci.md](ci.md#the-wheels)). Importing either opens no store and needs no
+database: the `wheel` legs on macOS and Windows test the package with none.
 
 `CandleReader` is what opens a store, of either backend, by the settings
 the `quantforge` command line resolves: its flags as arguments, its
@@ -413,13 +428,21 @@ instead:
 
 | Command | What it builds |
 | --- | --- |
-| `maturin build` | A wheel in the `dev` profile, as CI tests it |
-| `maturin build --release` | An optimized wheel, in the workspace's release profile |
+| `maturin build` | A wheel in the `dev` profile, as CI's `python` job tests it |
+| `maturin build --release` | An optimized wheel, in the workspace's release profile, as a release carries it |
 | `maturin build --no-default-features` | The SQLite-only package |
 
 A wheel carries the package, the extension module, the repository's
 `LICENSE`, and a CycloneDX bill of materials of the crate's dependencies,
 which maturin writes.
+
+**CI builds the wheel a release carries for each platform,** and tests it
+on that platform ([ci.md](ci.md#the-wheels)): Linux on x86-64, in a
+`manylinux_2_28` container, so that it loads on any Linux with glibc 2.28
+or later; macOS on Apple silicon; and Windows on x86-64. Each is built with
+`--release` and `--compatibility pypi`, which fails a wheel whose tag PyPI
+would refuse, and each that passes is kept with the run as an artifact,
+`wheel-<os>`.
 
 **The extension is built by maturin, never by `cargo build`.** maturin
 tells PyO3 that it builds an extension module, which leaves the Python
@@ -606,8 +629,10 @@ They hold the installed package to the checkout they are in:
   and the wheel's tag, the repository's license, and that it brings the
   package and nothing beside it.
 - **This page and the manifests** (`test_repository.py`): the tables and
-  the tree above, the readme's example, and what
-  [the workspace](#the-workspace) says.
+  the tree above, the builds among them, the readme's example, and what
+  [the workspace](#the-workspace) says; and CI as
+  [ci.md](ci.md#the-wheels) says it builds and tests the package, the
+  wheel of each platform among it.
 
 A build's storage backends cannot be read from anywhere but the build
 itself, so the tests are told when it is the SQLite-only one:
@@ -698,6 +723,22 @@ in-place install. It is CI's `python` job, which names the oldest Python
 and the newest, and has a PostgreSQL server for the reader's tests:
 [ci.md](ci.md#the-python-package).
 
+`scripts/python-wheel-check.sh` tests a wheel built for release, as CI's
+`wheel` legs test the wheel of each platform: the one wheel of the
+directory it is given, installed with its extras into a fresh virtualenv of
+every Python it is given, with the binary built for the reader's tests and
+the whole suite run against it. It tells the tests nothing, so the wheel
+has to be the package as it is published, with both stores. It runs on
+Linux, macOS and Windows, there in Git Bash. From the repository's root:
+
+```bash
+maturin build --release --manifest-path quantforge-py/Cargo.toml --out dist
+scripts/python-wheel-check.sh dist python3.11 python3.15
+```
+
+A directory that holds no wheel, or more than one, is refused, so that no
+wheel another build left there is tested in the place of the one built.
+
 ## The workspace
 
 The repository is a Cargo workspace of two packages: the `quantforge`
@@ -728,6 +769,5 @@ The spikes under `spikes/` are workspaces of their own, as before.
 | --- | --- |
 | The goldens reproduced from candles read out of each store, and by a server's job | QUA-458 |
 | A Python strategy run by a server's worker and by the command line | QUA-353, QUA-461 |
-| Wheels built and tested on Linux, macOS and Windows | QUA-474 |
 | Type stubs and the `py.typed` marker | QUA-471 |
 | The release to PyPI, and whether it carries a source distribution | QUA-476 |

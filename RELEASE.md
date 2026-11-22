@@ -26,7 +26,9 @@ cargo publish --locked
 This publishes the `quantforge` crate alone. `quantforge-py`, the Python
 package's crate, is a workspace member that cargo refuses to publish; its
 wheels go to PyPI, which this guide does not cover yet
-([docs/python-package.md](docs/python-package.md)).
+([docs/python-package.md](docs/python-package.md)). CI's `wheel` legs build
+the wheel of each platform as a release would publish it, test it, and keep
+each that passed with the run ([docs/ci.md](docs/ci.md#the-wheels)).
 
 ## Smoke test
 

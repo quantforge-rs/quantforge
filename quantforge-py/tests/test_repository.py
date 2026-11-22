@@ -3,6 +3,7 @@ page's tables and its tree are the package's own, and the workspace is wired
 as the page says. Each table and the tree sit between `<!-- begin: name -->`
 and `<!-- end: name -->` markers."""
 
+import ast
 import os
 import re
 import subprocess
@@ -14,6 +15,7 @@ import stores
 from quantforge_py import _native
 
 PAGE = "docs/python-package.md"
+CI_PAGE = "docs/ci.md"
 
 
 def documented_files(page) -> dict[str, str]:
@@ -185,6 +187,126 @@ def test_the_check_script_builds_the_binary_and_ci_has_the_server_the_readers_te
     served = rf"          {stores.POSTGRES_URL}: postgres://\S+@127\.0\.0\.1:5432/postgres\?sslmode=disable\n"
     assert re.search(served, job)
     assert job.index("run: ./scripts/python-package-check.sh") < job.index(stores.POSTGRES_REQUIRED)
+
+
+def workflow_job(repository, name: str) -> str:
+    """A job of CI's workflow as written: its line and every line under it."""
+    workflow = (repository / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    (job,) = re.findall(rf"^  {name}:\n(?:(?:    .*)?\n)+", workflow, re.M)
+    return job
+
+
+def test_the_page_declares_the_two_builds_the_crate_has(page, quoted, crate):
+    # The crate's one feature, PostgreSQL, is its default one: a build has
+    # it or is the SQLite-only one, and there is no third to declare.
+    assert crate["features"] == {"default": ["postgres"], "postgres": ["quantforge/postgres"]}
+    builds = page(PAGE).rows("builds")
+    assert [build[0] for build in builds] == ["The package", "The SQLite-only package"]
+    features = [re.findall(r"`([^`]+)`", build[1]) for build in builds]
+    assert features == [crate["features"]["default"], ["--no-default-features"]]
+    stated = [ast.literal_eval(quoted(build[2])) for build in builds]
+    assert stated == [("sqlite", "postgres"), ("sqlite",)]
+    # The build under test is one of the two, and the package alone is
+    # published.
+    assert quantforge_py.STORAGE_BACKENDS in stated
+    assert [build[3] == "Never" for build in builds] == [False, True]
+
+
+def test_ci_builds_the_wheel_of_each_platform_as_a_release_would_publish_it(
+    repository, page, quoted, crate
+):
+    job = workflow_job(repository, "wheel")
+    # A leg for each platform, each a check of its own, as the page lists
+    # them.
+    (platforms,) = re.findall(r"^        os: \[(.+)\]$", job, re.M)
+    legs = [f"wheel ({platform})" for platform in platforms.split(", ")]
+    assert legs == ["wheel (ubuntu-latest)", "wheel (macos-latest)", "wheel (windows-latest)"]
+    assert "    name: wheel (${{ matrix.os }})\n" in job
+    listed = page(CI_PAGE).rows("wheels")
+    assert [quoted(leg) for leg, _, _ in listed] == legs
+    # Built for release, with the crate's default features, both stores,
+    # into the directory the tests take it from, and only with a tag PyPI
+    # takes.
+    (args,) = re.findall(r"^          args: (.+)$", job, re.M)
+    built = args.split()
+    assert "--release" in built
+    assert built[built.index("--manifest-path") + 1] == "quantforge-py/Cargo.toml"
+    assert built[built.index("--out") + 1] == "dist"
+    assert built[built.index("--compatibility") + 1] == "pypi"
+    assert not {"--features", "-F", "--no-default-features", "--all-features"} & set(built)
+    assert crate["features"]["default"] == ["postgres"]
+    # The Linux wheel in the manylinux container the page names.
+    assert '          manylinux: "2_28"\n' in job
+    assert listed[0][1] == "In a `manylinux_2_28` container"
+
+
+def test_ci_tests_each_wheel_where_it_was_built_before_it_keeps_it(repository, pyproject):
+    job = workflow_job(repository, "wheel")
+    # The oldest Python the package supports and the newest the python job
+    # names, each named to the check by the path its setup gives.
+    workflow = (repository / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    (named,) = re.findall(r"^\s+run: \./scripts/python-package-check\.sh (.+)$", workflow, re.M)
+    oldest = pyproject["project"]["requires-python"].removeprefix(">=")
+    newest = named.split()[-1].removeprefix("python")
+    assert re.findall(r'^          python-version: "(.+)"$', job, re.M) == [oldest, newest]
+    assert re.findall(r"^        id: (\w+)$", job, re.M) == ["oldest", "newest"]
+    tested = '        run: ./scripts/python-wheel-check.sh dist "$OLDEST" "$NEWEST"\n'
+    assert tested in job
+    assert "          OLDEST: ${{ steps.oldest.outputs.python-path }}\n" in job
+    assert "          NEWEST: ${{ steps.newest.outputs.python-path }}\n" in job
+    # One script on every leg, Windows' among them.
+    assert "    defaults:\n      run:\n        shell: bash\n" in job
+    # Built, then tested, and kept only once it passed.
+    built = job.index("        uses: PyO3/maturin-action@")
+    kept = job.index("      - uses: actions/upload-artifact@")
+    assert built < job.index(tested) < kept
+    assert "          path: dist/*.whl\n" in job
+    assert "          if-no-files-found: error\n" in job
+
+
+def test_ci_tests_the_linux_wheel_on_postgresql_and_one_check_stands_for_the_legs(repository):
+    job = workflow_job(repository, "wheel")
+    # GitHub runs service containers on Linux alone: the Linux leg has a
+    # server and has to test it, and the others have an empty image, which
+    # starts none, and empty variables, which the tests take for unset.
+    assert "          - os: ubuntu-latest\n            postgres: postgres:18\n" in job
+    assert "        image: ${{ matrix.postgres }}\n" in job
+    required = f"          {stores.POSTGRES_REQUIRED}: " + "${{ matrix.postgres && '1' || '' }}\n"
+    assert required in job
+    (served,) = re.findall(
+        rf"^          {stores.POSTGRES_URL}: \$\{{\{{ matrix\.postgres && '(\S+)' \|\| '' \}}\}}$",
+        job,
+        re.M,
+    )
+    assert re.fullmatch(r"postgres://\S+@127\.0\.0\.1:5432/postgres\?sslmode=disable", served)
+    # One check stands for the legs, and fails where any did not pass.
+    wheels = workflow_job(repository, "wheels")
+    assert "    needs: wheel\n" in wheels and "    if: always()\n" in wheels
+    assert '        run: test "$RESULT" = success\n' in wheels
+    assert "          RESULT: ${{ needs.wheel.result }}\n" in wheels
+
+
+def test_the_wheel_check_tests_the_wheel_as_the_package_is_published(repository, package_dir):
+    script = (repository / "scripts" / "python-wheel-check.sh").read_text(encoding="utf-8")
+    # The tests are told nothing of the build or of the extras, whatever the
+    # caller exported: a wheel without PostgreSQL fails, as the package.
+    told = re.findall(
+        r'^\w+ = "(QUANTFORGE_PY_TEST_\w+)"$',
+        (package_dir / "tests" / "conftest.py").read_text(encoding="utf-8"),
+        re.M,
+    )
+    (unset,) = re.findall(r"^unset ((?:.*\\\n)*.*)$", script, re.M)
+    assert sorted(unset.replace("\\\n", " ").split()) == sorted(told) and len(told) == 5
+    # With both extras, which come as wheels or not at all.
+    assert '        "${wheel}[${extras}]"\n' in script
+    assert "--only-binary numpy,pandas" in script
+    # The binary is built before any run of the tests, and each is told where
+    # it is; and what the caller exported of PostgreSQL reaches every one.
+    built = "\ncargo build --locked\n"
+    named = f"\nexport {stores.CLI}=$binary\n"
+    assert built in script and named in script
+    assert script.index(built) < script.index(named) < script.index('\nfor python in "$@"; do\n')
+    assert stores.POSTGRES_URL in script and f"unset {stores.POSTGRES_URL}" not in script
 
 
 def test_the_binary_the_tests_write_stores_with_is_of_the_engine_the_package_has():
