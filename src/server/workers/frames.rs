@@ -15,6 +15,7 @@
 //! frames and its equity curve in `equity` frames, each in order. The
 //! worker then answers `finished` once, and the server kills it.
 
+use std::collections::BTreeMap;
 use std::io::{self, Read, Write};
 
 use serde::de::DeserializeOwned;
@@ -30,7 +31,7 @@ use crate::protocol::stream::Bar;
 use crate::protocol::{ErrorBody, ExactDecimal};
 
 /// The frames' own version, which any change to a frame raises.
-const FRAMES: u32 = 3;
+const FRAMES: u32 = 4;
 
 /// The build a server and its workers name in their first frames.
 pub(super) fn build() -> String {
@@ -80,8 +81,15 @@ pub(super) struct JobFrame {
     pub(super) submission: JobSubmission,
     /// The bundle's entry, `path.py:Class`, as its manifest names it.
     pub(super) entry: String,
+    /// The module the entry names, as Python imports it: `path`.
+    pub(super) module: String,
+    /// The class the entry names.
+    pub(super) class: String,
     /// The bundle's parameters, as its manifest gives them.
     pub(super) params: Map<String, Value>,
+    /// The packages the bundle imports, each with the version its manifest
+    /// pins.
+    pub(super) deps: BTreeMap<String, String>,
     /// How many bars the `candles` frames after it carry in all.
     pub(super) bars: u64,
 }

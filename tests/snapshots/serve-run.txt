@@ -16,6 +16,9 @@ Job limits:
       --job-memory-mib <MIB>  Memory one backtest job may use, in MiB of address space; enforced on Linux [env: QF_JOB_MEMORY_MIB=] [default: 4096]
       --job-wall-secs <SECS>  Wall-clock time one backtest job may run, in seconds, before it is stopped [env: QF_JOB_WALL_SECS=] [default: 1800]
 
+Job runtime:
+      --job-python <PATH>  Python interpreter that runs each job's bundle, with quantforge-py installed beside it; omitted, jobs fail as they start [env: QF_JOB_PYTHON=]
+
 Storage:
       --db <DB>
           SQLite database path; refused with --storage postgres [env: QF_DB=] [default: data/market.sqlite]

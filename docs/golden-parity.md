@@ -463,12 +463,15 @@ also have to say what the new ones are held to.
 | `tests/golden/dataset.rs` | `checks` | The generator to `candles.csv`, and the dataset to what this page says of it |
 | `tests/golden/docs.rs` | `checks` | This page to the files |
 | `quantforge-py/tests/test_golden_parity.py` | `python` | The strategy written in Python, through `run_backtest` and as a host that embeds Python runs one: every decision, and the result digit for digit. The strategies that differ, the decimal contexts, and this page's example |
+| `quantforge-py/tests/test_worker_jobs.py` | `python`, every `wheel` leg | The strategy as a bundle, run by a server's worker on candles the server read from SQLite and from PostgreSQL: its trades, its equity curve and its summary, digit for digit, as the job's result files hold them |
 <!-- end: held by -->
 
-Both checks are required of every pull request ([ci.md](ci.md#required-checks)).
-The crate's tests need no Python, so the engine is held to the goldens on
-every platform the crate is tested on; the Python package's run on Linux,
-on the oldest Python it supports and the newest.
+`checks` and `python` are required of every pull request
+([ci.md](ci.md#required-checks)). The crate's tests need no Python, so the
+engine is held to the goldens on every platform the crate is tested on; the
+Python package's run on Linux, on the oldest Python it supports and the
+newest, and again on each `wheel` leg, on Linux, macOS and Windows, with the
+wheel a release would carry.
 
 ## Running it yourself
 
@@ -534,7 +537,6 @@ The same files, held to more of QuantForge:
 | What | Story |
 | --- | --- |
 | The dataset loaded through SQLite and through PostgreSQL, and the strategy run locally and as a server's job, each held to these results | QUA-458 |
-| The strategy as a bundle, run by a server's worker | QUA-353 |
 | The strategy run from the command line | QUA-461 |
 | The Rust built-in strategies removed, and `tests/golden/oracle.rs` with them | QUA-459 |
 

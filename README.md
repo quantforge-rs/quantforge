@@ -22,8 +22,8 @@ library too.
 - 🤖 **Trade** the same strategy on live bars: dry-run by default, real
   orders only after an explicit confirmation
 - 👀 **Monitor** balances, orders and trades, and cancel or close by hand
-- 🌐 **Serve** candle history to other instances over HTTP; the backtest job
-  queue beside it has no worker runtime yet
+- 🌐 **Serve** candle history to other instances over HTTP, and run
+  strategies written in Python as backtest jobs, each in a worker of its own
 - 🦀 **Embed** it: the engines are plain Rust APIs, and a strategy is one
   trait
 
@@ -401,6 +401,7 @@ storage: sqlite data/market.sqlite
 job_concurrency: 4
 job_limits: cpu 600 s, memory 4096 MiB, wall clock 1800 s
 worker_isolation: cpu rlimit, memory rlimit, network seccomp, files landlock
+job_runtime: none
 listening: http://127.0.0.1:9600
 ```
 
@@ -447,6 +448,23 @@ Another address, a smaller range limit and two jobs at a time:
 cargo run -- serve run --listen 127.0.0.1:8080 --max-span-bars 100000 --job-concurrency 2
 ```
 
+Backtest jobs run their strategy bundles in the Python `--job-python`
+names, whose environment holds `quantforge-py` of the same release and the
+packages bundles may import, NumPy and pandas; without it, `job_runtime:
+none`, and every job fails as it starts:
+
+```bash
+cargo run -- serve run --job-python /srv/quantforge-jobs/bin/python
+```
+
+```text
+job_runtime: python 3.12, engine 0.2.0, numpy 2.3.5, pandas 2.3.3
+```
+
+[python-worker.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-worker.md)
+says how a job runs, what a bundle may import, and how a failure reaches
+the job's log with its traceback.
+
 | Route | Answers |
 | --- | --- |
 | `GET /healthz` | `ok` |
@@ -466,10 +484,12 @@ cargo run -- serve run --listen 127.0.0.1:8080 --max-span-bars 100000 --job-conc
 - Jobs run `--job-concurrency` at a time, half the CPU cores unless set,
   each in a worker process of its own, held to `--job-cpu-secs`,
   `--job-memory-mib` and `--job-wall-secs`; on Linux a worker reaches no
-  network and no file outside its scratch directory
+  network and changes no file outside its scratch directory, and reads
+  none but, for a Python worker, its interpreter's own files and the
+  system's libraries
   ([worker isolation](https://github.com/quantforge-rs/quantforge/blob/main/docs/worker-isolation.md)).
-- This release's workers have no runtime yet, so each job fails as it
-  starts, saying so.
+- Without `--job-python` the workers have no runtime, so each job fails as
+  it starts, saying so.
 - On Ctrl-C or SIGTERM the server finishes the requests in progress and
   fails the jobs that run, so that their clients submit them again; a second
   signal stops it without waiting.
@@ -775,7 +795,7 @@ annotates every source file and maps each command to its file.
 | Tables and migrations | [storage-schema.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/storage-schema.md) |
 | Candle segments | [segment-spec.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md) |
 | Strategy bundles and job results | [bundle-spec.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md), [result-spec.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/result-spec.md) |
-| What a job's worker may do | [worker-isolation.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/worker-isolation.md) |
+| What a job's worker may do, and how it runs a Python bundle | [worker-isolation.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/worker-isolation.md), [python-worker.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-worker.md) |
 | Exchanges: what each supports, adding one | [exchange-feature-matrix.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/exchange-feature-matrix.md), [adding-an-exchange.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/adding-an-exchange.md) |
 | Decimals and float64 | [decimal-float-policy.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/decimal-float-policy.md) |
 | The Python package, not released yet: the types it holds, the strategy a class implements, how a backtest is run, a batch of candles as NumPy arrays, candles and results as pandas DataFrames, and the reader of the candles a store holds | [python-package.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-package.md), [python-types.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-types.md), [python-numpy.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-numpy.md), [python-pandas.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-pandas.md), [python-reader.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-reader.md) |

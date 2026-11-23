@@ -22,6 +22,7 @@ fn quantforge() -> Command {
         "QF_JOB_CPU_SECS",
         "QF_JOB_MEMORY_MIB",
         "QF_JOB_WALL_SECS",
+        "QF_JOB_PYTHON",
         "QF_STORAGE",
         "QF_POSTGRES_URL",
         "QF_POSTGRES_POOL_SIZE",

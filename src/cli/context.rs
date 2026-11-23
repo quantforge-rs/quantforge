@@ -82,6 +82,9 @@ impl AppContext {
         if let Command::Data { command } = &cli.command {
             command.check_storage(&storage)?;
         }
+        if let Command::Serve { command } = &cli.command {
+            command.check()?;
+        }
 
         // Without a flag or variable, the exchange's own production
         // endpoint, as its registry entry names it.

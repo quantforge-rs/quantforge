@@ -1,9 +1,10 @@
 //! The sandbox a worker puts on itself on Linux: closed to the other
 //! processes of its user, its files confined to its scratch directory by
-//! Landlock, and its sockets and any way out of its process group refused
-//! by seccomp.
+//! Landlock, beside the directories its runtime reads, which it may read
+//! and never change, and its sockets and any way out of its process group
+//! refused by seccomp.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use landlock::{
     ABI, Access, AccessFs, AccessNet, RestrictionStatus, Ruleset, RulesetAttr, RulesetCreatedAttr,
@@ -79,11 +80,12 @@ pub(super) fn close_to_others() -> rustix::io::Result<()> {
     set_dumpable_behavior(DumpableBehavior::NotDumpable)
 }
 
-/// Every right in `scratch` and none elsewhere; no TCP bind or connection;
+/// Every right in `scratch`, the rights to read and run what is in each
+/// directory of `readable`, and none elsewhere; no TCP bind or connection;
 /// and signals and abstract sockets kept inside the sandbox, so that a job
 /// cannot signal the server. A kernel enforces what its Landlock knows.
-pub(super) fn confine_files(scratch: &Path) -> Guard {
-    match restrict(scratch) {
+pub(super) fn confine_files(scratch: &Path, readable: &[PathBuf]) -> Guard {
+    match restrict(scratch, readable) {
         Ok(status) => match status.ruleset {
             RulesetStatus::NotEnforced => Guard::not("this kernel has no Landlock"),
             _ => Guard::by("landlock"),
@@ -92,13 +94,16 @@ pub(super) fn confine_files(scratch: &Path) -> Guard {
     }
 }
 
-fn restrict(scratch: &Path) -> Result<RestrictionStatus, RulesetError> {
+/// A directory of `readable` that cannot be opened is left out, and stays
+/// closed like any other.
+fn restrict(scratch: &Path, readable: &[PathBuf]) -> Result<RestrictionStatus, RulesetError> {
     Ruleset::default()
         .handle_access(AccessFs::from_all(LANDLOCK))?
         .handle_access(AccessNet::from_all(LANDLOCK))?
         .scope(Scope::from_all(LANDLOCK))?
         .create()?
         .add_rules(path_beneath_rules([scratch], AccessFs::from_all(LANDLOCK)))?
+        .add_rules(path_beneath_rules(readable, AccessFs::from_read(LANDLOCK)))?
         .restrict_self()
 }
 

@@ -952,8 +952,7 @@ async fn a_server_without_a_runtime_fails_each_job_as_it_starts<B: Backend>(back
         failed["error"],
         json!({
             "code": "unavailable",
-            "message": "this server cannot run Python bundles yet; a later QuantForge release \
-                        brings the worker runtime",
+            "message": "this server runs no Python bundles: it was started without --job-python",
         })
     );
     assert!(failed["started_at_ms"].as_i64().is_some(), "{failed}");

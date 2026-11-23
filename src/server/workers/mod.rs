@@ -33,6 +33,14 @@
 //! log's limits, and never holds more than a few of a worker's frames at
 //! once, so a job that writes without end fills no memory of the server's.
 //!
+//! A worker is this binary, as `quantforge worker`, which runs no Python:
+//! it offers no runtime, or runs the tests' synthetic workloads. Python
+//! bundles run in workers that are the Python interpreter of the
+//! environment the server was given, running the worker of the
+//! `quantforge_py` installed there ([`WorkerProgram::python`]): the same
+//! frames, limits and sandbox, compiled into that package, with the job
+//! run by its own [`WorkerRuntime`]. `docs/python-worker.md` says how.
+//!
 //! - `pool`: the workers a server keeps, and a job's run on one.
 //! - `config`: what a pool starts with, and what a run answers.
 //! - `job`: one job's run on a worker.
@@ -40,6 +48,7 @@
 //! - `frames`: what a server and a worker say to each other.
 //! - `scratch`: the scratch directories.
 //! - `child`: the worker's side.
+//! - `runtime`: what a worker runs its job in.
 //! - `backtest`: the engine's run over a job's candles, in the worker.
 //! - `report`: what a job says to its server while it runs.
 //! - `isolation`: the limits and sandbox a worker puts on itself.
@@ -54,16 +63,28 @@ mod job;
 mod pool;
 mod process;
 mod report;
+mod runtime;
 mod scratch;
 mod synthetic;
 
-pub use child::{WorkerError, run_worker};
+pub use child::{WorkerError, run_worker, run_worker_with};
 pub use config::{Execution, PoolConfig, RunningWorker, WorkerLimits, WorkerMode, WorkerProgram};
 pub use isolation::{Guard, Posture, protect_server};
 pub use pool::WorkerPool;
+pub use report::Reporter;
+pub use runtime::{JobEnd, Prepared, WorkerJob, WorkerRuntime, run_backtest};
 
 /// The command that makes this binary a worker: `quantforge worker`.
 pub const WORKER_COMMAND: &str = "worker";
+
+/// The module of `quantforge_py` a Python interpreter runs as a worker:
+/// `python -m quantforge_py._worker`.
+pub const PYTHON_WORKER_MODULE: &str = "quantforge_py._worker";
+
+/// The packages a Python bundle may import beside the standard library and
+/// `quantforge_py`, by the names a manifest's `deps` gives them: a server
+/// offers those its environment holds, each at the version it holds.
+pub const JOB_PACKAGES: [&str; 2] = ["numpy", "pandas"];
 
 /// The CPU time a job may use unless the server says otherwise: 10 minutes.
 pub const DEFAULT_JOB_CPU_SECS: u64 = 600;

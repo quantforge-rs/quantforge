@@ -25,8 +25,8 @@ conformance suite runs live against the exchanges on a schedule
 | `package` | Linux | `cargo check` with Rust 1.85, the oldest the crate declares (`rust-version`), with and without the default features; then `cargo publish --dry-run` |
 | `postgres 16`, `postgres 17`, `postgres 18` | Linux | The whole suite against each PostgreSQL major [ADR 0001](adr/0001-postgres-client-strategy.md) supports: see [PostgreSQL](#postgresql) |
 | `storage` | Linux | Passes only when every `postgres` leg passed |
-| `python` | Linux | The Python package, `quantforge-py/`: clippy for its crate with and without the default features, `cargo check` with Rust 1.85, then the wheel maturin builds, installed with its extras, NumPy and pandas, and tested on Python 3.11 and 3.15, on the oldest NumPy and the oldest pandas the extras take, with NumPy alone, and without the extras, the SQLite-only wheel, and the in-place install; the `quantforge` binary is built for the candle reader's tests, which read stores it wrote, on SQLite and on the job's PostgreSQL server: see [The Python package](#the-python-package) |
-| `wheel (ubuntu-latest)`, `wheel (macos-latest)`, `wheel (windows-latest)` | Each platform | The Python package's wheel for the platform, built for release as it would be published, then installed with its extras and tested on Python 3.11 and 3.15, the candle reader's tests on SQLite, and on Linux on the job's PostgreSQL server too; the wheel that passed is kept with the run: see [The wheels](#the-wheels) |
+| `python` | Linux | The Python package, `quantforge-py/`: clippy for its crate with and without the default features, `cargo check` with Rust 1.85, then the wheel maturin builds, installed with its extras, NumPy and pandas, and tested on Python 3.11 and 3.15, on the oldest NumPy and the oldest pandas the extras take, with NumPy alone, and without the extras, the SQLite-only wheel, and the in-place install; the `quantforge` binary is built for the candle reader's tests, which read stores it wrote, and for the worker's, which run bundles on its server, on SQLite and on the job's PostgreSQL server: see [The Python package](#the-python-package) |
+| `wheel (ubuntu-latest)`, `wheel (macos-latest)`, `wheel (windows-latest)` | Each platform | The Python package's wheel for the platform, built for release as it would be published, then installed with its extras and tested on Python 3.11 and 3.15, the candle reader's and the worker's tests on SQLite, and on Linux on the job's PostgreSQL server too, the worker's on a `serve run` of the binary built there; the wheel that passed is kept with the run: see [The wheels](#the-wheels) |
 | `wheels` | Linux | Passes only when every `wheel` leg passed |
 
 Every check runs on every pull request; none has a path filter. A pull
@@ -169,8 +169,10 @@ python3.15`, which runs, in order:
 - **Clippy for the crate**, with and without the default features, and
   `cargo check` with Rust 1.85.
 - **The `quantforge` binary**: `cargo build`, since the tests of the candle
-  reader read stores the command line itself wrote. The script tells every
-  run below where it is, in `QUANTFORGE_PY_TEST_CLI`.
+  reader read stores the command line itself wrote, and the worker's run
+  strategy bundles on its `serve run`, whose workers are the Python of the
+  run ([the Python worker](python-worker.md#testing-it)). The script tells
+  every run below where it is, in `QUANTFORGE_PY_TEST_CLI`.
 - **The wheel**: `maturin build` once, then the tests against it in a fresh
   virtualenv of each Python named, where it is installed with its two
   extras, as `pip install "quantforge-py[numpy,pandas]"` installs it.

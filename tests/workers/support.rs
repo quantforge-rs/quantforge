@@ -26,6 +26,7 @@ pub(crate) fn program() -> WorkerProgram {
     WorkerProgram {
         path: env!("CARGO_BIN_EXE_quantforge").into(),
         args: vec![WORKER_COMMAND.into()],
+        env: Vec::new(),
     }
 }
 

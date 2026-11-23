@@ -1,7 +1,7 @@
 # Configuration
 
 Every QuantForge setting is a command-line flag. The ten global settings and
-the six settings of `serve run` also read a `QF_*` environment variable as a
+the seven settings of `serve run` also read a `QF_*` environment variable as a
 fallback; every other per-command option is a flag only. QuantForge reads no
 other environment variable itself — the few its dependencies honor are listed
 at the end.
@@ -43,8 +43,9 @@ the default:
 - `QF_LOG=` is an empty filter, which turns log output off, warnings included;
 - without its flag, `QF_LISTEN=` is a usage error (exit status 2, reported
   against `--listen`), and so are `QF_MAX_SPAN_BARS=`,
-  `QF_JOB_CONCURRENCY=`, `QF_JOB_CPU_SECS=`, `QF_JOB_MEMORY_MIB=` and
-  `QF_JOB_WALL_SECS=` (each reported against its flag);
+  `QF_JOB_CONCURRENCY=`, `QF_JOB_CPU_SECS=`, `QF_JOB_MEMORY_MIB=`,
+  `QF_JOB_WALL_SECS=` and `QF_JOB_PYTHON=` (each reported against its
+  flag);
 - an empty or whitespace-only API key or secret counts as missing, so commands
   that need credentials fail with the missing-credentials error.
 
@@ -113,6 +114,7 @@ Explanations belong in the Setting cell.
 | CPU time one backtest job may use, in seconds, at least 1; a job that uses it all is stopped and fails as `invalid_request`, saying so. Enforced on Linux and macOS; see [worker-isolation.md](worker-isolation.md) | `--job-cpu-secs <secs>` | `QF_JOB_CPU_SECS` | `600` | `serve run` |
 | Memory one backtest job may use, in MiB of address space, at least 1; a job that needs more is stopped and fails as `invalid_request`, saying so. Enforced on Linux only | `--job-memory-mib <mib>` | `QF_JOB_MEMORY_MIB` | `4096` | `serve run` |
 | Wall-clock time one backtest job may run, in seconds, at least 1; the server then kills its worker, and the job fails as `invalid_request`, saying so. The `job_limits:` line shows all three | `--job-wall-secs <secs>` | `QF_JOB_WALL_SECS` | `1800` | `serve run` |
+| Python interpreter that runs each job's bundle: one with `quantforge-py` of this release installed, such as a virtualenv's `bin/python`, with the packages bundles may import (NumPy, pandas) installed beside it; a path that is no file is refused before anything is opened. Omitted, the server runs no bundle, and each job fails as it starts, `unavailable`. The `job_runtime:` line shows what its workers offer; see [python-worker.md](python-worker.md) | `--job-python <path>` | `QF_JOB_PYTHON` | none | `serve run` |
 
 ## Storage backends
 
