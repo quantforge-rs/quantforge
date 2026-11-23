@@ -216,7 +216,10 @@ loaded, what its environment installs read and NumPy imported, so a job
 pays for its bundle's import and its own run, not for Python's start or
 for reading the environment, which takes tens of milliseconds. `test_worker_jobs.py` measures how long a
 job takes from its submission to its strategy's first bar, with and without
-NumPy, on every platform CI runs the package's tests on, and prints it.
+NumPy, on every platform CI runs the package's tests on, and prints it: for
+a job whose worker was ready, and for one submitted as soon as the job
+before it ended, which on a pool of one worker also waits for the worker
+that replaces the last one to start.
 
 ## Testing it
 

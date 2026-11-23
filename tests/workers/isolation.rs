@@ -483,9 +483,7 @@ fn this_binary_asked_for_python_bundles_offers_no_runtime_and_fails_each_job_as_
         failure(&ran),
         (
             ErrorCode::Unavailable,
-            "this server cannot run Python bundles yet; a later QuantForge release brings the \
-             worker runtime"
-                .to_string()
+            "this server runs no Python bundles: it was started without --job-python".to_string()
         )
     );
     pool.stop();

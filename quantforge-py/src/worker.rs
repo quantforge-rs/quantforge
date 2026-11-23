@@ -16,13 +16,16 @@
 //! - **Its frames go out on a descriptor of their own,** which
 //!   `_worker.py` moved them to, written through Python's own `os.write`:
 //!   what anything else writes to standard output goes where standard error
-//!   goes. Each frame is written whole before the next begins, a job's
-//!   lines and the run's progress in the order they are said, since all of
-//!   it is said on the one thread that runs the job.
+//!   goes. A job's lines may be said on threads of the strategy's own, beside
+//!   the run's progress on the thread that runs the job, so each frame is
+//!   held until it is whole and written in one turn that every writer
+//!   takes, waited for without the interpreter: no frame ever starts inside
+//!   another.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Condvar, Mutex, PoisonError};
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
@@ -55,7 +58,7 @@ pub(crate) fn run_worker(frames: i32) -> PyResult<()> {
         frames,
         offered: BTreeMap::new(),
     };
-    run_worker_with(io::stdin(), FramesOut { fd: frames }, &mut runtime)
+    run_worker_with(io::stdin(), FramesOut::new(frames), &mut runtime)
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))
 }
 
@@ -212,30 +215,83 @@ struct JobLines {
 #[pymethods]
 impl JobLines {
     fn __call__(&self, line: &str) {
-        Reporter::new(&mut FramesOut { fd: self.frames }).line(self.level, line);
+        Reporter::new(&mut FramesOut::new(self.frames)).line(self.level, line);
     }
 }
 
 /// The worker's frames, written to the descriptor `_worker.py` moved them
 /// to, through Python's own `os.write`, which works the same on every
-/// platform and needs no unsafe code here.
-#[derive(Clone, Copy, Debug)]
+/// platform and needs no unsafe code here. What is written is held until
+/// it is flushed, which a frame is once it is whole, and then written in
+/// the frames' turn.
+#[derive(Debug)]
 struct FramesOut {
     fd: i32,
+    held: Vec<u8>,
+}
+
+impl FramesOut {
+    fn new(fd: i32) -> Self {
+        Self {
+            fd,
+            held: Vec::new(),
+        }
+    }
 }
 
 impl Write for FramesOut {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        Python::attach(|py| {
-            WRITE
-                .import(py, "os", "write")?
-                .call1((self.fd, PyBytes::new(py, bytes)))?
-                .extract::<usize>()
-        })
-        .map_err(|error| io::Error::other(error.to_string()))
+        self.held.extend_from_slice(bytes);
+        Ok(bytes.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+        if self.held.is_empty() {
+            return Ok(());
+        }
+        let frame = std::mem::take(&mut self.held);
+        Python::attach(|py| {
+            let _turn = Turn::take(py);
+            let write = WRITE.import(py, "os", "write")?;
+            let mut written = 0;
+            while written < frame.len() {
+                written += write
+                    .call1((self.fd, PyBytes::new(py, &frame[written..])))?
+                    .extract::<usize>()?;
+            }
+            Ok(())
+        })
+        .map_err(|error: PyErr| io::Error::other(error.to_string()))
+    }
+}
+
+/// Whether a frame is being written, and the signal that one no longer is.
+static WRITING: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
+
+/// The frames' turn: one frame is written at a time, by whichever thread
+/// says it, from its first byte to its last. It is waited for without the
+/// interpreter, which the thread that holds the turn needs back after each
+/// `os.write` that gave it up. It is given back as it is dropped.
+struct Turn;
+
+impl Turn {
+    fn take(py: Python<'_>) -> Self {
+        py.detach(|| {
+            let (writing, done) = &WRITING;
+            let mut writing = writing.lock().unwrap_or_else(PoisonError::into_inner);
+            while *writing {
+                writing = done.wait(writing).unwrap_or_else(PoisonError::into_inner);
+            }
+            *writing = true;
+        });
+        Self
+    }
+}
+
+impl Drop for Turn {
+    fn drop(&mut self) {
+        let (writing, done) = &WRITING;
+        *writing.lock().unwrap_or_else(PoisonError::into_inner) = false;
+        done.notify_one();
     }
 }

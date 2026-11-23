@@ -16,8 +16,8 @@ use crate::protocol::{ErrorBody, ErrorCode};
 use crate::server::results::ResultFile;
 
 /// Why a server with no worker runtime fails each job as it starts.
-pub(in crate::server) const NO_RUNTIME: &str = "this server cannot run Python bundles yet; a later \
-     QuantForge release brings the worker runtime";
+pub(in crate::server) const NO_RUNTIME: &str =
+    "this server runs no Python bundles: it was started without --job-python";
 
 /// Everything one job runs on, read for it by the server as it started.
 #[derive(Debug)]
@@ -107,7 +107,7 @@ pub trait JobWorker: Send + Sync {
     fn run(&self, input: JobInput, cancel: &Cancel, log: &JobLog) -> WorkerOutcome;
 }
 
-/// The worker of a server that cannot run Python bundles yet: it offers no
+/// The worker of a server that runs no Python bundles: it offers no
 /// runtime, so every job fails as it starts.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NoRuntime;

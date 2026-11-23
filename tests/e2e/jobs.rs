@@ -31,8 +31,7 @@ use crate::serve::Served;
 const T: i64 = 1_792_454_400_000;
 const MINUTE: i64 = 60_000;
 
-const NO_RUNTIME: &str = "this server cannot run Python bundles yet; a later QuantForge release brings the worker \
-     runtime";
+const NO_RUNTIME: &str = "this server runs no Python bundles: it was started without --job-python";
 const STOPPED: &str = "the server stopped while the job ran; submit it again";
 
 fn market() -> MarketId {

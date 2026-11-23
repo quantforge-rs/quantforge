@@ -484,10 +484,12 @@ the job's log with its traceback.
 - Jobs run `--job-concurrency` at a time, half the CPU cores unless set,
   each in a worker process of its own, held to `--job-cpu-secs`,
   `--job-memory-mib` and `--job-wall-secs`; on Linux a worker reaches no
-  network and no file outside its scratch directory
+  network and changes no file outside its scratch directory, and reads
+  none but, for a Python worker, its interpreter's own files and the
+  system's libraries
   ([worker isolation](https://github.com/quantforge-rs/quantforge/blob/main/docs/worker-isolation.md)).
-- This release's workers have no runtime yet, so each job fails as it
-  starts, saying so.
+- Without `--job-python` the workers have no runtime, so each job fails as
+  it starts, saying so.
 - On Ctrl-C or SIGTERM the server finishes the requests in progress and
   fails the jobs that run, so that their clients submit them again; a second
   signal stops it without waiting.

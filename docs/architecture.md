@@ -504,7 +504,8 @@ segment codec of `storage::segments` to check what it sends, and, in a
 worker, the backtest `engine` and the `sdk` strategy it runs, whose result
 it writes as the protocol's result files; `serve run`
 opens the store, binds the address, and hands it both, with the pool of
-worker processes that run jobs, each a process of this binary that sees
+worker processes that run jobs, each a process of this binary, or of the
+Python interpreter `--job-python` names, that sees
 nothing of the store, one per job ([worker-isolation.md](worker-isolation.md)).
 What a job writes while it runs reaches the server as frames from its
 worker, is kept in a log bounded per job, followed by clients over a

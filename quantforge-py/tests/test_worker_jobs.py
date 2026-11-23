@@ -263,6 +263,60 @@ def test_what_a_strategy_writes_is_its_jobs_log(tmp_path):
     assert any(line.endswith("UserWarning: a warning") for line in warning[2:])
 
 
+def test_a_strategys_own_threads_write_whole_lines_beside_its_run(tmp_path):
+    # Threads of the strategy's own write to standard output and to standard
+    # error at once, each a stream of its own, while the engine runs and says
+    # how far it has come: every line reaches the log whole, at its level,
+    # and the job ends. 600 KB of lines, all of which a log keeps.
+    place = with_minutes(stores.Place.sqlite(tmp_path), 30)
+    source = """
+        import sys
+        import threading
+
+        import quantforge_py as qf
+
+
+        class Chatty(qf.Strategy):
+            def on_start(self, ctx):
+                # A whole line a write: `print` writes its text and its end
+                # apart, so the texts of two threads printing to one stream
+                # at once can make one line, in Python's own streams as here.
+                def talk(name, stream):
+                    for n in range(150):
+                        stream.write(f"{name} {n} " + "x" * 1000 + "\\n")
+
+                self.threads = [
+                    threading.Thread(
+                        target=talk, args=(f"thread-{t}", sys.stdout if t < 2 else sys.stderr)
+                    )
+                    for t in range(4)
+                ]
+                for thread in self.threads:
+                    thread.start()
+
+            def on_bar(self, ctx, bar):
+                sys.stdout.write(f"bar {bar.open_time_ms}\\n")
+                return None
+
+            def on_finish(self, ctx):
+                for thread in self.threads:
+                    thread.join()
+    """
+    with jobs.served(place, scratch(tmp_path)) as server:
+        job = server.submit(server.upload(bundle(source, "strategy.py:Chatty")), FIRST, THIRTIETH)
+        state = server.ended(job)
+        log = server.log(job)
+    assert state["kind"] == "succeeded", state
+    for t, level in [(0, "info"), (1, "info"), (2, "warning"), (3, "warning")]:
+        assert [line for line in messages(log, level) if line.startswith(f"thread-{t} ")] == [
+            f"thread-{t} {n} " + "x" * 1000 for n in range(150)
+        ], t
+    assert [line for line in messages(log, "info") if line.startswith("bar ")] == [
+        f"bar {FIRST + n * stores.MINUTE}" for n in range(30)
+    ]
+    assert len(messages(log)) == 4 * 150 + 30
+
+
 def test_every_job_runs_in_a_worker_of_its_own(tmp_path):
     place = with_minutes(stores.Place.sqlite(tmp_path), 2)
     source = """
@@ -353,12 +407,15 @@ def test_a_server_without_a_python_runs_no_bundle(tmp_path):
         job = server.submit(server.upload(bundle(HOLD)), FIRST, FIRST + stores.MINUTE)
         assert server.ended(job)["error"] == {
             "code": "unavailable",
-            "message": "this server cannot run Python bundles yet; a later QuantForge release "
-            "brings the worker runtime",
+            "message": "this server runs no Python bundles: it was started without --job-python",
         }
 
 
 def test_how_long_a_job_takes_to_reach_its_first_bar_is_measured(tmp_path, capsys):
+    # Two ways a job starts on a pool of one worker: with that worker ready,
+    # started ahead of the job, or submitted as soon as the job before it
+    # ended, when it waits for the worker that replaces the last one to start
+    # too. A pause of a second lets the replacement get ready.
     place = with_minutes(stores.Place.sqlite(tmp_path), 30)
     source = """
         import quantforge_py as qf
@@ -387,19 +444,22 @@ def test_how_long_a_job_takes_to_reach_its_first_bar_is_measured(tmp_path, capsy
         taken = {}
         for name, files in cases:
             stored = server.upload(files)
-            for _ in range(5):
-                submitted = time.time() * 1000
-                job = server.submit(stored, FIRST, THIRTIETH)
-                state = server.ended(job)
-                assert state["kind"] == "succeeded", state
-                (line,) = server.log(job)["lines"]
-                assert line["message"] == "first bar"
-                taken.setdefault(name, []).append(line["at_ms"] - submitted)
+            for start in ("worker ready", "back to back"):
+                for _ in range(3):
+                    if start == "worker ready":
+                        time.sleep(1.0)
+                    submitted = time.time() * 1000
+                    job = server.submit(stored, FIRST, THIRTIETH)
+                    state = server.ended(job)
+                    assert state["kind"] == "succeeded", state
+                    (line,) = server.log(job)["lines"]
+                    assert line["message"] == "first bar"
+                    taken.setdefault((name, start), []).append(line["at_ms"] - submitted)
     with capsys.disabled():
-        for name, times in taken.items():
+        for (name, start), times in taken.items():
             print(
-                f"\njob start, submit to first bar, {name}: median {statistics.median(times):.0f} "
-                f"ms, fastest {min(times):.0f} ms, slowest {max(times):.0f} ms, over "
-                f"{len(times)} jobs, on {sys.platform}, python {PYTHON}"
+                f"\njob start, submit to first bar, {name}, {start}: median "
+                f"{statistics.median(times):.0f} ms, fastest {min(times):.0f} ms, slowest "
+                f"{max(times):.0f} ms, over {len(times)} jobs, on {sys.platform}, python {PYTHON}"
             )
     assert all(0 <= each < 30_000 for times in taken.values() for each in times), taken

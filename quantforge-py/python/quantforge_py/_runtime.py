@@ -22,6 +22,7 @@ import json
 import os
 import re
 import sys
+import threading
 import traceback
 
 # Linux's own libraries, which a module a job imports may still load once
@@ -179,12 +180,14 @@ def failed(error, tb, root):
 class Lines(io.TextIOBase):
     """A stream whose every line goes to a job's log, through `say`: what a
     strategy prints, or writes to standard error. A line without its end
-    waits for it, or for the job's end."""
+    waits for it, or for the job's end. Threads of the strategy's own write
+    to it in turn."""
 
     def __init__(self, say):
         super().__init__()
         self._say = say
         self._held = ""
+        self._turn = threading.Lock()
 
     @property
     def encoding(self):
@@ -200,20 +203,22 @@ class Lines(io.TextIOBase):
     def write(self, text):
         if not isinstance(text, str):
             raise TypeError(f"write() argument must be str, not {type(text).__name__}")
-        self._held += text
-        *done, self._held = self._held.split("\n")
-        for each in done:
-            self._say(each.removesuffix("\r"))
-        while len(self._held) > LINE_HELD:
-            self._say(self._held[:LINE_HELD])
-            self._held = self._held[LINE_HELD:]
+        with self._turn:
+            self._held += text
+            *done, self._held = self._held.split("\n")
+            for each in done:
+                self._say(each.removesuffix("\r"))
+            while len(self._held) > LINE_HELD:
+                self._say(self._held[:LINE_HELD])
+                self._held = self._held[LINE_HELD:]
         return len(text)
 
     def finish(self):
         """Says the last line, where it has no end."""
-        if self._held:
-            self._say(self._held)
-            self._held = ""
+        with self._turn:
+            if self._held:
+                self._say(self._held)
+                self._held = ""
 
 
 def capture(out, err):
