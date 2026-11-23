@@ -242,6 +242,13 @@ jobs:
           python-version: "3.15"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # on linux the build runs in a container, as root, and the action gives
+      # the runner back only the directory it builds in and dist: a target
+      # the container made would stay root's, and the command line's build
+      # on the runner could write nothing in it. made here, it is the
+      # runner's on every leg
+      - name: target directory
+        run: mkdir -p target
       # with the maturin pyproject.toml asks for, and the crate's default
       # features, both stores, as every published artifact has them: on
       # linux in a manylinux_2_28 container, so that the wheel loads on any

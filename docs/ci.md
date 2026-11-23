@@ -262,6 +262,10 @@ Each leg runs, in order:
   2.28 or later. Its target directory, `target/wheel`, is its own: before
   a build in the container the action removes the build scripts of the
   directory it builds in, which the binary's build on the runner needs.
+  The leg makes `target` itself on the runner first: the container builds
+  as root, and the action gives the runner back only `target/wheel` and
+  `dist`, so a `target` the container made would stay root's, and the
+  binary's build could write nothing in it.
 - **The tests:** `scripts/python-wheel-check.sh dist <oldest> <newest>`.
   It builds the `quantforge` binary for the candle reader's tests, then
   installs the wheel with its two extras into a fresh virtualenv of each
