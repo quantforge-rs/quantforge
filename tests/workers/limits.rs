@@ -256,6 +256,7 @@ fn a_worker_that_starts_for_a_job_as_its_pool_stops_runs_nothing() {
                 go.clone().into_os_string(),
                 env!("CARGO_BIN_EXE_quantforge").into(),
             ],
+            env: Vec::new(),
         },
         size: 1,
         limits: roomy(),

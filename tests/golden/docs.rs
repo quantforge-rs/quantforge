@@ -336,6 +336,7 @@ fn the_page_names_the_tests_that_hold_the_goldens() {
             "tests/golden/dataset.rs",
             "tests/golden/docs.rs",
             "quantforge-py/tests/test_golden_parity.py",
+            "quantforge-py/tests/test_worker_jobs.py",
         ]
     );
     for row in &held_by {

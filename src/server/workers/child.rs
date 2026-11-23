@@ -1,22 +1,24 @@
 //! The worker's side: the process this binary becomes when a server starts
-//! it with the `worker` command. It reads its setup, puts its limits and
-//! sandbox on itself before anything else runs, says it is ready, runs the
-//! one job it is handed, says how it ended, a backtest's rows first, and
-//! exits. Once it holds its
-//! job, the end of its input means that the server has gone or given up on
-//! the job, and it exits at once.
+//! it with the `worker` command, and the one a Python worker runs through
+//! `quantforge_py`. It reads its setup, readies its runtime, puts its
+//! limits and sandbox on itself before any job's code runs, says it is
+//! ready, runs the one job it is handed, says how it ended, a backtest's
+//! rows first, and exits. Once it holds its job, the end of its input means
+//! that the server has gone or given up on the job, and it exits at once.
 
 use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::path::Path;
 
 use super::backtest::Ended;
 use super::config::WorkerMode;
 use super::frames::{self, Finished, FromWorker, MOST_TO_WORKER, ROWS_PER_FRAME, ToWorker};
 use super::isolation::{self, Limits};
 use super::report::Reporter;
+use super::runtime::{JobEnd, Prepared, WorkerJob, WorkerRuntime};
 use super::synthetic::{self, Seen};
 use crate::model::Candle;
+use crate::protocol::ErrorCode;
 use crate::protocol::stream::Bar;
-use crate::protocol::{ErrorBody, ErrorCode};
 use crate::server::jobs::NO_RUNTIME;
 
 /// The first argument a worker runs itself again under, once it has marked
@@ -47,6 +49,9 @@ pub enum WorkerError {
         /// This worker's.
         worker: String,
     },
+    /// Its runtime could not be readied.
+    #[error("the worker's runtime could not be readied: {0}")]
+    Runtime(String),
     /// The server sent a frame out of turn.
     #[error("the server sent a {got} frame where the worker expected {expected}")]
     OutOfTurn {
@@ -60,7 +65,9 @@ pub enum WorkerError {
 /// Runs this process as a job's worker, reading frames from `input`, its
 /// standard input, and writing them to `output`, its standard output, which
 /// nothing else may write to. Returns once it has said how its job ended,
-/// or when the server goes away before handing it one.
+/// or when the server goes away before handing it one. It runs no Python:
+/// in the synthetic mode it runs the tests' workloads, and in any other it
+/// offers no runtime.
 pub fn run_worker<R, W>(input: R, output: W) -> Result<(), WorkerError>
 where
     R: Read + Send + 'static,
@@ -68,6 +75,23 @@ where
 {
     #[cfg(unix)]
     shed_descriptors()?;
+    run_worker_with(input, output, &mut BuiltIn::default())
+}
+
+/// Runs this process as a job's worker, as [`run_worker`] does, with
+/// `runtime` readying itself for the server's setup and running the job.
+/// The caller has left the process no descriptor but its pipes, and starts
+/// no thread before this returns: the sandbox covers the threads started
+/// after it.
+pub fn run_worker_with<R, W>(
+    input: R,
+    output: W,
+    runtime: &mut dyn WorkerRuntime,
+) -> Result<(), WorkerError>
+where
+    R: Read + Send + 'static,
+    W: Write + Send,
+{
     let mut input = BufReader::new(input);
     let mut output = BufWriter::new(output);
     let Some(setup) = frames::read::<_, ToWorker>(&mut input, MOST_TO_WORKER)? else {
@@ -89,13 +113,19 @@ where
         });
     }
     let scratch = std::env::current_dir()?;
-    let seen = matches!(mode, WorkerMode::Synthetic { .. }).then(|| Seen::now(&scratch));
+    let Prepared {
+        runtime: offered,
+        readable,
+    } = runtime
+        .prepare(&mode, &scratch)
+        .map_err(WorkerError::Runtime)?;
     let posture = isolation::isolate(
         Limits {
             cpu_secs,
             memory_bytes,
         },
         &scratch,
+        &readable,
     );
     frames::write(
         &mut output,
@@ -103,7 +133,7 @@ where
             build: frames::build(),
             pid: std::process::id(),
             posture: posture.clone(),
-            runtime: mode.runtime(),
+            runtime: offered,
         },
     )?;
 
@@ -117,20 +147,48 @@ where
     watch(input)?;
     // What the job says while it runs goes out as it says it.
     let mut reporter = Reporter::new(&mut output);
-    let ended = match (&mode, &seen) {
-        (WorkerMode::Synthetic { .. }, Some(seen)) => {
-            synthetic::run(&job, &candles, seen, &posture, &mut reporter)
-        }
-        _ => Ended::Said(Finished::Failed {
-            error: ErrorBody {
-                code: ErrorCode::Unavailable,
-                message: NO_RUNTIME.to_string(),
-                supported: None,
-            },
-        }),
+    let held = WorkerJob {
+        frame: &job,
+        candles: &candles,
+        posture: &posture,
+        scratch: &scratch,
     };
-    say(&mut output, ended)?;
+    let ended = runtime.run(&held, &mut reporter);
+    say(&mut output, ended.0)?;
     Ok(())
+}
+
+/// What this binary runs a job in: the synthetic workloads, in the
+/// synthetic mode, which sees what the worker was given before its sandbox
+/// hides it; in any other mode, nothing, and the job fails as it starts.
+#[derive(Default)]
+struct BuiltIn {
+    seen: Option<Seen>,
+}
+
+impl WorkerRuntime for BuiltIn {
+    fn prepare(&mut self, mode: &WorkerMode, scratch: &Path) -> Result<Prepared, String> {
+        if matches!(mode, WorkerMode::Synthetic { .. }) {
+            self.seen = Some(Seen::now(scratch));
+        }
+        Ok(Prepared {
+            runtime: mode.runtime(),
+            readable: Vec::new(),
+        })
+    }
+
+    fn run(&mut self, job: &WorkerJob<'_>, reporter: &mut Reporter<'_>) -> JobEnd {
+        match &self.seen {
+            Some(seen) => JobEnd(synthetic::run(
+                job.frame,
+                job.candles,
+                seen,
+                job.posture,
+                reporter,
+            )),
+            None => JobEnd::failed(ErrorCode::Unavailable, NO_RUNTIME),
+        }
+    }
 }
 
 /// Says how the job ended: a backtest's trades and equity curve first, a

@@ -9,8 +9,10 @@
 //! through the adapter (`adapter.rs`); `run_backtest`, which runs such a
 //! strategy over candles in the engine (`run.rs`); a batch of candles as
 //! NumPy arrays, and back (`arrays.rs`); what the package's pandas
-//! functions, which are written in Python, are built on (`frames.rs`); and
-//! the reader of the candles a store holds (`reader.rs`).
+//! functions, which are written in Python, are built on (`frames.rs`); the
+//! reader of the candles a store holds (`reader.rs`); and the runtime a
+//! strategy bundle runs in (`runtime.rs`), with the worker a QuantForge
+//! server runs bundles in (`worker.rs`).
 //! `docs/python-package.md` says how the package is named, built and
 //! tested, `docs/python-types.md` what each type takes and gives and how a
 //! backtest is run, `docs/python-numpy.md` what crosses to NumPy and how,
@@ -36,8 +38,10 @@ mod frames;
 mod market;
 mod reader;
 mod run;
+mod runtime;
 mod strategy;
 mod trade;
+mod worker;
 
 /// The compiled extension module of QuantForge's Python package. Import
 /// `quantforge_py` instead: it publishes these names, and this module's
@@ -72,6 +76,10 @@ mod native {
     use crate::strategy::{Strategy, StrategyContext, TargetPosition};
     #[pymodule_export]
     use crate::trade::ClosedTrade;
+    // Private: the worker a server runs Python bundles in, which
+    // `quantforge_py._worker` starts.
+    #[pymodule_export]
+    use crate::worker::run_worker;
 
     /// The version of the engine the package was built with.
     #[pymodule_export]

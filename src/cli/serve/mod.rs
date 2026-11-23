@@ -14,6 +14,16 @@ pub(crate) enum ServeCommand {
     Run(ServeRunArgs),
 }
 
+impl ServeCommand {
+    /// Refuses settings that name what is not there, before the store is
+    /// opened.
+    pub(crate) fn check(&self) -> Result<()> {
+        match self {
+            Self::Run(args) => args.check(),
+        }
+    }
+}
+
 pub(crate) async fn dispatch(ctx: &AppContext, command: ServeCommand) -> Result<()> {
     match command {
         ServeCommand::Run(args) => handle_serve_run(ctx, args).await,

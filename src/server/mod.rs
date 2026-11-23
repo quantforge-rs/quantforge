@@ -95,8 +95,9 @@ pub use signal::{external_signal, read_signal, refusal_receipt};
 pub use store::{ServedStore, ServerStore, StoreLimits};
 pub use workers::{
     DEFAULT_JOB_CPU_SECS, DEFAULT_JOB_MEMORY_MIB, DEFAULT_JOB_WALL_SECS, Execution, Guard,
-    PoolConfig, Posture, RunningWorker, WORKER_COMMAND, WorkerError, WorkerLimits, WorkerMode,
-    WorkerPool, WorkerProgram, protect_server, run_worker,
+    JOB_PACKAGES, JobEnd, PYTHON_WORKER_MODULE, PoolConfig, Posture, Prepared, Reporter,
+    RunningWorker, WORKER_COMMAND, WorkerError, WorkerJob, WorkerLimits, WorkerMode, WorkerPool,
+    WorkerProgram, WorkerRuntime, protect_server, run_backtest, run_worker, run_worker_with,
 };
 
 /// Answers every route on `listener` until `shutdown` resolves, the history

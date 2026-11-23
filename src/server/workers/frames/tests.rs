@@ -87,7 +87,7 @@ fn a_frame_cut_short_or_not_json_is_an_error() {
 fn the_build_names_this_release_and_the_frames_version() {
     assert_eq!(
         build(),
-        format!("quantforge {} frames 3", env!("CARGO_PKG_VERSION"))
+        format!("quantforge {} frames 4", env!("CARGO_PKG_VERSION"))
     );
 }
 

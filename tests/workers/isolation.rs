@@ -12,10 +12,15 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use quantforge::server::{Cancel, Guard, WORKER_COMMAND};
+use quantforge::protocol::ErrorCode;
+use quantforge::server::{
+    Cancel, Guard, JobWorker, PoolConfig, WORKER_COMMAND, WorkerMode, WorkerPool,
+};
 use serde_json::{Value, json};
 
-use crate::support::{Pool, candles, given_env, input, report, roomy, unread, until, worker_env};
+use crate::support::{
+    Pool, candles, failure, given_env, input, program, report, roomy, unread, until, worker_env,
+};
 
 /// The guard's reason, when it does not hold.
 fn unenforced(guard: &Guard) -> Option<&str> {
@@ -263,7 +268,7 @@ fn a_worker_refuses_a_server_of_another_build() {
     let said = String::from_utf8_lossy(&output.stderr);
     assert!(
         said.contains(&format!(
-            "the server is quantforge 0.0.0 frames 0, and this worker quantforge {} frames 3; a \
+            "the server is quantforge 0.0.0 frames 0, and this worker quantforge {} frames 4; a \
              worker runs only for a server of its own build",
             env!("CARGO_PKG_VERSION")
         )),
@@ -286,7 +291,7 @@ fn alone(dir: &Path, params: Value) -> Value {
     stdin
         .write_all(&frame(&json!({
             "type": "setup",
-            "build": format!("quantforge {} frames 3", env!("CARGO_PKG_VERSION")),
+            "build": format!("quantforge {} frames 4", env!("CARGO_PKG_VERSION")),
             "mode": {"kind": "synthetic", "runtime": {"engine": "0.3.0", "python": "3.12", "packages": {}}},
             "cpu_secs": 60,
             "memory_bytes": 1_u64 << 31,
@@ -301,7 +306,10 @@ fn alone(dir: &Path, params: Value) -> Value {
             "job_id": job.job_id.to_string(),
             "submission": job.submission,
             "entry": "strategy.py:Hold",
+            "module": "strategy",
+            "class": "Hold",
             "params": params,
+            "deps": {},
             "bars": 0,
         })))
         .expect("the job");
@@ -377,7 +385,7 @@ fn a_worker_whose_server_goes_away_mid_job_exits() {
     stdin
         .write_all(&frame(&json!({
             "type": "setup",
-            "build": format!("quantforge {} frames 3", env!("CARGO_PKG_VERSION")),
+            "build": format!("quantforge {} frames 4", env!("CARGO_PKG_VERSION")),
             "mode": {"kind": "synthetic", "runtime": {"engine": "0.3.0", "python": "3.12", "packages": {}}},
             "cpu_secs": 60,
             "memory_bytes": 1_u64 << 31,
@@ -392,7 +400,10 @@ fn a_worker_whose_server_goes_away_mid_job_exits() {
             "job_id": job.job_id.to_string(),
             "submission": job.submission,
             "entry": "strategy.py:Hold",
+            "module": "strategy",
+            "class": "Hold",
             "params": {"workload": "sleep"},
+            "deps": {},
             "bars": 0,
         })))
         .expect("the job");
@@ -435,7 +446,7 @@ fn a_worker_given_no_job_exits_once_its_input_ends() {
     stdin
         .write_all(&frame(&json!({
             "type": "setup",
-            "build": format!("quantforge {} frames 3", env!("CARGO_PKG_VERSION")),
+            "build": format!("quantforge {} frames 4", env!("CARGO_PKG_VERSION")),
             "mode": {"kind": "no_runtime"},
             "cpu_secs": 60,
             "memory_bytes": 1_u64 << 31,
@@ -447,4 +458,35 @@ fn a_worker_given_no_job_exits_once_its_input_ends() {
     drop(stdin);
     let status = exited(&mut child);
     assert!(status.success(), "{status}");
+}
+
+#[test]
+fn this_binary_asked_for_python_bundles_offers_no_runtime_and_fails_each_job_as_it_starts() {
+    let parent = tempfile::tempdir().expect("a directory");
+    // Python bundles run in a worker that is a Python interpreter; this
+    // binary runs none, and says so as its workers start.
+    let pool = WorkerPool::start(PoolConfig {
+        program: program(),
+        size: 1,
+        limits: roomy(),
+        mode: WorkerMode::python(),
+        scratch_parent: parent.path().to_path_buf(),
+    })
+    .expect("a started pool");
+    assert_eq!(pool.runtime(), None);
+    let ran = pool.execute(
+        input(r#"workload = "report""#, candles(2)),
+        &Cancel::new(),
+        &unread(),
+    );
+    assert_eq!(
+        failure(&ran),
+        (
+            ErrorCode::Unavailable,
+            "this server cannot run Python bundles yet; a later QuantForge release brings the \
+             worker runtime"
+                .to_string()
+        )
+    );
+    pool.stop();
 }

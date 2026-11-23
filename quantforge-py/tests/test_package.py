@@ -106,7 +106,7 @@ def test_the_extension_module_is_private_and_built_for_the_stable_abi():
     assert extension.parent == pathlib.Path(quantforge_py.__file__).parent
 
 
-def test_the_extension_module_holds_five_private_entries_which_the_package_does_not_publish():
+def test_the_extension_module_holds_six_private_entries_which_the_package_does_not_publish():
     private = [name for name in vars(_native) if name.startswith("_") and not name.startswith("__")]
     assert sorted(private) == [
         # A backtest as a host that embeds Python runs one, for the package's
@@ -119,6 +119,9 @@ def test_the_extension_module_holds_five_private_entries_which_the_package_does_
         "_equity_columns",
         "_numpy",
         "_pandas",
+        # The worker a server runs Python bundles in, which
+        # `quantforge_py._worker` starts.
+        "_run_worker",
         "_trade_columns",
     ]
     for name in private:
@@ -129,6 +132,7 @@ def test_the_extension_module_holds_five_private_entries_which_the_package_does_
         "(result, /)",
         "()",
         "()",
+        "(frames)",
         "(result, /)",
     ]
     # It takes what the published function takes.

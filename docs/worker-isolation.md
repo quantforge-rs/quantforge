@@ -1,10 +1,16 @@
 # Worker isolation
 
-`serve run` runs every backtest job in a worker process of its own: a
-process of the same binary, started as `quantforge worker`, that runs the
-one job it is handed and is then killed. This page says what a worker gets,
-what limits it runs within, what each operating system enforces of them,
-and what nothing enforces yet. The code is `src/server/workers/`.
+`serve run` runs every backtest job in a worker process of its own, that
+runs the one job it is handed and is then killed: the Python interpreter
+`--job-python` names, running the worker of the `quantforge_py` installed
+beside it, which runs the job's strategy bundle
+([python-worker.md](python-worker.md)); or, without one, a process of the
+same binary, started as `quantforge worker`, which runs no bundle and fails
+each job as it starts. Both are the same worker, compiled into the binary
+and into the package: the same frames, limits and sandbox. This page says
+what a worker gets, what limits it runs within, what each operating system
+enforces of them, and what nothing enforces yet. The code is
+`src/server/workers/`.
 
 ## One process per job
 
@@ -41,14 +47,18 @@ Only what its job needs:
 - **An environment with nothing of the server's in it**: only `TMPDIR`
   (`TMP` and `TEMP` on Windows), naming its scratch directory. On macOS,
   CoreFoundation, which a build with PostgreSQL support links, sets one
-  more as the worker starts, holding the user's text encoding.
+  more as the worker starts, holding the user's text encoding. A Python
+  worker also gets the variables that make a job run alike on every
+  machine, and on Windows `SYSTEMROOT`
+  ([python-worker.md](python-worker.md#what-a-worker-keeps-from-its-server)).
 - **Three pipes**: its standard input, output and error, and no other
   descriptor. Every file and socket the server opens, its SQLite database
   and its PostgreSQL connections included, is closed on exec. On Linux and
   macOS a worker also closes, before it reads or runs anything, any other
   descriptor it finds open: one its server was given without close-on-exec,
   or one another of the server's threads was still opening as the worker
-  started. It marks them to close on exec and runs itself again in place.
+  started. It marks them to close on exec and runs itself again in place;
+  a Python worker closes them before anything else runs.
 
 A worker never sees the store, its URL or its credentials. The server reads
 everything a job runs on and writes how the job ended; a worker only answers
@@ -99,7 +109,9 @@ files landlock`. In detail:
 - **Files** (Landlock, Linux 5.13 and later, where the kernel enables it):
   a worker can open, create, change or run nothing outside its scratch
   directory: not another job's scratch directory, not the server's database
-  file, not `/etc`. On Linux 6.7 and later Landlock also refuses its TCP
+  file, not `/etc`. A Python worker may also read, and never change, the
+  files of its interpreter, its environment and its import path, and the
+  system's libraries, which a module its job imports may still load. On Linux 6.7 and later Landlock also refuses its TCP
   connections and binds, and on 6.12 and later it keeps its signals and
   abstract Unix sockets inside the sandbox, so a job cannot signal the
   server. A kernel without Landlock enforces no file guard, and
@@ -155,8 +167,11 @@ A server and its workers speak in frames of a four-byte big-endian length
 and that many bytes of JSON. They are no part of the protocol: a server only
 ever speaks to workers of its own build, and the first frame from each side
 names its build, so a worker refuses a server of another. A server sends
-`setup`, and the worker answers `ready` with what it enforced; the job
-follows as `job` and its `candles`, and the worker answers `finished` once.
+`setup`, naming what its workers run: no runtime, the tests' synthetic
+workloads, or Python bundles with the packages a bundle may import. The
+worker answers `ready` with what it enforced and the runtime it offers; the
+job follows as `job`, with the bundle's entry, parameters and declared
+packages, and its `candles`, and the worker answers `finished` once.
 
 A backtest that ran to its end sends its closed trades and its equity curve
 before `finished`, as `trades` and `equity` frames of rows, and its summary
@@ -191,4 +206,5 @@ run into before any user code runs in a worker; one runs the engine on a
 strategy built into QuantForge, so that a job ends with a result as a real
 one will; and one writes to its log, a few lines or many times what a log
 keeps, as fast as its worker takes them. `serve run` never starts its
-workers in that mode.
+workers in that mode. The Python package's tests run the Python worker
+through a real `serve run` ([python-worker.md](python-worker.md#testing-it)).

@@ -18,7 +18,10 @@ arrays and back ([candles as NumPy arrays](python-numpy.md)), and candles
 and a backtest's result are given as pandas DataFrames
 ([candles and results as pandas DataFrames](python-pandas.md)). The candles
 themselves are read from the store the command line wrote, SQLite or
-PostgreSQL, by `CandleReader` ([the candle reader](python-reader.md)).
+PostgreSQL, by `CandleReader` ([the candle reader](python-reader.md)). A
+QuantForge server runs strategy bundles in workers that are a Python
+interpreter with the package installed, through the same bindings
+([the Python worker](python-worker.md)).
 
 ## Contents
 
@@ -292,8 +295,8 @@ adds nothing to a run.
 
 | Host | The engine's thread | A callback that fails |
 | --- | --- | --- |
-| Python: `run_backtest` | The thread that called, attached throughout | Raises its own exception, in the caller |
-| One that embeds Python: a server's worker, the command line | A thread of the host's own, attached once around the run and detached while the engine computes | Is the engine's error, with the traceback in its text |
+| Python: `run_backtest`, and a server's worker, which is a Python interpreter | The thread that called, attached throughout | Raises its own exception, in the caller; a worker fails its job with it, its traceback in the job's log |
+| One that embeds Python: the command line | A thread of the host's own, attached once around the run and detached while the engine computes | Is the engine's error, with the traceback in its text |
 
 **A host that embeds Python attaches its engine thread once, around the
 whole run,** and detaches inside it:
@@ -317,13 +320,19 @@ reads its arguments, runs the engine on the calling thread through the
 adapter, and raises what a callback raised, or what the engine refused in
 the engine's words ([running a backtest](python-types.md#running-a-backtest)).
 
-**The other kind of host is not built yet:** a server's worker and the
-command line run a Python strategy with the stories that embed Python
-([what is left](#what-is-left)). Until then the extension module holds one
-private entry in their place, `quantforge_py._native._embedded_backtest`,
-which takes what `run_backtest` takes and runs the engine as such a host
-does. The package's own tests reach that kind of host through it, and hold
-both to the same cases.
+**A server's worker runs a bundle as `run_backtest` runs a strategy:** on
+the worker's main thread, which stays attached, through the same adapter.
+It is the interpreter the server was given, running the package's private
+worker, `quantforge_py._worker`, which imports the bundle's strategy and
+builds it in the runtime every host of a bundle shares
+([the Python worker](python-worker.md)).
+
+**The other kind of host is not built yet:** the command line runs a Python
+strategy with the story that embeds Python ([what is left](#what-is-left)).
+Until then the extension module holds one private entry in its place,
+`quantforge_py._native._embedded_backtest`, which takes what `run_backtest`
+takes and runs the engine as such a host does. The package's own tests
+reach that kind of host through it, and hold both to the same cases.
 
 ## Layout
 
@@ -341,7 +350,9 @@ quantforge-py/
 ├── python/
 │   └── quantforge_py/
 │       ├── __init__.py     the package: publishes the extension module's names, and the four functions of the module beside it
-│       └── _frames.py      candles and a backtest's result as pandas DataFrames, and a frame of candles as a batch: written in Python, with pandas' own calls
+│       ├── _frames.py      candles and a backtest's result as pandas DataFrames, and a frame of candles as a batch: written in Python, with pandas' own calls
+│       ├── _runtime.py     the runtime a strategy bundle runs in, in Python: the environment a worker offers, a bundle's strategy imported from its files and built from its parameters, what its own code may import, its lines and its failures
+│       └── _worker.py      the worker a QuantForge server runs Python bundles in, `python -m quantforge_py._worker`: what the server gave it closed, its frames moved off standard output, then the extension's worker
 ├── src/
 │   ├── adapter.rs          the engine's Strategy over a Python object: a thread attached for each callback, a failure with its traceback
 │   ├── arrays.rs           a batch's columns as NumPy arrays, and arrays as a batch: what crosses exactly, what as a float64, and what is refused
@@ -363,10 +374,13 @@ quantforge-py/
 │   │   ├── range.rs        the bounds of a range of candles: an int of milliseconds, a datetime with a time zone or RFC 3339 text, each as the engine's millisecond
 │   │   └── settings.rs     which store a reader opens: the command line's settings, from the reader's arguments and the variables behind them, refused by where a value came from and never by the value
 │   ├── run.rs              run_backtest: a run's arguments read, the market of the run settled, the engine run on the calling thread, and what it refused raised in its words
+│   ├── runtime.rs          the runtime a strategy bundle runs in, the one path every host takes: the bundle's strategy as the engine drives it, and a strategy that failed worded with its traceback
 │   ├── strategy.rs         Strategy, StrategyContext and TargetPosition: the class a strategy derives from, what its callbacks are handed, what they hand back
-│   └── trade.rs            ClosedTrade: one closed round trip, with the venue's order IDs as text
+│   ├── trade.rs            ClosedTrade: one closed round trip, with the venue's order IDs as text
+│   └── worker.rs           the worker a server runs Python bundles in: the server's own frames, limits and sandbox, the environment it offers, what its job writes taken into the job's log
 └── tests/
     ├── conftest.py         what the tests share: the checkout's manifests, the installed distribution, how a page and a refusal are read, how a strategy is run on either host, how a result is compared with a fixture's, and where a store lives on each backend
+    ├── jobs.py             what the job tests share: a `serve run` whose workers are this interpreter, on a store of either backend, bundles as their canonical tar, the job routes spoken to with the standard library alone, and a result's Arrow files read back as text
     ├── stores.py           what the reader's tests share: stores the quantforge command line wrote from an exchange that answers on this machine, a SQLite file and a PostgreSQL database of its own, and the server spoken to with the standard library alone
     ├── test_backtest.py    a backtest's config, a closed trade, an equity point and a result
     ├── test_candles.py     a candle, and a batch of candles by its candles and by its columns, with the market it names
@@ -389,11 +403,13 @@ quantforge-py/
     ├── test_reader_stores.py  what the reader reads on each backend, from stores the command line wrote: every candle digit for digit and oldest first, a range in each way a time is written, the sentence for a range that held nothing, product lines kept apart, and a store it refuses and leaves as it was
     ├── test_repository.py  this page, the readme and the manifests, held to the package
     ├── test_run_backtest.py  run_backtest: what it takes, the order it checks that in, the market a batch names, what the engine refuses, and that a run repeats
+    ├── test_runtime.py     the runtime a bundle runs in, in this process: its strategy built from its entry and its parameters, what its own code may import and what quantforge_py imports for it, every refusal and its traceback, its lines, and what a worker offers
     ├── test_strategy.py    a target, a context, and the class a strategy derives from
     ├── test_strategy_cases.py  the strategy boundary's shared cases: a Python strategy called and obeyed as the engine's own is
     ├── test_strategy_failures.py  a callback that raises or returns what it may not, a strategy's name, and what is no strategy
     ├── test_strategy_hosts.py  the thread a callback runs on, the interpreter it holds, and a thread's own state from bar to bar
-    └── test_types_page.py  the page of the types, held to the package
+    ├── test_types_page.py  the page of the types, held to the package
+    └── test_worker_jobs.py  bundles run by a server's workers: the goldens as a bundle on either backend, digit for digit; a raising strategy's traceback in its job's log; a package not on offer refused at upload and submission, and an import refused as it runs; what a strategy writes; a worker per job, holding nothing of its server's store; and how long a job takes to reach its first bar
 ```
 <!-- end: layout -->
 
@@ -620,6 +636,20 @@ They hold the installed package to the checkout they are in:
   interpreter, and carried into a forked process. And every table and
   example of [python-reader.md](python-reader.md), its PostgreSQL commands
   among them.
+- **The worker** (`test_worker_jobs.py`, `test_runtime.py`): strategy
+  bundles run by a `quantforge serve run` whose workers are the
+  interpreter the tests run on, the binary the reader's tests run, on a
+  store of either backend. The goldens' SMA cross as a bundle makes their
+  trades, equity curve and summary digit for digit; a strategy that raises
+  fails its job with its traceback in the job's log; a package the server
+  does not offer is refused as a bundle is uploaded and as a job is
+  submitted, and an import a bundle may not make as it runs; what a
+  strategy writes is its job's log; every job has a worker of its own,
+  whose environment, parameters, traceback and log hold nothing of the
+  store's URL; and how long a job takes to reach its first bar is measured
+  and printed. Then the runtime in the test's own process: every import
+  rule and every refusal, word for word, and what a worker offers
+  ([the Python worker](python-worker.md#testing-it)).
 - **The page of the types** (`test_types_page.py`): every table of
   [python-types.md](python-types.md), every signature, every refusal it
   shows, and its examples, which run as they are written.
@@ -768,6 +798,6 @@ The spikes under `spikes/` are workspaces of their own, as before.
 | What | Story |
 | --- | --- |
 | The goldens reproduced from candles read out of each store, and by a server's job | QUA-458 |
-| A Python strategy run by a server's worker and by the command line | QUA-353, QUA-461 |
+| A Python strategy run by the command line | QUA-461 |
 | Type stubs and the `py.typed` marker | QUA-471 |
 | The release to PyPI, and whether it carries a source distribution | QUA-476 |

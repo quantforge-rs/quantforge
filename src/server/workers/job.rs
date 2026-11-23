@@ -106,11 +106,19 @@ pub(super) fn run(
 /// sent, to be kept open until the job ends.
 fn send(mut stdin: ChildStdin, input: JobInput) -> io::Result<JoinHandle<io::Result<ChildStdin>>> {
     let manifest = input.bundle.manifest();
+    let entry = manifest.entry();
     let job = JobFrame {
         job_id: input.job_id.to_string(),
         submission: input.submission,
-        entry: manifest.entry().to_string(),
+        entry: entry.to_string(),
+        module: entry.module().to_string(),
+        class: entry.class().to_string(),
         params: manifest.params().as_map().clone(),
+        deps: manifest
+            .deps()
+            .iter()
+            .map(|(name, version)| (name.to_string(), version.to_string()))
+            .collect(),
         bars: u64::try_from(input.candles.len()).unwrap_or(u64::MAX),
     };
     let candles = input.candles;

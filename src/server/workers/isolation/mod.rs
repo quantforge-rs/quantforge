@@ -10,7 +10,7 @@ mod unix;
 
 use std::fmt;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -96,9 +96,10 @@ pub(super) struct Limits {
 /// Puts the limits and the sandbox on this process, and reports what held.
 /// The process must have no thread but the caller: a sandbox covers the
 /// thread that sets it up and the threads it starts afterwards. `scratch`
-/// is the only directory the sandbox leaves it.
+/// is the only directory the sandbox leaves it to write, and `readable`
+/// the others it may read: an interpreter's own files.
 #[cfg(target_os = "linux")]
-pub(super) fn isolate(limits: Limits, scratch: &Path) -> Posture {
+pub(super) fn isolate(limits: Limits, scratch: &Path, readable: &[PathBuf]) -> Posture {
     unix::no_core_dumps();
     // Failing, it leaves the worker's /proc open to its user's processes,
     // which Landlock closes anyway where the kernel has it.
@@ -106,7 +107,7 @@ pub(super) fn isolate(limits: Limits, scratch: &Path) -> Posture {
     let cpu = unix::limit_cpu(limits.cpu_secs);
     let memory = unix::limit_memory(limits.memory_bytes);
     // Landlock before seccomp, which leaves its calls alone anyway.
-    let files = linux::confine_files(scratch);
+    let files = linux::confine_files(scratch, readable);
     let network = linux::refuse_sockets();
     Posture {
         cpu,
@@ -119,7 +120,7 @@ pub(super) fn isolate(limits: Limits, scratch: &Path) -> Posture {
 /// Puts the limits on this process, and reports what held: a CPU-time
 /// limit only.
 #[cfg(all(unix, not(target_os = "linux")))]
-pub(super) fn isolate(limits: Limits, _scratch: &Path) -> Posture {
+pub(super) fn isolate(limits: Limits, _scratch: &Path, _readable: &[PathBuf]) -> Posture {
     unix::no_core_dumps();
     let os = std::env::consts::OS;
     Posture {
@@ -133,7 +134,7 @@ pub(super) fn isolate(limits: Limits, _scratch: &Path) -> Posture {
 /// Reports that nothing holds: the process profile has no guard here but
 /// the wall clock, which the server keeps.
 #[cfg(not(unix))]
-pub(super) fn isolate(_limits: Limits, _scratch: &Path) -> Posture {
+pub(super) fn isolate(_limits: Limits, _scratch: &Path, _readable: &[PathBuf]) -> Posture {
     let not = |what: &str| {
         Guard::not(format!(
             "the process profile has no {what} on {}",

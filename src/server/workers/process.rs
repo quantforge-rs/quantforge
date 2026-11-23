@@ -1,6 +1,8 @@
-//! A worker's process: started from this binary with nothing of the
-//! server's but three pipes, its frames and the end of its standard error
-//! read on threads of their own, and, once it stops, why. On Unix a worker
+//! A worker's process: started from this binary, or from the Python
+//! interpreter Python bundles run on, with nothing of the server's but
+//! three pipes and the variables its program names, its frames and the end
+//! of its standard error read on threads of their own, and, once it stops,
+//! why. On Unix a worker
 //! is killed with its process group, so that a process it started goes too
 //! unless it left the group, which the seccomp filter refuses on Linux
 //! where it holds; on Windows only the worker itself is killed.
@@ -66,6 +68,7 @@ pub(super) fn start(
     command
         .args(&program.args)
         .env_clear()
+        .envs(program.env.iter().map(|(name, value)| (name, value)))
         .current_dir(&scratch)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

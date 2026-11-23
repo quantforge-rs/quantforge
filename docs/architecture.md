@@ -431,7 +431,7 @@ src/
     │   │   └── tests.rs        numbering and cursors, what a log drops and how it says so, its end and its stored form
     │   └── worker.rs           JobWorker: what runs a job, its cancel, and the worker with no runtime
     ├── workers/                the processes that run jobs, one per job, and what each may reach
-    │   ├── mod.rs              the boundary, and what each operating system enforces of it
+    │   ├── mod.rs              the boundary, what each operating system enforces of it, and the packages a Python bundle may import
     │   ├── pool.rs             WorkerPool: workers started ahead of jobs, each killed after its one job
     │   ├── config.rs           what a pool starts with, and what a job's run on it answers
     │   ├── job.rs              one job's run: its bundle in scratch, its frames sent, its limits watched, what it says logged
@@ -444,7 +444,8 @@ src/
     │   ├── frames/             its unit tests, beside it for the line budget
     │   │   └── tests.rs        a frame as bytes, read back as written or refused, and the JSON of what a worker says
     │   ├── scratch.rs          the scratch directories: owner-only, removed with their worker
-    │   ├── child.rs            the worker's side: setup, its limits and sandbox, the job, its end
+    │   ├── child.rs            the worker's side: setup, its runtime readied, its limits and sandbox, the job, its end
+    │   ├── runtime.rs          WorkerRuntime: what a worker runs its job in, readied before the sandbox, and the job as it holds it; the runtime quantforge_py compiles runs Python bundles
     │   ├── report.rs           Reporter: a job's lines and progress, said as frames while it runs
     │   ├── backtest.rs         the engine's run over a job's candles in the worker, its progress, and its result as rows
     │   ├── synthetic.rs        the tests' workloads, which run into each limit in place of a strategy

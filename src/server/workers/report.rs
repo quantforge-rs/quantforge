@@ -4,6 +4,7 @@
 //! written the server has gone, nothing more is said, and the worker's
 //! watch on its input ends the process.
 
+use std::fmt;
 use std::io::Write;
 
 use super::frames::{self, FromWorker, LINE_BYTES_PER_FRAME};
@@ -11,14 +12,16 @@ use crate::protocol::jobs::LogLevel;
 use crate::server::jobs::start_of;
 
 /// A job's voice: the worker's output, for as long as its server reads it.
-pub(super) struct Reporter<'a> {
+/// Each frame is written whole and flushed before the call returns.
+pub struct Reporter<'a> {
     output: &'a mut (dyn Write + Send),
     /// Set once a frame could not be written.
     lost: bool,
 }
 
 impl<'a> Reporter<'a> {
-    pub(super) fn new(output: &'a mut (dyn Write + Send)) -> Self {
+    /// The voice of a job whose worker writes its frames to `output`.
+    pub fn new(output: &'a mut (dyn Write + Send)) -> Self {
         Self {
             output,
             lost: false,
@@ -27,7 +30,7 @@ impl<'a> Reporter<'a> {
 
     /// Writes a line to the job's log. A line longer than a frame carries
     /// is cut to its start, between two characters, and says by how much.
-    pub(super) fn line(&mut self, level: LogLevel, message: &str) {
+    pub fn line(&mut self, level: LogLevel, message: &str) {
         let sent = start_of(message, LINE_BYTES_PER_FRAME);
         self.send(&FromWorker::Log {
             level,
@@ -37,7 +40,7 @@ impl<'a> Reporter<'a> {
     }
 
     /// Says that the strategy has been handed `bars_done` of the job's bars.
-    pub(super) fn progress(&mut self, bars_done: u64) {
+    pub fn progress(&mut self, bars_done: u64) {
         self.send(&FromWorker::Progress { bars_done });
     }
 
@@ -45,6 +48,14 @@ impl<'a> Reporter<'a> {
         if !self.lost && frames::write(&mut self.output, frame).is_err() {
             self.lost = true;
         }
+    }
+}
+
+impl fmt::Debug for Reporter<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Reporter")
+            .field("lost", &self.lost)
+            .finish_non_exhaustive()
     }
 }
 

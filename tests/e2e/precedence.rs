@@ -631,6 +631,42 @@ fn job_limit_flags_beat_their_variables_and_the_variables_beat_the_defaults() {
 }
 
 #[test]
+fn job_python_flag_beats_its_variable_and_an_interpreter_that_is_no_file_is_refused_first() {
+    // Neither path is there: the refusal names the one that was read, and
+    // comes before the store is created.
+    let bed = TestBed::new();
+    let (flag, variable) = (bed.dir().join("flag-python"), bed.dir().join("env-python"));
+    for (given_flag, given_variable, named) in [
+        (Some(&flag), Some(&variable), &flag),
+        (None, Some(&variable), &variable),
+    ] {
+        let mut cmd = serve_cmd(&bed);
+        if let Some(path) = given_variable {
+            cmd.env("QF_JOB_PYTHON", path);
+        }
+        cmd.args(SERVE_RUN);
+        if let Some(path) = given_flag {
+            cmd.arg("--job-python").arg(path);
+        }
+        cmd.assert()
+            .code(1)
+            .stderr(predicate::str::contains(format!(
+                "the Python interpreter for jobs, {}, is not a file: set --job-python or \
+                 QF_JOB_PYTHON to the interpreter of the environment jobs run in",
+                named.display()
+            )));
+        assert!(
+            !bed.db_path().exists(),
+            "an interpreter that is no file created a database"
+        );
+    }
+
+    // Neither given, the workers run no bundle.
+    let served = Served::start(&bed);
+    assert_eq!(served.job_runtime, "none");
+}
+
+#[test]
 fn an_exported_but_empty_variable_never_falls_back_to_the_default() {
     // clap rejects the empty path before anything is opened or created.
     let bed = TestBed::new();
@@ -745,4 +781,19 @@ fn an_exported_but_empty_variable_never_falls_back_to_the_default() {
             "an empty {variable} created a database"
         );
     }
+
+    // An empty interpreter is none, and never the server running no bundle.
+    let bed = TestBed::new();
+    let held = held_port();
+    let mut cmd = serve_cmd(&bed);
+    cmd.env("QF_JOB_PYTHON", "")
+        .args(SERVE_RUN)
+        .args(["--listen", &address_of(&held)]);
+    cmd.assert().code(2).stderr(predicate::str::contains(
+        "a value is required for '--job-python <PATH>'",
+    ));
+    assert!(
+        !bed.db_path().exists(),
+        "an empty QF_JOB_PYTHON created a database"
+    );
 }

@@ -141,4 +141,6 @@ def test_the_distribution_brings_the_package_and_nothing_beside_it(distribution,
             "quantforge_py/__init__.py",
             "quantforge_py/_frames.py",
             f"quantforge_py/{extension}",
+            "quantforge_py/_runtime.py",
+            "quantforge_py/_worker.py",
         ]

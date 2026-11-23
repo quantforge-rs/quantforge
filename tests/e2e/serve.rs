@@ -36,6 +36,8 @@ pub(crate) struct Served {
     pub(crate) job_limits: String,
     /// What it says its job workers enforce.
     pub(crate) worker_isolation: String,
+    /// What it says its job workers run bundles on.
+    pub(crate) job_runtime: String,
     pub(crate) address: SocketAddr,
 }
 
@@ -93,12 +95,14 @@ impl Served {
             job_concurrency: String::new(),
             job_limits: String::new(),
             worker_isolation: String::new(),
+            job_runtime: String::new(),
             address: SocketAddr::from(([127, 0, 0, 1], 0)),
         };
         served.storage = served.next("storage");
         served.job_concurrency = served.next("job_concurrency");
         served.job_limits = served.next("job_limits");
         served.worker_isolation = served.next("worker_isolation");
+        served.job_runtime = served.next("job_runtime");
         let url = served.next("listening");
         served.address = url
             .strip_prefix("http://")
@@ -184,6 +188,8 @@ pub(crate) fn get(address: SocketAddr, path: &str) -> (u16, String) {
 fn serve_run_says_where_it_listens_and_answers_health_and_version(bed: &TestBed) {
     let mut served = Served::start(bed);
     assert_eq!(served.storage, bed.storage_text());
+    // No interpreter was given: the workers run no bundle.
+    assert_eq!(served.job_runtime, "none");
     assert_eq!(get(served.address, "/healthz"), (200, "ok".to_string()));
     let version = format!(
         r#"{{"version":"{}","proto_version":{},"min_supported":{}}}"#,

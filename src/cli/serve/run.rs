@@ -7,19 +7,21 @@
 //! budget, with as many calls at the store at once as its pool has
 //! connections. Jobs run `--job-concurrency` at a time, each in a worker
 //! process of its own, started ahead of it and held to `--job-cpu-secs`,
-//! `--job-memory-mib` and `--job-wall-secs`; this build's workers have no
-//! runtime, so each job fails as it starts.
+//! `--job-memory-mib` and `--job-wall-secs`. The workers are the Python
+//! interpreter `--job-python` names, which runs each job's bundle; without
+//! it they have no runtime, and each job fails as it starts.
 
 use crate::cli::context::AppContext;
 use anyhow::{Context, Result, bail};
 use clap::Args;
 use quantforge::server::{
-    self, Guard, History, HistoryLimits, JobLimits, Jobs, LogLimits, PoolConfig, ServerStore,
-    StoreLimits, WorkerLimits, WorkerMode, WorkerPool, WorkerProgram,
+    self, Guard, History, HistoryLimits, JobLimits, JobWorker, Jobs, LogLimits, PoolConfig,
+    ServerStore, StoreLimits, WorkerLimits, WorkerMode, WorkerPool, WorkerProgram,
 };
 use quantforge::{StorageSettings, StoreOwner};
 use std::net::SocketAddr;
 use std::num::NonZeroUsize;
+use std::path::PathBuf;
 use std::pin::pin;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -27,6 +29,9 @@ use tracing::info;
 
 /// Help section for the limits on each job.
 const JOB_LIMITS_HEADING: &str = "Job limits";
+
+/// Help section for what runs each job.
+const JOB_RUNTIME_HEADING: &str = "Job runtime";
 
 #[derive(Args, Debug)]
 pub(crate) struct ServeRunArgs {
@@ -84,6 +89,30 @@ pub(crate) struct ServeRunArgs {
         value_parser = clap::value_parser!(u64).range(1..)
     )]
     job_wall_secs: u64,
+
+    /// Python interpreter that runs each job's bundle, with quantforge-py installed beside it; omitted, jobs fail as they start
+    #[arg(
+        long,
+        env = "QF_JOB_PYTHON",
+        help_heading = JOB_RUNTIME_HEADING,
+        value_name = "PATH"
+    )]
+    job_python: Option<PathBuf>,
+}
+
+impl ServeRunArgs {
+    /// Refuses, before anything is opened, an interpreter that is no file.
+    pub(crate) fn check(&self) -> Result<()> {
+        match &self.job_python {
+            Some(python) if !python.is_file() => bail!(
+                "the Python interpreter for jobs, {}, is not a file: set --job-python or \
+                 QF_JOB_PYTHON to the interpreter of the environment jobs run in, such as a \
+                 virtualenv's bin/python",
+                python.display()
+            ),
+            _ => Ok(()),
+        }
+    }
 }
 
 pub(crate) async fn handle_serve_run(ctx: &AppContext, args: ServeRunArgs) -> Result<()> {
@@ -121,14 +150,25 @@ pub(crate) async fn handle_serve_run(ctx: &AppContext, args: ServeRunArgs) -> Re
     // Before any worker starts: a worker of the same user must not read the
     // store's URL or credentials out of this process.
     server::protect_server().context("failed to close the server to its job workers")?;
-    let program = WorkerProgram::this_binary()
-        .context("failed to find this binary to start the job workers from")?;
+    let (program, mode) = match &args.job_python {
+        Some(python) => (
+            WorkerProgram::python(python).with_context(|| {
+                format!("failed to find the Python interpreter {}", python.display())
+            })?,
+            WorkerMode::python(),
+        ),
+        None => (
+            WorkerProgram::this_binary()
+                .context("failed to find this binary to start the job workers from")?,
+            WorkerMode::NoRuntime,
+        ),
+    };
     let pool = tokio::task::spawn_blocking(move || {
         WorkerPool::start(PoolConfig {
             program,
             size: job_concurrency,
             limits,
-            mode: WorkerMode::NoRuntime,
+            mode,
             scratch_parent: std::env::temp_dir(),
         })
     })
@@ -136,6 +176,22 @@ pub(crate) async fn handle_serve_run(ctx: &AppContext, args: ServeRunArgs) -> Re
     .context("failed to start the job workers")?
     .context("failed to start the job workers")?;
     let posture = pool.posture().clone();
+    // What the workers run bundles on: `python 3.12, engine 0.3.0, numpy
+    // 2.1.3, pandas 2.2.3`, each package a bundle may import at every
+    // version offered, or `none`.
+    let runtime = match pool.runtime() {
+        Some(runtime) => {
+            let mut parts = vec![
+                format!("python {}", runtime.python),
+                format!("engine {}", runtime.engine),
+            ];
+            for (name, versions) in &runtime.packages {
+                parts.extend(versions.iter().map(|version| format!("{name} {version}")));
+            }
+            parts.join(", ")
+        }
+        None => "none".to_string(),
+    };
     for (guard, held) in [
         ("cpu", &posture.cpu),
         ("memory", &posture.memory),
@@ -172,6 +228,7 @@ pub(crate) async fn handle_serve_run(ctx: &AppContext, args: ServeRunArgs) -> Re
     println!("job_concurrency: {}", jobs.concurrency());
     println!("job_limits: {limits}");
     println!("worker_isolation: {posture}");
+    println!("job_runtime: {runtime}");
     println!("listening: http://{address}");
 
     let (begin_shutdown, shutdown_begun) = oneshot::channel::<()>();
