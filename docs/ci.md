@@ -12,6 +12,7 @@ conformance suite runs live against the exchanges on a schedule
 - [Required checks](#required-checks)
 - [PostgreSQL](#postgresql)
 - [The Python package](#the-python-package)
+- [The wheels](#the-wheels)
 - [Running them locally](#running-them-locally)
 - [How long they take](#how-long-they-take)
 - [What they are evidence for](#what-they-are-evidence-for)
@@ -25,6 +26,8 @@ conformance suite runs live against the exchanges on a schedule
 | `postgres 16`, `postgres 17`, `postgres 18` | Linux | The whole suite against each PostgreSQL major [ADR 0001](adr/0001-postgres-client-strategy.md) supports: see [PostgreSQL](#postgresql) |
 | `storage` | Linux | Passes only when every `postgres` leg passed |
 | `python` | Linux | The Python package, `quantforge-py/`: clippy for its crate with and without the default features, `cargo check` with Rust 1.85, then the wheel maturin builds, installed with its extras, NumPy and pandas, and tested on Python 3.11 and 3.15, on the oldest NumPy and the oldest pandas the extras take, with NumPy alone, and without the extras, the SQLite-only wheel, and the in-place install; the `quantforge` binary is built for the candle reader's tests, which read stores it wrote, on SQLite and on the job's PostgreSQL server: see [The Python package](#the-python-package) |
+| `wheel (ubuntu-latest)`, `wheel (macos-latest)`, `wheel (windows-latest)` | Each platform | The Python package's wheel for the platform, built for release as it would be published, then installed with its extras and tested on Python 3.11 and 3.15, the candle reader's tests on SQLite, and on Linux on the job's PostgreSQL server too; the wheel that passed is kept with the run: see [The wheels](#the-wheels) |
+| `wheels` | Linux | Passes only when every `wheel` leg passed |
 
 Every check runs on every pull request; none has a path filter. A pull
 request that changes only documentation can still break the PostgreSQL
@@ -58,6 +61,8 @@ Branch protection on `main` requires these checks by name:
 - `package`
 - `storage`, and `postgres 16`, `postgres 17` and `postgres 18` beside it
 - `python`
+- `wheels`, and `wheel (ubuntu-latest)`, `wheel (macos-latest)` and
+  `wheel (windows-latest)` beside it
 - `analyze` and `CodeQL`, from `.github/workflows/codeql.yml`
 - `scan` and `gitleaks`, from `.github/workflows/gitleaks.yml`
 - `CodeRabbit`
@@ -85,6 +90,11 @@ it would need no change to branch protection. Branch protection names the
 three legs as well, so a major that is dropped has to be taken out of
 branch protection in the same change: a required check that no job reports
 is waited for forever.
+
+**`wheels` stands for the `wheel` legs** in the same way: it passes only
+when every leg passed, and runs even when one failed or was cancelled.
+Branch protection names the three legs beside it, so a platform dropped
+from the matrix is taken out of branch protection in the same change.
 
 A renamed job is waited for the same way: every merge waits until its new
 name replaces the old one in branch protection. That is why the runner of
@@ -143,7 +153,8 @@ Two things stay off CI:
   stops the server with `pg_ctl` and needs its data directory, so it runs on
   demand ([storage-conformance.md](storage-conformance.md#postgresql)).
 - **PostgreSQL on macOS and Windows:** GitHub runs service containers on
-  Linux only.
+  Linux only, so the `wheel` legs there test the candle reader on SQLite
+  alone.
 
 ## The Python package
 
@@ -219,9 +230,77 @@ side of them.
 maturin, pytest, NumPy and pandas come from PyPI, at the versions
 `pyproject.toml` asks for, and NumPy and pandas as wheels or not at all:
 the script installs them into every virtualenv that has them itself, the
-in-place install's among them, and compiles neither. The wheels are built
-in the `dev` profile, on Linux only: release wheels for Linux, macOS and
-Windows are QUA-474's.
+in-place install's among them, and compiles neither. Its wheels are built
+in the `dev` profile, on Linux only: the wheel a release carries, for each
+platform, is the `wheel` legs' ([The wheels](#the-wheels)).
+
+## The wheels
+
+The `wheel` legs build [the Python package](python-package.md)'s wheel for
+each platform as a release would publish it, and test it on that platform.
+`python` tests a wheel built in the `dev` profile, on Linux alone; these
+test the wheels a release carries.
+
+<!-- begin: wheels -->
+| Leg | Built | For |
+| --- | --- | --- |
+| `wheel (ubuntu-latest)` | In a `manylinux_2_28` container | Linux on x86-64, with glibc 2.28 or later |
+| `wheel (macos-latest)` | On the runner | macOS on Apple silicon |
+| `wheel (windows-latest)` | On the runner | Windows on x86-64 |
+<!-- end: wheels -->
+
+Each leg runs, in order:
+
+- **The build:** `maturin build --release --compatibility pypi`, through
+  `PyO3/maturin-action`, which installs the maturin `pyproject.toml` asks
+  for. The wheel has the crate's default features, both stores, as every
+  published artifact has them, and is tagged `cp311-abi3`: one wheel for
+  every Python from 3.11 on. `--compatibility pypi` fails a wheel whose
+  tag PyPI would refuse, such as Linux's plain `linux` tag, which maturin
+  gives a wheel no manylinux takes. The Linux wheel is built in the action's
+  `manylinux_2_28` container, so that it loads on any Linux with glibc
+  2.28 or later. Its target directory, `target/wheel`, is its own: before
+  a build in the container the action removes the build scripts of the
+  directory it builds in, which the binary's build on the runner needs.
+  The leg makes `target` itself on the runner first: the container builds
+  as root, and the action gives the runner back only `target/wheel` and
+  `dist`, so a `target` the container made would stay root's, and the
+  binary's build could write nothing in it.
+- **The tests:** `scripts/python-wheel-check.sh dist <oldest> <newest>`.
+  It builds the `quantforge` binary for the candle reader's tests, then
+  installs the wheel with its two extras into a fresh virtualenv of each
+  Python and runs the package's whole suite against it, the golden parity
+  test among it. The Pythons are the oldest the package supports and the
+  newest released, as in `python`, each named by its path, since Windows
+  has no `python3.11` to name. On Windows the script runs in Git Bash.
+- **The artifact:** the wheel that passed, kept with the run as
+  `wheel-<os>`, such as `wheel-windows-latest`. A leg that fails keeps
+  none.
+
+**The Linux leg has a PostgreSQL server,** one service container of
+`postgres:18`, as `python` has, and sets `QUANTFORGE_TEST_POSTGRES_URL` and
+`QUANTFORGE_TEST_POSTGRES_REQUIRED=1`: there the wheel's reader reads the
+stores the binary wrote on both backends, and a test that could not reach
+the server fails. The macOS and Windows legs have no server, since GitHub
+runs service containers on Linux alone, and both variables are empty
+there: the reader's PostgreSQL tests skip, and the package is imported and
+tested with no database at all.
+
+**A wheel is held to the package as it is published.** The script never
+tells the tests that a wheel is the SQLite-only build, so one built
+without the `postgres` feature fails: `STORAGE_BACKENDS` has to name both
+stores (`test_package.py`), and selecting PostgreSQL has to reach for the
+server, where that build refuses it as not built (`test_reader.py`). The
+SQLite-only build is never taken for a release's wheel.
+
+The script ends by naming the wheel it tested and its SHA-256, by which a
+record in the parity matrix's [evidence ledger](parity/README.md#evidence)
+names a published file.
+
+**Nothing here waits for remote execution.** The goldens reproduced from
+candles read out of each store, run locally and as a server's job, are
+QUA-458's, which extends this workflow once remote execution is ready
+(ALG-530).
 
 ## Running them locally
 
@@ -249,9 +328,21 @@ cargo test --all-features --locked --no-fail-fast
 # here, the reader's tests run on postgresql too
 scripts/python-package-check.sh python3.11 python3.15
 
+# wheel, with maturin 1.16 or later: this platform's wheel, built for
+# release into a directory that holds no other wheel, and tested as its leg
+# tests it; with the servers of `start` up, on postgresql too
+maturin build --release --manifest-path quantforge-py/Cargo.toml --out dist
+scripts/python-wheel-check.sh dist python3.11 python3.15
+
 scripts/postgres-test-servers.sh leftovers
 scripts/postgres-test-servers.sh stop
 ```
+
+On Linux, `maturin build` builds the wheel on the machine itself, not in
+the leg's `manylinux_2_28` container, so its platform tag may differ from
+the one a release publishes. `scripts/python-wheel-check.sh` runs on Windows
+too, in Git Bash, where each interpreter is named by its path, as
+`py -0p` lists them.
 
 `start` runs the two servers on `127.0.0.1:54329` and `127.0.0.1:54330`, set
 up as in CI, and prints the four variables to export. A server of your own
@@ -290,9 +381,9 @@ At macOS's background priority, where timers run late, the suite took
 
 ## What they are evidence for
 
-The [parity matrix](parity/README.md) names this CI (as ALG-411) among the
-evidence for these capabilities. The release gate, ALG-769, turns runs into
-records in `evidence.jsonl`.
+The [parity matrix](parity/README.md) names this CI (as ALG-411, and the
+`wheel` legs as ALG-384) among the evidence for these capabilities. The
+release gate, ALG-769, turns runs into records in `evidence.jsonl`.
 
 | Capability | What runs it |
 | --- | --- |
@@ -304,6 +395,8 @@ records in `evidence.jsonl`.
 | `data.history` | `tests/e2e/history.rs`: `serve run`'s history routes read back against the store on both backends, and `both_backends_answer_byte_for_byte_alike`; the routes' own tests in `src/server/tests/` run on SQLite |
 | `config.storage`, `release.no_hidden_sqlite` | `tests/e2e/backends.rs`, and every command scenario on PostgreSQL; for Python, `test_reader.py` and `test_reader_stores.py` in `python`: an argument over its variable over the default, and no SQLite file made, opened or read where PostgreSQL is selected |
 | `release.artifact` (`sqlite-build`) | The SQLite-only lines of `checks` and `package` |
+| `release.artifact` (`wheel`) | The `wheel` legs: each platform's wheel, built as a release would publish it, passes the package's suite on that platform, the candle reader's tests on SQLite, and on Linux on PostgreSQL too; a wheel without the `postgres` feature fails it ([The wheels](#the-wheels)) |
+| `release.wheel_surface` | `test_package.py` in the `wheel` legs: each wheel publishes the names `__all__` lists and no other, none of them a webhook or a Telegram API |
 
 `data.history`'s release evidence on both exchanges is ALG-703's, and the
 server surface of `config.storage` waits for its story.

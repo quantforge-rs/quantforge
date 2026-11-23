@@ -59,6 +59,17 @@ binds, run what CI's `python` job runs, with CPython 3.11 or later:
 scripts/python-package-check.sh
 ```
 
+CI's `wheel` legs build the wheel a release carries for Linux, macOS and
+Windows, and test each on its platform. To test this platform's wheel the
+same way, after `pip install "maturin>=1.16,<2.0"`:
+
+```bash
+maturin build --release --manifest-path quantforge-py/Cargo.toml --out dist
+scripts/python-wheel-check.sh dist
+```
+
+[docs/ci.md](docs/ci.md#the-wheels) says what each leg builds and runs.
+
 ## Commit style
 
 Small, reviewable commits are preferred.

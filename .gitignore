@@ -19,3 +19,6 @@ __pycache__/
 /quantforge-py/python/quantforge_py/*.pyd
 .venv/
 .pytest_cache/
+# The wheel a release build leaves for scripts/python-wheel-check.sh, as CI's
+# `wheel` legs build it (docs/ci.md).
+/dist/
