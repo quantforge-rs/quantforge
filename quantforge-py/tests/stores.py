@@ -517,9 +517,9 @@ connection.close()
 """
 
 DIE_WRITING = """
-import os, sqlite3, sys
+import json, os, sqlite3, sys
 connection = sqlite3.connect(sys.argv[1], isolation_level=None)
-mode, statements = sys.argv[2], sys.argv[3:]
+mode, statements = sys.argv[2], json.load(sys.stdin)
 if mode == "wal":
     # Frames the writer commits stay in the log, and nothing moves them
     # into the database: it is killed before it closes.
@@ -569,9 +569,14 @@ def die_writing(path: pathlib.Path, mode: str, statements: list[str]):
     """Another process writes the statements to a store's file and is
     killed: in `wal` mode after it committed them, so that its frames stay in
     the log; in `journal` mode before it committed, so that its journal
-    stays beside the database."""
+    stays beside the database.
+
+    The statements reach it on its standard input, never its command line:
+    on Windows a command line holds at most 32,767 characters, and the
+    journal's test writes 300 candles, about 70,000."""
     done = subprocess.run(
-        [sys.executable, "-I", "-c", DIE_WRITING, str(path), mode, *statements],
+        [sys.executable, "-I", "-c", DIE_WRITING, str(path), mode],
+        input=json.dumps(statements),
         capture_output=True,
         text=True,
         timeout=120,
