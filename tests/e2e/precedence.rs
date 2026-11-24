@@ -10,6 +10,11 @@
 //! absent. Each of those runs stops at the bind, on a port the test holds,
 //! so that no server is left running.
 //!
+//! `--remote-token` follows `serve run`'s order: its flag goes after
+//! `backtest`, and its variable is read only when the flag is absent. Its
+//! runs end at a server that is not QuantForge, which records the token
+//! each run sent.
+//!
 //! The renamed `--binance-base-url` and `QF_BINANCE_BASE_URL` are refused
 //! here too, from either source.
 //!
@@ -796,4 +801,121 @@ fn an_exported_but_empty_variable_never_falls_back_to_the_default() {
         !bed.db_path().exists(),
         "an empty QF_JOB_PYTHON created a database"
     );
+}
+
+/// The `Authorization` header of the one request a `--remote` run sends to
+/// a server that is not QuantForge: it answers `GET /version` with `404`,
+/// which ends the run.
+fn remote_authorization(configure: impl FnOnce(&mut Command)) -> Option<String> {
+    use std::io::{BufRead, BufReader, Write};
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a port");
+    let address = listener.local_addr().expect("its address");
+    let recorder = std::thread::spawn(move || {
+        let stream = accept_within(&listener)?;
+        let mut reader = BufReader::new(stream.try_clone().expect("the stream"));
+        let mut authorization = None;
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("a header");
+            let line = line.trim_end();
+            if line.is_empty() {
+                break;
+            }
+            if let Some((name, value)) = line.split_once(": ") {
+                if name.eq_ignore_ascii_case("authorization") {
+                    authorization = Some(value.to_string());
+                }
+            }
+        }
+        let mut stream = stream;
+        stream
+            .write_all(b"HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
+            .expect("an answer");
+        Some(authorization)
+    });
+    let bed = TestBed::new();
+    let strategy =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/golden/sma_cross.py");
+    let mut cmd = unpinned_cmd(&bed);
+    cmd.args(["--log-level", "error", "backtest", "--symbol", "BTCUSDT"])
+        .args(["--remote", &format!("http://{address}")])
+        .arg("--strategy")
+        .arg(strategy)
+        .args(["--entry", "sma_cross.py:SmaCross"]);
+    configure(&mut cmd);
+    cmd.assert()
+        .code(1)
+        .stderr(predicate::str::contains("is it a QuantForge server?"))
+        .stderr(predicate::str::contains("flag-token").not())
+        .stderr(predicate::str::contains("env-token").not());
+    recorder
+        .join()
+        .expect("the recorder")
+        .expect("the run reached the server")
+}
+
+/// The next connection to `listener`, or `None` after 30 seconds, so that a
+/// run that went elsewhere fails its test rather than hanging it.
+fn accept_within(listener: &std::net::TcpListener) -> Option<std::net::TcpStream> {
+    listener.set_nonblocking(true).expect("nonblocking");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while std::time::Instant::now() < deadline {
+        match listener.accept() {
+            Ok((stream, _)) => {
+                stream.set_nonblocking(false).expect("blocking");
+                return Some(stream);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(error) => panic!("accept: {error}"),
+        }
+    }
+    None
+}
+
+#[test]
+fn a_remote_token_over_http_to_this_machine_never_goes_through_a_proxy() {
+    let proxy = std::net::TcpListener::bind("127.0.0.1:0").expect("a port");
+    let address = format!("http://{}", proxy.local_addr().expect("its address"));
+    proxy.set_nonblocking(true).expect("nonblocking");
+    let authorization = remote_authorization(|cmd| {
+        cmd.args(["--remote-token", "flag-token"]);
+        for variable in ["HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"] {
+            cmd.env(variable, &address);
+        }
+    });
+    assert_eq!(authorization.as_deref(), Some("Bearer flag-token"));
+    assert!(proxy.accept().is_err(), "the proxy was asked");
+}
+
+#[test]
+fn remote_token_flag_beats_its_variable_and_an_empty_one_sends_none() {
+    for (flag, variable, sent) in [
+        (
+            Some("flag-token"),
+            Some("env-token"),
+            Some("Bearer flag-token"),
+        ),
+        (None, Some("env-token"), Some("Bearer env-token")),
+        (Some("flag-token"), None, Some("Bearer flag-token")),
+        (Some(""), Some("env-token"), None),
+        (None, Some("  "), None),
+        (None, None, None),
+    ] {
+        let authorization = remote_authorization(|cmd| {
+            if let Some(flag) = flag {
+                cmd.args(["--remote-token", flag]);
+            }
+            if let Some(variable) = variable {
+                cmd.env("QF_REMOTE_TOKEN", variable);
+            }
+        });
+        assert_eq!(
+            authorization.as_deref(),
+            sent,
+            "flag {flag:?}, variable {variable:?}"
+        );
+    }
 }

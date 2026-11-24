@@ -150,9 +150,12 @@ fn defined_settings() -> (Vec<Setting>, Vec<String>) {
             if id == "help" || id == "version" {
                 continue;
             }
-            let long = arg
-                .get_long()
-                .unwrap_or_else(|| panic!("argument {id} has no long flag"));
+            // A positional argument, such as a job's ID, is no setting: it
+            // has no variable and no default to document.
+            let Some(long) = arg.get_long() else {
+                assert!(arg.is_positional(), "argument {id} has no long flag");
+                continue;
+            };
             let defaults: Vec<_> = arg
                 .get_default_values()
                 .iter()
@@ -179,8 +182,11 @@ fn defined_settings() -> (Vec<Setting>, Vec<String>) {
                 default,
             });
         }
+        // A command that runs on its own counts, its subcommands or not:
+        // `backtest` runs, its subcommand optional, and holds `backtest jobs`.
         let mut subcommands = command.get_subcommands().peekable();
-        if subcommands.peek().is_none() && !path.is_empty() {
+        let runs = subcommands.peek().is_none() || !command.is_subcommand_required_set();
+        if runs && !path.is_empty() {
             leaves.push(path.to_string());
         }
         for subcommand in subcommands {

@@ -122,7 +122,23 @@ impl Bundle {
     /// directories. A symlink or anything else that is not a regular file is
     /// refused, never followed.
     pub fn from_dir(root: &Path, limits: &BundleLimits) -> Result<Self, BundleError> {
-        let collected = dir::collect(root, limits)?;
+        Self::from_dir_with(root, Vec::<(String, Vec<u8>)>::new(), limits)
+    }
+
+    /// Collects a bundle from a directory as [`Bundle::from_dir`] does, with
+    /// `extra` files given in memory beside the ones found there, such as a
+    /// manifest a builder writes. A path both name is a collision.
+    pub fn from_dir_with<P: Into<String>, C: Into<Vec<u8>>>(
+        root: &Path,
+        extra: impl IntoIterator<Item = (P, C)>,
+        limits: &BundleLimits,
+    ) -> Result<Self, BundleError> {
+        let mut collected = dir::collect(root, limits)?;
+        collected.candidates.extend(
+            extra
+                .into_iter()
+                .map(|(path, contents)| files::Candidate::read(path.into(), contents.into())),
+        );
         Self::check(collected.candidates, collected.problems, limits)
     }
 

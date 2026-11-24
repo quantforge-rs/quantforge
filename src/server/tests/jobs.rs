@@ -127,6 +127,29 @@ fn canonical_tar(files: &[(&str, &str)]) -> Vec<u8> {
 }
 
 #[tokio::test]
+async fn the_runtime_route_names_what_the_workers_run_bundles_on_or_none() {
+    let bed = Bed::new();
+    for (worker, body) in [
+        (
+            jobs_of(&bed, Admitting(runtime("3.11")), 100),
+            r#"{"runtime":{"engine":"0.3.0","python":"3.11","packages":{}}}"#,
+        ),
+        (jobs_of(&bed, NoRuntime, 100), "{}"),
+    ] {
+        let address = serve_jobs(&bed, worker).await;
+        let response = client()
+            .get(format!("http://{address}/v1/runtime"))
+            .send()
+            .await
+            .expect("a response");
+        assert_eq!(response.status(), 200);
+        assert_eq!(header(&response, CONTENT_TYPE), Some("application/json"));
+        assert_eq!(header(&response, CACHE_CONTROL), Some("no-cache"));
+        assert_eq!(response.text().await.expect("a body"), body);
+    }
+}
+
+#[tokio::test]
 async fn an_upload_is_stored_once_under_its_code_hash() {
     let bed = Bed::new();
     let address = serve_jobs(&bed, jobs_of(&bed, NoRuntime, 100)).await;

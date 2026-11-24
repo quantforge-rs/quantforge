@@ -52,6 +52,8 @@ async-trait = "0.1"
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio", "ws"] }
 clap = { version = "4", features = ["derive", "env"] }
 deadpool-postgres = { version = "0.14", optional = true }
+# Reads the WebSocket stream of a remote job's log; in the lock already.
+futures-util = { version = "0.3", default-features = false }
 hex = "0.4"
 hmac = "0.12"
 percent-encoding = "2"
@@ -70,6 +72,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal
 tokio-postgres = { version = "0.7", optional = true }
 tokio-postgres-rustls = { version = "0.14", default-features = false, features = ["ring"], optional = true }
 toml = { version = "0.8", default-features = false, features = ["parse"] }
+# The client of a remote job's log stream: the tungstenite axum's ws feature
+# already brings, so no package joins the lock for it.
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "handshake"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = "2"
@@ -103,9 +108,6 @@ predicates = "3"
 serde_json = { version = "1", features = ["raw_value"] }
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync"] }
-# The WebSocket client of the log stream's tests: the tungstenite axum's ws
-# feature already brings, so no package joins the lock for them.
-tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "handshake"] }
 tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
 
 [profile.release]

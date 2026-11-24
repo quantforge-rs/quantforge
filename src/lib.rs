@@ -9,7 +9,7 @@
 //!
 //! # Module tree
 //!
-//! Nine modules. Six of them layer innermost first: [`model`] names the
+//! Ten modules. Six of them layer innermost first: [`model`] names the
 //! domain, [`ports`] names the seams over it, [`exchange`] and [`storage`]
 //! are the adapters behind those seams, [`sdk`] is the boundary a strategy
 //! is written against, and [`engine`] drives all of them. [`automation`]
@@ -18,7 +18,7 @@
 //! [`protocol`] stands apart: it is the wire format between QuantForge
 //! instances, and it uses nothing else in the crate, so that it can become
 //! a crate of its own. [`server`] answers other instances in that format,
-//! reading the store through the ports.
+//! reading the store through the ports, and [`net`] asks them as a client.
 //!
 //! - [`model`] — market identity with its venues and product lines, the
 //!   candle grid and its validation, the columnar [`CandleBatch`], the
@@ -71,10 +71,12 @@
 //!   routes, the history they serve from the selected store, and how it
 //!   stops ([`server::serve`]); and [`server::read_signal`], which reads an
 //!   alert's body into the model's signal.
+//! - [`net`] — the client of a server's routes ([`net::client::RemoteClient`]),
+//!   which `quantforge backtest --remote` runs a bundle through.
 //!
 //! # The command tree it answers to
 //!
-//! The mirror is real but partial. Five subcommands are a shell over one
+//! The mirror is real but partial. Six commands are a shell over one
 //! library entry point each:
 //!
 //! | Command | Entry point |
@@ -84,6 +86,7 @@
 //! | `quantforge backtest` | [`BacktestEngine`] |
 //! | `quantforge trade run` | [`LiveTradeEngine`] |
 //! | `quantforge serve run` | [`server::serve`] |
+//! | `quantforge backtest --remote` | [`net::client::RemoteClient`] |
 //!
 //! `trade close` and the six `monitor` subcommands have no engine behind
 //! them: they drive the connectors and [`RunJournalStore`] directly, so that
@@ -135,7 +138,8 @@
 //!   factory, not only the registered ones;
 //! - it is the wire protocol, published for clients and servers written
 //!   outside this repository: [`protocol`] is used through its module, and
-//!   in the crate only [`server`] names it;
+//!   in the crate only [`server`] and [`net`] name it; [`net::client`], its
+//!   client, is used through its module too;
 //! - it is the futures contract, published ahead of the adapters and the
 //!   automation that will implement and use it: [`model::futures`] and
 //!   [`ports::futures`] are used through their modules, as is
@@ -159,6 +163,7 @@ pub mod automation;
 pub mod engine;
 pub mod exchange;
 pub mod model;
+pub mod net;
 pub mod ports;
 pub mod protocol;
 pub mod sdk;

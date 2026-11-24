@@ -35,6 +35,12 @@ pub(crate) const COMMANDS: &[(&str, &[&str], &str)] = &[
     ("data-validate", &["data", "validate"], "data/validate"),
     ("data-migrate", &["data", "migrate"], "data/migrate"),
     ("backtest", &["backtest"], "backtest"),
+    ("backtest-jobs", &["backtest", "jobs"], "backtest/jobs"),
+    (
+        "backtest-jobs-status",
+        &["backtest", "jobs", "status"],
+        "backtest/jobs/status",
+    ),
     ("trade", &["trade"], "trade"),
     ("trade-run", &["trade", "run"], "trade/run"),
     ("trade-close", &["trade", "close"], "trade/close"),

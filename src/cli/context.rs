@@ -278,7 +278,7 @@ fn storage_refusal(error: StorageConfigError) -> anyhow::Error {
     }
 }
 
-fn init_tracing(level: &str) -> Result<()> {
+pub(crate) fn init_tracing(level: &str) -> Result<()> {
     // The filter comes only from --log-level/QF_LOG: `try_new` never reads
     // RUST_LOG, unlike `EnvFilter::from_default_env`. The fmt layer still
     // honors NO_COLOR, an output convention rather than a setting.

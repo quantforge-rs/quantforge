@@ -35,13 +35,17 @@ use store::StoreCommand;
 use trade::TradeCommand;
 
 /// Parse the process arguments exactly like clap's `Parser::parse()`, then
-/// refuse a renamed setting and record whether a credential arrived on the
-/// command line rather than through its env fallback, and where each
-/// storage setting came from — facts the derived struct cannot carry.
+/// refuse a renamed setting and a run's flags before `backtest jobs`, and
+/// record whether a credential arrived on the command line rather than
+/// through its env fallback, and where each storage setting came from —
+/// facts the derived struct cannot carry.
 pub(crate) fn parse() -> Cli {
     let matches = command().get_matches();
     if let Some(message) = renamed_setting_error(&matches) {
         command().error(ErrorKind::UnknownArgument, message).exit();
+    }
+    if let Some(error) = backtest::refuse_run_flags(&mut command(), &matches) {
+        error.exit();
     }
     let mut cli =
         Cli::from_arg_matches(&matches).unwrap_or_else(|err| err.format(&mut command()).exit());
@@ -100,11 +104,19 @@ pub(crate) async fn run(cli: Cli) -> Result<()> {
     if cli.is_worker() {
         bail!(WORKER_ONLY);
     }
+    // A backtest on a server reads no local store and reaches no exchange:
+    // it opens neither.
+    if let Command::Backtest(args) = &cli.command {
+        if args.is_remote() {
+            context::init_tracing(&cli.log_level)?;
+            return backtest::handle_remote(cli.exchange, args).await;
+        }
+    }
     let ctx = AppContext::init(&cli)?;
 
     match cli.command {
         Command::Data { command } => data::dispatch(&ctx, command).await?,
-        Command::Backtest(args) => handle_backtest(&ctx, args)?,
+        Command::Backtest(args) => handle_backtest(&ctx, *args)?,
         Command::Trade { command } => {
             ctx.verify_environment()?;
             trade::dispatch(&ctx, command).await?
@@ -240,8 +252,8 @@ pub(crate) enum Command {
         command: DataCommand,
     },
 
-    /// Deterministic backtest using locally stored candles.
-    Backtest(BacktestArgs),
+    /// Deterministic backtest: the built-in strategy on locally stored candles, or a Python strategy bundle on a --remote server.
+    Backtest(Box<BacktestArgs>),
 
     /// Run or manually close the strategy bot.
     Trade {

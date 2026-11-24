@@ -1,8 +1,10 @@
 # Configuration
 
-Every QuantForge setting is a command-line flag. The ten global settings and
-the seven settings of `serve run` also read a `QF_*` environment variable as a
-fallback; every other per-command option is a flag only. QuantForge reads no
+Every QuantForge setting is a command-line flag. The ten global settings, the
+seven settings of `serve run` and the token of `backtest --remote` also read a
+`QF_*` environment variable as a fallback; every other per-command option is a
+flag only. A job's ID, the one argument that is no flag, is not a setting and
+is not listed below. QuantForge reads no
 other environment variable itself — the few its dependencies honor are listed
 at the end.
 
@@ -20,10 +22,10 @@ An exported variable is checked even when its flag is given: a value the
 setting rejects, such as `QF_EXCHANGE=nosuch`, fails the command until it is
 fixed or unset, whatever the flag says.
 
-`serve run`'s settings follow the same order, with two differences: their
-flags go after `serve run`, and their variables are read, and checked, only
-when the flag is absent, so `QF_LISTEN=nonsense` is ignored beside
-`--listen 127.0.0.1:9600`.
+`serve run`'s settings and `--remote-token` follow the same order, with two
+differences: their flags go after their command, and their variables are
+read, and checked, only when the flag is absent, so `QF_LISTEN=nonsense` is
+ignored beside `--listen 127.0.0.1:9600`.
 
 A variable that is exported but empty is still set, so it never falls back to
 the default:
@@ -47,7 +49,9 @@ the default:
   `QF_JOB_WALL_SECS=` and `QF_JOB_PYTHON=` (each reported against its
   flag);
 - an empty or whitespace-only API key or secret counts as missing, so commands
-  that need credentials fail with the missing-credentials error.
+  that need credentials fail with the missing-credentials error;
+- an empty or whitespace-only `--remote-token` or `QF_REMOTE_TOKEN` counts as
+  no token, and an empty flag never falls back to the variable.
 
 ## Matrix
 
@@ -93,6 +97,14 @@ Explanations belong in the Setting cell.
 | Slow SMA period of the `sma_cross` strategy | `--slow <bars>` | — | `50` | `backtest`, `trade run` |
 | Starting quote cash; a positive decimal | `--cash <decimal>` | — | `10000` | `backtest` |
 | Fee per fill in basis points; a decimal of zero or more | `--fee-bps <decimal>` | — | `10` | `backtest` |
+| QuantForge server to run the backtest on, `http://` or `https://` with a host, such as `http://127.0.0.1:9600`, optionally under a path: it runs the `--strategy` bundle on the candles it stores, within the same `--start` and `--end` a local run reads, and the report prints here. It needs `--strategy`, and refuses `--fast` and `--slow`; nothing local is opened. See [Remote backtests](#remote-backtests) | `--remote <url>` | — | none | `backtest` |
+| QuantForge server that holds the job | `--remote <url>` | — | `required` | `backtest jobs status` |
+| Token sent to the `--remote` server with every request, as `Authorization: Bearer`; no server checks one yet. Prefer the variable, since command-line values can land in shell history and process listings, and `--help` never shows its value; it goes only over `https`, or over `http` to this machine and never through a proxy then, and is refused before any request otherwise; with a token, no redirect is followed | `--remote-token <token>` | `QF_REMOTE_TOKEN` | none | `backtest`, `backtest jobs status` |
+| Python strategy to run on `--remote`: a `.py` file, bundled beside a `quantforge.toml` written from `--entry` and `--params`, or a directory, bundled as the [bundle spec](bundle-spec.md) collects one, with its own `quantforge.toml` if it holds one | `--strategy <path>` | — | none | `backtest` |
+| The strategy's file and class, `path/to/file.py:ClassName`, for a `--strategy` without a `quantforge.toml`; refused beside one | `--entry <file:class>` | — | none | `backtest` |
+| The strategy's parameters, as the body of a TOML inline table, such as `fast=20,slow=50` or `name="sma"`, for a `--strategy` without a `quantforge.toml`; refused beside one | `--params <pairs>` | — | none | `backtest` |
+| Print the job's ID once the server has queued it, and leave without following it | `--no-wait` | — | `false` | `backtest` |
+| Follow the job's log until the job ends, then print its report; Ctrl-C leaves the job running | `--follow` | — | `false` | `backtest jobs status` |
 | Quote amount spent per entry; a positive decimal | `--quote-order-qty <decimal>` | — | `100` | `trade run` |
 | Execution mode: `dry-run` runs the strategy without any trading venue, `live` places real orders | `--mode <mode>` | — | `dry-run` | `trade run` |
 | Confirm a live run, an account change, or a change to the store's record; without it the command only previews the action, except that a live `trade run` on an interactive terminal asks instead | `--yes` | — | `false` | `trade run`, `trade close`, `monitor cancel-order`, `monitor close-position`, `store bind`, `store adopt-run` |
@@ -261,6 +273,50 @@ command does to an account — `--mode live`, `--yes`, a larger
 `serve run`'s settings are the exception. A server is set up once for the
 place it runs, often by a service manager or container that configures it
 through its environment, and none of its settings can touch an account.
+`--remote-token` is the other: it is a secret, which belongs in the
+environment rather than on a command line, and it touches no account.
+`--remote` itself has no variable, so an exported one can never send a
+backtest elsewhere unasked.
+
+## Remote backtests
+
+`backtest --remote <url> --strategy <path>` runs a Python strategy bundle
+on a QuantForge server and prints the report a local run prints. The
+client asks the server, in order, which protocol versions it speaks
+(`GET /version`), what its workers run bundles on (`GET /v1/runtime`), and
+which bars it stores of the market (`GET /v1/markets`); then it uploads
+the bundle under the code hash it computed, submits the job, follows the
+job's log, and downloads the result, checking each file against the size
+and hash the server listed. Every flag is parsed and the bundle checked
+against the [bundle spec](bundle-spec.md) before the first request.
+
+- **The bundle.** A directory with its own `quantforge.toml` is bundled as
+  it is, and `--entry` and `--params` are refused beside it. A `.py` file,
+  or a directory without one, is bundled beside a manifest written from
+  `--entry` and `--params`, whose `python` is the server's and whose
+  `engine` is `==` this build's version, so the server runs the engine a
+  local run would; a server running another engine refuses it, saying so.
+- **The candles.** `--start` and `--end` mean what they mean locally: the
+  bars the server stores between them, each one left out reaching the
+  first or the last stored bar. A window outside the bars the server stores
+  is refused before anything is uploaded; one that falls in a gap between
+  them fails its job, with the server's message, as a local run over no
+  candles fails.
+- **The output.** `remote:`, `range:`, `bundle:` and `job_id:` come first,
+  then the job's log as it runs: `log:` lines, with the level before the
+  text unless it is `info`, and `progress:` at most once a tenth of the
+  bars. Then `state:` and the report, whose first line names the strategy
+  by its entry, as in `strategy: sma_cross.py:SmaCross`, since the server
+  keeps no strategy name with a job; every other line is the local report's.
+- **Leaving.** `--no-wait` prints `job_id:` and leaves. Ctrl-C while the log
+  is followed leaves too, and the job keeps running: `quantforge backtest
+  jobs status <job id> --remote <url>` prints where it stands and, once it
+  has succeeded, the report, with the strategy named by its bundle's code
+  hash; `--follow` follows its log to its end first.
+- **Failures.** A server that cannot be reached, that is not QuantForge,
+  or that speaks no protocol version this build speaks is named as such;
+  a refusal prints the server's own message word for word, and a job that
+  failed prints its error; each exits with status 1.
 
 ## Environment variables QuantForge does not own
 
@@ -271,7 +327,7 @@ with no QuantForge-specific meaning, so they have no flags:
 | --- | --- | --- |
 | `NO_COLOR` | tracing-subscriber, clap | set and non-empty, removes ANSI colors; log lines carry them even when stdout is not a terminal |
 | `CLICOLOR`, `CLICOLOR_FORCE`, `TERM`, `CI` | clap | color choice for help and usage errors |
-| `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY`, and their lowercase forms | reqwest | route exchange requests through a proxy; all of them are ignored when `REQUEST_METHOD` is set, as under CGI |
+| `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, `NO_PROXY`, and their lowercase forms | reqwest | route exchange requests and `--remote` requests through a proxy; all of them are ignored when `REQUEST_METHOD` is set, as under CGI |
 | `RUST_BACKTRACE`, `RUST_LIB_BACKTRACE` | Rust standard library, anyhow | add backtraces to panics and error reports |
 | `TOKIO_WORKER_THREADS` | tokio | async runtime worker threads; a value that is not a positive integer makes QuantForge panic at startup |
 | `SQLITE_TMPDIR`, `TMPDIR` | SQLite | directory for SQLite's temporary files |
