@@ -13,7 +13,7 @@ Options:
 
 Remote:
       --remote <REMOTE>              QuantForge server that holds the job, such as http://127.0.0.1:9600
-      --remote-token <REMOTE_TOKEN>  Token sent to the --remote server with every request, as `Authorization: Bearer`; no server checks one yet. Prefer QF_REMOTE_TOKEN: command-line values can land in shell history and process listings [env: QF_REMOTE_TOKEN]
+      --remote-token <REMOTE_TOKEN>  Token sent to the --remote server with every request, as `Authorization: Bearer`, only over https or to this machine; no server checks one yet. Prefer QF_REMOTE_TOKEN: command-line values can land in shell history and process listings [env: QF_REMOTE_TOKEN]
       --follow                       Follow the job's log until the job ends, then report it; Ctrl-C leaves it running again
 
 Storage:

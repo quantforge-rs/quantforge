@@ -152,8 +152,10 @@ impl JobWorker for Engine {
 }
 
 /// A worker whose jobs write a line and run until they are cancelled.
+#[cfg(unix)]
 struct Holding;
 
+#[cfg(unix)]
 impl JobWorker for Holding {
     fn runtime(&self) -> Option<Runtime> {
         Some(runtime())
@@ -448,7 +450,7 @@ fn a_refusal_is_the_servers_message_word_for_word(bed: &TestBed) {
     assert!(
         stderr.contains(&format!(
             "the server at {}/ stores binance spot BTCUSDT 1m from 2026-01-01T12:00:00Z to \
-             2026-01-02T11:59:00Z, which holds no bar from 2026-01-01T12:00:00Z to \
+             2026-01-02T11:59:00Z, outside the window from 2026-01-01T12:00:00Z to \
              2025-12-31T00:00:00Z",
             remote.url()
         )),

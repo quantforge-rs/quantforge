@@ -15,7 +15,6 @@ use quantforge::protocol::jobs::{
 use quantforge::protocol::stream::AuthToken;
 use quantforge::{MarketId, TimestampMs, ms_to_rfc3339};
 use rust_decimal::Decimal;
-use tracing::warn;
 use url::Url;
 
 use super::report;
@@ -28,7 +27,8 @@ pub(super) const REMOTE_HEADING: &str = "Remote";
 #[derive(Args)]
 pub(crate) struct TokenArgs {
     /// Token sent to the --remote server with every request, as
-    /// `Authorization: Bearer`; no server checks one yet. Prefer
+    /// `Authorization: Bearer`, only over https or to this machine; no server
+    /// checks one yet. Prefer
     /// QF_REMOTE_TOKEN: command-line values can land in shell history and
     /// process listings
     #[arg(
@@ -87,15 +87,7 @@ pub(super) struct RemoteRun {
 
 /// Connects to the server, saying which one answered.
 pub(super) async fn connect(url: Url, token: Option<AuthToken>) -> Result<RemoteClient> {
-    let warn_cleartext = token.is_some() && url.scheme() == "http" && !loopback(&url);
     let client = RemoteClient::connect(url, token).await.map_err(reach)?;
-    if warn_cleartext {
-        warn!(
-            server = client.url(),
-            "the remote token goes to the server in clear text: it is not loopback and the URL \
-             is http://"
-        );
-    }
     println!(
         "remote: {} (QuantForge {}, protocol {})",
         client.url(),
@@ -103,15 +95,6 @@ pub(super) async fn connect(url: Url, token: Option<AuthToken>) -> Result<Remote
         client.version().path_segment()
     );
     Ok(client)
-}
-
-fn loopback(url: &Url) -> bool {
-    match url.host() {
-        Some(url::Host::Ipv4(address)) => address.is_loopback(),
-        Some(url::Host::Ipv6(address)) => address.is_loopback(),
-        Some(url::Host::Domain(name)) => name.eq_ignore_ascii_case("localhost"),
-        None => false,
-    }
 }
 
 /// A client failure, with what to check where the server was not reached.
@@ -178,7 +161,9 @@ pub(super) async fn run(args: RemoteRun) -> Result<()> {
 
 /// The range a local run over the same store would read: the market's
 /// bars from `start` to `end`, each bound left out reaching the first or
-/// the last bar the server stores.
+/// the last bar the server stores. A window outside those is refused here;
+/// one inside a gap between them reaches the server, whose job then fails
+/// as a local run over no candles does.
 async fn window(
     client: &RemoteClient,
     market: &MarketId,
@@ -208,7 +193,7 @@ async fn window(
     let to = end.map_or(last, |end| end.min(last));
     if from > to {
         bail!(
-            "the server at {} stores {named} from {} to {}, which holds no bar from {} to {}",
+            "the server at {} stores {named} from {} to {}, outside the window from {} to {}",
             client.url(),
             ms_to_rfc3339(first),
             ms_to_rfc3339(last),

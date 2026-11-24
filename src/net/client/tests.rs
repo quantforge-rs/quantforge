@@ -241,6 +241,35 @@ async fn a_read_is_asked_again_while_the_server_is_busy_and_a_submission_never_i
 }
 
 #[tokio::test]
+async fn a_token_never_crosses_the_network_in_clear_text() {
+    for text in [
+        "http://qf.example:9600",
+        "http://10.0.0.5:9600",
+        "http://[2001:db8::1]",
+    ] {
+        let url = server_url(text).expect("a URL");
+        let error = RemoteClient::connect(url, Some(AuthToken::new("t0k3n-sentinel")))
+            .await
+            .expect_err("refused");
+        assert!(
+            matches!(error, ClientError::CleartextToken { .. }),
+            "{text}: {error}"
+        );
+        assert!(
+            error.to_string().ends_with("is neither; nothing was sent"),
+            "{error}"
+        );
+        assert!(!error.to_string().contains("t0k3n"), "{error}");
+    }
+    // Without a token, a host elsewhere is asked; this one is not there.
+    let url = server_url("http://127.0.0.1:9").expect("a URL");
+    let error = RemoteClient::connect(url, None)
+        .await
+        .expect_err("unreachable");
+    assert!(matches!(error, ClientError::Unreachable { .. }), "{error}");
+}
+
+#[tokio::test]
 async fn the_token_goes_with_every_request_and_is_never_shown() {
     let (url, seen) = serve(speaking(
         Router::new().route("/v1/runtime", get(|| async { json(StatusCode::OK, "{}") })),

@@ -13,8 +13,10 @@
 //! the server took but could not answer for would run twice.
 //!
 //! A token is sent with every request, as `Authorization: Bearer`, and
-//! never shown: no server checks one yet.
+//! never shown: no server checks one yet. It goes only over `https`, or
+//! over `http` to this machine, and the client refuses to start otherwise.
 
+mod address;
 mod error;
 mod logs;
 mod result;
@@ -35,6 +37,8 @@ use crate::protocol::segments::MarketIndex;
 use crate::protocol::stream::AuthToken;
 use crate::protocol::{ErrorEnvelope, ProtoVersion, ServerVersion, VersionRange};
 
+pub use address::server_url;
+use address::{loopback, shown};
 pub use error::ClientError;
 pub use logs::LogEvent;
 pub use result::RemoteResult;
@@ -51,49 +55,6 @@ const ATTEMPTS: u32 = 5;
 
 /// The longest a `Retry-After` is waited for.
 const MOST_RETRY_WAIT: Duration = Duration::from_secs(5);
-
-/// A server's URL, checked: `http` or `https`, a host, no query or
-/// fragment, and a path that ends with `/`, so that the routes join below
-/// it, as behind a proxy that serves the server under a path.
-///
-/// ```
-/// use quantforge::net::client::server_url;
-///
-/// let url = server_url("http://127.0.0.1:9600")?;
-/// assert_eq!(url.as_str(), "http://127.0.0.1:9600/");
-/// assert_eq!(server_url("https://qf.example/lab")?.as_str(), "https://qf.example/lab/");
-/// assert!(server_url("ftp://qf.example").is_err());
-/// # Ok::<(), quantforge::net::client::ClientError>(())
-/// ```
-pub fn server_url(text: &str) -> Result<Url, ClientError> {
-    let invalid = |reason: &str| ClientError::InvalidUrl {
-        reason: reason.to_string(),
-    };
-    let mut url = Url::parse(text.trim()).map_err(|error| invalid(&error.to_string()))?;
-    if !matches!(url.scheme(), "http" | "https") {
-        return Err(invalid("a server's URL starts with http:// or https://"));
-    }
-    if url.host_str().is_none_or(str::is_empty) {
-        return Err(invalid("a server's URL names a host"));
-    }
-    if url.query().is_some() || url.fragment().is_some() {
-        return Err(invalid("a server's URL has no query or fragment"));
-    }
-    if !url.path().ends_with('/') {
-        let path = format!("{}/", url.path());
-        url.set_path(&path);
-    }
-    Ok(url)
-}
-
-/// The URL as it may be shown: without the user name and password it can
-/// carry.
-fn shown(url: &Url) -> String {
-    let mut shown = url.clone();
-    let _ = shown.set_username("");
-    let _ = shown.set_password(None);
-    shown.to_string()
-}
 
 /// A connection to one QuantForge server, at the newest protocol version
 /// both sides speak.
@@ -131,7 +92,13 @@ impl RemoteClient {
     /// Connects to the server at `url` (see [`server_url`]): asks it which
     /// protocol versions it speaks, and agrees on the newest both sides do.
     /// `token`, when given, goes with every request.
+    /// A token goes only where no one between can read it: over `https`,
+    /// or over `http` to this machine; anywhere else it is refused before
+    /// any request is sent.
     pub async fn connect(url: Url, token: Option<AuthToken>) -> Result<Self, ClientError> {
+        if token.is_some() && url.scheme() != "https" && !loopback(&url) {
+            return Err(ClientError::CleartextToken { url: shown(&url) });
+        }
         let bearer = token.map(|token| bearer(&token)).transpose()?;
         let http = reqwest::Client::builder()
             .connect_timeout(CONNECT_TIMEOUT)

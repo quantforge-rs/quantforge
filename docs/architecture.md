@@ -422,7 +422,8 @@ src/
 │   ├── mod.rs                  what the module is for; it uses the protocol and nothing else of the crate
 │   └── client/                 RemoteClient: a server's routes, as backtest --remote speaks them
 │       ├── mod.rs              the version agreed, each route asked, a busy server asked again, a result checked before it is read
-│       ├── error.rs            ClientError: unreachable, not QuantForge, incompatible, refused word for word, damaged
+│       ├── address.rs          server_url: a server's URL checked, shown without credentials, and whether it is this machine
+│       ├── error.rs            ClientError: a token refused in clear text, unreachable, not QuantForge, incompatible, refused word for word, damaged
 │       ├── result.rs           RemoteResult: a succeeded job's metrics, and its trades checked against the listed hash, then read
 │       ├── logs.rs             a job's log followed: the WebSocket stream, and the pages where it fails or breaks off
 │       ├── logs/               its unit tests, beside it

@@ -23,6 +23,17 @@ pub enum ClientError {
     #[error("the token is empty or holds a character other than printable ASCII without spaces")]
     InvalidToken,
 
+    /// A token that would cross the network in clear text: the server is
+    /// neither `https` nor this machine. Nothing was sent.
+    #[error(
+        "a token goes only over https, or over http to this machine, and the server at {url} \
+         is neither; nothing was sent"
+    )]
+    CleartextToken {
+        /// The server.
+        url: String,
+    },
+
     /// No answer came: the server could not be reached, or the connection
     /// broke or timed out before its answer arrived.
     #[error("could not reach the server at {url}: {cause}")]

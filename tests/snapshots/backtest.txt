@@ -23,7 +23,7 @@ Options:
 
 Remote:
       --remote <REMOTE>              QuantForge server to run the backtest on, such as http://127.0.0.1:9600: it runs the --strategy bundle on the candles it stores, and the report prints here
-      --remote-token <REMOTE_TOKEN>  Token sent to the --remote server with every request, as `Authorization: Bearer`; no server checks one yet. Prefer QF_REMOTE_TOKEN: command-line values can land in shell history and process listings [env: QF_REMOTE_TOKEN]
+      --remote-token <REMOTE_TOKEN>  Token sent to the --remote server with every request, as `Authorization: Bearer`, only over https or to this machine; no server checks one yet. Prefer QF_REMOTE_TOKEN: command-line values can land in shell history and process listings [env: QF_REMOTE_TOKEN]
       --strategy <STRATEGY>          Python strategy to run on --remote: a .py file, or a directory to bundle, whose own quantforge.toml is used as it is
       --entry <ENTRY>                The strategy's file and class, as in sma_cross.py:SmaCross, for a --strategy without a quantforge.toml
       --params <PARAMS>              The strategy's parameters as TOML key = value pairs, as in fast=20,slow=50, for a --strategy without a quantforge.toml

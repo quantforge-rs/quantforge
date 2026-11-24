@@ -99,7 +99,7 @@ Explanations belong in the Setting cell.
 | Fee per fill in basis points; a decimal of zero or more | `--fee-bps <decimal>` | — | `10` | `backtest` |
 | QuantForge server to run the backtest on, `http://` or `https://` with a host, such as `http://127.0.0.1:9600`, optionally under a path: it runs the `--strategy` bundle on the candles it stores, within the same `--start` and `--end` a local run reads, and the report prints here. It needs `--strategy`, and refuses `--fast` and `--slow`; nothing local is opened. See [Remote backtests](#remote-backtests) | `--remote <url>` | — | none | `backtest` |
 | QuantForge server that holds the job | `--remote <url>` | — | `required` | `backtest jobs status` |
-| Token sent to the `--remote` server with every request, as `Authorization: Bearer`; no server checks one yet. Prefer the variable, since command-line values can land in shell history and process listings, and `--help` never shows its value; a warning is logged when it would go in clear text to a host that is not loopback | `--remote-token <token>` | `QF_REMOTE_TOKEN` | none | `backtest`, `backtest jobs status` |
+| Token sent to the `--remote` server with every request, as `Authorization: Bearer`; no server checks one yet. Prefer the variable, since command-line values can land in shell history and process listings, and `--help` never shows its value; it goes only over `https`, or over `http` to this machine, and is refused before any request otherwise | `--remote-token <token>` | `QF_REMOTE_TOKEN` | none | `backtest`, `backtest jobs status` |
 | Python strategy to run on `--remote`: a `.py` file, bundled beside a `quantforge.toml` written from `--entry` and `--params`, or a directory, bundled as the [bundle spec](bundle-spec.md) collects one, with its own `quantforge.toml` if it holds one | `--strategy <path>` | — | none | `backtest` |
 | The strategy's file and class, `path/to/file.py:ClassName`, for a `--strategy` without a `quantforge.toml`; refused beside one | `--entry <file:class>` | — | none | `backtest` |
 | The strategy's parameters, as the body of a TOML inline table, such as `fast=20,slow=50` or `name="sma"`, for a `--strategy` without a `quantforge.toml`; refused beside one | `--params <pairs>` | — | none | `backtest` |
@@ -298,8 +298,10 @@ against the [bundle spec](bundle-spec.md) before the first request.
   local run would; a server running another engine refuses it, saying so.
 - **The candles.** `--start` and `--end` mean what they mean locally: the
   bars the server stores between them, each one left out reaching the
-  first or the last stored bar. A window in which the server stores no bar
-  is refused before anything is uploaded.
+  first or the last stored bar. A window outside the bars the server stores
+  is refused before anything is uploaded; one that falls in a gap between
+  them fails its job, with the server's message, as a local run over no
+  candles fails.
 - **The output.** `remote:`, `range:`, `bundle:` and `job_id:` come first,
   then the job's log as it runs: `log:` lines, with the level before the
   text unless it is `info`, and `progress:` at most once a tenth of the

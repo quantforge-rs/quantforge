@@ -313,8 +313,10 @@ QuantForge server advertises its runtime at `GET /v1/runtime`, so that a
 client checks first, and writes a manifest the server admits:
 
 ```json
-{"engine":"0.3.0","python":"3.12","packages":{"numpy":["2.1.3"],"pandas":["2.2.2","2.2.3"]}}
+{"runtime":{"engine":"0.3.0","python":"3.12","packages":{"numpy":["2.1.3"],"pandas":["2.2.2","2.2.3"]}}}
 ```
+
+A server that runs no bundles answers `{}`.
 
 ## Uploading
 
