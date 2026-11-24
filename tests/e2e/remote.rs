@@ -12,7 +12,6 @@
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use quantforge::protocol::bundle::Runtime;
 use quantforge::protocol::jobs::LogLevel;
@@ -163,7 +162,7 @@ impl JobWorker for Holding {
 
     fn run(&self, _input: JobInput, cancel: &Cancel, log: &JobLog) -> WorkerOutcome {
         log.line(LogLevel::Info, SAID);
-        while !cancel.wait(Duration::from_millis(50)) {}
+        while !cancel.wait(std::time::Duration::from_millis(50)) {}
         WorkerOutcome::Cancelled
     }
 }

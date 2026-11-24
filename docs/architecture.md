@@ -425,6 +425,8 @@ src/
 │       ├── address.rs          server_url: a server's URL checked, shown without credentials, and whether it is this machine
 │       ├── error.rs            ClientError: a token refused in clear text, unreachable, not QuantForge, incompatible, refused word for word, damaged
 │       ├── result.rs           RemoteResult: a succeeded job's metrics, and its trades checked against the listed hash, then read
+│       ├── result/             its unit tests, beside it
+│       │   └── tests.rs        a result read only from the file it lists, a damaged one refused
 │       ├── logs.rs             a job's log followed: the WebSocket stream, and the pages where it fails or breaks off
 │       ├── logs/               its unit tests, beside it
 │       │   └── tests.rs        a log read a page at a time to its end, and a stream that breaks off taken up by the pages

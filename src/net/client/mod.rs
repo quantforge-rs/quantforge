@@ -93,22 +93,31 @@ impl RemoteClient {
     /// protocol versions it speaks, and agrees on the newest both sides do.
     /// `token`, when given, goes with every request.
     /// A token goes only where no one between can read it: over `https`,
-    /// or over `http` to this machine; anywhere else it is refused before
-    /// any request is sent.
+    /// or over `http` to this machine, never through a proxy then; anywhere
+    /// else it is refused before any request is sent. With a token, a
+    /// redirect is never followed.
     pub async fn connect(url: Url, token: Option<AuthToken>) -> Result<Self, ClientError> {
         if token.is_some() && url.scheme() != "https" && !loopback(&url) {
             return Err(ClientError::CleartextToken { url: shown(&url) });
         }
         let bearer = token.map(|token| bearer(&token)).transpose()?;
-        let http = reqwest::Client::builder()
+        let mut builder = reqwest::Client::builder()
             .connect_timeout(CONNECT_TIMEOUT)
             .read_timeout(READ_TIMEOUT)
-            .user_agent(concat!("quantforge/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .map_err(|error| ClientError::Unreachable {
-                url: shown(&url),
-                cause: causes(&error.without_url()),
-            })?;
+            .user_agent(concat!("quantforge/", env!("CARGO_PKG_VERSION")));
+        if bearer.is_some() {
+            // A QuantForge server never redirects, and a redirect that only
+            // drops `https` keeps the header, as a proxy over `http` would
+            // see it: a token goes to the URL given, directly, or nowhere.
+            builder = builder.redirect(reqwest::redirect::Policy::none());
+            if url.scheme() != "https" {
+                builder = builder.no_proxy();
+            }
+        }
+        let http = builder.build().map_err(|error| ClientError::Unreachable {
+            url: shown(&url),
+            cause: causes(&error.without_url()),
+        })?;
         let mut client = Self {
             http,
             shown: shown(&url),

@@ -66,3 +66,6 @@ impl RemoteClient {
         Ok(RemoteResult { result, trades })
     }
 }
+
+#[cfg(test)]
+mod tests;

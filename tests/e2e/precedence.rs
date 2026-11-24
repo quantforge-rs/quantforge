@@ -812,7 +812,7 @@ fn remote_authorization(configure: impl FnOnce(&mut Command)) -> Option<String> 
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a port");
     let address = listener.local_addr().expect("its address");
     let recorder = std::thread::spawn(move || {
-        let (stream, _) = listener.accept().expect("a request");
+        let stream = accept_within(&listener)?;
         let mut reader = BufReader::new(stream.try_clone().expect("the stream"));
         let mut authorization = None;
         loop {
@@ -832,7 +832,7 @@ fn remote_authorization(configure: impl FnOnce(&mut Command)) -> Option<String> 
         stream
             .write_all(b"HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
             .expect("an answer");
-        authorization
+        Some(authorization)
     });
     let bed = TestBed::new();
     let strategy =
@@ -849,7 +849,45 @@ fn remote_authorization(configure: impl FnOnce(&mut Command)) -> Option<String> 
         .stderr(predicate::str::contains("is it a QuantForge server?"))
         .stderr(predicate::str::contains("flag-token").not())
         .stderr(predicate::str::contains("env-token").not());
-    recorder.join().expect("the recorder")
+    recorder
+        .join()
+        .expect("the recorder")
+        .expect("the run reached the server")
+}
+
+/// The next connection to `listener`, or `None` after 30 seconds, so that a
+/// run that went elsewhere fails its test rather than hanging it.
+fn accept_within(listener: &std::net::TcpListener) -> Option<std::net::TcpStream> {
+    listener.set_nonblocking(true).expect("nonblocking");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while std::time::Instant::now() < deadline {
+        match listener.accept() {
+            Ok((stream, _)) => {
+                stream.set_nonblocking(false).expect("blocking");
+                return Some(stream);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(error) => panic!("accept: {error}"),
+        }
+    }
+    None
+}
+
+#[test]
+fn a_remote_token_over_http_to_this_machine_never_goes_through_a_proxy() {
+    let proxy = std::net::TcpListener::bind("127.0.0.1:0").expect("a port");
+    let address = format!("http://{}", proxy.local_addr().expect("its address"));
+    proxy.set_nonblocking(true).expect("nonblocking");
+    let authorization = remote_authorization(|cmd| {
+        cmd.args(["--remote-token", "flag-token"]);
+        for variable in ["HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"] {
+            cmd.env(variable, &address);
+        }
+    });
+    assert_eq!(authorization.as_deref(), Some("Bearer flag-token"));
+    assert!(proxy.accept().is_err(), "the proxy was asked");
 }
 
 #[test]
