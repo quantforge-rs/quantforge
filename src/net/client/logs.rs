@@ -48,6 +48,16 @@ impl Cursor {
         }
     }
 
+    /// Lines the server no longer holds, right after the cursor: the server
+    /// numbers its next line past them, so the cursor passes them too, and
+    /// a page read after a break does not report them again.
+    fn dropped(&mut self, count: u64, on: &mut impl FnMut(LogEvent)) {
+        if count > 0 {
+            self.after = self.after.saturating_add(count);
+            on(LogEvent::Dropped(count));
+        }
+    }
+
     fn progress(&mut self, progress: JobProgress, on: &mut impl FnMut(LogEvent)) {
         if self.progress != Some(progress) {
             self.progress = Some(progress);
@@ -130,7 +140,7 @@ impl RemoteClient {
             match serde_json::from_str::<LogFrame>(text.as_str()) {
                 Ok(LogFrame::Line(line)) => cursor.line(line, on),
                 Ok(LogFrame::Progress(progress)) => cursor.progress(progress, on),
-                Ok(LogFrame::Truncated { dropped_lines }) => on(LogEvent::Dropped(dropped_lines)),
+                Ok(LogFrame::Truncated { dropped_lines }) => cursor.dropped(dropped_lines, on),
                 Ok(LogFrame::End) => return Streamed::Ended,
                 Ok(LogFrame::Error(body)) => return Streamed::Broken(body.message),
                 Ok(_) => {}
@@ -148,9 +158,7 @@ impl RemoteClient {
         loop {
             let page = self.log_page(job, cursor.after).await?;
             let had_lines = !page.lines.is_empty();
-            if page.dropped_lines > 0 {
-                on(LogEvent::Dropped(page.dropped_lines));
-            }
+            cursor.dropped(page.dropped_lines, on);
             for line in page.lines {
                 cursor.line(line, on);
             }

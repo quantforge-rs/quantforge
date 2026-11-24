@@ -183,9 +183,9 @@ fn defined_settings() -> (Vec<Setting>, Vec<String>) {
             });
         }
         // A command that runs on its own counts, its subcommands or not:
-        // `backtest` runs, and holds `backtest jobs`.
+        // `backtest` runs, its subcommand optional, and holds `backtest jobs`.
         let mut subcommands = command.get_subcommands().peekable();
-        let runs = subcommands.peek().is_none() || command.is_args_conflicts_with_subcommands_set();
+        let runs = subcommands.peek().is_none() || !command.is_subcommand_required_set();
         if runs && !path.is_empty() {
             leaves.push(path.to_string());
         }

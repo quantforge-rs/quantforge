@@ -35,13 +35,17 @@ use store::StoreCommand;
 use trade::TradeCommand;
 
 /// Parse the process arguments exactly like clap's `Parser::parse()`, then
-/// refuse a renamed setting and record whether a credential arrived on the
-/// command line rather than through its env fallback, and where each
-/// storage setting came from — facts the derived struct cannot carry.
+/// refuse a renamed setting and a run's flags before `backtest jobs`, and
+/// record whether a credential arrived on the command line rather than
+/// through its env fallback, and where each storage setting came from —
+/// facts the derived struct cannot carry.
 pub(crate) fn parse() -> Cli {
     let matches = command().get_matches();
     if let Some(message) = renamed_setting_error(&matches) {
         command().error(ErrorKind::UnknownArgument, message).exit();
+    }
+    if let Some(error) = backtest::refuse_run_flags(&mut command(), &matches) {
+        error.exit();
     }
     let mut cli =
         Cli::from_arg_matches(&matches).unwrap_or_else(|err| err.format(&mut command()).exit());

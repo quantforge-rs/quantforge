@@ -138,3 +138,54 @@ async fn a_stream_that_breaks_off_is_taken_up_by_the_pages_from_its_last_line() 
         ["line 1", "progress 1/3", "line 2", "line 3", "progress 3/3"]
     );
 }
+
+#[tokio::test]
+async fn a_stream_that_breaks_off_after_a_gap_leaves_the_gap_behind_the_pages() {
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let asked_route = asked.clone();
+    let rest = Router::new().route(
+        "/v1/backtests/j-1/logs",
+        get(
+            move |uri: axum::http::Uri, upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>| async move {
+                match upgrade {
+                    Ok(upgrade) => upgrade.on_upgrade(|mut socket| async move {
+                        let frame = r#"{"type":"truncated","dropped_lines":3}"#;
+                        let _ = socket.send(WsMessage::Text(frame.into())).await;
+                        // Gone before the next line.
+                    }),
+                    Err(_) => {
+                        let query = uri.query().unwrap_or_default().to_string();
+                        let after: u64 = query
+                            .strip_prefix("after=")
+                            .and_then(|after| after.parse().ok())
+                            .expect("a cursor");
+                        asked_route.lock().expect("the record").push(query);
+                        // As the server reads a log that holds lines 4 and
+                        // 5, the first three dropped.
+                        let from = after.max(3);
+                        let lines: Vec<String> = (from + 1..=5).map(line).collect();
+                        json(
+                            StatusCode::OK,
+                            &format!(
+                                r#"{{"job_id":"j-1","lines":[{}],"dropped_lines":{},"next_after":5,"complete":true}}"#,
+                                lines.join(","),
+                                from - after
+                            ),
+                        )
+                    }
+                }
+            },
+        ),
+    );
+    let (url, _) = serve(speaking(rest)).await;
+    let client = RemoteClient::connect(url, None).await.expect("connected");
+    let mut events = Vec::new();
+    client
+        .follow(&JobId::new("j-1").expect("a job id"), 0, |event| {
+            events.push(event)
+        })
+        .await
+        .expect("followed");
+    assert_eq!(seqs(&events), ["dropped 3", "line 4", "line 5"]);
+    assert_eq!(*asked.lock().expect("the record"), ["after=3"]);
+}

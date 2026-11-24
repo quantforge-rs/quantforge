@@ -81,7 +81,6 @@ pub(super) struct RemoteRun {
     pub(super) cash: Decimal,
     pub(super) fee_bps: Decimal,
     pub(super) draft: Draft,
-    pub(super) label: String,
     pub(super) no_wait: bool,
 }
 
@@ -117,6 +116,8 @@ pub(super) async fn run(args: RemoteRun) -> Result<()> {
         )
     })?;
     let bundle = args.draft.bundle(&runtime.python.to_string())?;
+    // The report names the entry of the bundle uploaded, read once.
+    let label = bundle.manifest().entry().to_string();
     bundle
         .admit(&runtime)
         .with_context(|| format!("the server at {} cannot run this bundle", client.url()))?;
@@ -156,7 +157,7 @@ pub(super) async fn run(args: RemoteRun) -> Result<()> {
     if args.no_wait {
         return Ok(());
     }
-    follow_and_report(&client, &status.job_id, &args.label).await
+    follow_and_report(&client, &status.job_id, &label).await
 }
 
 /// The range a local run over the same store would read: the market's

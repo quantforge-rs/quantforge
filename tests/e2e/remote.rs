@@ -601,6 +601,55 @@ fn the_built_in_strategy_and_a_python_one_do_not_mix() {
     }
 }
 
+#[test]
+fn backtest_jobs_takes_global_flags_before_it_and_refuses_a_runs_own() {
+    let job = "0123456789abcdef0123456789abcdef";
+    let dir = tempfile::tempdir().expect("a directory");
+    for (before, token, refused) in [
+        (
+            vec!["--symbol", "BTCUSDT"],
+            None,
+            Some("the subcommand 'jobs' cannot be used with '--symbol <SYMBOL>'"),
+        ),
+        (
+            vec!["--remote", "http://127.0.0.1:9", "--no-wait"],
+            None,
+            Some("the subcommand 'jobs' cannot be used with:\n  --remote <REMOTE>\n  --no-wait"),
+        ),
+        (vec!["--log-level", "error", "--db", "x.sqlite"], None, None),
+        // A variable is no flag before `jobs`.
+        (vec![], Some("t0k3n-sentinel"), None),
+    ] {
+        let mut cmd = isolated_cmd();
+        cmd.current_dir(dir.path())
+            .arg("backtest")
+            .args(&before)
+            .args(["jobs", "status", job, "--remote", "http://127.0.0.1:9"]);
+        if let Some(token) = token {
+            cmd.env("QF_REMOTE_TOKEN", token);
+        }
+        let output = cmd.output().expect("a run");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if let Some(said) = refused {
+            assert_eq!(output.status.code(), Some(2), "{before:?}: {output:?}");
+            assert!(stderr.contains(said), "{before:?}: {stderr}");
+        } else {
+            // Past the parser, to the server, which is not there.
+            assert_eq!(output.status.code(), Some(1), "{before:?}: {output:?}");
+            assert!(
+                stderr.contains("could not reach the server at http://127.0.0.1:9/"),
+                "{before:?}: {stderr}"
+            );
+        }
+    }
+    assert_eq!(
+        std::fs::read_dir(dir.path())
+            .expect("the directory")
+            .count(),
+        0
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn ctrl_c_leaves_the_job_running_and_says_how_to_pick_it_up() {

@@ -1,7 +1,7 @@
 Deterministic backtest: the built-in strategy on locally stored candles, or a Python strategy bundle on a --remote server
 
 Usage: quantforge backtest [OPTIONS] --symbol <SYMBOL>
-       quantforge backtest <COMMAND>
+       quantforge backtest [OPTIONS] <COMMAND>
 
 Commands:
   jobs  The jobs a QuantForge server holds: their state, their log and their report

@@ -20,7 +20,9 @@ use crate::cli::common::{
 };
 use crate::cli::context::AppContext;
 use anyhow::{Context, Result};
-use clap::{Args, Subcommand};
+use clap::error::{ContextKind, ContextValue, ErrorKind};
+use clap::parser::ValueSource;
+use clap::{ArgMatches, Args, Subcommand};
 use quantforge::server::BacktestOutput;
 use quantforge::{
     BacktestConfig, BacktestEngine, CandleQuery, CandleStore, ExchangeId, parse_rfc3339_to_ms,
@@ -31,8 +33,10 @@ use strategy::Draft;
 
 pub(crate) use jobs::JobsCommand;
 
+// A run's own flags are refused before `jobs` by `refuse_run_flags`: clap's
+// `args_conflicts_with_subcommands` would refuse a global flag there too.
 #[derive(Args, Debug)]
-#[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
+#[command(subcommand_negates_reqs = true)]
 pub(crate) struct BacktestArgs {
     #[command(subcommand)]
     command: Option<BacktestCommand>,
@@ -100,6 +104,44 @@ impl BacktestArgs {
     }
 }
 
+/// The refusal of a run's own flags given before `backtest jobs`, which
+/// takes none of them, worded as clap words a conflict. A global flag,
+/// which every command takes, may stand there. `root` is the command that
+/// made `matches`.
+pub(crate) fn refuse_run_flags(
+    root: &mut clap::Command,
+    matches: &ArgMatches,
+) -> Option<clap::Error> {
+    let ("backtest", backtest) = matches.subcommand()? else {
+        return None;
+    };
+    let (jobs, _) = backtest.subcommand()?;
+    root.build();
+    let command = root.find_subcommand_mut("backtest")?;
+    let mut given: Vec<String> = command
+        .get_arguments()
+        .filter(|arg| !arg.is_global_set())
+        .filter(|arg| {
+            backtest.value_source(arg.get_id().as_str()) == Some(ValueSource::CommandLine)
+        })
+        .map(ToString::to_string)
+        .collect();
+    let prior = match given.len() {
+        0 => return None,
+        1 => ContextValue::String(given.remove(0)),
+        _ => ContextValue::Strings(given),
+    };
+    let usage = command.render_usage();
+    let mut error = clap::Error::new(ErrorKind::ArgumentConflict).with_cmd(command);
+    error.insert(
+        ContextKind::InvalidSubcommand,
+        ContextValue::String(jobs.to_string()),
+    );
+    error.insert(ContextKind::PriorArg, prior);
+    error.insert(ContextKind::Usage, ContextValue::StyledStr(usage));
+    Some(error)
+}
+
 /// `backtest --remote` and `backtest jobs`, which reach a server and read
 /// no local store: every flag is parsed and the strategy read before any
 /// request.
@@ -124,7 +166,6 @@ pub(crate) async fn handle_remote(exchange: ExchangeId, args: &BacktestArgs) -> 
         end,
         cash,
         fee_bps,
-        label: draft.label()?,
         draft,
         no_wait: args.no_wait,
     })

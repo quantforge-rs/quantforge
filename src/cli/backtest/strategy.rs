@@ -135,22 +135,6 @@ impl Draft {
         };
         Ok(bundle?)
     }
-
-    /// What a report names the strategy by: its bundle's entry.
-    pub(super) fn label(&self) -> Result<String> {
-        Ok(match self {
-            Self::File { written, .. }
-            | Self::Dir {
-                written: Some(written),
-                ..
-            } => written.entry.to_string(),
-            Self::Dir { written: None, .. } => self
-                .bundle(PROVISIONAL_PYTHON)?
-                .manifest()
-                .entry()
-                .to_string(),
-        })
-    }
 }
 
 /// `--params`: the body of a TOML inline table, such as `fast=20,slow=50`
@@ -336,8 +320,8 @@ mod tests {
         let own = "format = 1\nentry = \"sma.py:Sma\"\nengine = \">=0.1.0\"\npython = \"3.12\"\n";
         fs::write(root.path().join(MANIFEST_FILE), own).expect("a manifest");
         let draft = Draft::read(root.path(), None, None).expect("a draft");
-        assert_eq!(draft.label().expect("a label"), "sma.py:Sma");
         let bundle = draft.bundle("3.99").expect("a bundle");
+        assert_eq!(bundle.manifest().entry().to_string(), "sma.py:Sma");
         assert_eq!(bundle.manifest().python().to_string(), "3.12");
         let error =
             Draft::read(root.path(), Some("sma.py:Sma"), None).expect_err("an entry beside it");
