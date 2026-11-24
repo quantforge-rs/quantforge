@@ -1,20 +1,33 @@
-Deterministic backtest using locally stored candles
+Deterministic backtest: the built-in strategy on locally stored candles, or a Python strategy bundle on a --remote server
 
 Usage: quantforge backtest [OPTIONS] --symbol <SYMBOL>
+       quantforge backtest <COMMAND>
+
+Commands:
+  jobs  The jobs a QuantForge server holds: their state, their log and their report
+  help  Print this message or the help of the given subcommand(s)
 
 Options:
       --symbol <SYMBOL>        
       --interval <INTERVAL>    [default: 1m]
       --start <START>          
       --end <END>              
-      --fast <FAST>            [default: 20]
       --exchange <EXCHANGE>    Exchange to connect to [env: QF_EXCHANGE=] [default: binance] [possible values: binance]
-      --slow <SLOW>            [default: 50]
+      --fast <FAST>            [default: 20]
       --base-url <BASE_URL>    Exchange API base URL; omitted, the exchange's production endpoint [env: QF_BASE_URL=]
+      --slow <SLOW>            [default: 50]
       --cash <CASH>            [default: 10000]
-      --fee-bps <FEE_BPS>      [default: 10]
       --log-level <LOG_LEVEL>  Log filter (trace, debug, info, warn, error or a full tracing filter expression) [env: QF_LOG=] [default: info]
+      --fee-bps <FEE_BPS>      [default: 10]
   -h, --help                   Print help
+
+Remote:
+      --remote <REMOTE>              QuantForge server to run the backtest on, such as http://127.0.0.1:9600: it runs the --strategy bundle on the candles it stores, and the report prints here
+      --remote-token <REMOTE_TOKEN>  Token sent to the --remote server with every request, as `Authorization: Bearer`; no server checks one yet. Prefer QF_REMOTE_TOKEN: command-line values can land in shell history and process listings [env: QF_REMOTE_TOKEN]
+      --strategy <STRATEGY>          Python strategy to run on --remote: a .py file, or a directory to bundle, whose own quantforge.toml is used as it is
+      --entry <ENTRY>                The strategy's file and class, as in sma_cross.py:SmaCross, for a --strategy without a quantforge.toml
+      --params <PARAMS>              The strategy's parameters as TOML key = value pairs, as in fast=20,slow=50, for a --strategy without a quantforge.toml
+      --no-wait                      Print the job's ID once the server has queued it, and leave; `backtest jobs status` reports it later
 
 Storage:
       --db <DB>

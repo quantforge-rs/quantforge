@@ -308,8 +308,9 @@ the messages may differ between implementations.
 A server runs a bundle only where its workers can: the engine version meets
 the manifest's `engine`, the Python version equals `python`, and every
 dependency is installed at its pinned version. The installed packages are
-the server's allowlist: a bundle may import those and no others. A server
-can advertise its runtime so that a client checks first:
+the server's allowlist: a bundle may import those and no others. A
+QuantForge server advertises its runtime at `GET /v1/runtime`, so that a
+client checks first, and writes a manifest the server admits:
 
 ```json
 {"engine":"0.3.0","python":"3.12","packages":{"numpy":["2.1.3"],"pandas":["2.2.2","2.2.3"]}}

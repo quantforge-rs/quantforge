@@ -24,8 +24,11 @@ underscores:
 
 A command group such as `quantforge monitor` lives in its directory's
 `mod.rs`, which holds the subcommand enum and the dispatch. A top-level
-command without subcommands, such as `backtest`, takes the directory form
-too, so subcommands can join it without moving files. The root parser, the
+command that runs on its own takes the directory form too, so that
+subcommands can join it without moving files: `quantforge backtest` runs
+from `src/cli/backtest/mod.rs`, which also holds its `jobs` group, whose
+`status` is `src/cli/backtest/jobs/status.rs`. A module beside a command's
+that serves it, such as `src/cli/backtest/remote.rs`, names no command. The root parser, the
 global flags, and the dispatch into each group are in `src/cli/mod.rs`.
 
 Each command's `--help` output is locked in `tests/snapshots/`, named by its
@@ -58,8 +61,14 @@ src/
 │   │   ├── sync.rs             quantforge data sync: pull klines from the exchange into the store
 │   │   ├── validate.rs         quantforge data validate: check stored candles
 │   │   └── migrate.rs          quantforge data migrate: copy a SQLite store into PostgreSQL, and verify it
-│   ├── backtest/               a leaf command in directory form
-│   │   └── mod.rs              quantforge backtest: simulate the strategy on stored candles
+│   ├── backtest/               a command that runs, and holds the jobs group
+│   │   ├── mod.rs              quantforge backtest: simulate the strategy on stored candles, or a bundle on a --remote server
+│   │   ├── remote.rs           a run on a server: the bundle uploaded, the job submitted, its log followed, its report
+│   │   ├── strategy.rs         --strategy, --entry and --params made into a bundle, its manifest written here
+│   │   ├── report.rs           the report a local and a remote run both print
+│   │   └── jobs/               the jobs a server holds
+│   │       ├── mod.rs          quantforge backtest jobs: subcommand enum and dispatch
+│   │       └── status.rs       quantforge backtest jobs status: where a job stands, its log followed, its report
 │   ├── trade/                  strategy-bot commands
 │   │   ├── mod.rs              quantforge trade: subcommand enum and dispatch
 │   │   ├── run.rs              quantforge trade run: the polling bot, dry-run by default
@@ -109,7 +118,8 @@ src/
 │   │   ├── status.rs           JobStatus, JobState, and the references to a job's results
 │   │   ├── logs.rs             LogLine, JobProgress, LogQuery and LogPage: a job's log, read a page at a time
 │   │   ├── log_stream.rs       LogFrame: the frames of the WebSocket stream that follows a job's log
-│   │   └── result.rs           JobResult and ResultLink: a succeeded job's metrics, and where its files are
+│   │   ├── result.rs           JobResult and ResultLink: a succeeded job's metrics, and where its files are
+│   │   └── runtime.rs          JobRuntime: what a server's workers run bundles on, or none
 │   ├── results/                what a job produces: its metrics, trades and equity curve as files
 │   │   ├── mod.rs              the result contract: files, columns, types, decimals; ResultKind, ResultError
 │   │   ├── metrics.rs          Metrics: the summary, and metrics.json
@@ -408,6 +418,16 @@ src/
 │       ├── admission.rs        a delivery recorded and judged: admitted, rejected, a no-op, a duplicate or a conflict
 │       ├── orders.rs           an attempt recorded before it is sent, and the venue's evidence that settles it
 │       └── resume.rs           an unknown outcome asked of the venue before anything is sent again
+├── net/                        asking other instances as a client, in the protocol's wire format
+│   ├── mod.rs                  what the module is for; it uses the protocol and nothing else of the crate
+│   └── client/                 RemoteClient: a server's routes, as backtest --remote speaks them
+│       ├── mod.rs              the version agreed, each route asked, a busy server asked again, a result checked before it is read
+│       ├── error.rs            ClientError: unreachable, not QuantForge, incompatible, refused word for word, damaged
+│       ├── result.rs           RemoteResult: a succeeded job's metrics, and its trades checked against the listed hash, then read
+│       ├── logs.rs             a job's log followed: the WebSocket stream, and the pages where it fails or breaks off
+│       ├── logs/               its unit tests, beside it
+│       │   └── tests.rs        a log read a page at a time to its end, and a stream that breaks off taken up by the pages
+│       └── tests.rs            the client against servers of its own: what it sends, passes on, asks again and refuses
 └── server/                     the HTTP server other instances connect to
     ├── mod.rs                  serve: the routes, and the shutdown that finishes requests in progress
     ├── store.rs                ServerStore: the store the routes and the queue share, and the turns at it
@@ -418,7 +438,7 @@ src/
     ├── signal.rs               a delivery's body as the model's signal, and a refusal as its receipt
     ├── jobs/                   Jobs: the backtest job routes and the queue behind them
     │   ├── mod.rs              the queue's state, its start after a restart, and its stop
-    │   ├── routes.rs           the upload, submission, status, list and cancel routes
+    │   ├── routes.rs           the runtime, upload, submission, status, list and cancel routes
     │   ├── submission.rs       what an upload and a submission must pass before anything is stored
     │   ├── queue.rs            the dispatcher, a job's input read from the store, and its log and its end written
     │   ├── status.rs           a job's record as the protocol shows it
@@ -538,7 +558,12 @@ result is in [result-spec.md](result-spec.md). The candle segments
 `storage` packs, and a server will serve, are written down in
 [segment-spec.md](segment-spec.md). Decisions that shape more than one
 change, such as how the storage ports reach PostgreSQL, are recorded in
-[adr/](adr/README.md).
+[adr/](adr/README.md). `net::client` is the other side of the server's
+routes: it uses `protocol` and nothing else of the crate, agrees on a
+protocol version before it asks anything, and checks every result file it
+downloads against the hash the server listed before it reads it.
+`backtest --remote` builds its bundle with `protocol::bundle`, the code a
+server checks an upload with, and prints the report a local run prints.
 
 ## Tests
 
@@ -552,7 +577,8 @@ change, such as how the storage ports reach PostgreSQL, are recorded in
   PostgreSQL, `serve.rs` for `serve run` as
   a running process — its routes, and how it stops on a signal —
   `history.rs` and `jobs.rs` for its history and job routes on each
-  backend, `migrate.rs` for `data migrate` against its acceptance criteria, and
+  backend, `remote.rs` for `backtest --remote` against a server hosted in
+  the test, its report held to the local one and to the goldens, `migrate.rs` for `data migrate` against its acceptance criteria, and
   `snapshot.rs` and `layout.rs` for the CLI surface and this document
 - `tests/snapshots/`: the committed `--help` output of every command, plus
   `version.txt` for `--version`

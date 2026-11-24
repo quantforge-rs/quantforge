@@ -167,3 +167,37 @@ mod unix {
         );
     }
 }
+
+#[test]
+fn a_manifest_given_beside_a_directory_makes_the_bundle_those_files_make_in_memory() {
+    let manifest =
+        "format = 1\nentry = \"pkg/sma.py:Sma\"\nengine = \"==0.2.0\"\npython = \"3.11\"\n";
+    let root = tempfile::tempdir().expect("a temporary directory");
+    write(root.path(), "pkg/sma.py", b"class Sma:\n    pass\n");
+    write(root.path(), "pkg/__init__.py", b"");
+    write(root.path(), ".git/config", b"junk");
+    let limits = BundleLimits::default();
+    let beside = Bundle::from_dir_with(root.path(), [("quantforge.toml", manifest)], &limits)
+        .expect("a bundle");
+    let in_memory = Bundle::from_files(
+        [
+            ("quantforge.toml", manifest.as_bytes()),
+            ("pkg/sma.py", b"class Sma:\n    pass\n".as_slice()),
+            ("pkg/__init__.py", b"".as_slice()),
+        ],
+        &limits,
+    )
+    .expect("a bundle");
+    assert_eq!(beside.code_hash(), in_memory.code_hash());
+
+    // A directory that holds a manifest of its own collides with the one given.
+    write(root.path(), "quantforge.toml", manifest.as_bytes());
+    let refused = Bundle::from_dir_with(root.path(), [("quantforge.toml", manifest)], &limits)
+        .expect_err("two manifests");
+    assert!(
+        refused
+            .to_string()
+            .contains("\"quantforge.toml\" is listed twice"),
+        "{refused}"
+    );
+}

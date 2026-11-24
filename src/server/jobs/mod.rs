@@ -8,7 +8,8 @@
 //! its store holds as running, and a cancel stops only a job running in the
 //! server that took it.
 //!
-//! - `routes`: the upload, submission, status, list and cancel routes.
+//! - `routes`: the runtime, upload, submission, status, list and cancel
+//!   routes.
 //! - `results`: the routes that answer what a succeeded job produced.
 //! - `follow`: the log route, a page of a job's log or the stream that
 //!   follows it.
@@ -45,7 +46,7 @@ pub(super) use follow::logs;
 pub(in crate::server) use log::start_of;
 pub use log::{DEFAULT_LOG_BYTES, DEFAULT_LOG_LINE_BYTES, DEFAULT_LOG_LINES, JobLog, LogLimits};
 pub(super) use results::{result, result_file};
-pub(super) use routes::{cancel, job, list, submit, upload};
+pub(super) use routes::{cancel, job, list, runtime, submit, upload};
 pub(in crate::server) use worker::NO_RUNTIME;
 pub use worker::{Cancel, JobInput, JobWorker, NoRuntime, WorkerOutcome};
 

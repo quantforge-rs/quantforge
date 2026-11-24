@@ -50,6 +50,7 @@ mod migrate;
 mod mock_binance;
 mod offline;
 mod precedence;
+mod remote;
 mod serve;
 #[cfg(feature = "postgres")]
 #[allow(dead_code, reason = "the storage tests use the rest of it")]

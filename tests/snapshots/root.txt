@@ -4,7 +4,7 @@ Usage: quantforge [OPTIONS] <COMMAND>
 
 Commands:
   data      Historical and incremental data ingestion into the selected store
-  backtest  Deterministic backtest using locally stored candles
+  backtest  Deterministic backtest: the built-in strategy on locally stored candles, or a Python strategy bundle on a --remote server
   trade     Run or manually close the strategy bot
   monitor   Observe exchange state and manage orders manually when needed
   serve     Run the server other QuantForge instances connect to

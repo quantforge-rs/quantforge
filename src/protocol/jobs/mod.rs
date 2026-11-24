@@ -12,6 +12,7 @@
 //!
 //! | Route | Body | Answer |
 //! | --- | --- | --- |
+//! | `GET /v1/runtime` | | `200` and a [`JobRuntime`]: the engine, Python version and packages the server's workers run bundles on, or none when it runs no bundles |
 //! | `PUT /v1/bundles/{code_hash}` | The bundle's canonical tar, as [`BUNDLE_MEDIA_TYPE`](super::bundle::BUNDLE_MEDIA_TYPE) | `201` and a [`BundleReceipt`] when the server stores it, `200` and the same when it held it already |
 //! | `POST /v1/backtests` | A [`JobSubmission`] | `201` and the job's [`JobStatus`], queued, with its path in `Location` |
 //! | `GET /v1/backtests/{job_id}` | | `200` and the job's [`JobStatus`] |
@@ -55,7 +56,9 @@
 //!    finishes fails with `internal`, its message saying how it stopped.
 //!
 //! A server without a worker runtime fails every job as it starts, with
-//! `unavailable`.
+//! `unavailable`, and says so at `GET /v1/runtime`, where a server with one
+//! names it: a client writes a manifest for that runtime, and checks a
+//! bundle against it before it uploads it.
 //!
 //! # A job's log
 //!
@@ -132,6 +135,7 @@
 mod log_stream;
 mod logs;
 mod result;
+mod runtime;
 mod status;
 mod submission;
 
@@ -144,6 +148,7 @@ use super::{ProtocolError, opaque_id};
 pub use log_stream::LogFrame;
 pub use logs::{JobProgress, LOG_PAGE_LINES, LogLevel, LogLine, LogPage, LogQuery};
 pub use result::{JobResult, ResultLink};
+pub use runtime::JobRuntime;
 pub use status::{JobList, JobState, JobStatus, ResultRef};
 pub use submission::{BacktestSettings, BundleReceipt, DataSelection, JobSubmission};
 

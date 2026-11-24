@@ -1,5 +1,5 @@
-//! The job routes: an upload, a submission, a job's status, the list, and
-//! a cancel. Every answer says how things stand now, so no cache keeps it.
+//! The job routes: the runtime, an upload, a submission, a job's status,
+//! the list, and a cancel. Every answer says how things stand now, so no cache keeps it.
 
 use axum::Json;
 use axum::body::Bytes;
@@ -14,7 +14,7 @@ use super::status::status;
 use super::{Jobs, submission};
 use crate::model::{JobId, JobPhase, now_utc_ms};
 use crate::protocol::bundle::BUNDLE_MEDIA_TYPE;
-use crate::protocol::jobs::{self, BundleReceipt, JobList, JobSubmission};
+use crate::protocol::jobs::{self, BundleReceipt, JobList, JobRuntime, JobSubmission};
 use crate::protocol::{ContentHash, ProtocolError};
 use crate::server::history::fresh;
 use crate::server::refusal::Refusal;
@@ -24,6 +24,14 @@ const DEFAULT_LIMIT: u64 = 100;
 
 /// The most jobs one list holds.
 const MAX_LIMIT: u64 = 1_000;
+
+/// `GET /v1/runtime`: what the worker runs bundles on, as every upload is
+/// admitted against it.
+pub(in crate::server) async fn runtime(State(jobs): State<Jobs>) -> Response {
+    fresh(Json(JobRuntime {
+        runtime: jobs.inner.worker.runtime(),
+    }))
+}
 
 /// `PUT /v1/bundles/{code_hash}`.
 pub(in crate::server) async fn upload(

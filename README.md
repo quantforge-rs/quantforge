@@ -472,6 +472,7 @@ the job's log with its traceback.
 | `GET /v1/markets` | every market held, with the span of its candles |
 | `GET /v1/candles` | the segments that hold a range, and its newest candles inline |
 | `GET /v1/segments/{hash}` | one segment; it never changes, so any cache may keep it for a year |
+| `GET /v1/runtime` | what the workers run bundles on: the engine, Python and packages, or none |
 | `PUT /v1/bundles/{code_hash}` | takes a strategy bundle as its canonical tar |
 | `POST /v1/backtests` | queues a backtest job on candles the store holds |
 | `GET /v1/backtests`, `GET /v1/backtests/{job_id}` | where jobs stand |
@@ -505,6 +506,69 @@ the
 and
 [result](https://github.com/quantforge-rs/quantforge/blob/main/docs/result-spec.md)
 specs cover what a job takes and gives back.
+
+### 🛰️ Remote backtests
+
+`--remote` runs a Python strategy on a server's candles and prints the
+report a local backtest prints:
+
+```bash
+# a file and its class; the manifest is written from --entry and --params
+cargo run -- backtest --symbol BTCUSDT --interval 1m \
+  --remote http://127.0.0.1:9600 \
+  --strategy tests/fixtures/golden/sma_cross.py \
+  --entry sma_cross.py:SmaCross --params fast=20,slow=50
+
+# a directory with its own quantforge.toml, over one day of the stored bars
+cargo run -- backtest --symbol BTCUSDT --interval 1m \
+  --remote http://127.0.0.1:9600 --strategy ./my-strategy \
+  --start 2026-11-10T00:00:00Z --end 2026-11-10T23:59:00Z
+
+# queue it and leave; ask later, or follow its log to its end
+cargo run -- backtest --symbol BTCUSDT --remote http://127.0.0.1:9600 \
+  --strategy ./my-strategy --no-wait
+cargo run -- backtest jobs status 57917a9825f44d75ad4a2e6329d00ec7 \
+  --remote http://127.0.0.1:9600 --follow
+
+# a token goes with every request; no server checks one yet
+export QF_REMOTE_TOKEN=my-token
+```
+
+```text
+remote: http://127.0.0.1:9600/ (QuantForge 0.2.0, protocol v1)
+range: 2026-01-01T12:00:00Z to 2026-01-02T11:59:00Z
+bundle: sha256:f5fbfb3f673fa6a1c42f3614c7a5399c9a9f443891c6c00449dfc06beeb17d59 (5120 bytes, stored)
+job_id: 57917a9825f44d75ad4a2e6329d00ec7
+progress: 0 of 1440 bars
+progress: 154 of 1440 bars
+…
+progress: 1440 of 1440 bars
+state: succeeded
+strategy: sma_cross.py:SmaCross
+final_equity: 9921.202457428483046329087897
+total_return_pct: -0.7879754257151695367091210300
+max_drawdown_pct: 1.8091109103945370264444945700
+trade_count: 15
+trade: entry=1767324360000 @ 81355.01000000 exit=1767326400000 @ 81092.88000000 qty=0.1213563908368800491954741441 gross_pnl=-51.525240359537865470510609
+…
+```
+
+- The bundle is built and checked here, by the code a server checks it
+  with, and uploaded under the code hash computed here. A file, or a
+  directory without a `quantforge.toml`, gets a manifest written for the
+  server's Python and for this build's engine, so the server runs the
+  engine a local run would.
+- `--start` and `--end` select the bars a local run over the same store
+  would; the server must store the market.
+- The job's log prints as it runs. **Ctrl-C stops following and leaves the
+  job running**; `backtest jobs status <job id> --remote <url>` reports
+  it, and `--follow` follows it again.
+- The report is a local run's, line for line, but the first: it names the
+  strategy by its entry.
+- A refusal prints the server's own message.
+
+[configuration.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/configuration.md#remote-backtests)
+has the details.
 
 ### 🔧 Configuration
 

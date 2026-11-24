@@ -100,11 +100,19 @@ pub(crate) async fn run(cli: Cli) -> Result<()> {
     if cli.is_worker() {
         bail!(WORKER_ONLY);
     }
+    // A backtest on a server reads no local store and reaches no exchange:
+    // it opens neither.
+    if let Command::Backtest(args) = &cli.command {
+        if args.is_remote() {
+            context::init_tracing(&cli.log_level)?;
+            return backtest::handle_remote(cli.exchange, args).await;
+        }
+    }
     let ctx = AppContext::init(&cli)?;
 
     match cli.command {
         Command::Data { command } => data::dispatch(&ctx, command).await?,
-        Command::Backtest(args) => handle_backtest(&ctx, args)?,
+        Command::Backtest(args) => handle_backtest(&ctx, *args)?,
         Command::Trade { command } => {
             ctx.verify_environment()?;
             trade::dispatch(&ctx, command).await?
@@ -240,8 +248,8 @@ pub(crate) enum Command {
         command: DataCommand,
     },
 
-    /// Deterministic backtest using locally stored candles.
-    Backtest(BacktestArgs),
+    /// Deterministic backtest: the built-in strategy on locally stored candles, or a Python strategy bundle on a --remote server.
+    Backtest(Box<BacktestArgs>),
 
     /// Run or manually close the strategy bot.
     Trade {

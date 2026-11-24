@@ -9,11 +9,14 @@ that raises fails its job with its traceback in its log; a package the
 server does not offer is refused before anything runs, and an import the
 bundle may not make as it runs; what a strategy writes is its job's log;
 every job has a worker of its own, which holds nothing of its server's
-store; and how long a job takes to reach its first bar is measured."""
+store; how long a job takes to reach its first bar is measured; and the
+command line's `backtest --remote` runs the goldens' strategy file on a
+server and prints their report."""
 
 import os
 import secrets
 import statistics
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -91,6 +94,73 @@ def test_the_goldens_sma_cross_runs_as_a_bundle_and_makes_their_trades_digit_for
     # Every bar was handed to the strategy, which wrote nothing.
     assert log["progress"] == {"bars_done": 1440, "bars_total": 1440}
     assert log["complete"] and log["lines"] == []
+
+
+def test_the_command_line_runs_the_goldens_strategy_on_a_server_and_prints_their_report(
+    place, tmp_path
+):
+    with stores.Exchange({("BTCUSDT", "1m"): jobs.golden_klines()}) as exchange:
+        place.sync(exchange)
+    expected = jobs.golden()["result"]
+    strategy = jobs.GOLDEN / "sma_cross.py"
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    environment = {name: os.environ[name] for name in ("PATH", "SYSTEMROOT") if name in os.environ}
+    with jobs.served(place, scratch(tmp_path)) as server:
+        run = subprocess.run(
+            [
+                str(stores.binary()),
+                "--log-level",
+                "error",
+                "backtest",
+                "--symbol",
+                "BTCUSDT",
+                "--remote",
+                f"http://127.0.0.1:{server.port}",
+                "--strategy",
+                str(strategy),
+                "--entry",
+                "sma_cross.py:SmaCross",
+                "--params",
+                "fast=20,slow=50",
+            ],
+            cwd=elsewhere,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=jobs.PATIENCE,
+        )
+    assert run.returncode == 0, run.stderr
+    lines = run.stdout.splitlines()
+    report = lines[lines.index("strategy: sma_cross.py:SmaCross") :]
+    trades = [
+        "trade: entry={entry_time_ms} @ {entry_price} exit={exit_time_ms} @ {exit_price} "
+        "qty={qty} gross_pnl={gross_quote_pnl}".format(**trade)
+        for trade in expected["trades"][-5:]
+    ]
+    assert report == [
+        "strategy: sma_cross.py:SmaCross",
+        f"final_equity: {expected['final_equity']}",
+        f"total_return_pct: {expected['total_return_pct']}",
+        f"max_drawdown_pct: {expected['max_drawdown_pct']}",
+        f"trade_count: {expected['trade_count']}",
+        *trades,
+    ]
+    assert "state: succeeded" in lines and "progress: 1440 of 1440 bars" in lines
+    # The client's code hash is the one this stdlib builder gives the same
+    # files: the strategy as it is, and the manifest the flags write for
+    # this server's Python and the client's engine.
+    manifest = (
+        f'format = 1\nentry = "sma_cross.py:SmaCross"\nengine = "=={qf.ENGINE_VERSION}"\n'
+        f'python = "{PYTHON}"\n\n[params]\nfast = 20\nslow = 50\n'
+    ).encode()
+    files = {"quantforge.toml": manifest, "sma_cross.py": strategy.read_bytes()}
+    named = jobs.code_hash(jobs.canonical_tar(files))
+    bundle = next(line for line in lines if line.startswith("bundle: "))
+    assert bundle.startswith(f"bundle: {named} ("), (bundle, named)
+    # Nothing was opened where the command ran.
+    assert list(elsewhere.iterdir()) == []
 
 
 def test_a_strategy_that_raises_fails_its_job_with_its_traceback_in_its_log(tmp_path):

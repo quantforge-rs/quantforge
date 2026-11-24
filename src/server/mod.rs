@@ -11,6 +11,7 @@
 //! | `GET /v1/markets` | `200`, the markets the store holds candles of, and the open times each spans |
 //! | `GET /v1/candles` | `200`, one market's bars in a range: the segments that hold them, and the tip after them |
 //! | `GET /v1/segments/{hash}` | `200`, a segment's stored bytes, which any cache may keep for a year; or `304` |
+//! | `GET /v1/runtime` | `200`, what the job workers run bundles on, or none |
 //! | `PUT /v1/bundles/{code_hash}` | `201` or `200`, a bundle stored under its code hash |
 //! | `POST /v1/backtests` | `201`, a backtest job, queued |
 //! | `GET /v1/backtests/{job_id}` | `200`, where a job stands |
@@ -177,6 +178,7 @@ fn router(history: History, jobs: Jobs) -> Router {
                 &format!("/{version}/segments/{{hash}}"),
                 get(segment::segment),
             )
+            .route(&format!("/{version}/runtime"), get(jobs::runtime))
             .route(
                 &format!("/{version}/bundles/{{code_hash}}"),
                 put(jobs::upload).layer(DefaultBodyLimit::max(upload_bytes)),

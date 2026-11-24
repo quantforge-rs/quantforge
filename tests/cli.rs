@@ -27,6 +27,7 @@ fn quantforge() -> Command {
         "QF_POSTGRES_URL",
         "QF_POSTGRES_POOL_SIZE",
         "QF_POSTGRES_CONNECT_TIMEOUT_SECS",
+        "QF_REMOTE_TOKEN",
     ] {
         cmd.env_remove(variable);
     }
