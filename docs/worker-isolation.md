@@ -10,7 +10,9 @@ each job as it starts. Both are the same worker, compiled into the binary
 and into the package: the same frames, limits and sandbox. This page says
 what a worker gets, what limits it runs within, what each operating system
 enforces of them, and what nothing enforces yet. The code is
-`src/server/workers/`.
+`src/server/workers/`. Who a worker is defended against, layer by layer,
+and what the tests show of it, is the
+[threat model](security/remote-execution.md).
 
 ## One process per job
 
@@ -43,7 +45,9 @@ Only what its job needs:
   (`TMPDIR`; `TMP` or `TEMP` on Windows) as it starts, a directory in it for
   each worker, and removes each once its worker has stopped, and its own
   when the server stops. A server that is killed leaves its directory
-  behind.
+  behind. The bundle is written into `bundle/` as the job starts, every
+  directory and file of it made new: anything standing where it goes, a
+  link above all, fails the job, and nothing is written through it.
 - **An environment with nothing of the server's in it**: only `TMPDIR`
   (`TMP` and `TEMP` on Windows), naming its scratch directory. On macOS,
   CoreFoundation, which a build with PostgreSQL support links, sets one
@@ -71,7 +75,7 @@ environment fallback:
 
 | Limit | Flag | Default | How |
 | --- | --- | --- | --- |
-| CPU time | `--job-cpu-secs` | 600 s | The worker sets `RLIMIT_CPU` on itself as it starts. Past it, the kernel stops it with `SIGXCPU`, and with `SIGKILL` a second later if the job catches that. |
+| CPU time | `--job-cpu-secs` | 600 s | The worker sets `RLIMIT_CPU` on itself as it starts. Past it, the kernel stops it with `SIGXCPU`, and on Linux with `SIGKILL` a second later if the job catches or ignores that. |
 | Memory | `--job-memory-mib` | 4096 MiB | The worker sets `RLIMIT_AS` on itself as it starts: an allocation past it fails, and the worker aborts. This limits address space, which some libraries reserve well beyond what they use. |
 | Wall-clock time | `--job-wall-secs` | 1800 s | The server kills the worker once the job has run that long. |
 
@@ -89,9 +93,10 @@ hold, and logs why:
 
 | Guard | Linux | macOS | Windows |
 | --- | --- | --- | --- |
-| CPU time | `rlimit` | `rlimit` | none |
+| CPU time | `rlimit` | `rlimit`, which a job can ignore | none |
 | Memory | `rlimit` | none | none |
 | Network | `seccomp` | none | none |
+| Processes and signals | `seccomp`, with the network guard | none | none |
 | Files | `landlock`, where the kernel has it | none | none |
 | Wall-clock time | the server kills the worker | the server kills the worker | the server kills the worker |
 
@@ -100,12 +105,27 @@ files landlock`. In detail:
 
 - **Network** (seccomp): a worker cannot create a socket of any kind, so it
   reaches no network and no local service, a PostgreSQL server listening on
-  a Unix socket included. It cannot use io_uring, which can open a socket
-  without the `socket` call, or `ptrace` and `process_vm_readv`/`writev`,
-  which read and write other processes' memory. Nor can it call `setsid` or
-  `setpgid`, so a process a job starts never leaves the worker's process
-  group, and goes when the server kills that group. A refused call fails
-  with `EACCES`.
+  a Unix socket included. Nor a pair of sockets of its own (`socketpair`):
+  one of a pair of datagram sockets can be sent to the address of any Unix
+  socket, the system log's among them. It cannot use io_uring, which can
+  open a socket without the `socket` call, or `ptrace` and
+  `process_vm_readv`/`writev`, which read and write other processes'
+  memory. A refused call fails with `EACCES`.
+- **Processes and signals** (the same seccomp filter, so the `network`
+  guard says whether they hold): a job starts no process. `fork`, `vfork`
+  and a `clone` that starts no thread are refused, and `clone3`, whose
+  flags a filter cannot read, is answered as a kernel without it answers,
+  so that a C library starts its threads with `clone`. A job's CPU time and
+  memory are limits on its worker's process, and every process a job
+  started would have them over again: without one, the limits are the
+  job's. Threads start as ever. Nor can a worker call `setsid` or
+  `setpgid`, or send a signal or set a resource limit (`kill`, `tkill`,
+  `tgkill`, `rt_sigqueueinfo`, `rt_tgsigqueueinfo`, `pidfd_send_signal`,
+  `prlimit64`) for any process but itself, or name another process as the
+  owner of a descriptor (`fcntl`'s `F_SETOWN` and `F_SETOWN_EX`), whom the
+  kernel signals as the descriptor has something to read: a job stops no
+  other process of its user, its server least of all, with a signal or by
+  taking its CPU time away.
 - **Files** (Landlock, Linux 5.13 and later, where the kernel enables it):
   a worker can open, create, change or run nothing outside its scratch
   directory: not another job's scratch directory, not the server's database
@@ -113,17 +133,20 @@ files landlock`. In detail:
   files of its interpreter, its environment and its import path, and the
   system's libraries, which a module its job imports may still load. On Linux 6.7 and later Landlock also refuses its TCP
   connections and binds, and on 6.12 and later it keeps its signals and
-  abstract Unix sockets inside the sandbox, so a job cannot signal the
-  server. A kernel without Landlock enforces no file guard, and
-  `worker_isolation:` says `files none`.
+  abstract Unix sockets inside the sandbox, each of which the seccomp
+  filter refuses already. Before Linux 6.2 Landlock does not cover
+  truncation: a job can empty, by its path, a file its user may write. A
+  kernel without Landlock enforces no file guard, and `worker_isolation:`
+  says `files none`.
 - **Other processes**: the server and its workers are not dumpable, so no
   other process of their user can attach to them or read their memory or
   environment under `/proc`, the server's database URL included.
 
-macOS enforces a worker's CPU time; it has no address-space limit, and the
-process profile has no network or file guard there. Windows enforces
-neither limit nor guard; the server still kills a worker past its
-wall-clock time.
+macOS signals a worker once when its CPU time is up, which stops a job that
+does nothing about it; a job that ignores the signal runs on to its
+wall-clock time. It has no address-space limit, and the process profile has
+no network, process or file guard there. Windows enforces neither limit nor
+guard; the server still kills a worker past its wall-clock time.
 
 ## How a job ends
 
@@ -134,6 +157,7 @@ wall-clock time.
 | It needed more memory than it may use | `failed` | `invalid_request` | `the job needed more than the N MiB of memory it may use, and was stopped` |
 | Its wall-clock time ran out | `failed` | `invalid_request` | `the job ran for the N s of wall-clock time it may run, and was stopped` |
 | Its worker crashed or was killed | `failed` | `internal` | `the job's worker stopped before the job finished:` and how, such as `it was stopped by signal 11 (SIGSEGV)` |
+| Its worker sent what no worker sends | `failed` | `internal` | `the job's worker sent the server something it cannot read` |
 | It was cancelled | `cancelled` | | |
 | The server stopped while it ran | `failed` | `internal` | `the server stopped while the job ran; submit it again` |
 
@@ -142,24 +166,30 @@ wall-clock time.
 The process profile is the default, and it is not airtight. What it leaves
 open:
 
-- A worker runs as the server's user. Run `serve run` as an ordinary user:
-  a worker running as root can raise its own limits, and do much that no
-  guard here refuses.
-- On macOS and Windows a job can reach the network and any file its user
-  can, and on Windows any process its user runs, the server included. A
-  Linux kernel without Landlock leaves files open too.
-- Before Linux 6.12 a job can signal any process of its user, and so stop
-  the server.
+- A worker runs as the server's user. Run `serve run` as an ordinary user
+  that owns nothing else: a worker running as root can raise its own
+  limits, and do much that no guard here refuses.
+- On macOS and Windows a job can reach the network, any file its user can,
+  and the processes its user runs: on macOS it reads their environments,
+  the server's among them, and on Windows the server's memory. A Linux
+  kernel without Landlock leaves files open too, and one before 6.2 lets a
+  job empty a file its user may write.
 - A job can fill its scratch directory's disk: nothing limits how much it
   writes.
+- The seccomp filter names the calls it refuses, and every other call
+  reaches the kernel: a job can still slow the other processes of its user
+  down, and a flaw in the kernel is a way out.
 - On macOS, and on Linux where seccomp does not hold (`network none`), a
-  process a job starts can outlive its worker by leaving the worker's
-  process group; on Windows every process a job starts outlives its worker.
-- A job that catches `SIGXCPU` is killed a second later and reported as
-  stopped by `SIGKILL`, not as out of CPU time.
+  job starts processes, each with the limits over again, and one of them
+  can outlive its worker by leaving the worker's process group; on Windows
+  every process a job starts outlives its worker.
+- A job that catches or ignores `SIGXCPU` is killed a second later on
+  Linux and reported as stopped by `SIGKILL`, not as out of CPU time; on
+  macOS it runs on to its wall-clock time.
 
-A container profile for hosted servers, which closes these, and the threat
-model of executing users' bundles, come later.
+The [threat model](security/remote-execution.md) says who each of these
+matters to, and what to do about it until a container profile for hosted
+servers closes them.
 
 ## The frames
 
@@ -177,10 +207,19 @@ A backtest that ran to its end sends its closed trades and its equity curve
 before `finished`, as `trades` and `equity` frames of rows, and its summary
 in `finished`. A worker never sends a file: the server reads each row,
 every decimal as its exact text, keeps no more rows than the job has bars,
-refuses a curve that does not have one row per bar or a summary that
-miscounts the trades, and writes the job's result files itself
-([result-spec.md](result-spec.md)). So what a client downloads is always
-exactly a result file, whatever the job's code did to its worker.
+refuses a trade of another symbol than the job's, a curve that does not
+have one row per bar or a summary that miscounts the trades, and writes the
+job's result files itself ([result-spec.md](result-spec.md)). So what a
+client downloads is always exactly a result file, whatever the job's code
+did to its worker.
+
+A job's code runs in its worker's process, and can write the worker's
+frames itself. So the server takes nothing a worker says on trust: a
+failure keeps the first 8 KiB of its words, and says how much it left out;
+a job fails as its request's fault, the worker's, or for want of a runtime,
+and a frame that says otherwise ends the job; and a result of a worker's
+own naming, which the tests' workloads report, is taken from no other
+worker.
 
 While a job runs its worker sends what the job says: a `log` frame for each
 line it writes, with the line's level, and `progress` frames with how many
@@ -205,6 +244,13 @@ connections and leave their process group, so that each limit and guard is
 run into before any user code runs in a worker; one runs the engine on a
 strategy built into QuantForge, so that a job ends with a result as a real
 one will; and one writes to its log, a few lines or many times what a log
-keeps, as fast as its worker takes them. `serve run` never starts its
-workers in that mode. The Python package's tests run the Python worker
-through a real `serve run` ([python-worker.md](python-worker.md#testing-it)).
+keeps, as fast as its worker takes them; and two try what a job that means
+harm would, every way out of the scratch directory and every reach for the
+processes around it. `serve run` never starts its workers in that mode. The
+Python package's tests run the Python worker through a real `serve run`
+([python-worker.md](python-worker.md#testing-it)), bundles that mean harm
+among them ([the threat model](security/remote-execution.md#what-the-tests-show)).
+
+A test of a guard skips where the workers enforce no such guard, and says
+so. Where `QUANTFORGE_TEST_SANDBOX_REQUIRED` is `1`, as on CI's Linux legs,
+it fails instead, so that no run passes for a sandbox that was never on.

@@ -483,14 +483,19 @@ the job's log with its traceback.
 | `POST /v1/backtests/{job_id}/rerun` | runs a succeeded job again from its provenance and says whether its result came out the same, or where it first did not |
 
 - The routes need no credentials yet, and the default address takes
-  connections from this machine only.
+  connections from this machine only. Leave it there: with `--job-python`,
+  whoever reaches the server can run code on it.
 - Jobs run `--job-concurrency` at a time, half the CPU cores unless set,
   each in a worker process of its own, held to `--job-cpu-secs`,
   `--job-memory-mib` and `--job-wall-secs`; on Linux a worker reaches no
-  network and changes no file outside its scratch directory, and reads
-  none but, for a Python worker, its interpreter's own files and the
-  system's libraries
+  network, starts no process, signals none but itself, and changes no file
+  outside its scratch directory, and reads none but, for a Python worker,
+  its interpreter's own files and the system's libraries
   ([worker isolation](https://github.com/quantforge-rs/quantforge/blob/main/docs/worker-isolation.md)).
+  On macOS and Windows there is no such sandbox, and a bundle runs as the
+  server's user: run only bundles you would run by hand. The
+  [threat model](https://github.com/quantforge-rs/quantforge/blob/main/docs/security/remote-execution.md)
+  says what each layer stops, what the tests show, and what nothing stops.
 - Without `--job-python` the workers have no runtime, so each job fails as
   it starts, saying so.
 - Every job runs on bars of segments its provenance names: those the
@@ -866,6 +871,7 @@ annotates every source file and maps each command to its file.
 | Candle segments | [segment-spec.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md) |
 | Strategy bundles and job results | [bundle-spec.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md), [result-spec.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/result-spec.md) |
 | What a job's worker may do, and how it runs a Python bundle | [worker-isolation.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/worker-isolation.md), [python-worker.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-worker.md) |
+| Who a server that runs uploaded code is defended against, and what nothing stops | [security/remote-execution.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/security/remote-execution.md), [SECURITY.md](https://github.com/quantforge-rs/quantforge/blob/main/SECURITY.md) |
 | Exchanges: what each supports, adding one | [exchange-feature-matrix.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/exchange-feature-matrix.md), [adding-an-exchange.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/adding-an-exchange.md) |
 | Decimals and float64 | [decimal-float-policy.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/decimal-float-policy.md) |
 | The Python package, not released yet: the types it holds, the strategy a class implements, how a backtest is run, a batch of candles as NumPy arrays, candles and results as pandas DataFrames, and the reader of the candles a store holds | [python-package.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-package.md), [python-types.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-types.md), [python-numpy.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-numpy.md), [python-pandas.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-pandas.md), [python-reader.md](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-reader.md) |

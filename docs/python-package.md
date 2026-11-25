@@ -388,6 +388,7 @@ quantforge-py/
     ├── test_distribution.py  the installed distribution: its name, its Pythons, its license, its files
     ├── test_end_to_end.py  a strategy that decides from its bars, run over fixture candles: the engine's decisions and result, and what each figure means
     ├── test_golden_parity.py  the golden parity test: an SMA cross written in Python makes the trades, the final equity and the drawdown of the Rust one's frozen run, digit for digit
+    ├── test_hostile_bundles.py  bundles that mean harm, run by a server's workers on either backend: each tries one thing a job has no business doing, a fork bomb, a memory bomb, a socket, a file outside its scratch directory, its server's secrets, a frame in its worker's place, and is held to what the workers say they enforce
     ├── test_market.py      a symbol, an interval, a product family, a product line and a market
     ├── test_numpy.py       a batch's columns as NumPy arrays and arrays as a batch: each array's type and shape, what crosses exactly and what as a float, and every refusal
     ├── test_numpy_fixtures.py  the repository's fixtures through a batch that names its market and through NumPy: every product line kept apart, a store's decimals, the frozen day of candles and its backtest

@@ -101,16 +101,42 @@ fn open_up(_dir: &Path) {}
 
 /// Writes the bundle's files into `bundle/` in the scratch directory `dir`,
 /// each at its path in the bundle, which the bundle spec keeps inside it.
+/// Every directory and file is made here, new: `bundle/` itself must not
+/// be there yet, and a path that meets anything but a directory this call
+/// made, a link above all, fails the write. So whatever stands in a
+/// scratch directory before its job, nothing of a bundle is ever written
+/// through it to another place.
 pub(super) fn write_bundle(dir: &Path, bundle: &Bundle) -> io::Result<()> {
     let root = dir.join(BUNDLE_DIR);
+    fs::create_dir(&root)?;
     for file in bundle.files() {
-        let path = root.join(file.path().as_str());
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
+        let mut path = root.clone();
+        let mut components = file.path().components().peekable();
+        while let Some(component) = components.next() {
+            path.push(component);
+            if components.peek().is_some() {
+                directory(&path)?;
+            }
         }
         File::create_new(&path)?.write_all(file.contents())?;
     }
     Ok(())
+}
+
+/// Makes the directory `path`, or takes the one an earlier file of the same
+/// bundle made: what is there must be a directory itself, never a link to
+/// one.
+fn directory(path: &Path) -> io::Result<()> {
+    match fs::create_dir(path) {
+        Err(taken) if taken.kind() == io::ErrorKind::AlreadyExists => {
+            if fs::symlink_metadata(path)?.is_dir() {
+                Ok(())
+            } else {
+                Err(taken)
+            }
+        }
+        made => made,
+    }
 }
 
 #[cfg(test)]
@@ -225,7 +251,115 @@ mod tests {
         );
         assert!(
             write_bundle(dir.path(), &bundle).is_err(),
-            "a file already there is never overwritten"
+            "a bundle already there is never written over"
         );
+    }
+
+    /// A bundle of two files in one directory and one beside it.
+    fn nested() -> Bundle {
+        Bundle::from_files(
+            [
+                (
+                    "quantforge.toml",
+                    "format = 1\nentry = \"pkg/strategy.py:Hold\"\nengine = \">=0.3.0\"\npython = \"3.12\"\n",
+                ),
+                ("pkg/strategy.py", "class Hold:\n    pass\n"),
+                ("pkg/deep/levels.json", "{}"),
+                ("notes.txt", "x"),
+            ],
+            &BundleLimits::default(),
+        )
+        .expect("a bundle")
+    }
+
+    /// Every file under `dir`, by its path from it, a link named as one and
+    /// never followed.
+    fn under(dir: &Path) -> Vec<String> {
+        let mut found = Vec::new();
+        let mut pending = vec![dir.to_path_buf()];
+        while let Some(next) = pending.pop() {
+            for entry in fs::read_dir(&next).expect("a directory").flatten() {
+                let path = entry.path();
+                let kind = fs::symlink_metadata(&path).expect("an entry").file_type();
+                let named = path.strip_prefix(dir).expect("under it");
+                let named = named.to_string_lossy().replace('\\', "/");
+                if kind.is_symlink() {
+                    found.push(format!("{named} -> a link"));
+                } else if kind.is_dir() {
+                    pending.push(path);
+                } else {
+                    found.push(named);
+                }
+            }
+        }
+        found.sort();
+        found
+    }
+
+    #[test]
+    fn a_bundle_lands_under_bundle_and_nowhere_else() {
+        let parent = tempfile::tempdir().expect("a directory");
+        let scratch = parent.path().join("scratch");
+        fs::create_dir(&scratch).expect("a scratch directory");
+        fs::write(parent.path().join("beside"), b"kept").expect("a file");
+        write_bundle(&scratch, &nested()).expect("written");
+        assert_eq!(
+            under(parent.path()),
+            [
+                "beside",
+                "scratch/bundle/notes.txt",
+                "scratch/bundle/pkg/deep/levels.json",
+                "scratch/bundle/pkg/strategy.py",
+                "scratch/bundle/quantforge.toml",
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_planted_where_a_bundle_goes_fails_the_write_and_nothing_lands_beyond_it() {
+        use std::os::unix::fs::symlink;
+
+        // Each place a bundle's path passes, a link out of the scratch
+        // directory stands in turn: the directory the bundle goes in, a
+        // directory of the bundle's own, and a file of it.
+        for planted in [
+            "bundle",
+            "bundle/pkg",
+            "bundle/pkg/deep",
+            "bundle/notes.txt",
+        ] {
+            let parent = tempfile::tempdir().expect("a directory");
+            let (scratch, outside) = (parent.path().join("scratch"), parent.path().join("outside"));
+            fs::create_dir(&scratch).expect("a scratch directory");
+            fs::create_dir(&outside).expect("a directory outside it");
+            let link = scratch.join(planted);
+            fs::create_dir_all(link.parent().expect("its directory")).expect("directories");
+            // To a directory, and for a file to a file that is not there
+            // yet, which a write that followed the link would create.
+            let target = if planted.ends_with(".txt") {
+                outside.join("written.txt")
+            } else {
+                outside.clone()
+            };
+            symlink(&target, &link).expect("a link");
+            let refused = write_bundle(&scratch, &nested()).expect_err("a link in the way");
+            assert_eq!(
+                refused.kind(),
+                io::ErrorKind::AlreadyExists,
+                "{planted}: {refused}"
+            );
+            assert_eq!(under(&outside), Vec::<String>::new(), "{planted}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_file_planted_where_a_bundles_directory_goes_fails_the_write() {
+        let dir = tempfile::tempdir().expect("a directory");
+        fs::create_dir(dir.path().join("bundle")).expect("a directory");
+        fs::write(dir.path().join("bundle/pkg"), b"in the way").expect("a file");
+        let refused = write_bundle(dir.path(), &nested()).expect_err("no bundle directory is new");
+        assert_eq!(refused.kind(), io::ErrorKind::AlreadyExists, "{refused}");
     }
 }

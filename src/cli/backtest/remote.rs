@@ -3,7 +3,9 @@
 //! over the same candles a local run would read, its log followed as it
 //! runs, and its result downloaded and printed as a local run prints its
 //! own. Ctrl-C while the log is followed leaves the job running and says
-//! how to pick it up again.
+//! how to pick it up again. What a job says, its log's lines and why it
+//! failed, is its bundle's to word, and is printed with every control
+//! character written out, so that no job redraws the lines around its own.
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Args;
@@ -249,10 +251,31 @@ pub(super) async fn report_ended(client: &RemoteClient, job: &JobId, label: &str
             report::print(label, &result.result.metrics, &result.trades);
             Ok(())
         }
-        JobState::Failed { error, .. } => bail!("job {job} failed: {}", error.message),
+        JobState::Failed { error, .. } => bail!("job {job} failed: {}", plain(&error.message)),
         JobState::Cancelled { .. } => bail!("job {job} was cancelled"),
         _ => Ok(()),
     }
+}
+
+/// `text` as a terminal may be shown it: a job's words with each control
+/// character but a tab written as Rust writes it, `\u{1b}` for the one that
+/// starts an escape sequence, `\r` and `\n` for the ones that end a line. A
+/// job that says them would otherwise clear the screen, or write a line of
+/// its own in this command's voice.
+fn plain(text: &str) -> std::borrow::Cow<'_, str> {
+    let drawn = |character: char| character.is_control() && character != '\t';
+    if !text.contains(drawn) {
+        return text.into();
+    }
+    let mut written = String::with_capacity(text.len());
+    for character in text.chars() {
+        if drawn(character) {
+            written.extend(character.escape_default());
+        } else {
+            written.push(character);
+        }
+    }
+    written.into()
 }
 
 /// How much of a followed log has been printed: progress in tenths, so a
@@ -277,7 +300,7 @@ impl Shown {
                     .dropped_bytes
                     .map(|bytes| format!(" [{bytes} more bytes left out]"))
                     .unwrap_or_default();
-                println!("log: {level}{}{cut}", line.message);
+                println!("log: {level}{}{cut}", plain(&line.message));
             }
             LogEvent::Dropped(count) => {
                 println!("log: [{count} earlier lines no longer held by the server]");
@@ -297,6 +320,32 @@ impl Shown {
                 }
             }
             _ => {}
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_jobs_words_are_shown_with_their_control_characters_written_out() {
+        // Text is shown as it is, a tab and letters of any alphabet with it.
+        for text in ["bar 12 closed at 81940.01\tup", "币安人生 é", ""] {
+            assert!(matches!(plain(text), std::borrow::Cow::Borrowed(shown) if shown == text));
+        }
+        for (said, shown) in [
+            // Clears the screen and homes the cursor.
+            ("\u{1b}[2J\u{1b}[Hcleared", "\\u{1b}[2J\\u{1b}[Hcleared"),
+            // Writes over the line it is on, and starts one of its own.
+            ("done\rstate: succeeded", "done\\rstate: succeeded"),
+            ("one\nstate: succeeded", "one\\nstate: succeeded"),
+            (
+                "bell\u{7}, nul\0, del\u{7f}, c1\u{9b}31m",
+                "bell\\u{7}, nul\\u{0}, del\\u{7f}, c1\\u{9b}31m",
+            ),
+        ] {
+            assert_eq!(plain(said), shown);
         }
     }
 }

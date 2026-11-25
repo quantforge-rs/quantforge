@@ -6,12 +6,15 @@
 //! - the messages a refused bundle shows;
 //! - a canonical tar read by the system's `tar`;
 //! - the spec document, held to the code;
+//! - bundles made to do harm, and broken ones: every one refused, and
+//!   nothing a reader accepts naming a place outside the bundle;
 //! - this build's engine version, which a bundle's requirement is held to.
 
 mod archive;
 mod determinism;
 mod docs;
 mod fixture;
+mod hostile;
 mod messages;
 
 use quantforge::ENGINE_VERSION;

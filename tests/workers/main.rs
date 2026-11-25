@@ -15,13 +15,19 @@
 //!   cancels.
 //! - `isolation`: scratch directories, the network, the environment and
 //!   descriptors a worker gets, recycling, and the worker command itself.
+//! - `hostile`: what a job that means harm tries, and is refused: a way
+//!   out of its scratch directory, and the processes around it.
 //! - `results`: a backtest in a worker, and the files its rows become.
 //! - `logs`: what a job writes to its log, a line too long, and a flood.
+//! - `docs`: the threat model, held to the tests it names and to what a
+//!   worker started here enforces.
 //! - `backends`: jobs through the queue to real workers on each backend.
 //! - `provenance`: what a job records it ran on, and its rerun, on each
 //!   backend, across both, and on a store copied or restored.
 
 mod backends;
+mod docs;
+mod hostile;
 mod isolation;
 mod limits;
 mod logs;

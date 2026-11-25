@@ -22,7 +22,10 @@ pub struct Posture {
     pub cpu: Guard,
     /// The memory a job may use.
     pub memory: Guard,
-    /// Whether a job can reach the network, or any socket.
+    /// Whether a job can reach the network, or any socket. The filter that
+    /// refuses a socket on Linux refuses with it a process of the job's own
+    /// and a signal for any process but the worker: the guard holds for all
+    /// three, or for none.
     pub network: Guard,
     /// Whether a job can reach files outside its scratch directory.
     pub files: Guard,
@@ -108,7 +111,7 @@ pub(super) fn isolate(limits: Limits, scratch: &Path, readable: &[PathBuf]) -> P
     let memory = unix::limit_memory(limits.memory_bytes);
     // Landlock before seccomp, which leaves its calls alone anyway.
     let files = linux::confine_files(scratch, readable);
-    let network = linux::refuse_sockets();
+    let network = linux::refuse_calls();
     Posture {
         cpu,
         memory,

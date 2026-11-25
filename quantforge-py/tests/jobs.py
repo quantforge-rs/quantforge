@@ -148,14 +148,16 @@ class Refused(Exception):
 
 class Served:
     """A running `serve run` on the place's store, its workers this
-    interpreter: what it said as it started, by key, and its routes."""
+    interpreter: what it said as it started, by key, and its routes.
+    `variables` are more of its environment, beside the place's own."""
 
-    def __init__(self, place, scratch: pathlib.Path, *arguments, python=None):
+    def __init__(self, place, scratch: pathlib.Path, *arguments, python=None, variables=None):
         self.place = place
         environment = {
             name: os.environ[name] for name in ("PATH", "SYSTEMROOT") if name in os.environ
         }
         environment.update(place.variables)
+        environment.update(variables or {})
         for variable in ("TMPDIR", "TMP", "TEMP"):
             environment[variable] = str(scratch)
         command = [
@@ -303,8 +305,8 @@ class Served:
 
 
 @contextlib.contextmanager
-def served(place, scratch: pathlib.Path, *arguments, python=None):
-    with Served(place, scratch, *arguments, python=python) as server:
+def served(place, scratch: pathlib.Path, *arguments, python=None, variables=None):
+    with Served(place, scratch, *arguments, python=python, variables=variables) as server:
         yield server
 
 

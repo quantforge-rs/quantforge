@@ -19,15 +19,20 @@
 //! | CPU time | `RLIMIT_CPU` | `RLIMIT_CPU` | none |
 //! | memory | `RLIMIT_AS` | none | none |
 //! | network | seccomp refuses every socket | none | none |
+//! | processes and signals | the same filter refuses a process of the job's own, and a signal or a limit for any other | none | none |
 //! | files | Landlock leaves only the scratch directory, where the kernel has it | none | none |
 //! | wall clock | the server kills the worker | the server kills the worker | the server kills the worker |
 //!
 //! `docs/worker-isolation.md` says what each guard covers and what none
-//! does yet.
+//! does yet, and `docs/security/remote-execution.md` who a worker is
+//! defended against.
 //!
 //! A backtest that ran to its end sends its server its summary and the
 //! rows of its trades and its equity curve, never files: the server checks
-//! every row as it reads it, and writes the result files itself. While a
+//! every row as it reads it, and writes the result files itself. A job's
+//! code runs in its worker's process and can write its frames, so nothing
+//! a worker says is taken on trust: what it sends is held to its job, and
+//! a frame no worker of its kind sends ends the job. While a
 //! job runs, its worker sends each line the job writes to its log and how
 //! many bars it has run; the server keeps the newest lines within the
 //! log's limits, and never holds more than a few of a worker's frames at

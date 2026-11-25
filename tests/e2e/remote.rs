@@ -35,6 +35,10 @@ const GOLDEN: &str = "tests/fixtures/golden";
 /// What the goldens' strategy writes to its log, here.
 const SAID: &str = "sma cross over the frozen day";
 
+/// A line a job that means harm writes: it clears the screen, then writes
+/// over its own line and starts another, each in the command's own voice.
+const DRAWN: &str = "\u{1b}[2Jcleared\rstate: succeeded\nstate: succeeded";
+
 fn golden_path(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(GOLDEN)
@@ -135,6 +139,7 @@ impl JobWorker for Engine {
         .expect("a strategy");
         log.line(LogLevel::Info, SAID);
         log.line(LogLevel::Warning, "a warning, too");
+        log.line(LogLevel::Error, DRAWN);
         let bars = u64::try_from(input.candles.len()).expect("a count");
         log.progress(bars / 2, bars);
         let backtest = &input.submission.backtest;
@@ -347,6 +352,15 @@ fn the_goldens_bundle_runs_remotely_and_prints_the_local_report(bed: &TestBed) {
     assert!(at(&format!("log: {SAID}")) < at("log: warning: a warning, too"));
     assert!(at("log: warning: a warning, too") < at("progress: 1440 of 1440 bars"));
     assert!(at("progress: 1440 of 1440 bars") < at("state: succeeded"));
+    // A line that would redraw the screen is one line of the job's log,
+    // its control characters written out, and the job's state is said
+    // once, by the command.
+    at(r"log: error: \u{1b}[2Jcleared\rstate: succeeded\nstate: succeeded");
+    let states = lines
+        .iter()
+        .filter(|line| line.contains("state: succeeded"));
+    assert_eq!(states.count(), 2, "{lines:#?}");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains(['\u{1b}', '\r']));
 
     // The same bundle again is held already, under the same hash.
     let again = remote_cmd(&remote, elsewhere.path(), &["--no-wait"])
