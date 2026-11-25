@@ -2,10 +2,13 @@
 //! being the same file, and where a file differs, value by value in the
 //! file's own order to the first that differs: `metrics` field by field,
 //! the tables row by row, each row column by column, every value as its
-//! exact text, so that a decimal's scale counts.
+//! exact text, so that a decimal's scale counts. A file only the rerun
+//! produced differs too. The values are read on a thread of their own,
+//! which holds the rerun's slot: a table can be long.
 
 use std::sync::Arc;
 
+use tokio::sync::OwnedSemaphorePermit;
 use tracing::error;
 
 use super::Jobs;
@@ -21,18 +24,21 @@ use crate::server::results::{ResultFile, unpack};
 type Cell = (&'static str, String);
 
 /// The job's result files, in the order it lists them, against the
-/// rerun's. A file of the job's that differs is read from the store and
-/// checked against its name, as the result routes read it.
+/// rerun's, then each file only the rerun produced. A file of the job's
+/// that differs is read from the store and checked against its name, as
+/// the result routes read it; the two are then read value by value on a
+/// thread that holds `slot`, the rerun's, until it is done.
 pub(super) async fn compare(
     jobs: &Jobs,
     job_id: &JobId,
     recorded: &[ResultRef],
-    rerun: &[ResultFile],
+    rerun: Vec<ResultFile>,
+    slot: Arc<OwnedSemaphorePermit>,
 ) -> Result<Vec<ResultComparison>, Refusal> {
     let differing: Vec<ResultRef> = recorded
         .iter()
         .filter(|reference| {
-            produced(rerun, reference).is_some_and(|file| file.reference.hash != reference.hash)
+            produced(&rerun, reference).is_some_and(|file| file.reference.hash != reference.hash)
         })
         .cloned()
         .collect();
@@ -58,7 +64,25 @@ pub(super) async fn compare(
             .collect()
     })
     .await?;
-    recorded
+    let (id, listed) = (job_id.clone(), recorded.to_vec());
+    tokio::task::spawn_blocking(move || {
+        let _slot = slot;
+        compared(&id, &listed, &rerun, &stored)
+    })
+    .await
+    .map_err(|_| Refusal::internal("the server failed while it compared a rerun's result"))?
+}
+
+/// Each of the job's files against the rerun's of its name, one that
+/// differs against `stored`, the job's copy of it; then each file only the
+/// rerun produced, which has no recorded hash to match.
+fn compared(
+    job_id: &JobId,
+    recorded: &[ResultRef],
+    rerun: &[ResultFile],
+    stored: &[(String, Vec<u8>)],
+) -> Result<Vec<ResultComparison>, Refusal> {
+    let mut compared = recorded
         .iter()
         .map(|reference| {
             let file = produced(rerun, reference);
@@ -78,12 +102,28 @@ pub(super) async fn compare(
             };
             Ok(ResultComparison {
                 name: reference.name.clone(),
-                recorded: reference.hash,
+                recorded: Some(reference.hash),
                 rerun: file.map(|file| file.reference.hash),
                 divergence,
             })
         })
-        .collect()
+        .collect::<Result<Vec<_>, Refusal>>()?;
+    compared.extend(
+        rerun
+            .iter()
+            .filter(|file| {
+                recorded
+                    .iter()
+                    .all(|reference| reference.name != file.reference.name)
+            })
+            .map(|file| ResultComparison {
+                name: file.reference.name.clone(),
+                recorded: None,
+                rerun: Some(file.reference.hash),
+                divergence: None,
+            }),
+    );
+    Ok(compared)
 }
 
 /// The rerun's file of the name the job lists `reference` under.

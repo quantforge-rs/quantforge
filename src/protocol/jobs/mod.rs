@@ -161,16 +161,17 @@
 //!
 //! `POST /v1/backtests/{job_id}/rerun` runs a succeeded job again from its
 //! provenance alone and answers once the rerun has ended, as long as it
-//! runs: it waits for a slot like any job, on a worker like any job, within
-//! the same limits.
+//! runs: it takes a slot like any job, and holds it until it answers, on a
+//! worker like any job, within the same limits.
 //!
-//! 1. The server reads the job's provenance, checks it against its
-//!    identity, and checks the bundle and every segment it names against
-//!    their names. Anything the store no longer holds, or holds altered,
-//!    refuses the rerun with `409 conflict`, the message listing every
-//!    difference, and so does a bundle the server's runtime no longer
-//!    admits, such as one whose manifest's engine requirement the server's
-//!    engine does not meet.
+//! 1. The server reads the job's provenance and checks it against its
+//!    identity. Once a slot is free, and not before, it reads the bundle
+//!    and every segment the provenance names and checks each against its
+//!    name. Anything the store no longer holds, or holds altered, refuses
+//!    the rerun with `409 conflict`, the message listing every difference,
+//!    and so does a bundle the server's runtime no longer admits, such as
+//!    one whose manifest's engine requirement the server's engine does not
+//!    meet.
 //! 2. It runs the bundle on the bars of those segments within the job's
 //!    range, under the job's settings. A runtime that differs from the one
 //!    recorded, but admits the bundle, runs it: the report names what ran.
@@ -178,9 +179,11 @@
 //!    same file, byte for byte, and so the same values, each decimal with
 //!    its scale. A file that differs is read row by row to the first value
 //!    that differs, which the report gives with both texts
-//!    ([`Divergence`]). The verdict is `verified` when every file is the
-//!    same, and `diverged` otherwise, or when the rerun failed for its
-//!    bundle's own reasons, which [`RerunReport::failure`] gives.
+//!    ([`Divergence`]); a file the rerun produced that the job does not
+//!    list comes last, with no recorded hash. The verdict is `verified`
+//!    when every file is the same and the rerun produced no other, and
+//!    `diverged` otherwise, or when the rerun failed for its bundle's own
+//!    reasons, which [`RerunReport::failure`] gives.
 //!
 //! A rerun changes nothing the server holds: the report is its answer, and
 //! the server's log records each verdict.

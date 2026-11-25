@@ -34,7 +34,8 @@ pub struct RerunReport {
     /// the job, wherever the bundle's manifest allows one.
     pub runtime: ProvenanceRuntime,
     /// Each of the job's result files, in the order the job lists them,
-    /// against the file the rerun produced.
+    /// against the file the rerun produced; then each file the rerun
+    /// produced that the job does not list.
     pub results: Vec<ResultComparison>,
     /// Why the rerun failed, when it did: it produced no file, and its
     /// verdict is `diverged`. A failure of the server's own is refused
@@ -49,9 +50,11 @@ pub struct RerunReport {
 #[non_exhaustive]
 pub enum RerunVerdict {
     /// Every result file came out byte for byte as the job's, and so every
-    /// value in it, each decimal with its scale.
+    /// value in it, each decimal with its scale; and the rerun produced no
+    /// other file.
     Verified,
-    /// A file came out otherwise, or the rerun failed.
+    /// A file came out otherwise or not at all, the rerun produced a file
+    /// the job does not list, or the rerun failed.
     Diverged,
     /// A verdict this build does not know, from a later revision of the
     /// protocol. Never sent: serializing it fails.
@@ -59,13 +62,17 @@ pub enum RerunVerdict {
     Unrecognized,
 }
 
-/// One of a job's result files against the rerun's file of the same name.
+/// One of a job's result files against the rerun's file of the same name,
+/// or a file only the rerun produced.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResultComparison {
-    /// The file: `metrics`, `trades` or `equity`.
+    /// The file: `metrics`, `trades` or `equity` for every file a job
+    /// lists.
     pub name: String,
-    /// The hash the job lists for it.
-    pub recorded: ContentHash,
+    /// The hash the job lists for it; absent for a file the job does not
+    /// list, which only the rerun produced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recorded: Option<ContentHash>,
     /// The hash of the rerun's file; absent when the rerun produced none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rerun: Option<ContentHash>,
@@ -113,7 +120,7 @@ mod tests {
                 .expect("a runtime"),
             results: vec![ResultComparison {
                 name: "trades".to_string(),
-                recorded: EMPTY.parse().expect("a hash"),
+                recorded: Some(EMPTY.parse().expect("a hash")),
                 rerun: None,
                 divergence: None,
             }],
@@ -162,6 +169,22 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<Divergence>(&json).expect("a divergence"),
             divergence
+        );
+    }
+
+    #[test]
+    fn a_file_only_the_rerun_produced_has_no_recorded_hash() {
+        let extra = ResultComparison {
+            name: "notes".to_string(),
+            recorded: None,
+            rerun: Some(EMPTY.parse().expect("a hash")),
+            divergence: None,
+        };
+        let json = serde_json::to_string(&extra).expect("serialize");
+        assert_eq!(json, format!(r#"{{"name":"notes","rerun":"{EMPTY}"}}"#));
+        assert_eq!(
+            serde_json::from_str::<ResultComparison>(&json).expect("a comparison"),
+            extra
         );
     }
 

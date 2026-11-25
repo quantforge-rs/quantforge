@@ -16,7 +16,7 @@ use crate::protocol::bundle::Runtime;
 use crate::protocol::bundle::{Bundle, BundleLimits};
 use crate::protocol::{ErrorBody, ErrorCode};
 use crate::sdk::BuiltInStrategyConfig;
-use crate::server::results::BacktestOutput;
+use crate::server::results::{BacktestOutput, ResultFile};
 
 /// The first bar of the job's range: a hundred minutes into the first day.
 pub(super) const START: TimestampMs = T + 100 * MINUTE;
@@ -80,6 +80,15 @@ pub(super) enum Later {
     Rescaled,
     /// The bundle raises.
     Failing,
+    /// The same files, and one more: `notes()`.
+    Extra,
+    /// The run stops without being asked to.
+    Quitting,
+}
+
+/// The file a worker whose later runs are `Extra` adds to their result.
+pub(super) fn notes() -> ResultFile {
+    ResultFile::new("notes", "text/plain", b"one file more\n".to_vec())
 }
 
 /// A worker that backtests the built-in SMA cross on the candles it is
@@ -121,6 +130,7 @@ impl JobWorker for Backtesting {
                     supported: None,
                 });
             }
+            Later::Quitting if !first => return WorkerOutcome::Cancelled,
             _ => {}
         }
         let mut strategy = BuiltInStrategyConfig::SmaCross { fast: 2, slow: 3 }
@@ -137,7 +147,11 @@ impl JobWorker for Backtesting {
             let point = &mut result.equity_curve[0];
             point.equity.rescale(point.equity.scale() + 1);
         }
-        WorkerOutcome::Succeeded(BacktestOutput::of(&result).files().expect("the files"))
+        let mut files = BacktestOutput::of(&result).files().expect("the files");
+        if let (Later::Extra, false) = (self.later, first) {
+            files.push(notes());
+        }
+        WorkerOutcome::Succeeded(files)
     }
 }
 

@@ -1,11 +1,14 @@
 //! `POST /v1/backtests/{job_id}/rerun`: a succeeded job run again from its
 //! provenance alone, on the bars of the segments it names and the bundle of
 //! its code hash, each checked against its name first; and its result
-//! compared with the job's (`compare`). The rerun waits for a slot like any
-//! job and runs on a worker like any job, registered so that a stopping
-//! server stops it; a client that hangs up stops it too. It changes nothing
-//! the server holds: the report is its answer, and the log records each
-//! verdict.
+//! compared with the job's (`compare`). The rerun takes a slot like any job
+//! before it reads more than the provenance, so that one waiting for its
+//! turn holds no bars, and keeps it until it answers; the worker it runs
+//! on, and the thread that compares its result, keep it until they end,
+//! even when its client hangs up. It is registered as running here, so that
+//! a stopping server stops it, and so does a client that hangs up. It
+//! changes nothing the server holds: the report is its answer, and the log
+//! records each verdict.
 
 use std::sync::Arc;
 
@@ -14,9 +17,9 @@ use axum::extract::rejection::PathRejection;
 use axum::extract::{Path, State};
 use axum::response::Response;
 use sha2::{Digest, Sha256};
+use tokio::sync::OwnedSemaphorePermit;
 use tracing::{error, info};
 
-use super::Jobs;
 use super::bars::{SegmentFault, read_segments};
 use super::compare::compare;
 use super::provenance::ledger;
@@ -24,6 +27,7 @@ use super::queue::patiently;
 use super::results::listed;
 use super::routes::job_named;
 use super::worker::{Cancel, JobInput, NO_RUNTIME, WorkerOutcome};
+use super::{JobLog, Jobs};
 use crate::model::{BundleHash, Candle, JobId, JobPhase, SegmentHash, ms_to_rfc3339};
 use crate::protocol::bundle::Bundle;
 use crate::protocol::jobs::{
@@ -63,46 +67,13 @@ pub(in crate::server) async fn rerun(
     let recorded = listed(&ledger.record)?;
     let inputs = ledger.stored.inputs;
 
-    // What the job ran on, each part checked against its name.
-    let bundle = read_bundle(&jobs, inputs.code_hash).await?;
-    let hashes: Vec<SegmentHash> = inputs
-        .data
-        .segments
-        .iter()
-        .map(|segment| SegmentHash::from_digest(*segment.hash.digest()))
-        .collect();
-    let opened = read_segments(&jobs, &hashes, &Cancel::new())
-        .await?
-        .unwrap_or_default();
-    let mut problems: Vec<String> = bundle.as_ref().err().cloned().into_iter().collect();
-    let mut candles: Vec<Candle> = Vec::new();
-    let range = inputs.data.start_open_ms..=inputs.data.end_open_ms;
-    for (segment, opened) in inputs.data.segments.iter().zip(opened) {
-        match opened {
-            Ok(bars) => candles.extend(
-                bars.into_iter()
-                    .filter(|candle| range.contains(&candle.open_time_ms)),
-            ),
-            Err(SegmentFault::Missing) => problems.push(format!(
-                "the server no longer holds segment {}, which held the bars from {} to {}",
-                segment.hash,
-                ms_to_rfc3339(segment.first_open_ms),
-                ms_to_rfc3339(segment.last_open_ms)
-            )),
-            Err(SegmentFault::Damaged(why)) => problems.push(format!(
-                "the server's copy of segment {} is altered: {why}",
-                segment.hash
-            )),
-        }
-    }
-    let bundle = match bundle {
-        Ok(bundle) if problems.is_empty() => bundle,
-        _ => {
-            return Err(Refusal::conflict(format!(
-                "job {job_id} cannot be rerun: {}",
-                problems.join("; ")
-            )));
-        }
+    // Nothing more is read before a slot is free, as a job reads nothing
+    // before it has one; the slot is shared with the work handed to other
+    // threads, and free once all of it has ended.
+    let slot = Arc::new(take_slot(&jobs).await.ok_or_else(stopped)?);
+    let run = Registered::new(&jobs, run_name()?);
+    let Some((bundle, candles)) = read_inputs(&jobs, &job_id, &inputs, &run.cancel).await? else {
+        return Err(stopped());
     };
     let runtime = jobs
         .inner
@@ -135,19 +106,22 @@ pub(in crate::server) async fn rerun(
         deps: bundle.manifest().deps().clone(),
     };
     let input = JobInput {
-        job_id: run_name()?,
+        job_id: run.name.clone(),
         submission: submission_of(&inputs),
         bundle,
         candles,
     };
-    let (results, failure) = match run_again(&jobs, input).await? {
-        Rerun::Produced(files) => (compare(&jobs, &job_id, &recorded, &files).await?, None),
+    let (results, failure) = match run_again(&jobs, &run, input, &slot).await? {
+        Rerun::Produced(files) => (
+            compare(&jobs, &job_id, &recorded, files, Arc::clone(&slot)).await?,
+            None,
+        ),
         Rerun::Failed(error) => {
             let results = recorded
                 .iter()
                 .map(|reference| ResultComparison {
                     name: reference.name.clone(),
-                    recorded: reference.hash,
+                    recorded: Some(reference.hash),
                     rerun: None,
                     divergence: None,
                 })
@@ -155,10 +129,11 @@ pub(in crate::server) async fn rerun(
             (results, Some(error))
         }
     };
+    // A file only the rerun produced has no recorded hash, so it differs.
     let same = failure.is_none()
         && results
             .iter()
-            .all(|compared| compared.rerun == Some(compared.recorded));
+            .all(|compared| compared.rerun == compared.recorded);
     let verdict = if same {
         RerunVerdict::Verified
     } else {
@@ -175,6 +150,75 @@ pub(in crate::server) async fn rerun(
         results,
         failure,
     })))
+}
+
+/// A job slot once one is free, taken as the dispatcher takes one: `None`
+/// once the server stops.
+async fn take_slot(jobs: &Jobs) -> Option<OwnedSemaphorePermit> {
+    let mut stopping = jobs.inner.stopping.subscribe();
+    tokio::select! {
+        biased;
+        _ = stopping.wait_for(|stopping| *stopping) => None,
+        slot = Arc::clone(&jobs.inner.slots).acquire_owned() => slot.ok(),
+    }
+}
+
+/// The refusal of a rerun the server stopped.
+fn stopped() -> Refusal {
+    Refusal::unavailable(
+        "the server stopped before the rerun could finish; ask for it again once the server is \
+         back",
+    )
+}
+
+/// The bundle and the bars the job ran on, read as its provenance names
+/// them, each part checked against its name; `None` once `cancel` is sent.
+/// Anything the store no longer holds as recorded refuses the rerun, every
+/// difference named.
+async fn read_inputs(
+    jobs: &Jobs,
+    job_id: &JobId,
+    inputs: &ProvenanceInputs,
+    cancel: &Cancel,
+) -> Result<Option<(Bundle, Vec<Candle>)>, Refusal> {
+    let bundle = read_bundle(jobs, inputs.code_hash).await?;
+    let hashes: Vec<SegmentHash> = inputs
+        .data
+        .segments
+        .iter()
+        .map(|segment| SegmentHash::from_digest(*segment.hash.digest()))
+        .collect();
+    let Some(opened) = read_segments(jobs, &hashes, cancel).await? else {
+        return Ok(None);
+    };
+    let mut problems: Vec<String> = bundle.as_ref().err().cloned().into_iter().collect();
+    let mut candles: Vec<Candle> = Vec::new();
+    let range = inputs.data.start_open_ms..=inputs.data.end_open_ms;
+    for (segment, opened) in inputs.data.segments.iter().zip(opened) {
+        match opened {
+            Ok(bars) => candles.extend(
+                bars.into_iter()
+                    .filter(|candle| range.contains(&candle.open_time_ms)),
+            ),
+            Err(SegmentFault::Missing) => problems.push(format!(
+                "the server no longer holds segment {}, which held the bars from {} to {}",
+                segment.hash,
+                ms_to_rfc3339(segment.first_open_ms),
+                ms_to_rfc3339(segment.last_open_ms)
+            )),
+            Err(SegmentFault::Damaged(why)) => problems.push(format!(
+                "the server's copy of segment {} is altered: {why}",
+                segment.hash
+            )),
+        }
+    }
+    match bundle {
+        Ok(bundle) if problems.is_empty() => Ok(Some((bundle, candles))),
+        _ => Err(Refusal::conflict(format!(
+            "job {job_id} cannot be rerun: {}",
+            problems.join("; ")
+        ))),
+    }
 }
 
 /// The bundle of a job's code hash, checked against its name; or why it
@@ -258,49 +302,49 @@ enum Rerun {
     Failed(ErrorBody),
 }
 
-/// A rerun registered as running here, until it is dropped: then its
-/// signal is sent, which stops a run its client no longer waits for, and
-/// it is forgotten.
+/// A rerun registered as running here under its name, with its signal and
+/// its log, until it is dropped: then its signal is sent, which stops a run
+/// its client no longer waits for, and it is forgotten.
 struct Registered {
     jobs: Jobs,
-    key: String,
+    name: jobs::JobId,
     cancel: Cancel,
+    log: JobLog,
+}
+
+impl Registered {
+    fn new(jobs: &Jobs, name: jobs::JobId) -> Self {
+        let (cancel, log) = jobs.register_key(name.to_string());
+        Self {
+            jobs: jobs.clone(),
+            name,
+            cancel,
+            log,
+        }
+    }
 }
 
 impl Drop for Registered {
     fn drop(&mut self) {
         self.cancel.cancel();
-        self.jobs.unregister_key(&self.key);
+        self.jobs.unregister_key(self.name.as_str());
     }
 }
 
-/// Runs `input` on the worker once a slot is free, as a job runs. A
-/// stopping server answers that it stopped, and so does a failure of the
-/// server's own; only the bundle's own failure is the rerun's outcome.
-async fn run_again(jobs: &Jobs, input: JobInput) -> Result<Rerun, Refusal> {
-    let mut stopping = jobs.inner.stopping.subscribe();
-    let slot = tokio::select! {
-        biased;
-        _ = stopping.wait_for(|stopping| *stopping) => None,
-        slot = Arc::clone(&jobs.inner.slots).acquire_owned() => slot.ok(),
-    };
-    let stopped = || {
-        Refusal::unavailable(
-            "the server stopped before the rerun could finish; ask for it again once the server \
-             is back",
-        )
-    };
-    let slot = slot.ok_or_else(stopped)?;
-    let key = input.job_id.to_string();
-    let (cancel, log) = jobs.register_key(key.clone());
-    let _registered = Registered {
-        jobs: jobs.clone(),
-        key,
-        cancel: cancel.clone(),
-    };
-    let worker = Arc::clone(&jobs.inner.worker);
+/// Runs `input` on the worker under `run`'s signal, the worker holding
+/// `slot` until it exits. A stopping server answers that it stopped, and a
+/// failure of the server's own is refused as one; only the bundle's own
+/// failure is the rerun's outcome.
+async fn run_again(
+    jobs: &Jobs,
+    run: &Registered,
+    input: JobInput,
+    slot: &Arc<OwnedSemaphorePermit>,
+) -> Result<Rerun, Refusal> {
+    let (worker, held) = (Arc::clone(&jobs.inner.worker), Arc::clone(slot));
+    let (cancel, log) = (run.cancel.clone(), run.log.clone());
     let ran = tokio::task::spawn_blocking(move || {
-        let _slot = slot;
+        let _slot = held;
         worker.run(input, &cancel, &log)
     })
     .await
@@ -320,6 +364,12 @@ async fn run_again(jobs: &Jobs, input: JobInput) -> Result<Rerun, Refusal> {
                 error.message
             )))
         }
-        WorkerOutcome::Cancelled => Err(stopped()),
+        WorkerOutcome::Cancelled if run.cancel.is_cancelled() => Err(stopped()),
+        WorkerOutcome::Cancelled => {
+            error!(rerun = %run.name, "a rerun's worker stopped it without being asked to");
+            Err(Refusal::internal(
+                "the rerun could not finish: the worker stopped it without being asked to",
+            ))
+        }
     }
 }

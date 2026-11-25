@@ -503,7 +503,7 @@ src/
         ├── queue.rs            a job that waits out a busy store as it starts, and a log stored before its end is said
         ├── backtesting.rs      three days of candles, two packed, and a worker that backtests what it is handed
         ├── provenance.rs       a job's bars from its segments and those packed for it, and the provenance route
-        ├── reruns.rs           a rerun verified after corrections, two that diverge, one that fails, and a stop
+        ├── reruns.rs           a rerun verified after corrections, three that diverge, one that fails, one stopped unasked, one waiting for a slot, and a stop
         ├── rerun_refusals.rs   reruns refused: a segment or bundle not held as recorded, a runtime, no result
         ├── results.rs          a result the store holds damaged, lost or unlisted, never sent
         ├── logs.rs             the log route's refusals, a stored log that reads as none, and a client that talks
