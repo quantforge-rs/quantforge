@@ -139,8 +139,12 @@ def test_the_distribution_brings_the_package_and_nothing_beside_it(distribution,
         extension = "_native.pyd" if sys.platform == "win32" else "_native.abi3.so"
         assert brought == [
             "quantforge_py/__init__.py",
+            "quantforge_py/_client.py",
+            "quantforge_py/_errors.py",
             "quantforge_py/_frames.py",
+            "quantforge_py/_jobs.py",
             f"quantforge_py/{extension}",
             "quantforge_py/_runtime.py",
+            "quantforge_py/_wire.py",
             "quantforge_py/_worker.py",
         ]

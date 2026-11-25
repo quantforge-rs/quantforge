@@ -35,6 +35,15 @@ refused in the engine's own words:
   a frame as a batch.
 - ``trades_to_dataframe`` and ``equity_to_dataframe``: the closed trades
   and the equity curve of a ``BacktestResult`` as pandas DataFrames.
+- ``Client``: the client of a QuantForge server, ``quantforge serve run``.
+  ``client.backtest`` lists the server's backtest jobs and gets one by its
+  ID, each as a ``Job``: its ID, the ``JobStatus`` the server last gave of
+  it, and ``refresh`` and ``cancel``, which ask the server.
+- ``RemoteError``: a request to a server that did not get its answer, and
+  the six exceptions derived from it, one for each way a caller acts on
+  one: ``AuthError``, ``ValidationError``, ``NotFound``, ``Conflict``,
+  ``ServerUnavailable`` and ``VersionMismatch``. One a server refused a
+  request with says what the server said, word for word.
 
 A price, a quantity or an amount is a ``decimal.Decimal`` on both sides of
 every type, and never a float. It becomes one only where it is asked to, by
@@ -42,19 +51,25 @@ the engine's own conversion: ``decimal_to_f64`` for one value,
 ``CandleBatch.to_numpy`` for the columns of a batch, and the four functions
 that give or take a DataFrame, which are for computing with.
 
-Importing the package opens no store. A ``CandleReader`` is the one object
-that holds one, and the one that holds a database's credentials: it is for
-the process that reads its own store, and nothing it reads carries them.
+Importing the package opens no store and no connection. A ``CandleReader``
+is the one object that holds a store, and the one that holds a database's
+credentials: it is for the process that reads its own store, and nothing it
+reads carries them. A ``Client`` is the one object that reaches a server,
+when it is first used and not before, and the one that holds a server's
+token, which it never shows.
 
 The package requires nothing but Python. NumPy and pandas are its two
 extras: ``pip install "quantforge-py[numpy]"`` for the arrays, and
 ``pip install "quantforge-py[pandas]"`` for the DataFrames, which brings
 NumPy too. Neither is imported before it is needed, and where one is missing
-what needs it says what to install.
+what needs it says what to install. The client is written with the standard
+library alone, and imports what a request takes when it first makes one.
 
 The types come from the compiled extension module, ``quantforge_py._native``,
-and the DataFrame functions from ``quantforge_py._frames``. Both are private:
-import the names from here.
+the DataFrame functions from ``quantforge_py._frames``, and the client, its
+jobs and its exceptions from ``quantforge_py._client``, ``quantforge_py._jobs``
+and ``quantforge_py._errors``. Every module of the package is private: import
+the names from here.
 """
 
 from ._native import (
@@ -86,6 +101,17 @@ from ._frames import (
     equity_to_dataframe,
     trades_to_dataframe,
 )
+from ._client import Client
+from ._jobs import Job, JobStatus
+from ._errors import (
+    AuthError,
+    Conflict,
+    NotFound,
+    RemoteError,
+    ServerUnavailable,
+    ValidationError,
+    VersionMismatch,
+)
 
 __all__ = [
     "__version__",
@@ -113,4 +139,14 @@ __all__ = [
     "dataframe_to_candles",
     "trades_to_dataframe",
     "equity_to_dataframe",
+    "Client",
+    "Job",
+    "JobStatus",
+    "RemoteError",
+    "AuthError",
+    "ValidationError",
+    "NotFound",
+    "Conflict",
+    "ServerUnavailable",
+    "VersionMismatch",
 ]

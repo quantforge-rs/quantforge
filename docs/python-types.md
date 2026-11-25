@@ -12,9 +12,10 @@ This page is what each type takes and gives, and how a backtest is run.
 A batch of candles as NumPy arrays has a page of its own,
 [candles as NumPy arrays](python-numpy.md), and so have candles and a
 backtest's result as pandas DataFrames,
-[candles and results as pandas DataFrames](python-pandas.md), and the
-reader of the candles a store holds,
-[the candle reader](python-reader.md). How the package is named, built and
+[candles and results as pandas DataFrames](python-pandas.md), the reader
+of the candles a store holds, [the candle reader](python-reader.md), and
+the client of a QuantForge server,
+[the Python client](python-client.md). How the package is named, built and
 tested is [the Python package](python-package.md).
 
 ```python
@@ -81,6 +82,15 @@ contract, with their signatures.
 which reads the candles the command line stored into a `CandleBatch`. It is
 the engine's own reader, `quantforge::CandleReader`, and
 [the candle reader](python-reader.md) is its contract, with its signatures.
+
+**And the client of a QuantForge server, with what it gives and what it
+raises:** `Client`, the `Job` it gives for each backtest job the server
+holds, a job's `JobStatus`, and `RemoteError` with the six exceptions
+derived from it. They are written in Python, with the standard library
+alone, and bind no type of the engine's: a status gives what its job runs
+in the types of this page, a `MarketId` and a `BacktestConfig`.
+[The Python client](python-client.md) is their contract, with their
+signatures.
 
 ## How a value crosses
 

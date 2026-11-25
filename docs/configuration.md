@@ -318,6 +318,14 @@ against the [bundle spec](bundle-spec.md) before the first request.
   a refusal prints the server's own message word for word, and a job that
   failed prints its error; each exits with status 1.
 
+**The Python package's client takes the same token by the same rule:** its
+`token` argument, or `QF_REMOTE_TOKEN` where the argument is left out, sent
+only over `https`, or over `http` to this machine
+([python-client.md](python-client.md)). It differs from the command line in
+three things: it reads no proxy from the environment, it follows no
+redirect whether it has a token or not, and it refuses a URL that carries a
+user name or a password.
+
 ## Environment variables QuantForge does not own
 
 These are conventions shared across Rust and Unix tools, read by dependencies

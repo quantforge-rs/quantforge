@@ -1760,7 +1760,9 @@ def test_every_docstring_says_what_to_install_and_none_calls_a_spot_pnl_a_future
 
 
 def test_the_four_functions_take_what_the_contract_states():
-    assert {name: str(inspect.signature(getattr(qf, name))) for name in qf.__all__[-4:]} == {
+    first = qf.__all__.index("candles_to_dataframe")
+    four = qf.__all__[first : first + 4]
+    assert {name: str(inspect.signature(getattr(qf, name))) for name in four} == {
         "candles_to_dataframe": "(candles, /)",
         "dataframe_to_candles": "(frame, /, *, market=None)",
         "trades_to_dataframe": "(result, /)",

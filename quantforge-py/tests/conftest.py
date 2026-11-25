@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import re
 import tomllib
 import warnings
 
@@ -267,6 +268,45 @@ def no_storage_setting_from_outside(monkeypatch):
     that wants one sets it."""
     for variable in stores.SETTINGS:
         monkeypatch.delenv(variable, raising=False)
+
+
+# The variable a client reads its token from where it is given none: the
+# command line's, for `--remote-token`.
+REMOTE_TOKEN = "QF_REMOTE_TOKEN"
+
+
+@pytest.fixture(autouse=True)
+def no_token_from_outside(monkeypatch):
+    """Every test starts without the variable a client reads its token
+    from, whatever the shell that runs the tests exports: a test that wants
+    one sets it."""
+    monkeypatch.delenv(REMOTE_TOKEN, raising=False)
+
+
+@pytest.fixture(scope="session")
+def protocol_codes(repository) -> dict[str, int]:
+    """Every code of the protocol's error envelope, with its HTTP status, in
+    the protocol's order: the table the crate's own tests hold its
+    `ErrorCode` to."""
+    source = read(repository / "src" / "protocol" / "errors.rs")
+    ((count, rows),) = re.findall(
+        r"const CODES: \[\(ErrorCode, &str, u16\); (\d+)\] = \[(.*?)\];", source, re.S
+    )
+    codes = {name: int(status) for name, status in re.findall(r'"(\w+)", (\d+)\)', rows)}
+    assert len(codes) == int(count) == 10
+    return codes
+
+
+@pytest.fixture(scope="session")
+def protocol_states(repository) -> list[str]:
+    """Every state the protocol names for a job, in its order, as it is
+    written on the wire: the variants of the crate's `JobState` but the one
+    no server sends."""
+    source = read(repository / "src" / "protocol" / "jobs" / "status.rs")
+    (variants,) = re.findall(r"^pub enum JobState \{\n(.*?)^\}", source, re.S | re.M)
+    named = re.findall(r"^    (\w+)(?: \{|,)$", variants, re.M)
+    assert named[-1] == "Unrecognized" and len(named) == 6
+    return [name.lower() for name in named[:-1]]
 
 
 @pytest.fixture(scope="session")
