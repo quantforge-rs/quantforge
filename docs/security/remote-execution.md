@@ -280,8 +280,8 @@ How each is reported, where its guard holds:
 - **Stopped at a limit** (`memory-bomb`, `cpu-spin`, `wall-sleep`): the job
   fails as `invalid_request`, its message naming the limit and its value.
   A memory limit met inside Python fails the job as a `MemoryError`. A job
-  that ignores the CPU limit's signal is killed a second later on Linux and
-  reported as stopped by `SIGKILL`.
+  that ignores the CPU limit's signal is killed on Linux once it has used
+  one more second of CPU time, and reported as stopped by `SIGKILL`.
 - **Refused by the server** (`forged-frames`, `exit`): the job fails as
   `internal`, `the job's worker sent the server something it cannot read`
   or `the job's worker stopped before the job finished`, and has no result.

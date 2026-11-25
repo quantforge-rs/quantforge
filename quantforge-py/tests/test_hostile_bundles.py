@@ -666,7 +666,8 @@ def test_a_bundle_that_ignores_the_signal_for_its_cpu_time_is_stopped_all_the_sa
     request, out_of_cpu
 ):
     if sys.platform.startswith("linux") and out_of_cpu.holds("cpu"):
-        # The kernel kills it a second past the limit, and says no more.
+        # The kernel kills it a second of CPU time past the limit, and says
+        # no more.
         assert out_of_cpu.run(CPU_SPIN, ignoring=True).error == {
             "code": "internal",
             "message": "the job's worker stopped before the job finished: it was stopped by "
@@ -675,7 +676,8 @@ def test_a_bundle_that_ignores_the_signal_for_its_cpu_time_is_stopped_all_the_sa
         return
     # macOS signals once and lets a job that ignores it run on: on a server
     # where the CPU time is up seconds before the wall clock, so that the
-    # signal is sent and a kill a second after it would end the job early.
+    # signal is sent, and a kill a second of CPU time after it would end
+    # the job early.
     limited = "out_of_cpu_then_time" if out_of_cpu.holds("cpu") else "out_of_time"
     server = request.getfixturevalue(limited)
     ran = server.run(CPU_SPIN, ignoring=True)

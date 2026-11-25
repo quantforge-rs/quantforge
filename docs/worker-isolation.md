@@ -75,7 +75,7 @@ environment fallback:
 
 | Limit | Flag | Default | How |
 | --- | --- | --- | --- |
-| CPU time | `--job-cpu-secs` | 600 s | The worker sets `RLIMIT_CPU` on itself as it starts. Past it, the kernel stops it with `SIGXCPU`, and on Linux with `SIGKILL` a second later if the job catches or ignores that. |
+| CPU time | `--job-cpu-secs` | 600 s | The worker sets `RLIMIT_CPU` on itself as it starts. Past it, the kernel stops it with `SIGXCPU`, and on Linux, if the job catches or ignores that, with `SIGKILL` once it has used one more second of CPU time. |
 | Memory | `--job-memory-mib` | 4096 MiB | The worker sets `RLIMIT_AS` on itself as it starts: an allocation past it fails, and the worker aborts. This limits address space, which some libraries reserve well beyond what they use. |
 | Wall-clock time | `--job-wall-secs` | 1800 s | The server kills the worker once the job has run that long. |
 
@@ -183,9 +183,9 @@ open:
   job starts processes, each with the limits over again, and one of them
   can outlive its worker by leaving the worker's process group; on Windows
   every process a job starts outlives its worker.
-- A job that catches or ignores `SIGXCPU` is killed a second later on
-  Linux and reported as stopped by `SIGKILL`, not as out of CPU time; on
-  macOS it runs on to its wall-clock time.
+- A job that catches or ignores `SIGXCPU` is killed on Linux once it has
+  used one more second of CPU time, and reported as stopped by `SIGKILL`,
+  not as out of CPU time; on macOS it runs on to its wall-clock time.
 
 The [threat model](security/remote-execution.md) says who each of these
 matters to, and what to do about it until a container profile for hosted
