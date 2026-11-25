@@ -239,14 +239,17 @@ exist.
 
 ### The job store
 
-`JobStore`: the bundles a server was sent, its jobs and their results. A
-bundle is stored once under its name; a job moves from queued to running to
-one final phase, or straight to cancelled, each move one guarded change, so a
-claim never takes a job twice and nothing changes an ended job; a succeeded
-job's results are stored in the change that ends it, each once under its
-name; and what a server kept of a job's log is stored once, under the job.
-The scenarios use any bytes, names and text: checking a bundle or a result
-against its name, and reading a log, is the server's.
+`JobStore`: the bundles a server was sent, its jobs, their results, their
+logs and their provenance. A bundle is stored once under its name; a job
+moves from queued to running to one final phase, or straight to cancelled,
+each move one guarded change, so a claim never takes a job twice and nothing
+changes an ended job; a succeeded job's results are stored in the change that
+ends it, each once under its name; what a server kept of a job's log is
+stored once, under the job; and so is a job's provenance, with the segments
+packed for the job, in one change that names no segment the store lacks. The
+scenarios use any bytes, names and text: checking a bundle, a result or a
+segment against its name, and reading a log or a provenance, is the
+server's.
 
 <!-- begin: jobs -->
 - `jobs.bundle_stored_once`: a bundle is stored once under its name, every
@@ -281,6 +284,17 @@ against its name, and reading a log, is the server's.
 - `jobs.log_of_any_job_held`: a log is stored for a job wherever it stands,
   queued, running, ended or cancelled, and changes nothing else of it; one for
   a job the store does not hold is refused
+- `jobs.provenance_recorded_once`: a job's provenance is recorded once under
+  the job, its text kept as given with its identity, and read back with the
+  time and the store's own backend and schema version; one recorded again
+  changes nothing, its segments included, and a job with none reads nothing
+- `jobs.provenance_stores_its_segments`: the segments packed for a job are
+  stored with its provenance, each once under its name, the bytes stored first
+  staying; a later provenance names a segment the store holds without handing
+  it again
+- `jobs.provenance_names_held_segments`: a provenance naming a segment the
+  store neither holds nor is handed is refused, storing nothing, the segments
+  handed with it included; one for a job the store does not hold is refused
 - `jobs.reopened`: a store opened again keeps every job as it stood, and
   claims on in order
 - `jobs.claims_racing`: stores claiming at once from many queued jobs claim
@@ -288,6 +302,9 @@ against its name, and reading a log, is the server's.
 - `jobs.failed_end_changes_nothing`: an end whose results cannot all be
   stored changes nothing: the job still runs and holds no result, and ends
   once they can
+- `jobs.failed_provenance_changes_nothing`: a provenance whose record cannot be
+  stored changes nothing: none of the segments handed with it is stored, and
+  it is recorded once it can
 <!-- end: jobs -->
 
 ### The policy store

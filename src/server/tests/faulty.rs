@@ -9,8 +9,9 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 
 use crate::model::{
-    BundleHash, Candle, JobId, JobOutcome, JobRecord, MarketCoverage, MarketId, NewJob, ResultHash,
-    SegmentHash, SegmentPlan, SegmentRefresh, TimestampMs,
+    BundleHash, Candle, JobId, JobOutcome, JobRecord, MarketCoverage, MarketId, NewJob,
+    NewProvenance, ProvenanceRecord, ResultHash, SegmentHash, SegmentPlan, SegmentRefresh,
+    TimestampMs,
 };
 use crate::ports::{CandleQuery, CandleStore, JobStore, SegmentStore, StorageError};
 
@@ -290,6 +291,22 @@ impl<S: JobStore> JobStore for Faulty<S> {
     fn job_log(&self, job_id: &JobId) -> Result<Option<String>, StorageError> {
         self.fault()?;
         self.inner.job_log(job_id)
+    }
+
+    fn record_provenance(
+        &self,
+        job_id: &JobId,
+        provenance: &NewProvenance,
+        recorded_at_ms: TimestampMs,
+    ) -> Result<bool, StorageError> {
+        self.fault()?;
+        self.inner
+            .record_provenance(job_id, provenance, recorded_at_ms)
+    }
+
+    fn provenance(&self, job_id: &JobId) -> Result<Option<ProvenanceRecord>, StorageError> {
+        self.fault()?;
+        self.inner.provenance(job_id)
     }
 
     fn cancel_job(

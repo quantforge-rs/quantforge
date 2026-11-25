@@ -179,15 +179,16 @@ pub mod storage;
 pub use model::{
     AccountTrade, AssetBalance, BotRunState, BundleHash, CancelOrderRequest, Candle, CandleBatch,
     CandleColumns, Category, ClosedTrade, ControlEvent, DurabilityReport, DurabilitySetting,
-    Environment, ExchangeId, ExchangeOrder, ExecutionMode, Fill, IdentitySource, Interval, JobId,
-    JobOutcome, JobPhase, JobRecord, KeyFingerprint, KlineRequest, LegacyRun, MarketCoverage,
-    MarketId, MarketOrderRequest, ModelError, NewJob, OrderQueryRequest, OrderStatus,
-    PositionState, ResultHash, RunIdentity, RunStatus, SchemaMigration, SegmentHash, SegmentPlan,
-    SegmentRef, SegmentRefresh, SegmentTip, Side, StoreActivation, StoreId, StoreIdentity,
-    StoredResult, Symbol, SymbolRules, TargetPosition, TimestampMs, TransferRecord, TransferState,
-    ValidationIssue, ValidationReport, Venue, VenueAccountId, VenueOrderId, VenueTradeId,
-    decimal_from_f64, decimal_to_f64, describe_account, describe_environment, ms_to_rfc3339,
-    now_utc_ms, parse_rfc3339_to_ms, round_down_to_step, validate_candles,
+    Environment, ExchangeId, ExchangeOrder, ExecutionMode, Fill, IdentitySource, InputsIdentity,
+    Interval, JobId, JobOutcome, JobPhase, JobRecord, KeyFingerprint, KlineRequest, LegacyRun,
+    MarketCoverage, MarketId, MarketOrderRequest, ModelError, NewJob, NewProvenance,
+    OrderQueryRequest, OrderStatus, PackedSegment, PositionState, ProvenanceRecord, ResultHash,
+    RunIdentity, RunStatus, SchemaMigration, SegmentHash, SegmentPlan, SegmentRef, SegmentRefresh,
+    SegmentTip, Side, StoreActivation, StoreId, StoreIdentity, StoredResult, Symbol, SymbolRules,
+    TargetPosition, TimestampMs, TransferRecord, TransferState, ValidationIssue, ValidationReport,
+    Venue, VenueAccountId, VenueOrderId, VenueTradeId, decimal_from_f64, decimal_to_f64,
+    describe_account, describe_environment, ms_to_rfc3339, now_utc_ms, parse_rfc3339_to_ms,
+    round_down_to_step, validate_candles,
 };
 
 /// The seams. An out-of-tree exchange or storage backend implements the

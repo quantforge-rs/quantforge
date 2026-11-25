@@ -11,17 +11,29 @@
 //! - `routes`: the runtime, upload, submission, status, list and cancel
 //!   routes.
 //! - `results`: the routes that answer what a succeeded job produced.
+//! - `provenance`: the route that answers what a job ran on, and the ledger
+//!   a rerun reads.
+//! - `rerun`: the route that runs a succeeded job again from its
+//!   provenance, and `compare`, which compares the two results.
 //! - `follow`: the log route, a page of a job's log or the stream that
 //!   follows it.
 //! - `submission`: what an upload and a submission must pass.
 //! - `queue`: the dispatcher, a job's run, and the stop.
+//! - `inputs`: what a job runs on, read as it starts, and its provenance
+//!   recorded before it runs; `bars`, its bars from the segments that hold
+//!   them and from the candles no segment holds yet, packed for the job.
 //! - `status`: a job's record as the protocol shows it.
 //! - `log`: a job's log, kept within its limits while the job runs.
 //! - `worker`: what runs a job, and the signal a cancel sends it.
 
+mod bars;
+mod compare;
 mod follow;
+mod inputs;
 mod log;
+mod provenance;
 mod queue;
+mod rerun;
 mod results;
 mod routes;
 mod status;
@@ -45,6 +57,8 @@ use crate::protocol::{ErrorBody, ErrorCode};
 pub(super) use follow::logs;
 pub(in crate::server) use log::start_of;
 pub use log::{DEFAULT_LOG_BYTES, DEFAULT_LOG_LINE_BYTES, DEFAULT_LOG_LINES, JobLog, LogLimits};
+pub(super) use provenance::provenance;
+pub(super) use rerun::rerun;
 pub(super) use results::{result, result_file};
 pub(super) use routes::{cancel, job, list, runtime, submit, upload};
 pub(in crate::server) use worker::NO_RUNTIME;
@@ -162,18 +176,22 @@ impl Jobs {
         Ok(failed)
     }
 
-    /// Stops claiming jobs, stops the running ones, and returns once each
-    /// has ended, those it stopped failed so that their clients know to
-    /// submit them again, and once the log streams it had open have said
-    /// their last, or a few seconds have passed. Answers how many jobs it
-    /// stopped. A caller that cannot wait drops this future: the next start
+    /// Stops claiming jobs, stops the running ones and every rerun in
+    /// progress, and returns once each has ended, the jobs it stopped
+    /// failed so that their clients know to submit them again, and once the
+    /// log streams it had open have said their last, or a few seconds have
+    /// passed. Answers how many jobs it stopped, reruns not counted. A caller that cannot wait drops this future: the next start
     /// fails them.
     pub async fn stop(&self) -> usize {
         let stopped = {
             let running = self.running();
             self.inner.stopping.send_replace(true);
             running.values().for_each(|job| job.cancel.cancel());
-            running.len()
+            // A rerun is stopped too, and is no job.
+            running
+                .keys()
+                .filter(|key| !key.starts_with(rerun::RUN_PREFIX))
+                .count()
         };
         let all = u32::try_from(self.inner.job_limits.concurrency).unwrap_or(u32::MAX);
         // Every job holds a slot until its end and its log are written.
@@ -200,6 +218,12 @@ impl Jobs {
     /// Records a job as running here, and answers its signal, already sent
     /// when the server is stopping, and its log, empty.
     fn register(&self, job_id: &JobId) -> (Cancel, JobLog) {
+        self.register_key(job_id.to_string())
+    }
+
+    /// Records a run under `key` as running here, as [`Jobs::register`]
+    /// records a job: a rerun runs under a name of its own.
+    fn register_key(&self, key: String) -> (Cancel, JobLog) {
         let job = Running {
             cancel: Cancel::new(),
             log: JobLog::new(self.inner.job_limits.log),
@@ -210,7 +234,7 @@ impl Jobs {
             if *self.inner.stopping.borrow() {
                 job.cancel.cancel();
             }
-            running.insert(job_id.to_string(), job);
+            running.insert(key, job);
         }
         self.moved();
         handles
@@ -223,7 +247,11 @@ impl Jobs {
     }
 
     fn unregister(&self, job_id: &JobId) {
-        self.running().remove(job_id.as_str());
+        self.unregister_key(job_id.as_str());
+    }
+
+    fn unregister_key(&self, key: &str) {
+        self.running().remove(key);
     }
 
     /// Sends a job's signal, when it runs here.

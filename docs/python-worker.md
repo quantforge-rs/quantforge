@@ -107,6 +107,15 @@ A worker writes no bytecode (`-B`), has neither the user's site-packages
 Python's traceback to its standard error if it crashes
 (`-X faulthandler`).
 
+So a job run again comes out the same: a server records, before a job
+runs, its bars, its bundle and the engine, Python and packages that run it,
+as the job's provenance, and `POST /v1/backtests/{job_id}/rerun` runs a
+succeeded job again from that record and compares the result file by file
+([the protocol](../src/protocol/jobs/mod.rs) says how). What a strategy
+takes from outside its bars and its state, such as `random` without a seed
+of its own or the clock, comes out otherwise on a rerun, and the rerun says
+where its result first differs.
+
 ## What a bundle may import
 
 A bundle's own code may import

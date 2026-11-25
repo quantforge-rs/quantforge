@@ -123,3 +123,12 @@ INSERT INTO reservation_pools VALUES ('bybit', 'demo', 'venue', '12345', 'asset:
 INSERT INTO store_control_events(from_activation, to_activation, activation_epoch, changed_at_ms)
 VALUES ('inactive', 'active', 1, 1792454300000);
 "#;
+
+/// A job's provenance, the row schema 11 adds, naming the segment the seed
+/// holds.
+pub(super) const SEED_11: &str = r#"
+INSERT INTO job_provenance VALUES
+  (repeat('a', 32), 'sha256:' || repeat('12', 32),
+   '{"format":1,"inputs":{"data":{"segments":[{"hash":"sha256:abab"}]}}}', 'postgres', 11,
+   1792454402000);
+"#;

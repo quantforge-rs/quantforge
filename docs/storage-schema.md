@@ -1,6 +1,6 @@
 # The storage schema
 
-**Schema 10.** Every QuantForge store holds the same tables under one schema
+**Schema 11.** Every QuantForge store holds the same tables under one schema
 version, on SQLite and on PostgreSQL. This page is the contract between
 them: the identities their rows carry, the record a store keeps
 about itself and the activation contract behind it, who owns which tables
@@ -11,7 +11,7 @@ hold every backend to the identities. [upgrading.md](upgrading.md) is the
 operator's side of the same contract.
 
 <!-- begin: schema version -->
-10
+11
 <!-- end: schema version -->
 
 ## Contents
@@ -28,6 +28,7 @@ operator's side of the same contract.
 - [Segments on PostgreSQL](#segments-on-postgresql)
 - [Keeping segments](#keeping-segments)
 - [Keeping jobs](#keeping-jobs)
+- [Keeping provenance](#keeping-provenance)
 - [Keeping policies](#keeping-policies)
 - [Keeping the execution store](#keeping-the-execution-store)
 - [The shared cases](#the-shared-cases)
@@ -184,8 +185,8 @@ story exist yet.
 | `job_logs` | QUA-355 (ALG-512) | schema 8 |
 | `automation_profiles`, `policy_revisions` | QUA-36 (ALG-735) | schema 9 |
 | `signal_inbox`, `signal_deliveries`, `execution_operations`, `execution_intents`, `execution_orders`, `execution_fills`, `position_cycles`, `margin_reservations`, `execution_incidents`, `outbox_events`, and the store's own `position_leases`, `reservation_pools` and `store_control_events` | QUA-206 (ALG-738) | schema 10 |
+| `job_provenance` | QUA-352 (ALG-516) | schema 11 |
 | Notifications | ALG-749 | a later schema |
-| Jobs' provenance: the reproducibility ledger | ALG-516 | a later schema |
 <!-- end: table owners -->
 
 **PostgreSQL** starts at schema 5 with the same version numbers and the
@@ -193,7 +194,7 @@ same steps from there on; a step that applies to a backend that never had
 the earlier schema is the whole step's DDL for that backend.
 
 **A later step.** A story that changes the schema, such as ALG-749's
-notifications or the provenance of ALG-516:
+notifications:
 
 - adds one step for the next version on both backends in the same change:
   SQLite's to `src/storage/sqlite/migrate.rs`, PostgreSQL's to
@@ -240,6 +241,7 @@ untouched (`StorageError::SchemaUnsupported`).
 | 7 → 8 | QUA-355 | `job_logs`: what is kept of each job's log. No job an earlier build recorded has one, since no earlier build kept any. |
 | 8 → 9 | QUA-36 | `automation_profiles` and `policy_revisions`: automation profiles and every revision of their policies. Both start empty: no earlier build recorded a profile. |
 | 9 → 10 | QUA-206 | The execution store's tables: the signal inbox and its deliveries, the operations, the intents, orders, fills, position cycles, reservations and incidents, the event outbox, and the store's own leases, pool revisions and activation log. All start empty, and the store's record stays as it was: bound or not, and never activated by a step. |
+| 10 → 11 | QUA-352 | `job_provenance`: each job's provenance, the reproducibility ledger. No job an earlier build ran has one, since no earlier build recorded any. |
 
 ## The chain on PostgreSQL
 
@@ -266,6 +268,7 @@ committed, and the waiting process would apply the step again.
 | 7 → 8 | QUA-355 | `job_logs`, as [below](#schema-8-on-postgresql), its job IDs collated `"C"` from the start. |
 | 8 → 9 | QUA-36 | `automation_profiles` and `policy_revisions`, as [below](#schema-9-on-postgresql), their profile IDs collated `"C"` from the start. |
 | 9 → 10 | QUA-206 | The execution store's tables, as [below](#schema-10-on-postgresql). Every table a transfer copies is keyed by a number, so none needs a collation of its own. |
+| 10 → 11 | QUA-352 | `job_provenance`, as [below](#schema-11-on-postgresql), its job IDs collated `"C"` from the start. |
 
 Refused untouched, before anything is created:
 
@@ -776,6 +779,15 @@ CREATE TABLE store_control_events (
   to_activation TEXT NOT NULL,
   activation_epoch INTEGER NOT NULL,
   changed_at_ms INTEGER NOT NULL
+);
+
+CREATE TABLE job_provenance (
+  job_id TEXT PRIMARY KEY,
+  identity TEXT NOT NULL,
+  provenance_json TEXT NOT NULL,
+  backend TEXT NOT NULL,
+  schema_version INTEGER NOT NULL,
+  recorded_at_ms INTEGER NOT NULL
 );
 ```
 <!-- end: sqlite schema -->
@@ -1292,6 +1304,23 @@ CREATE TABLE store_control_events (
 ```
 <!-- end: postgres step 10 -->
 
+### Schema 11 on PostgreSQL
+
+The step after schema 10, `SCHEMA_11`, held to this text the same way:
+
+<!-- begin: postgres step 11 -->
+```sql
+CREATE TABLE job_provenance (
+  job_id TEXT COLLATE "C" PRIMARY KEY,
+  identity TEXT NOT NULL,
+  provenance_json TEXT NOT NULL,
+  backend TEXT NOT NULL,
+  schema_version BIGINT NOT NULL,
+  recorded_at_ms BIGINT NOT NULL
+);
+```
+<!-- end: postgres step 11 -->
+
 ## Segments on PostgreSQL
 
 The segment tables are SQLite's, and so is the protocol over them, which
@@ -1306,7 +1335,7 @@ packing are the same code on both backends (`src/storage/refresh.rs`), and
   second system to run.
 - **Blobs are immutable.** A segment row is inserted with `ON CONFLICT
   (hash) DO NOTHING` and never updated: a replaced segment stays loadable,
-  and a hash a job's provenance names (ALG-516) stays there. Only an index
+  and a hash a job's provenance names (QUA-352) stays there. Only an index
   entry moves to another hash, or goes when its window has no candles left.
 - **Every mark is a revision.** Writing candles that change a window marks
   it with `INSERT ... ON CONFLICT (exchange, symbol, interval,
@@ -1332,10 +1361,23 @@ packing are the same code on both backends (`src/storage/refresh.rs`), and
 
 No release deletes a segment, on either backend. A segment a correction
 replaced stays stored and opens under its name, because a job's provenance
-(ALG-516) names the segments it read by hash, and a rerun must find their
+(QUA-352) names the segments it read by hash, and a rerun must find their
 bytes. The shared suite holds this on both backends with
 `segments.correction_keeps_old_segment`, `segments.backfill_keeps_old_segment`
 and `segments.emptied_window`.
+
+**A job packs what it reads and no segment holds yet.** A job's range can
+reach past the segments the index lists: into the window holding the
+newest candle, and into windows waiting for a refresh. As the job starts,
+the server packs the bars it reads from each such window into a segment of
+the job's own, in the [segment format](segment-spec.md), and the store
+keeps it as a row of `segments` in the change that records the job's
+provenance ([Keeping provenance](#keeping-provenance)): no index entry
+names it, and the provenance does. A window wholly inside the range packs
+to the segment a refresh would build from the same candles, which is
+stored once whichever writes it first; a part of a window packs to a
+segment of its own. Either way the job's bars stay readable under their
+names after a correction, a cutover or a restore.
 
 Replaced segments take up space in proportion to what corrections replace.
 A later story may reclaim it with an operator command. Nothing in 0.3 does,
@@ -1344,10 +1386,11 @@ and the rules below need no schema change:
 - **What counts as a reference.** A segment may go only when no
   `segment_index` row and no retained provenance record names it. Both are
   read when the command runs; no reference is counted or cached.
-- **Retention belongs to the records.** ALG-516 decides how long a job's
-  record is kept, and a hash stays referenced for as long as a record names
-  it. A segment has no clock of its own, and without that ledger nothing can
-  be collected at all.
+- **Retention belongs to the records.** A job's provenance is kept as long
+  as its job, which no release deletes (QUA-352), and a hash stays
+  referenced for as long as a provenance names it. A segment has no clock of
+  its own: the segments packed for a job are named by its provenance alone,
+  and stay as long as it does.
 - **The check and the delete are one transaction that keeps write-backs
   out.** A write-back can name a stored blob again at any moment, and `ON
   CONFLICT (hash) DO NOTHING` locks no row. So the transaction starts with
@@ -1383,7 +1426,9 @@ shared suite's `jobs` group holds both backends to the same answers
   does the same. `idx_jobs_state` serves the claim and the startup scan.
 - **What a row holds.** `request_json` is the submission as the server
   accepted it, its market's category named, and the job's input is read
-  from the store's candles as it starts; `results_json` is the results'
+  as it starts, from the segments holding its range and, for bars no
+  segment holds yet, from the candles, and recorded as its provenance
+  ([Keeping provenance](#keeping-provenance)); `results_json` is the results'
   JSON list and `failure_json` the protocol's error body. `started_at_ms`
   is empty until a claim, and stays empty for a job cancelled while
   queued.
@@ -1432,6 +1477,41 @@ shared suite's `jobs` group holds both backends to the same answers
   with `internal` and the reason; a server that stops fails the jobs it
   runs the same way. A cancel stops a job's worker only in the server that
   claimed it.
+
+## Keeping provenance
+
+`serve run` records each job's provenance through the `JobStore` port as
+the job starts, before its worker runs: what the job runs on, the reproducibility
+ledger a rerun reads ([the protocol](../src/protocol/jobs/mod.rs) is the
+contract of what it holds). The shared suite's `jobs` group holds both
+backends to the same answers.
+
+- **One row per job, recorded once and never changed.** `job_id` names a
+  job the store holds; a provenance recorded again changes nothing.
+  `provenance_json` is the server's JSON, which a store keeps and returns
+  and never reads: `{"format":1,"inputs":{…},"strategy":{…}}`, the
+  protocol's `ProvenanceInputs` and `ProvenanceStrategy`. `identity` is the
+  SHA-256 of the inputs as the protocol writes them, which the server checks
+  the JSON against whenever it reads it back.
+- **Where it was recorded is no part of what was run.** `backend` (`sqlite`
+  or `postgres`) and `schema_version` are those of the store that recorded
+  the row, and `recorded_at_ms` when: the same inputs on SQLite and on
+  PostgreSQL have the same identity and JSON. No connection URL, user,
+  password or credential is written here. A transfer copies the row as it
+  is, so one recorded on SQLite says `sqlite` on its PostgreSQL copy.
+- **It names only segments the store holds.** The record lists every
+  segment holding a bar the job reads, and the change that records it
+  refuses one the store does not hold. The segments the server packed for
+  the job ([Keeping segments](#keeping-segments)) are written in that same
+  change, `ON CONFLICT (hash) DO NOTHING`, so a refused record stores none
+  of them.
+- **One transaction.** On SQLite, one `BEGIN IMMEDIATE`. On PostgreSQL, one
+  `READ COMMITTED` transaction that locks the job's row `FOR UPDATE`, so two
+  records of one job take turns and the second finds the first, writes the
+  record, then reads the copy guard, so an unfinished copy refuses it.
+- **Kept as long as its job.** No release deletes a provenance, nor a job
+  or a segment one names. A job an earlier build ran has none: step 11
+  adds the table empty, and such a job is never rerun.
 
 ## Keeping policies
 

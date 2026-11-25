@@ -11,7 +11,9 @@
 //! opened by the build before automation policies, its queue driven on
 //! until jobs ended with their logs kept. Schema 9's, that one opened by
 //! the build before the execution store and given two profiles with their
-//! policies, is held by `migration_execution`.
+//! policies, is held by `migration_execution`; and schema 10's, that one
+//! opened by the build before the reproducibility ledger, activated, given
+//! a lease and an operation and deactivated, by `migration_provenance`.
 
 use quantforge::model::futures::{
     OwnerTag, PolicyChange, ProfileId, ProfileIdentity, ProfileLabel, ProfilePolicy,
@@ -340,7 +342,7 @@ fn a_schema_5_store_gains_the_job_tables_and_keeps_every_row() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 5, "five steps logged");
+                assert_eq!(after.len(), rows_before.len() + 6, "six steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -351,7 +353,10 @@ fn a_schema_5_store_gains_the_job_tables_and_keeps_every_row() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10)]);
+    assert_eq!(
+        steps,
+        [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10), (10, 11)]
+    );
     let migrated = store.store_identity().expect("identity");
     assert_eq!(migrated.store_id, identity.store_id, "the same store");
     assert_eq!(migrated.environment, identity.environment);
@@ -388,7 +393,7 @@ fn a_schema_5_store_gains_the_job_tables_and_keeps_every_row() {
     assert_eq!((claimed.job_id, claimed.phase), (job_id, JobPhase::Running));
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 6);
+    assert_eq!(store.migrations().expect("log").len(), 7);
 }
 
 /// Schema 6 held bundles and jobs and no result of any: the steps from it
@@ -424,7 +429,7 @@ fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 4, "four steps logged");
+                assert_eq!(after.len(), rows_before.len() + 5, "five steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -435,7 +440,10 @@ fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10)]);
+    assert_eq!(
+        steps,
+        [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10), (10, 11)]
+    );
     assert_eq!(
         everything(&store, "job_results"),
         Vec::<Vec<Option<String>>>::new()
@@ -506,7 +514,7 @@ fn a_schema_6_store_gains_the_results_table_and_keeps_every_job() {
     assert_eq!(store.claim_job(DAY_TWO + 3).expect("a claim"), None);
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 6);
+    assert_eq!(store.migrations().expect("log").len(), 7);
 }
 
 /// Schema 7 held jobs with their result files and no log of any: the step
@@ -543,7 +551,7 @@ fn a_schema_7_store_gains_the_logs_table_and_keeps_every_result() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 3, "three steps logged");
+                assert_eq!(after.len(), rows_before.len() + 4, "four steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -554,7 +562,10 @@ fn a_schema_7_store_gains_the_logs_table_and_keeps_every_result() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10)]);
+    assert_eq!(
+        steps,
+        [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10), (10, 11)]
+    );
     assert_eq!(
         everything(&store, "job_logs"),
         Vec::<Vec<Option<String>>>::new()
@@ -620,7 +631,7 @@ fn a_schema_7_store_gains_the_logs_table_and_keeps_every_result() {
     );
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 6);
+    assert_eq!(store.migrations().expect("log").len(), 7);
 }
 
 /// Schema 8 held jobs with their logs and no automation profile: the step
@@ -660,7 +671,7 @@ fn a_schema_8_store_gains_the_policy_tables_and_keeps_every_log() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 2, "two steps logged");
+                assert_eq!(after.len(), rows_before.len() + 3, "three steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -671,7 +682,10 @@ fn a_schema_8_store_gains_the_policy_tables_and_keeps_every_log() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10)]);
+    assert_eq!(
+        steps,
+        [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10), (10, 11)]
+    );
     for table in ["automation_profiles", "policy_revisions"] {
         assert_eq!(
             everything(&store, table),
@@ -733,7 +747,7 @@ fn a_schema_8_store_gains_the_policy_tables_and_keeps_every_log() {
     );
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 6);
+    assert_eq!(store.migrations().expect("log").len(), 7);
 }
 
 #[test]
@@ -761,6 +775,7 @@ fn a_fresh_store_logs_one_step_from_zero_and_is_the_documented_schema() {
             "execution_operations",
             "execution_orders",
             "job_logs",
+            "job_provenance",
             "job_results",
             "jobs",
             "margin_reservations",

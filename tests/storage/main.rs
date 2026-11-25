@@ -19,6 +19,9 @@
 //! - [`migration_execution`]: the step that gives a store its execution
 //!   tables, from a store the build before it wrote, with every profile
 //!   and every revision of its policy read back word for word;
+//! - [`migration_provenance`]: the step that gives a store its jobs'
+//!   provenance, from a store the build before it wrote, with every job
+//!   and execution row kept and no provenance made up for an earlier job;
 //! - [`docs`]: the documents held to the code and the fixtures;
 //! - [`boundary`]: nothing opens a store but the factory, and nothing asks
 //!   the factory but the CLI's context;
@@ -38,6 +41,7 @@ mod docs;
 mod measure;
 mod migration;
 mod migration_execution;
+mod migration_provenance;
 #[cfg(feature = "postgres")]
 mod postgres;
 mod reader;

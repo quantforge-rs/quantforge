@@ -119,6 +119,8 @@ src/
 │   │   ├── logs.rs             LogLine, JobProgress, LogQuery and LogPage: a job's log, read a page at a time
 │   │   ├── log_stream.rs       LogFrame: the frames of the WebSocket stream that follows a job's log
 │   │   ├── result.rs           JobResult and ResultLink: a succeeded job's metrics, and where its files are
+│   │   ├── provenance.rs       Provenance and the identity of its inputs: what a job ran on, recorded before it ran
+│   │   ├── rerun.rs            RerunReport, RerunVerdict and Divergence: a job run again, and where its result first differs
 │   │   └── runtime.rs          JobRuntime: what a server's workers run bundles on, or none
 │   ├── results/                what a job produces: its metrics, trades and equity curve as files
 │   │   ├── mod.rs              the result contract: files, columns, types, decimals; ResultKind, ResultError
@@ -164,6 +166,7 @@ src/
 │   │   └── tests.rs            a symbol's normalization, each product line's spellings, and names read back or refused
 │   ├── money.rs                Asset and Money: amounts that never mix assets
 │   ├── order.rs                Side, OrderStatus, Fill, ExchangeOrder, AccountTrade
+│   ├── provenance.rs           InputsIdentity, NewProvenance, PackedSegment, ProvenanceRecord: a job's provenance as a store keeps it
 │   ├── refusal.rs              Refusal: why a request stops short of a venue
 │   ├── request.rs              the exchange-agnostic requests a connector serves
 │   ├── rules.rs                SymbolRules and AssetBalance
@@ -199,6 +202,7 @@ src/
 │   ├── transfer/               what a transfer between two stores carries
 │   │   ├── mod.rs              a row's values, their canonical text, the market, the target's record
 │   │   ├── tables.rs           the tables a transfer copies, in copy order, and those each store keeps
+│   │   ├── jobs.rs             the job store's tables, as a transfer copies them
 │   │   ├── execution.rs        the execution store's tables, as a transfer copies them
 │   │   └── tables/             its unit tests, beside it for the line budget
 │   │       └── tests.rs        a table's header, its key, and how many of its rows a batch holds
@@ -292,7 +296,9 @@ src/
 │   │   └── tests/              the resolver's unit tests
 │   │       ├── mod.rs          every resolve rule, and the shared limits
 │   │       └── connection.rs   the sslmode table, every URL refusal, and the redaction
-│   ├── any.rs                  AnyStore: every storage port, handed to the backend it holds
+│   ├── any/                    AnyStore: every storage port, handed to the backend it holds
+│   │   ├── mod.rs              the store a host opened, and every port but the job store's
+│   │   └── jobs.rs             the job store, handed to its backend
 │   ├── common.rs               what both backends share: exact decimal reads, a candle's window
 │   ├── runs.rs                 what both backends' journals share: identity columns, state, adoption
 │   ├── jobs.rs                 what both backends' job stores share: a job's columns, outcomes, refusals
@@ -327,6 +333,7 @@ src/
 │   │   ├── coverage.rs         the markets the candle table holds, each found in two indexed steps
 │   │   ├── jobs.rs             JobStore: guarded statements, a claim skipping what another holds locked
 │   │   ├── job_logs.rs         a job's log: stored once under its job's ID, behind the copy guard, and read back
+│   │   ├── provenance.rs       a job's provenance: recorded once with the segments packed for it, behind the copy guard, and read back
 │   │   ├── policies.rs         PolicyStore: a profile and its first revision in one transaction, each later one a guarded insert
 │   │   ├── execution/          ExecutionStore: a unit as one transaction that locks what it decides on
 │   │   │   ├── mod.rs          units, operations and leases through the bridge, and the keys a unit holds before it reads
@@ -367,6 +374,7 @@ src/
 │       ├── snapshot.rs         SqliteSnapshot: a store read-only from one snapshot, the source of a transfer
 │       ├── candles.rs          candle table and the CandleStore implementation; marks changed windows
 │       ├── jobs.rs             bundles and jobs: their DDL and JobStore, each move one statement
+│       ├── provenance.rs       job_provenance: its DDL, and a job's provenance recorded once with the segments packed for it
 │       ├── policies.rs         profiles and policy revisions: their DDL and PolicyStore, each revision one guarded insert
 │       ├── execution/          the execution tables and the ExecutionStore implementation
 │       │   ├── mod.rs          a unit as one immediate transaction: read, decide, write
@@ -443,7 +451,12 @@ src/
     │   ├── mod.rs              the queue's state, its start after a restart, and its stop
     │   ├── routes.rs           the runtime, upload, submission, status, list and cancel routes
     │   ├── submission.rs       what an upload and a submission must pass before anything is stored
-    │   ├── queue.rs            the dispatcher, a job's input read from the store, and its log and its end written
+    │   ├── queue.rs            the dispatcher, a job's run on its worker, and its log and its end written
+    │   ├── inputs.rs           a job's input read as it starts, and its provenance recorded before it runs
+    │   ├── bars.rs             a job's bars: from the segments that hold them, the rest packed into segments of its own
+    │   ├── provenance.rs       the provenance route, and the ledger a rerun reads, checked against its identity
+    │   ├── rerun.rs            the rerun route: a succeeded job run again from its provenance alone
+    │   ├── compare.rs          a rerun's result against its job's: by hash, then value by value to the first difference
     │   ├── status.rs           a job's record as the protocol shows it
     │   ├── results.rs          the result routes: a succeeded job's metrics and files, each checked before it goes
     │   ├── follow.rs           the log route: a page of a job's log, or the WebSocket stream that follows it to its end
@@ -488,6 +501,10 @@ src/
         ├── markets.rs          every stored market, in order, with its span
         ├── queries.rs          the queries refused before the store is asked anything
         ├── queue.rs            a job that waits out a busy store as it starts, and a log stored before its end is said
+        ├── backtesting.rs      three days of candles, two packed, and a worker that backtests what it is handed
+        ├── provenance.rs       a job's bars from its segments and those packed for it, and the provenance route
+        ├── reruns.rs           a rerun verified after corrections, two that diverge, one that fails, and a stop
+        ├── rerun_refusals.rs   reruns refused: a segment or bundle not held as recorded, a runtime, no result
         ├── results.rs          a result the store holds damaged, lost or unlisted, never sent
         ├── logs.rs             the log route's refusals, a stored log that reads as none, and a client that talks
         ├── segments.rs         stored bytes, 304s, unknown hashes, and damaged copies never sent

@@ -6,7 +6,10 @@
 //! [`ContentHash`](super::ContentHash); submits a [`JobSubmission`]; reads
 //! the job's [`JobStatus`] until the job has finished, or follows its log
 //! as it runs; and then fetches what it produced: a [`JobResult`], and the
-//! files it lists, which [`results`](super::results) specifies.
+//! files it lists, which [`results`](super::results) specifies. Every job
+//! that starts has its [`Provenance`]: what it ran on, recorded before it
+//! ran, from which the server runs a succeeded job again and checks that
+//! its result comes out the same ([`RerunReport`]).
 //!
 //! # Routes
 //!
@@ -23,6 +26,8 @@
 //! | `GET /v1/backtests/{job_id}/result/metrics.json` | | `200` and the job's metrics: a [`Metrics`](super::results::Metrics), as JSON |
 //! | `GET /v1/backtests/{job_id}/result/trades.arrow` | | `200` and the job's closed trades, as an Arrow IPC file |
 //! | `GET /v1/backtests/{job_id}/result/equity.arrow` | | `200` and the job's equity curve, as an Arrow IPC file |
+//! | `GET /v1/backtests/{job_id}/provenance` | | `200` and the job's [`Provenance`]: everything it ran on, as the server recorded it before the job ran, the identity of its inputs and, once it has succeeded, its result files |
+//! | `POST /v1/backtests/{job_id}/rerun` | | `200` and a [`RerunReport`]: the job run again from its provenance, and whether its result came out the same, or where it first did not |
 //!
 //! None of the routes needs credentials yet. A refused request is answered
 //! with an [`ErrorEnvelope`](super::ErrorEnvelope):
@@ -31,9 +36,9 @@
 //! | --- | --- |
 //! | 400 `invalid_request` | A log query whose `after` or `limit` is not a number, or whose `limit` is not from 1 to 1,000; a WebSocket request for a log that is not a well-formed upgrade. An upload not sent as `application/x-tar`, larger than any bundle within the server's limits, whose bytes hash to another name, that is not exactly a canonical tar, breaks the [bundle spec], or cannot run on this server: from the third on, the message is the bundle's refusal, each problem's message verbatim. A submission that is not in its canonical form, whose settings are out of range, whose market without `category` is ambiguous, whose range spans more bars than the server runs one job on, that names a bundle the server does not hold or cannot run, or whose range is not within the bars the server stores, from the first to the last |
 //! | 404 `not_found` | No job of that ID; a result file of another name |
-//! | 409 `conflict` | Cancelling a job that has finished; asking for the result of a job that has not succeeded, which the message says is queued, running, failed or cancelled |
-//! | 503 `unavailable` | The server's store could not answer in time; `Retry-After` says how many seconds to wait |
-//! | 500 `internal` | The server failed: its store refused, or its copy of a result does not match the result's hash |
+//! | 409 `conflict` | Cancelling a job that has finished; asking for the result of a job that has not succeeded, which the message says is queued, running, failed or cancelled; asking for the provenance of a job that has recorded none; rerunning a job that has not succeeded or has no provenance, whose segments or bundle the server no longer holds as recorded, or whose bundle the server's runtime no longer admits, the message listing every difference |
+//! | 503 `unavailable` | The server's store could not answer in time; `Retry-After` says how many seconds to wait. A rerun asked of a server that runs no bundles, or that stopped while the rerun ran |
+//! | 500 `internal` | The server failed: its store refused, its copy of a result does not match the result's hash, or its copy of a provenance does not match its identity; a rerun that failed for the server's own reasons |
 //!
 //! # A job's life
 //!
@@ -122,6 +127,64 @@
 //! hash before it sends it, and a client that wants to be sure of what it
 //! holds hashes the bytes it received and compares.
 //!
+//! # A job's provenance
+//!
+//! As a job starts, the server reads everything it will run on and records
+//! it, before the job runs, as the job's [`Provenance`]: the bundle's code
+//! hash, the market and range with every segment that holds the job's
+//! bars, the backtest's settings, the engine, Python and packages that run
+//! the bundle, and the protocol version. A worker receives those inputs and
+//! nothing else, and never sees the store.
+//!
+//! - **Every bar is in a named segment.** The bars the store has packed
+//!   come from their segments, checked against their names. Bars no segment
+//!   holds yet, the newest window's and those of windows waiting for a
+//!   refresh, are packed by the server as the job starts, window by window,
+//!   into segments of the job's own of the [segment format], stored with
+//!   the others and named in the provenance. So the job runs on exactly
+//!   the bars of the segments listed, and a later correction of the candles
+//!   changes none of them. Any segment can be fetched by its hash from
+//!   `GET /v1/segments/{hash}`.
+//! - **The identity covers the inputs.** [`ProvenanceInputs::identity`] is
+//!   the SHA-256 of the inputs' compact JSON: jobs given the same bundle,
+//!   bars, settings and runtime have the same identity on every server and
+//!   store. The bundle's entry and parameters are listed beside it, fixed
+//!   already by its code hash, and where and when it was recorded beside
+//!   that, neither part of the identity.
+//! - **It is kept with the job.** A provenance is recorded once and never
+//!   changed, in the server's store, with the segments it names; neither a
+//!   job nor a segment is ever deleted. A job that never started, that
+//!   ended before the server read its inputs, or that a build before
+//!   provenance ran, has none.
+//!
+//! # A rerun
+//!
+//! `POST /v1/backtests/{job_id}/rerun` runs a succeeded job again from its
+//! provenance alone and answers once the rerun has ended, as long as it
+//! runs: it waits for a slot like any job, on a worker like any job, within
+//! the same limits.
+//!
+//! 1. The server reads the job's provenance, checks it against its
+//!    identity, and checks the bundle and every segment it names against
+//!    their names. Anything the store no longer holds, or holds altered,
+//!    refuses the rerun with `409 conflict`, the message listing every
+//!    difference, and so does a bundle the server's runtime no longer
+//!    admits, such as one whose manifest's engine requirement the server's
+//!    engine does not meet.
+//! 2. It runs the bundle on the bars of those segments within the job's
+//!    range, under the job's settings. A runtime that differs from the one
+//!    recorded, but admits the bundle, runs it: the report names what ran.
+//! 3. It compares each result file with the job's: the same hash is the
+//!    same file, byte for byte, and so the same values, each decimal with
+//!    its scale. A file that differs is read row by row to the first value
+//!    that differs, which the report gives with both texts
+//!    ([`Divergence`]). The verdict is `verified` when every file is the
+//!    same, and `diverged` otherwise, or when the rerun failed for its
+//!    bundle's own reasons, which [`RerunReport::failure`] gives.
+//!
+//! A rerun changes nothing the server holds: the report is its answer, and
+//! the server's log records each verdict.
+//!
 //! # A market without `category`
 //!
 //! A [`DataSelection`] may leave out `category`: the form a market took
@@ -131,9 +194,12 @@
 //! guess. The job's [`JobStatus::submission`] always names the category.
 //!
 //! [bundle spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md>
+//! [segment format]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/segment-spec.md>
 
 mod log_stream;
 mod logs;
+mod provenance;
+mod rerun;
 mod result;
 mod runtime;
 mod status;
@@ -147,6 +213,11 @@ use super::{ProtocolError, opaque_id};
 
 pub use log_stream::LogFrame;
 pub use logs::{JobProgress, LOG_PAGE_LINES, LogLevel, LogLine, LogPage, LogQuery};
+pub use provenance::{
+    PROVENANCE_FORMAT, Provenance, ProvenanceData, ProvenanceInputs, ProvenanceRecorded,
+    ProvenanceRuntime, ProvenanceSegment, ProvenanceStrategy,
+};
+pub use rerun::{Divergence, RerunReport, RerunVerdict, ResultComparison};
 pub use result::{JobResult, ResultLink};
 pub use runtime::JobRuntime;
 pub use status::{JobList, JobState, JobStatus, ResultRef};

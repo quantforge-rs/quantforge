@@ -4,7 +4,9 @@ submitted over the job routes, its result and its log read back
 (docs/python-worker.md).
 
 The goldens' SMA cross runs as a bundle on a store of either backend and
-makes their trades, equity curve and summary digit for digit; a strategy
+makes their trades, equity curve and summary digit for digit, records what
+it ran on, and reruns to the same result, which a strategy that draws on
+randomness does not; a strategy
 that raises fails its job with its traceback in its log; a package the
 server does not offer is refused before anything runs, and an import the
 bundle may not make as it runs; what a strategy writes is its job's log;
@@ -13,6 +15,8 @@ store; how long a job takes to reach its first bar is measured; and the
 command line's `backtest --remote` runs the goldens' strategy file on a
 server and prints their report."""
 
+import hashlib
+import json
 import os
 import secrets
 import statistics
@@ -94,6 +98,69 @@ def test_the_goldens_sma_cross_runs_as_a_bundle_and_makes_their_trades_digit_for
     # Every bar was handed to the strategy, which wrote nothing.
     assert log["progress"] == {"bars_done": 1440, "bars_total": 1440}
     assert log["complete"] and log["lines"] == []
+
+
+def test_a_goldens_job_records_what_it_ran_on_and_reruns_to_the_same_result(place, tmp_path):
+    with stores.Exchange({("BTCUSDT", "1m"): jobs.golden_klines()}) as exchange:
+        place.sync(exchange)
+    files = jobs.golden_bundle()
+    with jobs.served(place, scratch(tmp_path)) as server:
+        job = server.submit(server.upload(files), FIRST, LAST)
+        assert server.ended(job)["kind"] == "succeeded"
+        provenance = server.json("GET", f"/v1/backtests/{job}/provenance")
+        report = server.json("POST", f"/v1/backtests/{job}/rerun")
+    inputs = provenance["inputs"]
+    # The identity is the SHA-256 of the inputs' compact JSON, which the
+    # standard library writes as the server did from the members received.
+    compact = json.dumps(inputs, separators=(",", ":"), ensure_ascii=False)
+    assert provenance["identity"] == "sha256:" + hashlib.sha256(compact.encode()).hexdigest()
+    assert inputs["code_hash"] == jobs.code_hash(jobs.canonical_tar(files))
+    assert inputs["runtime"] == {"engine": qf.ENGINE_VERSION, "python": PYTHON, "deps": {}}
+    assert provenance["strategy"] == {
+        "entry": "sma_cross.py:SmaCross",
+        "params": {"fast": 20, "slow": 50},
+    }
+    # The day's afternoon from the segment its sync packed; its morning, in
+    # the window no refresh packs yet, packed for the job.
+    data = inputs["data"]
+    assert data["bar_count"] == 1440
+    assert [segment["bar_count"] for segment in data["segments"]] == [720, 720]
+    assert (data["segments"][0]["first_open_ms"], data["segments"][-1]["last_open_ms"]) == (
+        FIRST,
+        LAST,
+    )
+    assert provenance["recorded"]["backend"] == place.backend
+    assert report["verdict"] == "verified", report
+    assert report["identity"] == provenance["identity"]
+    listed = [result["hash"] for result in provenance["results"]]
+    assert [compared["recorded"] for compared in report["results"]] == listed
+    assert [compared["rerun"] for compared in report["results"]] == listed
+
+
+def test_a_strategy_that_draws_on_randomness_reruns_to_another_result_and_says_where(tmp_path):
+    place = with_minutes(stores.Place.sqlite(tmp_path))
+    source = """
+        import random
+
+        import quantforge_py as qf
+
+
+        class Coin(qf.Strategy):
+            def on_bar(self, ctx, bar):
+                if random.random() < 0.5:
+                    return qf.TargetPosition.LONG_ALL_IN
+                return qf.TargetPosition.FLAT
+    """
+    with jobs.served(place, scratch(tmp_path)) as server:
+        job = server.submit(server.upload(bundle(source, entry="strategy.py:Coin")), FIRST, THIRTIETH)
+        assert server.ended(job)["kind"] == "succeeded"
+        report = server.json("POST", f"/v1/backtests/{job}/rerun")
+    assert report["verdict"] == "diverged", report
+    equity = next(compared for compared in report["results"] if compared["name"] == "equity")
+    assert equity["rerun"] != equity["recorded"]
+    divergence = equity["divergence"]
+    assert 1 <= divergence["row"] <= 30 and divergence["field"] == "equity", divergence
+    assert divergence["recorded"] != divergence["rerun"]
 
 
 def test_the_command_line_runs_the_goldens_strategy_on_a_server_and_prints_their_report(
@@ -457,10 +524,13 @@ def test_a_worker_holds_nothing_of_its_servers_store(postgres_server, tmp_path):
                 state = server.ended(job)
                 log = server.log(job)
                 status = server.status(job)
+                # Recorded as the job started, before its strategy raised.
+                provenance = server.json("GET", f"/v1/backtests/{job}/provenance")
     finally:
         postgres_server.query(f"DROP ROLE IF EXISTS {role}")
     assert state["kind"] == "failed"
-    said = repr(state) + repr(log) + repr(status)
+    assert provenance["recorded"]["backend"] == "postgres"
+    said = repr(state) + repr(log) + repr(status) + repr(provenance)
     for secret in (password, role, url, database.name, "postgres://"):
         assert secret not in said, secret
     names = [line.split(" ", 2)[1] for line in messages(log, "info") if line.startswith("env ")]

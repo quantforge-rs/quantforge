@@ -6,7 +6,7 @@
 
 use super::migrate::{column, log, reread, scratch, snapshot, tables, version};
 use super::scratch::rows;
-use super::seeds::{SEED, SEED_6, SEED_7, SEED_8, SEED_9, SEED_10};
+use super::seeds::{SEED, SEED_6, SEED_7, SEED_8, SEED_9, SEED_10, SEED_11};
 use super::*;
 use crate::storage::postgres::migrate::{STEPS, Step, ensure_current_with};
 use tokio_postgres::error::SqlState;
@@ -17,6 +17,7 @@ const SCHEMA_6_CHAIN: [Step; 2] = [STEPS[0], STEPS[1]];
 const SCHEMA_7_CHAIN: [Step; 3] = [STEPS[0], STEPS[1], STEPS[2]];
 const SCHEMA_8_CHAIN: [Step; 4] = [STEPS[0], STEPS[1], STEPS[2], STEPS[3]];
 const SCHEMA_9_CHAIN: [Step; 5] = [STEPS[0], STEPS[1], STEPS[2], STEPS[3], STEPS[4]];
+const SCHEMA_10_CHAIN: [Step; 6] = [STEPS[0], STEPS[1], STEPS[2], STEPS[3], STEPS[4], STEPS[5]];
 
 /// The collation of `table.column`.
 fn collation(store: &PostgresStore, table: &str, column: &str) -> Vec<String> {
@@ -215,7 +216,7 @@ fn schema_10_keeps_every_row_of_schema_9_and_adds_the_execution_tables() {
         assert!(!tables(&store).contains(&table.to_string()), "{table}");
     }
 
-    store.init().expect("schema 10");
+    ensure_current_with(&store.bridge, &SCHEMA_10_CHAIN, 10, "scratch").expect("schema 10");
     assert_eq!(reread(&store, &before), before);
     assert_eq!(version(&store), ["10"]);
     assert_eq!(log(&store), ["9<-0", "10<-9"]);
@@ -284,6 +285,49 @@ fn schema_10_keeps_every_row_of_schema_9_and_adds_the_execution_tables() {
     );
 
     // Run again, it finds the work done.
-    store.init().expect("a repeat");
+    ensure_current_with(&store.bridge, &SCHEMA_10_CHAIN, 10, "scratch").expect("a repeat");
     assert_eq!(log(&store), ["9<-0", "10<-9"]);
+}
+
+#[test]
+fn schema_11_keeps_every_row_of_schema_10_and_adds_the_provenance_table() {
+    let Some(scratch) = scratch() else {
+        return;
+    };
+    let store = scratch.store();
+    ensure_current_with(&store.bridge, &SCHEMA_10_CHAIN, 10, "scratch").expect("schema 10");
+    for seed in [SEED, SEED_6, SEED_7, SEED_8, SEED_9, SEED_10] {
+        rows(&store, seed);
+    }
+    let before = snapshot(&store);
+    assert!(before.iter().all(|(_, found)| !found.is_empty()), "seeded");
+    assert!(!tables(&store).contains(&"job_provenance".to_string()));
+
+    store.init().expect("schema 11");
+    assert_eq!(reread(&store, &before), before);
+    assert_eq!(version(&store), ["11"]);
+    assert_eq!(log(&store), ["10<-0", "11<-10"]);
+    assert!(tables(&store).contains(&"job_provenance".to_string()));
+    assert_eq!(collation(&store, "job_provenance", "job_id"), ["C"]);
+    rows(&store, SEED_11);
+    // A job's provenance is recorded once.
+    let again = "INSERT INTO job_provenance VALUES (repeat('a', 32), 'sha256:' || \
+                 repeat('34', 32), '{}', 'postgres', 11, 1)";
+    let failed = store
+        .bridge
+        .execute(Effect::Write, move |client| {
+            Box::pin(async move { client.batch_execute(again).await })
+        })
+        .expect_err(again);
+    let StorageError::Other(source) = &failed else {
+        panic!("{failed:?}");
+    };
+    let code = source
+        .downcast_ref::<tokio_postgres::Error>()
+        .and_then(tokio_postgres::Error::code);
+    assert_eq!(code, Some(&SqlState::UNIQUE_VIOLATION), "{failed:?}");
+
+    // Run again, it finds the work done.
+    store.init().expect("a repeat");
+    assert_eq!(log(&store), ["10<-0", "11<-10"]);
 }

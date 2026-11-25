@@ -18,10 +18,13 @@
 //! - `results`: a backtest in a worker, and the files its rows become.
 //! - `logs`: what a job writes to its log, a line too long, and a flood.
 //! - `backends`: jobs through the queue to real workers on each backend.
+//! - `provenance`: what a job records it ran on, and its rerun, on each
+//!   backend, across both, and on a store copied or restored.
 
 mod backends;
 mod isolation;
 mod limits;
 mod logs;
+mod provenance;
 mod results;
 mod support;

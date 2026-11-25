@@ -276,6 +276,7 @@ fn the_postgres_ddl_names_the_same_tables_and_columns_in_the_same_order() {
     postgres_ddl.extend(section("postgres step 8"));
     postgres_ddl.extend(section("postgres step 9"));
     postgres_ddl.extend(section("postgres step 10"));
+    postgres_ddl.extend(section("postgres step 11"));
     let (postgres, postgres_indexes) = parse(&postgres_ddl);
     let names = |tables: &[Table]| -> Vec<(String, Vec<String>)> {
         tables

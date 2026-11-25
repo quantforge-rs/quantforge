@@ -1,7 +1,7 @@
-//! Schema 9 to schema 10: a store the build before the execution store
-//! wrote (`tests/fixtures/sqlite/schema-9.sql`) gains the inbox, the
-//! ledger, the outbox and its own leases, and keeps every row it held,
-//! its profiles and every revision of their policies among them.
+//! Schema 9 onward: a store the build before the execution store wrote
+//! (`tests/fixtures/sqlite/schema-9.sql`) gains the inbox, the ledger, the
+//! outbox and its own leases, and keeps every row it held, its profiles and
+//! every revision of their policies among them.
 
 use quantforge::model::execution::{
     ExecutionScope, LeaseAnswer, LeaseHolder, LeaseRequest, NewOperation, OperationKind,
@@ -50,7 +50,7 @@ fn a_schema_9_store_gains_the_execution_tables_and_keeps_every_policy() {
     assert_eq!(everything(&store, "automation_profiles").len(), 2);
     assert_eq!(revisions.len(), 7, "five of one profile, two of the other");
 
-    CandleStore::init(&store).expect("schema 10");
+    CandleStore::init(&store).expect("schema 11");
 
     assert_eq!(version(&store), SCHEMA_VERSION);
     assert_eq!(shape(&store), shape(&fresh), "not the fresh schema");
@@ -66,7 +66,7 @@ fn a_schema_9_store_gains_the_execution_tables_and_keeps_every_policy() {
             ),
             "schema_migrations" => {
                 assert_eq!(after[..rows_before.len()], rows_before[..], "the log kept");
-                assert_eq!(after.len(), rows_before.len() + 1, "one step logged");
+                assert_eq!(after.len(), rows_before.len() + 2, "two steps logged");
             }
             _ => assert_eq!(&after, rows_before, "{table}"),
         }
@@ -77,7 +77,10 @@ fn a_schema_9_store_gains_the_execution_tables_and_keeps_every_policy() {
         .iter()
         .map(|step| (step.from_version, step.to_version))
         .collect();
-    assert_eq!(steps, [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10)]);
+    assert_eq!(
+        steps,
+        [(4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 10), (10, 11)]
+    );
     for table in ADDED {
         assert_eq!(
             everything(&store, table),
@@ -167,5 +170,5 @@ fn a_schema_9_store_gains_the_execution_tables_and_keeps_every_policy() {
     );
 
     CandleStore::init(&store).expect("second init");
-    assert_eq!(store.migrations().expect("log").len(), 6);
+    assert_eq!(store.migrations().expect("log").len(), 7);
 }

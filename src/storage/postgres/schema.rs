@@ -19,7 +19,7 @@ pub(super) const LOCK_KEY: i64 = 0x5146_5343_4845_4D41;
 
 /// The tables of the current schema. A database holding any of them but no
 /// recorded version is not a QuantForge store, and `init` refuses it.
-pub(super) const TABLES: [&str; 29] = [
+pub(super) const TABLES: [&str; 30] = [
     "meta",
     "candles",
     "bot_runs",
@@ -34,6 +34,7 @@ pub(super) const TABLES: [&str; 29] = [
     "jobs",
     "job_results",
     "job_logs",
+    "job_provenance",
     "automation_profiles",
     "policy_revisions",
     "signal_inbox",
@@ -249,6 +250,19 @@ CREATE TABLE policy_revisions (
   changed_at_ms BIGINT NOT NULL,
   policy_json TEXT NOT NULL,
   UNIQUE (profile_id, revision)
+);
+"#;
+
+/// Schema 11 (QUA-352): each job's provenance, the reproducibility ledger,
+/// under the job's ID, which a transfer reads in byte order.
+pub(super) const SCHEMA_11: &str = r#"
+CREATE TABLE job_provenance (
+  job_id TEXT COLLATE "C" PRIMARY KEY,
+  identity TEXT NOT NULL,
+  provenance_json TEXT NOT NULL,
+  backend TEXT NOT NULL,
+  schema_version BIGINT NOT NULL,
+  recorded_at_ms BIGINT NOT NULL
 );
 "#;
 

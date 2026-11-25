@@ -8,7 +8,8 @@ use rusqlite::{ErrorCode, OptionalExtension, Row, TransactionBehavior, params};
 use super::SqliteStore;
 use super::errors::{commit_failed, failed};
 use crate::model::{
-    BundleHash, JobId, JobOutcome, JobPhase, JobRecord, NewJob, ResultHash, TimestampMs,
+    BundleHash, JobId, JobOutcome, JobPhase, JobRecord, NewJob, NewProvenance, ProvenanceRecord,
+    ResultHash, TimestampMs,
 };
 use crate::ports::{JobStore, StorageError};
 use crate::storage::jobs::{
@@ -306,6 +307,19 @@ impl JobStore for SqliteStore {
             )
             .optional()
             .map_err(failed)
+    }
+
+    fn record_provenance(
+        &self,
+        job_id: &JobId,
+        provenance: &NewProvenance,
+        recorded_at_ms: TimestampMs,
+    ) -> Result<bool, StorageError> {
+        self.record_job_provenance(job_id, provenance, recorded_at_ms)
+    }
+
+    fn provenance(&self, job_id: &JobId) -> Result<Option<ProvenanceRecord>, StorageError> {
+        self.job_provenance(job_id)
     }
 
     fn cancel_job(

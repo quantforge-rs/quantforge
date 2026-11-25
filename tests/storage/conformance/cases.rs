@@ -11,8 +11,8 @@
 use quantforge::{
     BotRunState, BundleHash, Candle, ClosedTrade, Environment, ExchangeId, ExchangeOrder,
     ExecutionMode, Fill, Interval, JobId, JobOutcome, JobRecord, KeyFingerprint, MarketId, NewJob,
-    OrderStatus, PositionState, RunIdentity, RunStatus, Side, StoredResult, Symbol, VenueAccountId,
-    VenueOrderId, VenueTradeId,
+    OrderStatus, PackedSegment, PositionState, ProvenanceRecord, RunIdentity, RunStatus, Side,
+    StoredResult, Symbol, VenueAccountId, VenueOrderId, VenueTradeId,
 };
 use rust_decimal::Decimal;
 use serde::Deserialize;
@@ -177,6 +177,22 @@ pub enum Step {
     JobLog {
         job_id: String,
         expect: Option<String>,
+    },
+    RecordProvenance {
+        job_id: String,
+        identity: String,
+        provenance_json: String,
+        segments: Vec<String>,
+        packed: Vec<PackedText>,
+        at: i64,
+        #[serde(default)]
+        expect: Option<bool>,
+        #[serde(default)]
+        refused: Option<Refusal>,
+    },
+    Provenance {
+        job_id: String,
+        expect: Option<ProvenanceText>,
     },
     SubmitJob {
         job: NewJobText,
@@ -470,6 +486,50 @@ impl JobText {
             finished_at_ms: record.finished_at_ms,
             results_json: record.results_json.clone(),
             failure_json: record.failure_json.clone(),
+        }
+    }
+}
+
+/// A segment packed for a job, as the cases hand it to a store: its
+/// stored bytes as hex, which a store keeps and never reads.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PackedText {
+    pub hash: String,
+    pub payload_len: u64,
+    pub data: String,
+}
+
+impl PackedText {
+    pub fn packed(&self) -> PackedSegment {
+        PackedSegment {
+            hash: self.hash.parse().expect("a segment hash"),
+            payload_len: self.payload_len,
+            data: hex::decode(&self.data).expect("hex"),
+        }
+    }
+}
+
+/// A job's provenance as text: what a store must answer, but the backend,
+/// which is each store's own.
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProvenanceText {
+    pub job_id: String,
+    pub identity: String,
+    pub provenance_json: String,
+    pub schema_version: u32,
+    pub recorded_at_ms: i64,
+}
+
+impl ProvenanceText {
+    pub fn of(record: &ProvenanceRecord) -> Self {
+        Self {
+            job_id: record.job_id.as_str().to_string(),
+            identity: record.identity.to_string(),
+            provenance_json: record.provenance_json.clone(),
+            schema_version: record.schema_version,
+            recorded_at_ms: record.recorded_at_ms,
         }
     }
 }

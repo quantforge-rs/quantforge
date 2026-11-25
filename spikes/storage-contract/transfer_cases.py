@@ -4,8 +4,8 @@ of the Rust code under test.
 
 A store's tables as rows of plain values: candles of three product lines on
 two venues, a run journal with every identity source, segments with their
-index and dirty marks, a server's bundles and jobs with their results and
-logs, automation profiles with every revision of their policies, and an
+index and dirty marks, a server's bundles and jobs with their results,
+logs and provenance, automation profiles with every revision of their policies, and an
 execution store's signals, operations, intents, orders, fills, cycles,
 reservations, incidents and events, as the reference model of
 execution_model.py leaves them. Then, for every table and every market of a
@@ -104,6 +104,13 @@ TABLES = [
         False,
     ),
     ("job_logs", ["job_id", "log_json", "stored_at_ms"], "job_id", False),
+    (
+        "job_provenance",
+        ["job_id", "identity", "provenance_json", "backend", "schema_version",
+         "recorded_at_ms"],
+        "job_id",
+        False,
+    ),
     (
         "automation_profiles",
         ["profile_id", "venue", "environment", "account_kind", "account_id", "category",
@@ -543,6 +550,50 @@ JOB_LOGS = [
             (1, 3), T + 52_000),
 ]
 
+
+
+def job_provenance(job_row, segments, bar_count, backend, recorded, deps=None):
+    """A job's provenance as the server records it: the inputs, the
+    strategy, and the identity of the inputs, the SHA-256 of their compact
+    JSON as the protocol writes it."""
+    submission = json.loads(job_row["request_json"])
+    data = dict(submission["data"])
+    data["bar_count"] = bar_count
+    data["segments"] = [
+        {"hash": row["hash"], "first_open_ms": first, "last_open_ms": last, "bar_count": count}
+        for row, (first, last, count) in segments
+    ]
+    inputs = {
+        "code_hash": submission["bundle"],
+        "data": data,
+        "backtest": submission["backtest"],
+        "runtime": {"engine": "0.2.0", "python": "3.11", "deps": deps or {}},
+        "proto_version": 1,
+    }
+    stored = {
+        "format": 1,
+        "inputs": inputs,
+        "strategy": {"entry": "strategy.py:Strategy", "params": {"fast": 2, "label": "ž"}},
+    }
+    compact = json.dumps(inputs, separators=(",", ":"), ensure_ascii=False)
+    return {"job_id": job_row["job_id"],
+            "identity": "sha256:" + hashlib.sha256(compact.encode("utf-8")).hexdigest(),
+            "provenance_json": json.dumps(stored, separators=(",", ":"), ensure_ascii=False),
+            "backend": backend, "schema_version": 11, "recorded_at_ms": recorded}
+
+
+# The provenance of the three jobs that started: the one that succeeded, on
+# the segment the index lists; the cancelled one, on the segment a
+# correction replaced, which its provenance keeps referenced; and the one
+# still running, on the non-ASCII market, recorded where another store ran
+# it. Their job IDs compare byte by byte.
+JOB_PROVENANCE = [
+    job_provenance(JOBS[0], [(SEGMENTS[0], (T, T + 2 * MINUTE, 3))], 3, "sqlite", T + 31_000,
+                   deps={"numpy": "2.4.6"}),
+    job_provenance(JOBS[2], [(SEGMENTS[1], (T, T + MINUTE, 2))], 2, "sqlite", T + 51_000),
+    job_provenance(JOBS[3], [], 0, "postgres", T + 61_000),
+]
+
 # --- Automation profiles and the revisions of their policies ------------------
 
 # The store is bound to testnet, so its profiles are testnet's: four of them
@@ -637,6 +688,7 @@ ROWS = {
     "job_results": JOB_RESULTS,
     "jobs": JOBS,
     "job_logs": JOB_LOGS,
+    "job_provenance": JOB_PROVENANCE,
     "automation_profiles": AUTOMATION_PROFILES,
     "policy_revisions": POLICY_REVISIONS,
     **transfer_rows(),

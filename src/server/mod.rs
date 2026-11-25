@@ -20,6 +20,8 @@
 //! | `GET /v1/backtests/{job_id}/logs` | `200`, the lines of a job's log after a cursor, and its progress; asked as a WebSocket, `101` and the log followed to its end |
 //! | `GET /v1/backtests/{job_id}/result` | `200`, a succeeded job's metrics and where its result files are |
 //! | `GET /v1/backtests/{job_id}/result/{file}` | `200`, one result file, `metrics.json`, `trades.arrow` or `equity.arrow`, which the client's cache may keep for a year; or `304` |
+//! | `GET /v1/backtests/{job_id}/provenance` | `200`, what a job ran on, as the server recorded it before the job ran, and the identity of its inputs |
+//! | `POST /v1/backtests/{job_id}/rerun` | `200`, a succeeded job run again from its provenance, and whether its result came out the same |
 //!
 //! [`protocol::segments`](crate::protocol::segments) specifies the three
 //! history routes, [`protocol::jobs`](crate::protocol::jobs) the job routes
@@ -41,8 +43,9 @@
 //! thread, so a slow store never stalls the server's other requests; a
 //! request that waits longer than [`StoreLimits::wait`] is answered `503`
 //! with `Retry-After`. A job's worker never sees the store: the server reads
-//! everything the job runs on and writes how it ended, its result files
-//! with it, in the one change that ends the job. `serve run` runs each job
+//! everything the job runs on, records it as the job's provenance before
+//! the job runs, and writes how it ended, its result files with it, in the
+//! one change that ends the job. `serve run` runs each job
 //! in a worker process of its own, from a [`WorkerPool`], within the limits
 //! of [`WorkerLimits`].
 //!
@@ -203,6 +206,14 @@ fn router(history: History, jobs: Jobs) -> Router {
             .route(
                 &format!("/{version}/backtests/{{job_id}}/result/{{file}}"),
                 get(jobs::result_file),
+            )
+            .route(
+                &format!("/{version}/backtests/{{job_id}}/provenance"),
+                get(jobs::provenance),
+            )
+            .route(
+                &format!("/{version}/backtests/{{job_id}}/rerun"),
+                post(jobs::rerun),
             );
     }
     let state = ServerState {
