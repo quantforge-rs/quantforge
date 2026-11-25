@@ -237,7 +237,7 @@ def test_the_page_lists_the_arguments_and_the_variable_the_command_line_has(page
     assert matrix["--remote"][0] == no_variable
 
 
-def test_the_page_shows_how_a_client_is_given_its_token(page, monkeypatch):
+def test_the_page_shows_how_a_client_is_given_its_token(page, monkeypatch, session):
     (fence,) = page(PAGE).fences("bash")
     name, _, value = fence.strip().removeprefix("export ").partition("=")
     assert fence.startswith("export ") and name == REMOTE_TOKEN
@@ -246,10 +246,16 @@ def test_the_page_shows_how_a_client_is_given_its_token(page, monkeypatch):
     made = {"qf": qf}
     exec(compile(example, PAGE, "exec"), made)
     # Making them asked no server anything: none of the three is there.
-    assert repr(made["client"]) == "<Client https://qf.example/, with a token>"
+    assert repr(made["exported"]) == "<Client https://qf.example/, with a token>"
     assert repr(made["other"]) == "<Client https://qf.example/, with a token>"
     assert repr(made["plain"]) == "<Client http://lab.example:9600/>"
-    assert f"`{made['client']!r}`" in page(PAGE).text
+    assert f"`{made['exported']!r}`" in page(PAGE).text
+    # A reader who runs the page from its top still has the client of the
+    # examples around it: this one takes no name of theirs.
+    *_, names, _, _, _ = session
+    theirs = {name for name in names if not name.startswith("__")}
+    assert {"client", "jobs", "job", "status"} <= theirs
+    assert set(made) & theirs == {"qf"}
     # Without the argument that says it sends none, the last is refused.
     with pytest.raises(ValueError, match="The token is QF_REMOTE_TOKEN's"):
         qf.Client("http://lab.example:9600")
@@ -290,6 +296,7 @@ def test_the_page_says_what_is_raised_where_no_quantforge_server_answered(page, 
         "ServerUnavailable",
         "AuthError",
         "ServerUnavailable",
+        "RemoteError",
         "RemoteError",
         "RemoteError",
         "RemoteError",

@@ -232,6 +232,15 @@ def test_the_readmes_example_of_the_client_runs_against_a_real_server(page, tmp_
     example = readme.fences("python")[-1]
     shown = "http://127.0.0.1:9600"
     assert example.count(shown) == 1 and "QF_REMOTE_TOKEN" in example
+    # On a server no job was submitted to, it lists none and ends there.
+    fresh = tmp_path / "fresh"
+    (fresh / "scratch").mkdir(parents=True)
+    with jobs.served(stores.Place.sqlite(fresh), fresh / "scratch") as server:
+        names = {"qf": qf}
+        url = f"http://127.0.0.1:{server.port}"
+        exec(compile(example.replace(shown, url), readme.name, "exec"), names)
+        assert names["jobs"] == [] and "job" not in names
+        assert names["client"].proto_version == 1
     with jobs.one_of_each(stores.Place.sqlite(tmp_path), tmp_path) as fixture:
         names = {"qf": qf}
         exec(compile(example.replace(shown, fixture.url), readme.name, "exec"), names)
@@ -244,7 +253,7 @@ def test_the_readmes_example_of_the_client_runs_against_a_real_server(page, tmp_
         assert job.status.market == MARKET
         assert names["client"].url == f"{fixture.url}/"
     # Every state it names is one the protocol has, and it names them all.
-    (named,) = re.findall(r"^job\.status\.state +# (.+)$", example, re.M)
+    (named,) = re.findall(r"^ *job\.status\.state +# (.+)$", example, re.M)
     states = ["queued", "running", "succeeded", "failed", "cancelled"]
     assert re.findall(r"'(\w+)'", named) == states
     # And every exception it names is one a request is raised.

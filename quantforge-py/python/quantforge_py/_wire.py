@@ -97,17 +97,22 @@ def _tls_context():
     return ssl.create_default_context()
 
 
-def _this_machine(host):
-    """Whether a URL's host names this machine: a loopback address, or
-    `localhost`."""
+def _loopback(address):
+    """Whether text is a loopback address, which is this machine's: of IPv4,
+    of IPv6, or of IPv4 as IPv6 writes one."""
     import ipaddress
 
-    if host.lower() == "localhost":
-        return True
     try:
-        return ipaddress.ip_address(host).is_loopback
+        parsed = ipaddress.ip_address(address)
     except ValueError:
         return False
+    return (getattr(parsed, "ipv4_mapped", None) or parsed).is_loopback
+
+
+def _this_machine(host):
+    """Whether a URL's host names this machine: a loopback address, or
+    `localhost`, which is held to leading to one as a connection is made."""
+    return host.lower() == "localhost" or _loopback(host)
 
 
 class _Server:
@@ -216,6 +221,17 @@ class _Answer:
         return f"{self.status} {phrase}".strip()
 
 
+def _at_most(digits, most):
+    """The number that ASCII digits write, or `most` where it is larger. A
+    number longer than `most` is told by its length and never converted:
+    Python refuses to read one of thousands of digits, and a server sends
+    whatever it likes."""
+    digits = digits.lstrip("0")
+    if len(digits) > len(str(most)):
+        return most
+    return min(int(digits or "0"), most)
+
+
 def _retry_after(text):
     """How long a `503`'s `Retry-After` asks to wait, in seconds, at most
     `_MOST_RETRY_SECONDS`; `None` without one, which says not to ask
@@ -225,7 +241,19 @@ def _retry_after(text):
     text = text.strip()
     if not (text.isascii() and text.isdigit()):
         return None
-    return min(int(text), _MOST_RETRY_SECONDS)
+    return _at_most(text, _MOST_RETRY_SECONDS)
+
+
+def _stated_length(response):
+    """How many bytes an answer says its body has, or `None` where it says
+    none that counts: at most one more than the bytes of an answer that are
+    read, which is how one that is too long is told."""
+    if response.getheader("Transfer-Encoding") is not None:
+        return None
+    text = response.getheader("Content-Length", "").strip()
+    if not (text.isascii() and text.isdigit()):
+        return None
+    return _at_most(text, _MOST_ANSWER_BYTES + 1)
 
 
 def _parsed(body):
@@ -309,6 +337,8 @@ class _Wire:
     is raised."""
 
     def __init__(self, server, token):
+        import threading
+
         self.server = server
         self._headers = {
             "Accept": "application/json",
@@ -317,10 +347,18 @@ class _Wire:
         }
         if token is not None:
             self._headers["Authorization"] = f"Bearer {token}"
+        # A token over plain `http` goes to this machine alone, which a
+        # connection is held to as it is made: a name leads where the
+        # system's resolver says.
+        self._local_only = token is not None and not server.https
         self._context = None
         # The server's release and the protocol version agreed with it, once
-        # the server has been asked.
+        # the server has been asked; and how many times a refusal has had it
+        # forgotten, so that an answer that was on its way meanwhile is not
+        # taken for the server's latest.
         self.agreed = None
+        self._forgotten = 0
+        self._lock = threading.Lock()
 
     def _connection(self):
         import http.client
@@ -337,27 +375,45 @@ class _Wire:
             server.host, server.port, timeout=_CONNECT_SECONDS, context=self._context
         )
 
+    def _held_to_this_machine(self, connection):
+        """Refuses a connection that does not end on this machine, before
+        anything is sent on it."""
+        peer = connection.sock.getpeername()[0]
+        if not _loopback(peer):
+            raise RemoteError(
+                f"the server at {self.server.shown} is not on this machine: its name leads to "
+                f"{peer} here, and a token goes over http to this machine alone; nothing was sent"
+            )
+
     def _once(self, method, target):
         """One request, on a connection of its own, and its answer."""
         import http.client
 
-        connection = self._connection()
+        connection = None
         try:
+            # Within what a failure is told by: making ready for TLS reads
+            # files, and fails as opening a connection does.
+            connection = self._connection()
             connection.connect()
+            if self._local_only:
+                self._held_to_this_machine(connection)
             connection.sock.settimeout(_READ_SECONDS)
             connection.request(method, target, headers=self._headers)
-            response = connection.getresponse()
-            body = response.read(_MOST_ANSWER_BYTES + 1)
-            # A read of so many bytes gives what came where the connection
-            # closed before the length the answer stated, and says nothing:
-            # an answer cut short is no answer.
-            stated = response.getheader("Content-Length", "").strip()
-            if response.getheader("Transfer-Encoding") is None and stated.isascii():
-                if stated.isdigit() and len(body) < min(int(stated), _MOST_ANSWER_BYTES + 1):
-                    raise http.client.IncompleteRead(body, int(stated) - len(body))
-            answer = _Answer(
-                response.status, response.reason, response.getheader("Retry-After"), body
-            )
+            # An answer that closes its connection holds the socket itself:
+            # it is closed here, however reading it ends.
+            with connection.getresponse() as response:
+                stated = _stated_length(response)
+                body = None
+                if stated is None or stated <= _MOST_ANSWER_BYTES:
+                    body = response.read(_MOST_ANSWER_BYTES + 1)
+                    # A read of so many bytes gives what came where the
+                    # connection closed before the length the answer stated,
+                    # and says nothing: an answer cut short is no answer.
+                    if stated is not None and len(body) < stated:
+                        raise http.client.IncompleteRead(body, stated - len(body))
+                answer = _Answer(
+                    response.status, response.reason, response.getheader("Retry-After"), body
+                )
         except (OSError, http.client.IncompleteRead) as failure:
             # What the system says of a connection names no more of the
             # server than its address, and never the token.
@@ -371,8 +427,11 @@ class _Wire:
                 f"HTTP ({type(failure).__name__}); is it a QuantForge server?"
             ) from failure
         finally:
-            connection.close()
-        if len(answer.body) > _MOST_ANSWER_BYTES:
+            if connection is not None:
+                connection.close()
+        # Too long by its own account, and then not read at all, or by what
+        # came.
+        if answer.body is None or len(answer.body) > _MOST_ANSWER_BYTES:
             raise RemoteError(
                 f"the server at {self.server.shown} answered {method} {target} with more than "
                 f"{_MOST_ANSWER_BYTES} bytes, more than a QuantForge server sends; is it one?"
@@ -414,7 +473,9 @@ class _Wire:
         if raised is VersionMismatch:
             # The version agreed on is one the server no longer speaks: the
             # next request asks it again.
-            self.agreed = None
+            with self._lock:
+                self._forgotten += 1
+                self.agreed = None
             return VersionMismatch(message, code=code, status=answer.status, supported=supported)
         return raised(message, code=code, status=answer.status)
 
@@ -439,6 +500,7 @@ class _Wire:
         agreed = self.agreed
         if agreed is not None:
             return agreed
+        forgotten = self._forgotten
 
         def read(value):
             what = "the server's version"
@@ -454,7 +516,12 @@ class _Wire:
                 supported=(oldest, newest),
             )
         agreed = (release, min(newest, _PROTO_VERSION))
-        self.agreed = agreed
+        # Kept, unless the server refused a version while this answer was on
+        # its way: what it said before that is not its latest, and the
+        # request it is used for here is the last it serves.
+        with self._lock:
+            if self._forgotten == forgotten:
+                self.agreed = agreed
         return agreed
 
     def ask(self, method, route, read):

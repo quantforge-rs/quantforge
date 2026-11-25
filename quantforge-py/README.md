@@ -178,11 +178,12 @@ A QuantForge server, `quantforge serve run`, runs backtests as jobs, and a
 ```python
 client = qf.Client("http://127.0.0.1:9600")  # asks nothing yet; a token is read from QF_REMOTE_TOKEN
 jobs = client.backtest.list()                # the server's jobs, the last submitted first
-job = client.backtest.get(jobs[0].id)        # one of them, by its ID
-job.status.state                             # 'queued', 'running', 'succeeded', 'failed' or 'cancelled'
-job.status.market                            # what it runs on, in the package's own types
-if not job.status.ended:
-    job.cancel()                             # asks the server, and keeps what it answers
+if jobs:                                     # none, on a server no job was submitted to
+    job = client.backtest.get(jobs[0].id)    # one of them, by its ID
+    job.status.state                         # 'queued', 'running', 'succeeded', 'failed' or 'cancelled'
+    job.status.market                        # what it runs on, in the package's own types
+    if not job.status.ended:
+        job.cancel()                         # asks the server, and keeps what it answers
 ```
 
 A client agrees on a protocol version with its server when it is first

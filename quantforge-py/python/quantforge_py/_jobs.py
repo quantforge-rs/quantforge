@@ -62,12 +62,15 @@ def _is_job_id(text):
 
 def _is_exact_decimal(text):
     """Whether text is a decimal in the protocol's exact form: digits, with
-    no sign but a `-`, no exponent, and no zero before a whole part."""
+    no sign but a `-`, none on a zero, no exponent, and no zero before a
+    whole part."""
     digits = text.removeprefix("-")
     whole, point, fraction = digits.partition(".")
     if not (whole.isascii() and whole.isdigit()) or (len(whole) > 1 and whole[0] == "0"):
         return False
-    return not point or (fraction.isascii() and fraction.isdigit())
+    if point and not (fraction.isascii() and fraction.isdigit()):
+        return False
+    return digits == text or not set(digits) <= {"0", "."}
 
 
 def _amount(record, name, what):
@@ -188,6 +191,25 @@ def _status_of(job_id):
         return status
 
     return read
+
+
+def _cancelled(job_id):
+    """Reads the answer to a cancel of the job `job_id`: its status, which
+    the protocol says is cancelled. One that says the job is in another of
+    the protocol's states is no answer to a cancel; a state a later revision
+    of the protocol adds is given as the server wrote it."""
+    read = _status_of(job_id)
+
+    def cancelled(value):
+        status = read(value)
+        if status.state in _STATES and status.state != _CANCELLED:
+            raise _Unreadable(
+                f"it says that job {job_id} is {status.state}, and a job that was cancelled is "
+                "cancelled"
+            )
+        return status
+
+    return cancelled
 
 
 @_final
@@ -378,17 +400,17 @@ class Job:
         """Where the job stood when the server was last asked."""
         return self._status
 
-    def _asked(self, method, route):
+    def _asked(self, method, route, read):
         """Asks a route of this job that answers its status, and keeps the
-        answer."""
-        status = self._wire.ask(method, route, _status_of(self.id))
+        answer as `read` makes of it."""
+        status = self._wire.ask(method, route, read(self.id))
         object.__setattr__(self, "_status", status)
         return status
 
     def refresh(self):
         """Asks the server where the job stands, keeps the answer as
         `status`, and gives it."""
-        return self._asked("GET", f"backtests/{self.id}")
+        return self._asked("GET", f"backtests/{self.id}", _status_of)
 
     def cancel(self):
         """Asks the server to cancel the job, keeps the status it answers,
@@ -398,7 +420,7 @@ class Job:
         job that is cancelled already stays so. One that has succeeded or
         failed is a `Conflict`, and `status` stays as it was.
         """
-        return self._asked("POST", f"backtests/{self.id}/cancel")
+        return self._asked("POST", f"backtests/{self.id}/cancel", _cancelled)
 
     def __repr__(self):
         return f"<Job {self.id} {self._status.state}>"

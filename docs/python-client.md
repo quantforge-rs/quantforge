@@ -125,6 +125,11 @@ never shown.** It is the command line's `--remote-token`:
   over `http` to this machine, which is `localhost` or a loopback address.
   Anywhere else a client with a token is refused as it is made, before
   anything is sent.
+- **`localhost` has to be this machine.** A name leads where the system's
+  resolver says, so before a token goes over `http` the client checks that
+  the connection it opened ends on this machine, at a loopback address. On
+  one that does not, nothing is sent, and the request is a `RemoteError`
+  that says where the name led.
 - **No message, `repr` or exception holds the token.** A client says only
   that it has one: `<Client https://qf.example/, with a token>`.
 - **No server checks a token yet.** A QuantForge server answers whoever
@@ -137,7 +142,7 @@ export QF_REMOTE_TOKEN='the-token'
 ```
 
 ```python
-client = qf.Client("https://qf.example")                  # sends the variable's token
+exported = qf.Client("https://qf.example")                # sends the variable's token
 other = qf.Client("https://qf.example", token="another")  # the argument wins
 plain = qf.Client("http://lab.example:9600", token="")    # sends none
 ```
@@ -325,6 +330,9 @@ True
   A running one's worker is stopped, and freed for the next job.
 - **Cancelling a job that is cancelled already changes nothing,** and
   answers it as it was.
+- **A cancel is answered `cancelled`, or it is no answer.** One that says
+  the job is queued, running, succeeded or failed is a status the protocol
+  does not write for a cancel, and is refused as any such answer is.
 - **A job that has succeeded or failed is not cancelled.** The server
   refuses, a `Conflict`, and the job's `status` stays as it was:
 
@@ -413,7 +421,8 @@ and names the server by its URL:
 | `502`, `503` or `504` without the protocol's error envelope | `ServerUnavailable` |
 | Any other status that is no success without it, a redirect among them | `RemoteError` |
 | A success whose body is not what the protocol says the route answers | `RemoteError` |
-| An answer longer than any QuantForge server sends | `RemoteError` |
+| An answer longer than any QuantForge server sends, by the length it states or by what came | `RemoteError` |
+| A connection for a token over `http` that does not end on this machine | `RemoteError` |
 <!-- end: without an envelope -->
 
 A proxy in front of a server answers in its place where it refuses a

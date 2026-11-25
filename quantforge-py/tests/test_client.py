@@ -29,7 +29,7 @@ import pytest
 
 import quantforge_py as qf
 from conftest import REMOTE_TOKEN
-from quantforge_py import _errors, _wire
+from quantforge_py import _errors, _jobs, _wire
 
 # What a server of this release says of itself.
 SPEAKS = {"version": "0.2.0", "proto_version": 1, "min_supported": 1}
@@ -77,7 +77,8 @@ class StandIn:
     with what the test told it to, one answer after another and the last
     one from then on, `GET /version` with `SPEAKS` unless told otherwise,
     and any other route as a QuantForge server answers one it does not
-    have. `asked` is what it was asked, in order."""
+    have. An answer that is a function is called as it is asked for, which
+    is how a test holds one back. `asked` is what it was asked, in order."""
 
     def __init__(self, speaks=SPEAKS):
         self.asked = []
@@ -96,7 +97,10 @@ class StandIn:
                             404, "not_found", f"this server answers no {self.command} {self.path}"
                         )
                     ]
-                status, body, headers = answers.pop(0) if len(answers) > 1 else answers[0]
+                answer = answers.pop(0) if len(answers) > 1 else answers[0]
+                if callable(answer):
+                    answer = answer()
+                status, body, headers = answer
                 if isinstance(body, (dict, list)):
                     body = json.dumps(body).encode()
                     headers = {"Content-Type": "application/json", **headers}
@@ -132,7 +136,7 @@ class StandIn:
         """From now on `method target` is answered with `answers`, each a
         status, a body and headers, in order."""
         self._answers[(method, target)] = [
-            (answer + ({},))[:3] if len(answer) == 2 else answer for answer in answers
+            answer if callable(answer) or len(answer) == 3 else (*answer, {}) for answer in answers
         ]
         return self
 
@@ -564,6 +568,85 @@ def test_a_token_goes_over_http_to_this_machine(url):
     assert repr(qf.Client(url, token=TOKEN)).endswith(", with a token>")
 
 
+def test_a_token_goes_over_http_only_on_a_connection_that_ends_on_this_machine(
+    server, monkeypatch
+):
+    # `localhost` is this machine by its name, and a name leads where the
+    # system's resolver says. Here it leads to this machine, and the token
+    # goes.
+    url = f"http://localhost:{server.port}"
+    qf.Client(url, token=TOKEN).handshake()
+    assert authorization(server) == [f"Bearer {TOKEN}"]
+    # Where it leads elsewhere, the connection is given up before anything
+    # is sent on it: the stand-in is reached, and told nothing.
+    with_a_token, without_one = qf.Client(url, token=TOKEN), qf.Client(url)
+    monkeypatch.setattr(_wire, "_loopback", lambda address: False)
+    for use in (with_a_token.handshake, with_a_token.backtest.list):
+        error = raised(qf.RemoteError, use)
+        assert str(error) == (
+            f"the server at http://localhost:{server.port}/ is not on this machine: its name "
+            "leads to 127.0.0.1 here, and a token goes over http to this machine alone; nothing "
+            "was sent"
+        )
+        assert (error.code, error.status) == (None, None) and TOKEN not in str(error)
+    assert len(server.asked) == 1
+    # The rule is the token's: a client without one asks wherever the name
+    # leads.
+    without_one.handshake()
+    assert authorization(server) == [f"Bearer {TOKEN}", None]
+
+
+@pytest.mark.parametrize(
+    "address, this_machine",
+    [
+        ("127.0.0.1", True),
+        ("127.8.9.10", True),
+        ("::1", True),
+        ("::ffff:127.0.0.1", True),
+        ("10.0.0.5", False),
+        ("203.0.113.7", False),
+        ("::ffff:10.0.0.5", False),
+        ("2001:db8::1", False),
+        ("fe80::1%en0", False),
+        ("0.0.0.0", False),
+        ("localhost", False),
+        ("", False),
+    ],
+)
+def test_this_machine_is_a_loopback_address_and_no_other(address, this_machine):
+    assert _wire._loopback(address) is this_machine
+
+
+def test_what_tls_cannot_be_made_ready_with_is_a_server_that_was_not_reached(
+    monkeypatch, tmp_path
+):
+    # Making ready for TLS reads files, and fails as opening a connection
+    # does: before one is opened, so no server is asked for here.
+    def unreadable():
+        raise FileNotFoundError(2, "No such file or directory", "/no/such/keys.log")
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(_wire, "_tls_context", unreadable)
+        client = qf.Client("https://qf.example", token=TOKEN)
+        for use in (client.handshake, client.backtest.list):
+            error = raised(qf.ServerUnavailable, use)
+            assert str(error) == (
+                "could not reach the server at https://qf.example/: FileNotFoundError: [Errno 2] "
+                "No such file or directory: '/no/such/keys.log'"
+            )
+            assert isinstance(error.__cause__, FileNotFoundError)
+            assert (error.code, error.status) == (None, None)
+    # And as Python itself fails at it, where its TLS writes a key log: one
+    # that cannot be opened. The server named is a port of this machine that
+    # nothing listens on, so that nothing leaves it either way.
+    if hasattr(ssl.SSLContext, "keylog_filename") and not sys.flags.ignore_environment:
+        monkeypatch.setenv("SSLKEYLOGFILE", str(tmp_path / "no" / "such" / "keys.log"))
+        url = f"https://127.0.0.1:{nobody_listens()}"
+        error = raised(qf.ServerUnavailable, qf.Client(url).handshake)
+        assert str(error).startswith(f"could not reach the server at {url}/: FileNotFoundError")
+        assert isinstance(error.__cause__, FileNotFoundError)
+
+
 def test_over_https_a_certificate_is_checked_and_nothing_is_said_in_clear_text():
     # How a certificate is checked: against what the system trusts, and the
     # name the URL gives.
@@ -710,6 +793,44 @@ def test_a_version_the_server_no_longer_speaks_is_agreed_on_again(server):
     assert raised(qf.VersionMismatch, client.backtest.list).supported is None
 
 
+def test_an_answer_that_was_on_its_way_while_the_server_refused_a_version_is_not_kept(server):
+    # Two threads use a client that has agreed on nothing yet. The first
+    # asks the server which versions it speaks, and its answer is held back.
+    asked, let_go = threading.Event(), threading.Event()
+
+    def late():
+        asked.set()
+        assert let_go.wait(30)
+        return 200, SPEAKS, {}
+
+    said = "this server speaks protocol versions 2 to 3, not 1"
+    supported = {"min_supported": 2, "proto_version": 3}
+    server.says("GET", "/version", late, (200, SPEAKS))
+    server.says(
+        "GET",
+        "/v1/backtests",
+        refusal(400, "unsupported_version", said, supported=supported),
+        (200, {"jobs": []}),
+    )
+    client = qf.Client(server.url)
+    with concurrent.futures.ThreadPoolExecutor(1) as pool:
+        first = pool.submit(client.backtest.list)
+        assert asked.wait(30)
+        # Meanwhile the second agrees on a version, and is refused it.
+        assert str(raised(qf.VersionMismatch, client.backtest.list)) == said
+        assert (client.server_version, client.proto_version) == (None, None)
+        # Now the first is answered: with what the server said before it
+        # refused. It serves the request it was asked for, and is not kept.
+        let_go.set()
+        assert first.result(timeout=30) == []
+    assert (client.server_version, client.proto_version) == (None, None)
+    assert server.routes == ["GET /version"] * 2 + ["GET /v1/backtests"] * 2
+    # So the next use asks the server which versions it speaks now.
+    assert client.backtest.list() == []
+    assert server.routes[4:] == ["GET /version", "GET /v1/backtests"]
+    assert (client.server_version, client.proto_version) == ("0.2.0", 1)
+
+
 # What a server refuses a request with.
 
 
@@ -791,8 +912,9 @@ class Checking(StandIn):
 
 def test_a_refused_token_is_an_auth_error_that_says_what_the_server_said(monkeypatch):
     with Checking(TOKEN) as server:
+        cancelled = written(state={"kind": "cancelled", "finished_at_ms": 9})
         server.says("GET", "/v1/backtests", (200, {"jobs": [written()]}))
-        server.says("POST", f"/v1/backtests/{JOB}/cancel", (200, written()))
+        server.says("POST", f"/v1/backtests/{JOB}/cancel", (200, cancelled))
         # No token, a wrong one, and a wrong one from the variable.
         without = raised(qf.AuthError, qf.Client(server.url).backtest.list)
         assert str(without) == "this server takes a token, and the request carries none"
@@ -808,7 +930,7 @@ def test_a_refused_token_is_an_auth_error_that_says_what_the_server_said(monkeyp
         # The right one is let through, to every route.
         client = qf.Client(server.url, token=TOKEN)
         (job,) = client.backtest.list()
-        assert job.cancel().state == "queued"
+        assert job.cancel().state == "cancelled"
         # And once it is no longer the server's, the client's next request
         # says so.
         server.expects = "another"
@@ -935,6 +1057,24 @@ def test_a_wait_is_five_seconds_at_most_and_a_proxys_503_is_waited_for_too(serve
     assert no_waiting == [5, 5]
 
 
+def test_a_wait_written_in_more_digits_than_python_reads_is_five_seconds_too(server, no_waiting):
+    endless, padded, nothing = "9" * 5000, "0" * 5000 + "3", "0" * 5000
+    if sys.get_int_max_str_digits():
+        # Python refuses to read a number so long, which is why none is.
+        with pytest.raises(ValueError):
+            int(endless)
+    client = qf.Client(server.url)
+    client.handshake()
+    server.says(
+        "GET", "/v1/backtests", busy(endless), busy(padded), busy(nothing), (200, {"jobs": []})
+    )
+    assert client.backtest.list() == []
+    # The longest is the most that is waited, and zeros before a number are
+    # not its digits.
+    assert no_waiting == [5, 3, 0]
+    assert server.routes == ["GET /version"] + ["GET /v1/backtests"] * 4
+
+
 # A server that is not there, or is no server.
 
 
@@ -1025,6 +1165,78 @@ def test_an_answer_longer_than_any_quantforge_server_sends_is_refused(server, mo
     # As long as the longest is taken.
     server.says("GET", "/v1/backtests", (200, json.dumps({"jobs": []}).ljust(256)))
     assert client.backtest.list() == []
+
+
+def test_an_answer_is_held_to_the_length_it_states_however_it_is_written(monkeypatch):
+    whole = json.dumps(SPEAKS).encode()
+
+    def endless(connection):
+        head = b"HTTP/1.1 200 OK\r\nContent-Length: " + b"9" * 5000 + b"\r\n\r\n"
+        connection.sendall(head + whole)
+
+    def padded(connection):
+        stated = b"0" * 5000 + str(len(whole)).encode()
+        connection.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: " + stated + b"\r\n\r\n" + whole)
+
+    def padded_and_cut_short(connection):
+        stated = b"0" * 5000 + str(len(whole) + 1).encode()
+        connection.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: " + stated + b"\r\n\r\n" + whole)
+
+    def unstated(connection):
+        connection.sendall(b"HTTP/1.0 200 OK\r\n\r\n" + whole.ljust(300))
+
+    # A length of more digits than Python reads is longer than any answer
+    # that is read, and says so itself: nothing of it is.
+    with Raw(endless) as other:
+        error = raised(qf.RemoteError, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
+    assert str(error) == (
+        f"the server at http://127.0.0.1:{other.port}/ answered GET /version with more than "
+        f"{_wire._MOST_ANSWER_BYTES} bytes, more than a QuantForge server sends; is it one?"
+    )
+    # Zeros before a length are not its digits: the answer is whole, or it
+    # is cut short.
+    with Raw(padded) as other:
+        client = qf.Client(f"http://127.0.0.1:{other.port}")
+        client.handshake()
+        assert client.proto_version == 1
+    with Raw(padded_and_cut_short) as other:
+        error = raised(qf.ServerUnavailable, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
+    assert str(error).endswith(f"IncompleteRead({len(whole)} bytes read, 1 more expected)")
+    # An answer that states no length is read to its end, and to one byte
+    # past the most that is read at the longest.
+    with Raw(unstated) as other:
+        qf.Client(f"http://127.0.0.1:{other.port}").handshake()
+    monkeypatch.setattr(_wire, "_MOST_ANSWER_BYTES", 256)
+    with Raw(unstated) as other:
+        error = raised(qf.RemoteError, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
+    assert "with more than 256 bytes" in str(error)
+
+
+def test_a_read_that_fails_lets_go_of_its_connection_at_once(monkeypatch):
+    let_go = threading.Event()
+
+    def stall(connection):
+        # An answer that says it closes its connection, begins, and stops.
+        head = b"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 100\r\n\r\n"
+        connection.sendall(head + b"{")
+        try:
+            connection.recv(1)
+        except TimeoutError:
+            # Still held, five seconds on.
+            return
+        except OSError:
+            # Let go of, though not by a close this end reads as one.
+            pass
+        let_go.set()
+
+    monkeypatch.setattr(_wire, "_READ_SECONDS", 0.2)
+    with Raw(stall) as stalled:
+        client = qf.Client(f"http://127.0.0.1:{stalled.port}")
+        error = raised(qf.ServerUnavailable, client.handshake)
+        # The error is held here, with every frame it was raised through,
+        # the answer's among them: its connection is closed all the same.
+        assert let_go.wait(3), "the client holds on to the connection of a read that failed"
+    assert str(error).endswith(": TimeoutError: timed out")
 
 
 # Jobs, as a server writes them.
@@ -1225,6 +1437,19 @@ UNREADABLE = [
         f"the `fee_bps` of job {JOB}'s submission is no decimal in its exact form",
     ),
     (
+        changed("submission.backtest.fee_bps", "-0"),
+        f"the `fee_bps` of job {JOB}'s submission is no decimal in its exact form",
+    ),
+    (
+        changed("submission.backtest.fee_bps", "-0.00"),
+        f"the `fee_bps` of job {JOB}'s submission is no decimal in its exact form",
+    ),
+    (
+        changed("submission.backtest.fee_bps", "-0.5"),
+        f"job {JOB}'s submission has settings the engine refuses (invalid configuration: "
+        "fee_bps must be zero or greater, got -0.5)",
+    ),
+    (
         changed("submission.backtest.initial_cash", "0"),
         f"job {JOB}'s submission has settings the engine refuses (invalid configuration: "
         "initial_cash must be greater than 0, got 0)",
@@ -1296,6 +1521,26 @@ def test_a_list_the_protocol_does_not_write_is_refused(server, answer, why):
         f"the server at {server.url}/ answered GET /v1/backtests with a body the protocol does "
         f"not read: {why}; is it a QuantForge server?"
     )
+
+
+def test_an_amount_is_in_the_protocols_exact_form_or_it_is_none(server, repository):
+    # What the protocol's own tests refuse as no exact decimal, read from
+    # the crate: a minus sign on a zero among it.
+    source = (repository / "src" / "protocol" / "decimal.rs").read_text(encoding="utf-8")
+    (listed,) = re.findall(
+        r"fn anything_but_the_exact_form_is_refused\(\) \{\s+for text in \[(.*?)\] \{", source, re.S
+    )
+    refused = re.findall(r'"([^"]*)"', listed)
+    assert len(refused) > 20 and {"-0", "-0.00", "+1", "1e5", ""} <= set(refused)
+    assert [text for text in refused if _jobs._is_exact_decimal(text)] == []
+    # And what it takes, each read with the digits it was written with.
+    for text in ["0", "0.00", "7.50", "10", "0.0001", "81940.01000000"]:
+        assert _jobs._is_exact_decimal(text) and _jobs._is_exact_decimal(f"-{text}") == (
+            text.strip("0.") != ""
+        ), text
+        status = written()
+        status["submission"]["backtest"]["fee_bps"] = text
+        assert format(job_of(server, status).status.config.fee_bps, "f") == text
 
 
 def test_a_job_is_given_only_the_status_of_the_job_it_is(server):
@@ -1398,6 +1643,40 @@ def test_refresh_and_cancel_ask_the_server_and_keep_what_it_answers(server):
     server.says("GET", f"/v1/backtests/{JOB}", refusal(404, "not_found", "the server holds no job"))
     raised(qf.NotFound, job.refresh)
     assert job.status is cancelled
+
+
+def test_a_cancel_is_answered_cancelled_or_it_is_no_answer(server):
+    running = written(state={"kind": "running", "started_at_ms": STARTED})
+    job = job_of(server, running)
+    cancel = f"/v1/backtests/{JOB}/cancel"
+    answered = 0
+    for state, *_ in STATES:
+        server.says("POST", cancel, (200, written(state=state)))
+        if state["kind"] == "cancelled":
+            # Before it started, and after.
+            assert job.cancel().state == "cancelled"
+            answered += 1
+            continue
+        # A cancel that is answered with the job in another state is one the
+        # protocol does not write, and says nothing of the job.
+        before = job.status
+        error = raised(qf.RemoteError, job.cancel)
+        assert str(error) == (
+            f"the server at {server.url}/ answered POST {cancel} with a body the protocol does "
+            f"not read: it says that job {JOB} is {state['kind']}, and a job that was cancelled "
+            "is cancelled; is it a QuantForge server?"
+        )
+        assert job.status is before
+    assert answered == 2
+    # A state a later revision of the protocol answers a cancel with is
+    # given as the server wrote it, as anywhere.
+    later = {"kind": "cancelling", "started_at_ms": STARTED}
+    server.says("POST", cancel, (200, written(state=later)))
+    assert (job.cancel().state, job.status.ended) == ("cancelling", False)
+    # And a status that is asked for is given in any state.
+    for state, *_ in STATES:
+        server.says("GET", f"/v1/backtests/{JOB}", (200, written(state=state)))
+        assert job.refresh().state == state["kind"]
 
 
 # What the classes are.
@@ -1511,9 +1790,11 @@ def test_every_failure_of_a_request_is_a_remote_error_and_an_exception_like_any_
     assert pickle.loads(pickle.dumps(mismatch)).supported == (2, 3)
 
 
-def test_importing_the_package_imports_nothing_of_the_network():
+def test_importing_the_package_imports_nothing_of_the_network(server):
     # What a request takes is imported when a client first makes one: the
-    # package imports as fast with a client in it as without.
+    # package imports as fast with a client in it as without. The client of
+    # this fresh interpreter asks the stand-in, so nothing here depends on
+    # what listens on the machine, or does not.
     code = """
         import sys
 
@@ -1523,16 +1804,18 @@ def test_importing_the_package_imports_nothing_of_the_network():
             return sorted(name for name in names if name in sys.modules)
 
         print(loaded("http", "http.client", "ssl", "socket", "json", "email", "urllib.parse"))
-        client = qf.Client("http://127.0.0.1:9", token="t")
+        client = qf.Client(sys.argv[1], token="a-token")
         client.backtest, client.url, repr(client)
         print(loaded("http.client", "ssl", "socket", "json", "email"))
-        try:
-            client.handshake()
-        except qf.ServerUnavailable:
-            print(loaded("http.client", "socket"))
+        client.handshake()
+        print(loaded("http.client", "socket", "json"), client.proto_version)
     """
     run = subprocess.run(
-        [sys.executable, "-c", textwrap.dedent(code)], capture_output=True, text=True, timeout=120
+        [sys.executable, "-c", textwrap.dedent(code), server.url],
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
     assert run.returncode == 0, run.stderr
-    assert run.stdout.splitlines() == ["[]", "[]", "['http.client', 'socket']"]
+    assert run.stdout.splitlines() == ["[]", "[]", "['http.client', 'json', 'socket'] 1"]
+    assert server.routes == ["GET /version"] and authorization(server) == ["Bearer a-token"]
