@@ -413,12 +413,17 @@ class Job:
         return self._asked("GET", f"backtests/{self.id}", _status_of)
 
     def cancel(self):
-        """Asks the server to cancel the job, keeps the status it answers,
-        which is cancelled, as `status`, and gives it.
+        """Asks the server to cancel the job, keeps the status it answers
+        as `status`, and gives it: `cancelled`, by the protocol.
 
         A queued job never starts, and a running one's worker is stopped. A
         job that is cancelled already stays so. One that has succeeded or
         failed is a `Conflict`, and `status` stays as it was.
+
+        That a cancel returns says that the server took it. A state a later
+        revision of the protocol answers one with is given as the server
+        wrote it, and its `ended` is `False`: read `ended` where the job has
+        to have ended.
         """
         return self._asked("POST", f"backtests/{self.id}/cancel", _cancelled)
 

@@ -692,8 +692,8 @@ They hold the installed package to the checkout they are in:
   every code the protocol has, read from the crate, raised as its exception
   with the server's message word for word; a server that checks its token,
   which no QuantForge server does yet, refusing a missing and a wrong one
-  as an `AuthError`; a request asked again while the server is busy, five
-  times at most; a server that is not there, a connection that breaks, an
+  as an `AuthError`; a request sent again while the server is busy, five
+  tries in all at most; a server that is not there, a connection that breaks, an
   answer cut short, a redirect and what is not HTTP, each named for what it
   is; and every status the protocol does not write refused, member by
   member. Then against a real `quantforge serve run` on SQLite and on

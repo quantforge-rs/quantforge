@@ -201,16 +201,18 @@ def _token(given):
 
 
 class _Answer:
-    """One answer of a server: its status, how long it asks to wait, and
-    its body."""
+    """One answer of a server: its status, how long it asks to wait, its
+    body, and how many refusals of a version the client had counted as the
+    request it answers was sent."""
 
-    __slots__ = ("status", "reason", "retry_after", "body")
+    __slots__ = ("status", "reason", "retry_after", "body", "forgotten")
 
-    def __init__(self, status, reason, retry_after, body):
+    def __init__(self, status, reason, retry_after, body, forgotten):
         self.status = status
         self.reason = reason
         self.retry_after = retry_after
         self.body = body
+        self.forgotten = forgotten
 
     @property
     def said(self):
@@ -247,8 +249,14 @@ def _retry_after(text):
 def _stated_length(response):
     """How many bytes an answer says its body has, or `None` where it says
     none that counts: at most one more than the bytes of an answer that are
-    read, which is how one that is too long is told."""
-    if response.getheader("Transfer-Encoding") is not None:
+    read, which is how one that is too long is told. An answer that has no
+    body, a `204` or a `304` among them, may state the length of the one it
+    stands for, which is not its own."""
+    if response.status in (204, 304) or 100 <= response.status < 200:
+        return None
+    # In chunks, an answer's length is its chunks', and one stated beside
+    # them is not read: as `http.client` itself tells the two apart.
+    if (response.getheader("Transfer-Encoding") or "").lower() == "chunked":
         return None
     text = response.getheader("Content-Length", "").strip()
     if not (text.isascii() and text.isdigit()):
@@ -398,21 +406,35 @@ class _Wire:
             if self._local_only:
                 self._held_to_this_machine(connection)
             connection.sock.settimeout(_READ_SECONDS)
+            # Counted as the request leaves: a refusal of a version that
+            # comes after this is newer than what this request is answered.
+            forgotten = self._forgotten
             connection.request(method, target, headers=self._headers)
             # An answer that closes its connection holds the socket itself:
             # it is closed here, however reading it ends.
             with connection.getresponse() as response:
                 stated = _stated_length(response)
-                body = None
-                if stated is None or stated <= _MOST_ANSWER_BYTES:
+                if stated is None:
+                    # To its end, and to one byte past the most that is read
+                    # at the longest.
                     body = response.read(_MOST_ANSWER_BYTES + 1)
-                    # A read of so many bytes gives what came where the
-                    # connection closed before the length the answer stated,
-                    # and says nothing: an answer cut short is no answer.
-                    if stated is not None and len(body) < stated:
+                elif stated > _MOST_ANSWER_BYTES:
+                    # Too long by its own account: none of it is read.
+                    body = None
+                else:
+                    # The bytes it states and no more, so that a server that
+                    # keeps its connection open is not waited for. Fewer came
+                    # where the connection closed first, and a read says
+                    # nothing of that: an answer cut short is no answer.
+                    body = response.read(stated)
+                    if len(body) < stated:
                         raise http.client.IncompleteRead(body, stated - len(body))
                 answer = _Answer(
-                    response.status, response.reason, response.getheader("Retry-After"), body
+                    response.status,
+                    response.reason,
+                    response.getheader("Retry-After"),
+                    body,
+                    forgotten,
                 )
         except (OSError, http.client.IncompleteRead) as failure:
             # What the system says of a connection names no more of the
@@ -457,7 +479,7 @@ class _Wire:
         envelope = _envelope(answer.body)
         if envelope is None:
             raised = _RAISED_BY_STATUS.get(answer.status, RemoteError)
-            if 300 <= answer.status < 400:
+            if 300 <= answer.status < 400 and answer.status != 304:
                 return raised(
                     f"the server at {self.server.shown} answered {answer.said}, a redirect, which "
                     "the client never follows; name the server by the URL it answers at",
@@ -479,10 +501,9 @@ class _Wire:
             return VersionMismatch(message, code=code, status=answer.status, supported=supported)
         return raised(message, code=code, status=answer.status)
 
-    def _ask(self, method, target, read):
-        """A request's answer as `read` makes of its JSON, or the exception
-        it failed with."""
-        answer = self._answered(method, target)
+    def _made_of(self, answer, method, target, read):
+        """An answer as `read` makes of its JSON, or the exception it is
+        raised as."""
         if not 200 <= answer.status < 300:
             raise self._refusal(answer)
         try:
@@ -493,6 +514,11 @@ class _Wire:
                 f"protocol does not read: {unreadable}; is it a QuantForge server?"
             ) from None
 
+    def _ask(self, method, target, read):
+        """A request's answer as `read` makes of its JSON, or the exception
+        it failed with."""
+        return self._made_of(self._answered(method, target), method, target, read)
+
     def handshake(self):
         """The server's release and the protocol version agreed with it, the
         newest both sides speak. A server that was asked is not asked
@@ -500,14 +526,15 @@ class _Wire:
         agreed = self.agreed
         if agreed is not None:
             return agreed
-        forgotten = self._forgotten
 
         def read(value):
             what = "the server's version"
             record = _object(value, what)
             return _member(record, "version", str, what), _versions(record, what)
 
-        release, (oldest, newest) = self._ask("GET", f"{self.server.path}version", read)
+        target = f"{self.server.path}version"
+        answer = self._answered("GET", target)
+        release, (oldest, newest) = self._made_of(answer, "GET", target, read)
         if newest < _MIN_SUPPORTED or oldest > _PROTO_VERSION:
             raise VersionMismatch(
                 f"the server at {self.server.shown} runs QuantForge {release}, which speaks "
@@ -518,9 +545,11 @@ class _Wire:
         agreed = (release, min(newest, _PROTO_VERSION))
         # Kept, unless the server refused a version while this answer was on
         # its way: what it said before that is not its latest, and the
-        # request it is used for here is the last it serves.
+        # request it is used for here is the last it serves. What counts is
+        # the request this answer came to, the last of them where the server
+        # was busy and was asked again.
         with self._lock:
-            if self._forgotten == forgotten:
+            if self._forgotten == answer.forgotten:
                 self.agreed = agreed
         return agreed
 

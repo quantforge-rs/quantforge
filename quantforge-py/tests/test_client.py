@@ -572,8 +572,15 @@ def test_a_token_goes_over_http_only_on_a_connection_that_ends_on_this_machine(
     server, monkeypatch
 ):
     # `localhost` is this machine by its name, and a name leads where the
-    # system's resolver says. Here it leads to this machine, and the token
-    # goes.
+    # system's resolver says. Here it is made to lead to the address the
+    # stand-in listens on, whatever the machine's own resolver makes of it,
+    # and the token goes.
+    resolve = socket.getaddrinfo
+
+    def to_the_stand_in(host, *rest, **named):
+        return resolve("127.0.0.1" if host == "localhost" else host, *rest, **named)
+
+    monkeypatch.setattr(socket, "getaddrinfo", to_the_stand_in)
     url = f"http://localhost:{server.port}"
     qf.Client(url, token=TOKEN).handshake()
     assert authorization(server) == [f"Bearer {TOKEN}"]
@@ -831,6 +838,44 @@ def test_an_answer_that_was_on_its_way_while_the_server_refused_a_version_is_not
     assert (client.server_version, client.proto_version) == ("0.2.0", 1)
 
 
+def test_an_answer_to_a_request_sent_after_the_refusal_is_the_servers_latest_and_is_kept(
+    server, no_waiting
+):
+    # The first thread's question is answered late, and with a server that
+    # is busy: it is asked again, and by then the server has refused a
+    # version to the second thread.
+    asked, let_go = threading.Event(), threading.Event()
+
+    def busy_and_late():
+        asked.set()
+        assert let_go.wait(30)
+        return busy("0")
+
+    said = "this server speaks protocol versions 2 to 3, not 1"
+    supported = {"min_supported": 2, "proto_version": 3}
+    server.says("GET", "/version", busy_and_late, (200, SPEAKS))
+    server.says(
+        "GET",
+        "/v1/backtests",
+        refusal(400, "unsupported_version", said, supported=supported),
+        (200, {"jobs": []}),
+    )
+    client = qf.Client(server.url)
+    with concurrent.futures.ThreadPoolExecutor(1) as pool:
+        first = pool.submit(client.handshake)
+        assert asked.wait(30)
+        raised(qf.VersionMismatch, client.backtest.list)
+        assert (client.server_version, client.proto_version) == (None, None)
+        let_go.set()
+        assert first.result(timeout=30) is None
+    # What the first was answered then, it had asked after the refusal: a
+    # handshake that returns has agreed, and the client says on what.
+    assert server.routes == ["GET /version"] * 2 + ["GET /v1/backtests", "GET /version"]
+    assert (client.server_version, client.proto_version) == ("0.2.0", 1)
+    assert client.backtest.list() == []
+    assert server.routes[4:] == ["GET /v1/backtests"]
+
+
 # What a server refuses a request with.
 
 
@@ -1059,8 +1104,9 @@ def test_a_wait_is_five_seconds_at_most_and_a_proxys_503_is_waited_for_too(serve
 
 def test_a_wait_written_in_more_digits_than_python_reads_is_five_seconds_too(server, no_waiting):
     endless, padded, nothing = "9" * 5000, "0" * 5000 + "3", "0" * 5000
-    if sys.get_int_max_str_digits():
-        # Python refuses to read a number so long, which is why none is.
+    if 0 < sys.get_int_max_str_digits() < len(endless):
+        # Python refuses to read a number so long, unless it was told to
+        # read longer ones or any, which is why none is converted.
         with pytest.raises(ValueError):
             int(endless)
     client = qf.Client(server.url)
@@ -1185,6 +1231,11 @@ def test_an_answer_is_held_to_the_length_it_states_however_it_is_written(monkeyp
     def unstated(connection):
         connection.sendall(b"HTTP/1.0 200 OK\r\n\r\n" + whole.ljust(300))
 
+    def cut_short_beside_an_encoding_that_is_none(connection):
+        head = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: identity\r\n"
+        stated = b"Content-Length: " + str(len(whole) + 1).encode() + b"\r\n\r\n"
+        connection.sendall(head + stated + whole)
+
     # A length of more digits than Python reads is longer than any answer
     # that is read, and says so itself: nothing of it is.
     with Raw(endless) as other:
@@ -1202,6 +1253,12 @@ def test_an_answer_is_held_to_the_length_it_states_however_it_is_written(monkeyp
     with Raw(padded_and_cut_short) as other:
         error = raised(qf.ServerUnavailable, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
     assert str(error).endswith(f"IncompleteRead({len(whole)} bytes read, 1 more expected)")
+    # Only an answer in chunks has its length elsewhere: beside any other
+    # transfer encoding the length stated is the answer's, and what came is
+    # held to it, though it reads as an answer of its own.
+    with Raw(cut_short_beside_an_encoding_that_is_none) as other:
+        error = raised(qf.ServerUnavailable, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
+    assert str(error).endswith(f"IncompleteRead({len(whole)} bytes read, 1 more expected)")
     # An answer that states no length is read to its end, and to one byte
     # past the most that is read at the longest.
     with Raw(unstated) as other:
@@ -1210,6 +1267,57 @@ def test_an_answer_is_held_to_the_length_it_states_however_it_is_written(monkeyp
     with Raw(unstated) as other:
         error = raised(qf.RemoteError, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
     assert "with more than 256 bytes" in str(error)
+
+
+def test_an_answer_without_a_body_is_told_by_its_status_whatever_length_it_states():
+    # A `304` and a `204` have no body, and may state the length of the one
+    # they stand for: that is not a body cut short.
+    def not_modified(connection):
+        connection.sendall(b"HTTP/1.1 304 Not Modified\r\nContent-Length: 1234\r\n\r\n")
+
+    def no_content(connection):
+        connection.sendall(b"HTTP/1.1 204 No Content\r\nContent-Length: 1234\r\n\r\n")
+
+    with Raw(not_modified) as other:
+        error = raised(qf.RemoteError, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
+    # No redirect either: it names nowhere to go.
+    assert str(error) == (
+        f"the server at http://127.0.0.1:{other.port}/ answered 304 Not Modified without "
+        "QuantForge's error envelope; is it a QuantForge server?"
+    )
+    assert (error.code, error.status) == (None, 304)
+    with Raw(no_content) as other:
+        error = raised(qf.RemoteError, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
+    assert str(error) == (
+        f"the server at http://127.0.0.1:{other.port}/ answered GET /version with a body the "
+        "protocol does not read: it is not JSON; is it a QuantForge server?"
+    )
+    assert (error.code, error.status) == (None, None)
+
+
+def test_an_answer_of_a_stated_length_is_not_waited_for_past_its_end(monkeypatch):
+    whole = json.dumps(SPEAKS).encode()
+
+    def kept_open(stated: bytes):
+        def serve(connection):
+            head = b"HTTP/1.1 200 OK\r\nContent-Length: " + stated + b"\r\n\r\n"
+            connection.sendall(head + whole)
+            # The server keeps its connection: the client is the one to close.
+            try:
+                connection.recv(1)
+            except OSError:
+                pass
+
+        return serve
+
+    # A second and a half would be waited out, were the end of the
+    # connection what a read waited for.
+    monkeypatch.setattr(_wire, "_READ_SECONDS", 1.5)
+    for stated in (str(len(whole)).encode(), b"0" * 5000 + str(len(whole)).encode()):
+        with Raw(kept_open(stated)) as other:
+            client = qf.Client(f"http://127.0.0.1:{other.port}")
+            client.handshake()
+            assert (client.server_version, client.proto_version) == ("0.2.0", 1)
 
 
 def test_a_read_that_fails_lets_go_of_its_connection_at_once(monkeypatch):

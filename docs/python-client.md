@@ -326,13 +326,21 @@ True
 - **`refresh()` asks the server where the job stands,** keeps the answer
   as the job's `status`, and gives it.
 - **`cancel()` asks the server to cancel the job,** and keeps and gives
-  the status it answers, which is `cancelled`. A queued job never starts.
-  A running one's worker is stopped, and freed for the next job.
+  the status it answers, which the protocol says is `cancelled`. A queued
+  job never starts. A running one's worker is stopped, and freed for the
+  next job.
 - **Cancelling a job that is cancelled already changes nothing,** and
   answers it as it was.
-- **A cancel is answered `cancelled`, or it is no answer.** One that says
-  the job is queued, running, succeeded or failed is a status the protocol
-  does not write for a cancel, and is refused as any such answer is.
+- **A cancel that is answered in another of the protocol's states is no
+  answer.** One that says the job is queued, running, succeeded or failed
+  is a status the protocol does not write for a cancel, and is refused as
+  any such answer is.
+- **A cancel that returns says that the server took it, and not that the
+  job has ended.** Today the two are one: the status is `cancelled`. A
+  state a later revision of the protocol answers a cancel with is given as
+  the server wrote it, as anywhere, and `ended` is `False` for it. Code
+  that needs the job to have ended reads `ended`, and asks again with
+  `refresh()` until it has.
 - **A job that has succeeded or failed is not cancelled.** The server
   refuses, a `Conflict`, and the job's `status` stays as it was:
 
