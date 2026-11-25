@@ -8,8 +8,8 @@ use quantforge::protocol::bundle::{Bundle, BundleLimits, Runtime};
 use quantforge::protocol::jobs::{self, JobSubmission};
 use quantforge::protocol::{ErrorBody, ErrorCode};
 use quantforge::server::{
-    Cancel, Execution, JobInput, JobLog, LogLimits, PoolConfig, WORKER_COMMAND, WorkerLimits,
-    WorkerMode, WorkerOutcome, WorkerPool, WorkerProgram,
+    Cancel, Execution, Guard, JobInput, JobLog, LogLimits, PoolConfig, WORKER_COMMAND,
+    WorkerLimits, WorkerMode, WorkerOutcome, WorkerPool, WorkerProgram,
 };
 use quantforge::{Candle, JobId, TimestampMs};
 use rust_decimal::Decimal;
@@ -34,6 +34,33 @@ pub(crate) fn program() -> WorkerProgram {
 /// tests' bundles.
 pub(crate) fn runtime() -> Runtime {
     serde_json::from_str(r#"{"engine":"0.3.0","python":"3.12","packages":{}}"#).expect("a runtime")
+}
+
+/// Set to `1` where the workers' sandbox has to hold, as on CI's Linux legs
+/// (`docs/ci.md`): a test that would skip because the workers enforce no
+/// such guard here fails instead, so that no run passes for a sandbox that
+/// was never there.
+pub(crate) const SANDBOX_REQUIRED: &str = "QUANTFORGE_TEST_SANDBOX_REQUIRED";
+
+/// Whether `guard`, `what` it is, holds. Where it does not, a test of it
+/// has nothing to hold the workers to and skips, saying so; where the
+/// sandbox has to hold, it fails instead.
+pub(crate) fn holds(guard: &Guard, what: &str) -> bool {
+    let Guard::Unenforced { why } = guard else {
+        return true;
+    };
+    assert!(
+        std::env::var(SANDBOX_REQUIRED).ok().as_deref() != Some("1"),
+        "the workers enforce no {what} here ({why}), and {SANDBOX_REQUIRED} says the sandbox \
+         has to hold"
+    );
+    eprintln!("skipping: the workers enforce no {what} here: {why}");
+    false
+}
+
+/// `text` as a TOML string, for a workload's parameter.
+pub(crate) fn toml_string(text: &str) -> String {
+    serde_json::to_string(text).expect("a string")
 }
 
 /// Limits a job runs into only when it means to.

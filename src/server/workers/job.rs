@@ -6,7 +6,10 @@
 //! lines of its log and its progress, goes into the job's log as it comes,
 //! which keeps no more of it than its limits. A backtest's rows are read
 //! as they come, each checked, and written as the job's result files here:
-//! a worker runs a job's code, so no file is ever taken from one.
+//! a worker runs a job's code, so no file is ever taken from one, and
+//! nothing it says is trusted: its rows are held to the job's bars and
+//! symbol, its failure's words are cut short, and a frame no worker of
+//! this build sends for such a job ends the job.
 
 use std::io;
 use std::process::ChildStdin;
@@ -16,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use tracing::{error, warn};
 
-use super::config::WorkerLimits;
+use super::config::{PoolConfig, WorkerLimits, WorkerMode};
 use super::frames::{
     self, BARS_PER_FRAME, EquityFrame, Finished, FromWorker, JobFrame, ResultText, ToWorker,
     TradeFrame,
@@ -27,7 +30,7 @@ use crate::protocol::jobs::LogLevel;
 use crate::protocol::results::{EquityRow, Metrics, TradeRow};
 use crate::protocol::{ErrorBody, ErrorCode};
 use crate::server::history::bar;
-use crate::server::jobs::{Cancel, JobInput, JobLog, WorkerOutcome};
+use crate::server::jobs::{Cancel, JobInput, JobLog, WorkerOutcome, start_of};
 use crate::server::results::{BacktestOutput, ResultFile};
 
 /// How often a run looks at its cancel and its clock while it waits.
@@ -39,17 +42,21 @@ const GRACE: Duration = Duration::from_secs(1);
 /// How long the end of a stopped worker's standard error may take to come.
 const LAST_WORDS: Duration = Duration::from_millis(500);
 
-/// Runs the job on `worker`, which is killed by the time this returns,
-/// writing what the job says into `log`.
+/// The most bytes a job's failure keeps of the words its own code chose.
+const FAILURE_BYTES: usize = 8 << 10;
+
+/// Runs the job on `worker`, one of a pool started with `config`, which is
+/// killed by the time this returns, writing what the job says into `log`.
 pub(super) fn run(
     worker: &mut Worker,
     input: JobInput,
     cancel: &Cancel,
-    limits: &WorkerLimits,
+    config: &PoolConfig,
     log: &JobLog,
 ) -> WorkerOutcome {
     let job = input.job_id.to_string();
-    let bars = input.candles.len();
+    let limits = &config.limits;
+    let rows = Rows::of(input.candles.len(), &input.submission.data.symbol);
     let process = &mut worker.process;
     if let Err(failure) = scratch::write_bundle(&process.scratch, &input.bundle) {
         error!(job, %failure, "a job's bundle could not be written for its worker");
@@ -72,17 +79,16 @@ pub(super) fn run(
         }
     };
     let wall = Duration::from_secs(limits.wall_secs);
-    let ran = match watch(process, cancel, wall, bars, log) {
+    let ran = match watch(process, cancel, wall, rows, log) {
         Watched::Finished(Finished::Backtest { metrics }, rows) => {
-            backtest(metrics, rows, bars).unwrap_or_else(|why| garbled(&job, &why))
+            backtest(metrics, rows).unwrap_or_else(|why| garbled(&job, &why))
         }
-        Watched::Finished(Finished::Succeeded { results }, rows) if rows.is_empty() => {
-            succeeded(results)
+        Watched::Finished(Finished::Succeeded { results }, rows) => {
+            report(&config.mode, results, &rows).unwrap_or_else(|why| garbled(&job, why))
         }
-        Watched::Finished(Finished::Succeeded { .. }, _) => {
-            garbled(&job, "it sent a backtest's rows and then a report")
+        Watched::Finished(Finished::Failed { error }, _) => {
+            said(error).unwrap_or_else(|why| garbled(&job, &why))
         }
-        Watched::Finished(Finished::Failed { error }, _) => WorkerOutcome::Failed(error),
         Watched::Cancelled => WorkerOutcome::Cancelled,
         Watched::OutOfTime => failed(
             ErrorCode::InvalidRequest,
@@ -134,33 +140,53 @@ fn send(mut stdin: ChildStdin, input: JobInput) -> io::Result<JoinHandle<io::Res
         })
 }
 
-/// The rows a backtest sent before it finished.
-#[derive(Default)]
+/// The rows a backtest sent before it finished, held to its job of `bars`
+/// bars on `symbol`: a row is a few numbers and that symbol, so a worker
+/// makes its server hold no more than the job's bars, whatever it sends.
 struct Rows {
+    bars: usize,
+    symbol: String,
     trades: Vec<TradeRow>,
     equity: Vec<EquityRow>,
 }
 
 impl Rows {
+    fn of(bars: usize, symbol: &str) -> Self {
+        Self {
+            bars,
+            symbol: symbol.to_string(),
+            trades: Vec::new(),
+            equity: Vec::new(),
+        }
+    }
+
     fn is_empty(&self) -> bool {
         self.trades.is_empty() && self.equity.is_empty()
     }
 
-    /// Keeps the next run of trades, or says why a job of `bars` bars
-    /// cannot have that many: a fill takes a bar.
-    fn trades(&mut self, more: Vec<TradeFrame>, bars: usize) -> Result<(), String> {
-        if self.trades.len() + more.len() > bars {
-            return Err(format!("it sent more than {bars} trades"));
+    /// Keeps the next run of trades, or says why the job cannot have them:
+    /// a fill takes a bar, and the job trades one symbol. The symbol a
+    /// refused row names is never said: it is as long as its sender likes.
+    fn trades(&mut self, more: Vec<TradeFrame>) -> Result<(), String> {
+        if self.trades.len() + more.len() > self.bars {
+            return Err(format!("it sent more than {} trades", self.bars));
         }
-        self.trades.extend(more.into_iter().map(TradeRow::from));
+        let more: Vec<TradeRow> = more.into_iter().map(TradeRow::from).collect();
+        if more.iter().any(|trade| trade.symbol != self.symbol) {
+            return Err(format!(
+                "it sent a trade of another symbol than the job's {}",
+                self.symbol
+            ));
+        }
+        self.trades.extend(more);
         Ok(())
     }
 
-    /// Keeps the next run of the equity curve, or says why a job of `bars`
-    /// bars cannot have that many rows: the curve has one per bar.
-    fn equity(&mut self, more: Vec<EquityFrame>, bars: usize) -> Result<(), String> {
-        if self.equity.len() + more.len() > bars {
-            return Err(format!("it sent more than {bars} equity rows"));
+    /// Keeps the next run of the equity curve, or says why the job cannot
+    /// have that many rows: the curve has one per bar.
+    fn equity(&mut self, more: Vec<EquityFrame>) -> Result<(), String> {
+        if self.equity.len() + more.len() > self.bars {
+            return Err(format!("it sent more than {} equity rows", self.bars));
         }
         self.equity.extend(more.into_iter().map(EquityRow::from));
         Ok(())
@@ -178,22 +204,21 @@ enum Watched {
 /// Watches the worker until it says how the job ended, the job is
 /// cancelled, the worker stops, or `limit` has passed: measured from now,
 /// never as an instant that far ahead, which may not exist. A backtest's
-/// rows are kept as they come, never more of either kind than the job has
-/// bars, and what the job says goes into `log`, which bounds it: the
-/// worker's count of bars is held to the job's.
+/// rows are kept in `rows` as they come, which holds them to the job, and
+/// what the job says goes into `log`, which bounds it: the worker's count
+/// of bars is held to the job's.
 fn watch(
     process: &Process,
     cancel: &Cancel,
     limit: Duration,
-    bars: usize,
+    mut rows: Rows,
     log: &JobLog,
 ) -> Watched {
     let started = Instant::now();
-    let mut rows = Rows::default();
     loop {
         let wait = limit.saturating_sub(started.elapsed()).min(POLL);
         match process.frames.recv_timeout(wait) {
-            Ok(Ok(frame)) => match take(frame, &mut rows, bars, log) {
+            Ok(Ok(frame)) => match take(frame, &mut rows, log) {
                 Ok(Some(outcome)) => return Watched::Finished(outcome, rows),
                 Ok(None) => {}
                 Err(why) => return Watched::Garbled(why),
@@ -211,16 +236,10 @@ fn watch(
     }
 }
 
-/// Takes one frame of a running job of `bars` bars: a line or the job's
-/// progress into `log`, a backtest's rows into `rows`. Answers how the job
-/// ended, once a frame says, or why the frame is none a worker of this
-/// build sends.
-fn take(
-    frame: FromWorker,
-    rows: &mut Rows,
-    bars: usize,
-    log: &JobLog,
-) -> Result<Option<Finished>, String> {
+/// Takes one frame of a running job: a line or the job's progress into
+/// `log`, a backtest's rows into `rows`. Answers how the job ended, once a
+/// frame says, or why the frame is none a worker of this build sends.
+fn take(frame: FromWorker, rows: &mut Rows, log: &JobLog) -> Result<Option<Finished>, String> {
     match frame {
         FromWorker::Finished { outcome } => return Ok(Some(outcome)),
         // A level with no name could never be sent on to a client.
@@ -234,10 +253,10 @@ fn take(
             dropped_bytes,
         } => log.line_cut(level, &message, dropped_bytes),
         FromWorker::Progress { bars_done } => {
-            log.progress(bars_done, u64::try_from(bars).unwrap_or(u64::MAX));
+            log.progress(bars_done, u64::try_from(rows.bars).unwrap_or(u64::MAX));
         }
-        FromWorker::Trades { rows: more } => rows.trades(more, bars)?,
-        FromWorker::Equity { rows: more } => rows.equity(more, bars)?,
+        FromWorker::Trades { rows: more } => rows.trades(more)?,
+        FromWorker::Equity { rows: more } => rows.equity(more)?,
         FromWorker::Ready { .. } => return Err("it said it was ready a second time".to_string()),
     }
     Ok(None)
@@ -279,12 +298,13 @@ fn stopped(process: &mut Process, limits: &WorkerLimits, job: &str) -> WorkerOut
 }
 
 /// A backtest's three result files, written here from the rows its worker
-/// sent, or why what it sent is no backtest of the job's `bars` bars.
-fn backtest(metrics: Metrics, rows: Rows, bars: usize) -> Result<WorkerOutcome, String> {
-    if rows.equity.len() != bars {
+/// sent, or why what it sent is no backtest of the job's bars.
+fn backtest(metrics: Metrics, rows: Rows) -> Result<WorkerOutcome, String> {
+    if rows.equity.len() != rows.bars {
         return Err(format!(
-            "it sent an equity curve of {} rows for a job of {bars} bars",
-            rows.equity.len()
+            "it sent an equity curve of {} rows for a job of {} bars",
+            rows.equity.len(),
+            rows.bars
         ));
     }
     if u64::try_from(rows.trades.len()).ok() != Some(metrics.trade_count) {
@@ -310,18 +330,57 @@ fn backtest(metrics: Metrics, rows: Rows, bars: usize) -> Result<WorkerOutcome, 
     })
 }
 
-/// A synthetic workload's report: each text a result file.
-fn succeeded(results: Vec<ResultText>) -> WorkerOutcome {
-    WorkerOutcome::Succeeded(
+/// A synthetic workload's report, each text a result file, or why the
+/// worker could not have sent one: only a worker started for the tests'
+/// workloads reports, and a report comes without a backtest's rows. A
+/// bundle that writes its worker's frames itself names no result this way.
+fn report(
+    mode: &WorkerMode,
+    results: Vec<ResultText>,
+    rows: &Rows,
+) -> Result<WorkerOutcome, &'static str> {
+    if !matches!(mode, WorkerMode::Synthetic { .. }) {
+        return Err("it sent a report, which only a synthetic workload does");
+    }
+    if !rows.is_empty() {
+        return Err("it sent a backtest's rows and then a report");
+    }
+    Ok(WorkerOutcome::Succeeded(
         results
             .into_iter()
             .map(|result| ResultFile::new(result.name, result.media_type, result.text.into_bytes()))
             .collect(),
-    )
+    ))
 }
 
-/// The end of a job whose worker sent what no worker of this build sends.
+/// A failure as its worker worded it, or why no worker of this build said
+/// it: a job fails as its request's fault, the worker's, or for want of a
+/// runtime, and as nothing else. The message is cut to its first
+/// `FAILURE_BYTES` bytes, between two characters, and says by how much.
+fn said(error: ErrorBody) -> Result<WorkerOutcome, String> {
+    let known = [
+        ErrorCode::InvalidRequest,
+        ErrorCode::Internal,
+        ErrorCode::Unavailable,
+    ];
+    if !known.contains(&error.code) {
+        return Err(format!(
+            "it said the job failed as {:?}, which no job does",
+            error.code
+        ));
+    }
+    let kept = start_of(&error.message, FAILURE_BYTES);
+    let message = match error.message.len() - kept.len() {
+        0 => error.message,
+        cut => format!("{kept}… [{cut} more bytes left out]"),
+    };
+    Ok(failed(error.code, message))
+}
+
+/// The end of a job whose worker sent what no worker of this build sends,
+/// logged with the start of why: a frame's refusal can quote the frame.
 fn garbled(job: &str, why: &str) -> WorkerOutcome {
+    let why = start_of(why, 256);
     warn!(job, why, "a worker sent what the server cannot read");
     failed(
         ErrorCode::Internal,

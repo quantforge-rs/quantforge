@@ -150,7 +150,7 @@ impl WorkerPool {
             Err(outcome) => return Execution { outcome, pid: None },
         };
         let pid = worker.process.pid;
-        let outcome = job::run(&mut worker, input, cancel, &self.inner.config.limits, log);
+        let outcome = job::run(&mut worker, input, cancel, &self.inner.config, log);
         worker.process.retire();
         drop(worker);
         drop(running);

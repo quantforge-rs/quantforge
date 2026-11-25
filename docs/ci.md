@@ -11,6 +11,7 @@ conformance suite runs live against the exchanges on a schedule
 - [The checks](#the-checks)
 - [Required checks](#required-checks)
 - [PostgreSQL](#postgresql)
+- [The workers' sandbox](#the-workers-sandbox)
 - [The Python package](#the-python-package)
 - [The wheels](#the-wheels)
 - [Running them locally](#running-them-locally)
@@ -155,6 +156,49 @@ Two things stay off CI:
 - **PostgreSQL on macOS and Windows:** GitHub runs service containers on
   Linux only, so the `wheel` legs there test the candle reader on SQLite
   alone.
+
+## The workers' sandbox
+
+A backtest job runs in a worker that puts limits and a sandbox on itself,
+and says what held ([worker-isolation.md](worker-isolation.md)). On Linux
+that is all of it; on macOS and Windows most of it does not exist. So a
+test of a guard asks the workers first, and where they enforce no such
+guard it has nothing to hold them to: it skips, or, for a bundle that means
+harm, holds the attempt to going through, as the
+[threat model](security/remote-execution.md) says it does there.
+
+**`QUANTFORGE_TEST_SANDBOX_REQUIRED=1` keeps a sandbox that is not on from
+passing as one that is.** With it, a test of a guard the workers do not
+enforce fails. Every job that runs tests on Linux sets it:
+
+<!-- begin: sandbox required -->
+| Job | The variable |
+| --- | --- |
+| `checks` | `1` on the Linux leg, empty on macOS and Windows |
+| `postgres 16`, `postgres 17`, `postgres 18` | `1` |
+| `python` | `1` |
+| `wheel` | `1` on the Linux leg, empty on macOS and Windows |
+<!-- end: sandbox required -->
+
+An empty value is as if unset. With it set, a Linux runner whose kernel
+had no Landlock, or a build whose seccomp filter the kernel refused, fails
+the tests of that guard in `tests/workers/` in the crate's suite and in
+`test_hostile_bundles.py` in the package's, where each would otherwise
+skip, or hold a bundle to getting through, without having tested the guard.
+
+What runs, on every leg:
+
+- **`tests/workers/`**, with this build's binary as the worker: each limit
+  run into, every way out of a scratch directory, every reach for another
+  process, and a link planted where a bundle is written.
+- **`tests/bundle/hostile.rs` and `src/server/tests/hostile.rs`**: archives
+  and uploads made to do harm, or simply broken, 15,000 mutations of
+  canonical tars among them, from a fixed seed. These need no sandbox, and
+  run alike everywhere.
+- **`test_hostile_bundles.py`**, in `python` and in each `wheel` leg: real
+  bundles that mean harm, through a real `serve run` whose workers are the
+  Python of the run, on SQLite and, where the job has a server, on
+  PostgreSQL.
 
 ## The Python package
 
@@ -399,6 +443,7 @@ release gate, ALG-769, turns runs into records in `evidence.jsonl`.
 | `release.artifact` (`sqlite-build`) | The SQLite-only lines of `checks` and `package` |
 | `release.artifact` (`wheel`) | The `wheel` legs: each platform's wheel, built as a release would publish it, passes the package's suite on that platform, the candle reader's tests on SQLite, and on Linux on PostgreSQL too; a wheel without the `postgres` feature fails it ([The wheels](#the-wheels)) |
 | `release.wheel_surface` | `test_package.py` in the `wheel` legs: each wheel publishes the names `__all__` lists and no other, none of them a webhook or a Telegram API |
+| `jobs.isolation` | `tests/workers/` in every `checks` and `postgres` leg, on each store: workers within their limits, with nothing of the store, and every way out refused where the sandbox holds, which on Linux it has to ([The workers' sandbox](#the-workers-sandbox)); and the hostile-bundle suite, `test_hostile_bundles.py`, in `python` and the `wheel` legs, each bundle through a real server on SQLite and on PostgreSQL |
 
 `data.history`'s release evidence on both exchanges is ALG-703's, and the
 server surface of `config.storage` waits for its story.

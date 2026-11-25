@@ -326,6 +326,13 @@ SHA-256 of the bytes it received, reads them back strictly, so that only a
 canonical tar is accepted, checks the bundle, and admits it against its
 runtime.
 
+These checks are the first thing between an upload and the machine a server
+runs on: they keep a bundle's files plain files, inside the place they are
+written to, within a size. They read no code. What stops a bundle that
+passes them and means harm is the worker it runs in; the
+[threat model](security/remote-execution.md) has both layers, and the
+bundles and archives the tests throw at each.
+
 ## A worked example
 
 A bundle of two files. Its manifest:

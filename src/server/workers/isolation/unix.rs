@@ -18,8 +18,9 @@ pub(super) fn no_core_dumps() {
 }
 
 /// At most `secs` seconds of CPU time. Past them the kernel sends SIGXCPU,
-/// which stops the process, and SIGKILL a second later if the job catches
-/// it.
+/// which stops the process. A job that catches or ignores it is sent
+/// SIGKILL on Linux once it has used one more second of CPU time, and on
+/// macOS runs on.
 pub(super) fn limit_cpu(secs: u64) -> Guard {
     let hard = lowered(Resource::Cpu, secs.saturating_add(1));
     limit(

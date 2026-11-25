@@ -470,16 +470,16 @@ src/
     │   ├── mod.rs              the boundary, what each operating system enforces of it, and the packages a Python bundle may import
     │   ├── pool.rs             WorkerPool: workers started ahead of jobs, each killed after its one job
     │   ├── config.rs           what a pool starts with, and what a job's run on it answers
-    │   ├── job.rs              one job's run: its bundle in scratch, its frames sent, its limits watched, what it says logged
+    │   ├── job.rs              one job's run: its bundle in scratch, its frames sent, its limits watched, what it says logged, and nothing its worker says trusted
     │   ├── job/                its unit tests, beside it for the line budget
-    │   │   └── tests.rs        a backtest's rows and a job's lines as they are taken, and a frame no worker sends
+    │   │   └── tests.rs        a backtest's rows and a job's lines as they are taken, a failure's words cut short, and a frame no worker sends, or none of its kind
     │   ├── process.rs          a worker's process: started bare, killed with its group, why it stopped
     │   ├── process/            its unit tests, beside it for the line budget
     │   │   └── tests.rs        how a worker's stop is read, and frames read only a few ahead of the server
     │   ├── frames.rs           what a server and its workers say: length-prefixed JSON frames
     │   ├── frames/             its unit tests, beside it for the line budget
     │   │   └── tests.rs        a frame as bytes, read back as written or refused, and the JSON of what a worker says
-    │   ├── scratch.rs          the scratch directories: owner-only, removed with their worker
+    │   ├── scratch.rs          the scratch directories: owner-only, removed with their worker, a bundle written into one through no link
     │   ├── child.rs            the worker's side: setup, its runtime readied, its limits and sandbox, the job, its end
     │   ├── runtime.rs          WorkerRuntime: what a worker runs its job in, readied before the sandbox, and the job as it holds it; the runtime quantforge_py compiles runs Python bundles
     │   ├── report.rs           Reporter: a job's lines and progress, said as frames while it runs
@@ -487,11 +487,12 @@ src/
     │   ├── synthetic.rs        the tests' workloads, which run into each limit in place of a strategy
     │   ├── synthetic/          the workloads with a file of their own
     │   │   ├── given.rs        a digest of the candles a job was given, and the workload that expects one
+    │   │   ├── hostile.rs      the workloads that try what a job that means harm would: a way out of the scratch directory, and the processes around it
     │   │   └── talk.rs         the workload that writes to its log as much and as fast as it is asked
     │   └── isolation/          the limits and sandbox a worker puts on itself as it starts
     │       ├── mod.rs          Posture and Guard: what held, and why not; the server closed to workers
     │       ├── unix.rs         rlimits: CPU time and address space, and no core dumps
-    │       └── linux.rs        Landlock for files, seccomp for sockets and process groups, and not dumpable
+    │       └── linux.rs        Landlock for files; seccomp for sockets, processes of a job's own, signals and limits for any other, and process groups; and not dumpable
     ├── refusal.rs              every failed answer as an error envelope, and what a storage failure may say
     └── tests/                  the routes in process, over a real SQLite store
         ├── mod.rs              the fixtures, health, version, unknown paths and methods
@@ -511,6 +512,7 @@ src/
         ├── segments.rs         stored bytes, 304s, unknown hashes, and damaged copies never sent
         ├── store.rs            storage failures named to no client, and the turns at the store
         ├── jobs.rs             uploads stored once, and every upload refused before it is stored
+        ├── hostile.rs          uploads made to leave a bundle or sent packed, refused and never stored, and paths that climb, which name no file
         └── submissions.rs      submissions queued or refused, and statuses, the list and cancels
 ```
 
@@ -627,9 +629,11 @@ server checks an upload with, and prints the report a local run prints.
   [worker-isolation.md](worker-isolation.md), this build's binary started as
   `quantforge worker` and running the synthetic workloads: each limit run
   into and named, crashes, kills and cancels, scratch directories, the
-  network and the environment a worker gets, recycling, a backtest run in a
-  worker and the result files its rows become, what a job writes to its log
-  and a job that floods it, and jobs through the queue on each backend
+  network and the environment a worker gets, recycling, what a job that
+  means harm tries and is refused, a backtest run in a worker and the
+  result files its rows become, what a job writes to its log and a job
+  that floods it, jobs through the queue on each backend, and the
+  [threat model](security/remote-execution.md) held to the tests it names
 - `tests/results/`: a job's result files against
   [result-spec.md](result-spec.md): the shared cases of
   `tests/fixtures/result_cases.json`, the spec held to the code, and an
@@ -712,7 +716,9 @@ server checks an upload with, and prints the report a local run prints.
 - `tests/bundle/`: the strategy bundle spec — the shared cases of
   `tests/fixtures/bundle_cases.json`, bundles built from real directories,
   the messages a refused bundle shows, a canonical tar read by the system
-  `tar`, and [bundle-spec.md](bundle-spec.md) held to the code
+  `tar`, [bundle-spec.md](bundle-spec.md) held to the code, and archives
+  made to do harm or simply broken, thousands of mutations among them,
+  each refused or read back as exactly its bytes
 - `tests/segments/`: candle segments — the shared cases of
   `tests/fixtures/segment_cases.json` and every payload a reader refuses,
   [segment-spec.md](segment-spec.md) held to the code, and data sync

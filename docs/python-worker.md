@@ -145,10 +145,20 @@ NumPy: a bundle that uses NumPy declares it. What the standard library and
 the packages a bundle may import go on to import is their own: pandas'
 dependencies are pandas' to import.
 
+**What a bundle imports is not all it may use.** On Linux, where the
+worker's sandbox holds, a job starts no process and opens no socket: the
+standard library's `subprocess` and `multiprocessing` fail there with
+`PermissionError`, and so does an `asyncio` event loop, which makes a pair
+of sockets for itself. Threads start as anywhere
+([worker-isolation.md](worker-isolation.md#what-each-operating-system-enforces)).
+
 **The rules are best effort.** Code that goes around Python's import system,
 or reads modules out of `sys.modules`, is not stopped by them. The boundary
 is the worker's process and its sandbox
-([worker-isolation.md](worker-isolation.md)).
+([worker-isolation.md](worker-isolation.md)), and a bundle is taken for
+code that means harm on the far side of it: the
+[threat model](security/remote-execution.md) says what stops such a bundle
+on each system, and what does not.
 
 ## What a job's log holds
 
@@ -210,7 +220,10 @@ writes how it ended; a worker gets its job and its candles over a pipe:
   another.
 
 A job's parameters, its traceback and its log hold what the bundle and its
-strategy put there and nothing else.
+strategy put there and nothing else. What a strategy fails with is its to
+word, at any length: a job's failure keeps the first 8 KiB of it and says
+how much it left out, and the whole of it is in the traceback, within the
+log's own limits.
 
 ## One runtime for every host
 
@@ -248,6 +261,10 @@ The package's tests run the worker for real (`quantforge-py/tests/`):
   imports the rules refuse; what a strategy writes; a worker per job; a
   worker's environment, parameters, traceback and log, which hold no part
   of the store's URL; and how long a job takes to start;
+- `test_hostile_bundles.py` runs bundles that mean harm the same way, on
+  both stores: each tries one thing a job has no business doing, and is
+  held to what the server's workers say they enforce
+  ([the threat model](security/remote-execution.md#bundles-that-mean-harm));
 - `test_runtime.py` runs the runtime in the test's own process: every rule
   and every refusal above, and what a worker offers.
 

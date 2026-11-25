@@ -5,7 +5,8 @@
 //! parameter; each answers a report, holds its worker until it is killed,
 //! runs into a limit, or stops the worker. One, `backtest`, runs the engine
 //! on a strategy built into QuantForge, so that the tests have a job that
-//! ends as a real one will, and one, `log`, writes to the job's log.
+//! ends as a real one will, one, `log`, writes to the job's log, and two,
+//! `escape` and `others`, try what a job that means harm would (`hostile`).
 
 use std::io::Write;
 use std::net::{SocketAddr, TcpStream};
@@ -16,6 +17,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 mod given;
+mod hostile;
 mod talk;
 
 use self::given::{digest, expect};
@@ -145,6 +147,8 @@ fn workload(job: &JobFrame, candles: &[Candle], seen: &Seen, posture: &Posture) 
         Some("connect_unix") => report(&connect_unix(text("path").unwrap_or_default())),
         Some("chatter") => report(&chatter(number("kib").unwrap_or(1024))),
         Some("leave") => report(&leave()),
+        Some("escape") => report(&hostile::escape(text("outside").unwrap_or_default())),
+        Some("others") => report(&hostile::others()),
         Some("spawn") => report(&spawn(
             text("program").unwrap_or_default(),
             job.params

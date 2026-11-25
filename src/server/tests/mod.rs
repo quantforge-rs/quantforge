@@ -8,14 +8,16 @@
 //! start and a stop racing the dispatcher in `queue`, what a job records as
 //! it starts and the provenance route in `provenance`, the rerun route in
 //! `reruns` and its refusals in `rerun_refusals`, over the store and worker
-//! of `backtesting`, and storage failures and the turns at the store in
-//! `store`, over the store of `faulty`.
+//! of `backtesting`, storage failures and the turns at the store in
+//! `store`, over the store of `faulty`, and requests made to do harm in
+//! `hostile`.
 //! Literal venue names live in this file only: `tests/exchange_boundary.rs`
 //! reads the others as code.
 
 mod backtesting;
 mod faulty;
 mod history;
+mod hostile;
 mod jobs;
 mod logs;
 mod markets;

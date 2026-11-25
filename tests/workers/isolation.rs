@@ -19,7 +19,8 @@ use quantforge::server::{
 use serde_json::{Value, json};
 
 use crate::support::{
-    Pool, candles, failure, given_env, input, program, report, roomy, unread, until, worker_env,
+    Pool, candles, failure, given_env, holds, input, program, report, roomy, toml_string, unread,
+    until, worker_env,
 };
 
 /// The guard's reason, when it does not hold.
@@ -88,12 +89,14 @@ fn every_job_gets_a_fresh_worker_that_holds_nothing_of_the_last() {
 #[test]
 fn a_job_reads_neither_another_jobs_scratch_directory_nor_any_file_outside_its_own() {
     let pool = Pool::start(2, roomy());
-    if let Some(why) = unenforced(&pool.pool.posture().files) {
+    let files = &pool.pool.posture().files;
+    if let Some(why) = unenforced(files) {
         assert!(
             std::env::consts::OS != "linux" || why == "this kernel has no Landlock",
             "{why}"
         );
-        eprintln!("skipping: the workers enforce no file guard here: {why}");
+    }
+    if !holds(files, "file guard") {
         return;
     }
     let held = input(r#"workload = "hold""#, candles(5));
@@ -143,16 +146,10 @@ fn held_file(root: &Path, job: &str) -> Option<PathBuf> {
         .find(|held| std::fs::read_to_string(held).is_ok_and(|text| text == job))
 }
 
-fn toml_string(text: &str) -> String {
-    serde_json::to_string(text).expect("a string")
-}
-
 #[test]
 fn a_job_reaches_no_network() {
     let pool = Pool::start(1, roomy());
-    if let Some(why) = unenforced(&pool.pool.posture().network) {
-        assert_ne!(std::env::consts::OS, "linux", "{why}");
-        eprintln!("skipping: the workers enforce no network guard here: {why}");
+    if !holds(&pool.pool.posture().network, "network guard") {
         return;
     }
     let listener = TcpListener::bind("127.0.0.1:0").expect("a listener");
@@ -195,9 +192,7 @@ fn a_job_reaches_no_network() {
 #[test]
 fn a_job_cannot_leave_its_workers_process_group_where_seccomp_holds() {
     let pool = Pool::start(1, roomy());
-    if let Some(why) = unenforced(&pool.pool.posture().network) {
-        assert_ne!(std::env::consts::OS, "linux", "{why}");
-        eprintln!("skipping: the workers enforce no seccomp filter here: {why}");
+    if !holds(&pool.pool.posture().network, "seccomp filter") {
         return;
     }
     let left = report(&pool.run(input(r#"workload = "leave""#, candles(1))));
@@ -215,8 +210,10 @@ fn a_program_a_job_starts_goes_with_its_worker_or_never_starts() {
         "workload = \"spawn\"\nprogram = \"/bin/sleep\"\nargs = [\"3600\"]",
         candles(1),
     )));
-    if pool.pool.posture().files.is_enforced() {
-        // Landlock refuses to run anything outside the scratch directory.
+    let posture = pool.pool.posture();
+    if posture.network.is_enforced() || posture.files.is_enforced() {
+        // The seccomp filter refuses a job a process of its own, and
+        // Landlock to run anything outside the scratch directory.
         assert_eq!(started["allowed"], false, "{started}");
         return;
     }

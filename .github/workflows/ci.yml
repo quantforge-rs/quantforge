@@ -42,10 +42,17 @@ jobs:
       # the sqlite-only build, which holds no postgresql code (adr 0001)
       - name: clippy (sqlite only)
         run: cargo clippy --all-targets --no-default-features -- -D warnings
+      # on linux the job workers' sandbox has to hold (docs/ci.md): there a
+      # test of a guard the workers do not enforce fails, where on the other
+      # platforms, which have no such guard, it skips. empty is as if unset
       - name: test
         run: cargo test --all-features --locked
+        env:
+          QUANTFORGE_TEST_SANDBOX_REQUIRED: ${{ runner.os == 'Linux' && '1' || '' }}
       - name: test (sqlite only)
         run: cargo test --no-default-features --locked
+        env:
+          QUANTFORGE_TEST_SANDBOX_REQUIRED: ${{ runner.os == 'Linux' && '1' || '' }}
 
   package:
     runs-on: ubuntu-latest
@@ -121,6 +128,8 @@ jobs:
           QUANTFORGE_TEST_POSTGRES_URL: postgres://quant:test-pw@127.0.0.1:5432/postgres?sslmode=disable
           QUANTFORGE_TEST_POSTGRES_TLS_URL: postgres://quant:test-pw@localhost:5432/postgres?sslmode=verify-full&sslrootcert=${{ runner.temp }}/postgres-tls/ca.crt
           QUANTFORGE_TEST_POSTGRES_WEAK_URL: postgres://quant:test-pw@127.0.0.1:5433/postgres?sslmode=disable
+          # the job workers' sandbox has to hold, as in checks on linux
+          QUANTFORGE_TEST_SANDBOX_REQUIRED: "1"
       - name: nothing left behind
         run: ./scripts/postgres-test-servers.sh leftovers "$SERVER" "$WEAK"
         env:
@@ -186,6 +195,10 @@ jobs:
         env:
           QUANTFORGE_TEST_POSTGRES_REQUIRED: "1"
           QUANTFORGE_TEST_POSTGRES_URL: postgres://quant:test-pw@127.0.0.1:5432/postgres?sslmode=disable
+          # the job workers' sandbox has to hold: a hostile bundle the
+          # workers do not contain fails its test where it would pass as
+          # uncontained on a system without a sandbox
+          QUANTFORGE_TEST_SANDBOX_REQUIRED: "1"
 
   # the python package's wheel of each platform (docs/ci.md, the wheels):
   # built for release as it would be published, then installed and tested on
@@ -271,6 +284,8 @@ jobs:
           # legs both are empty, as if unset, and those tests skip
           QUANTFORGE_TEST_POSTGRES_REQUIRED: ${{ matrix.postgres && '1' || '' }}
           QUANTFORGE_TEST_POSTGRES_URL: ${{ matrix.postgres && 'postgres://quant:test-pw@127.0.0.1:5432/postgres?sslmode=disable' || '' }}
+          # on linux the job workers' sandbox has to hold, as in python
+          QUANTFORGE_TEST_SANDBOX_REQUIRED: ${{ runner.os == 'Linux' && '1' || '' }}
       # the wheel that passed, one artifact for each platform; a leg run
       # again keeps the wheel it built in the place of the one before
       - uses: actions/upload-artifact@v7
