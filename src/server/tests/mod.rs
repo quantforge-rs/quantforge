@@ -22,6 +22,7 @@ mod markets;
 mod provenance;
 mod queries;
 mod queue;
+mod rerun_hangups;
 mod rerun_refusals;
 mod reruns;
 mod results;

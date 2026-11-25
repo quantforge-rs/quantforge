@@ -180,8 +180,9 @@ impl Jobs {
     /// progress, and returns once each has ended, the jobs it stopped
     /// failed so that their clients know to submit them again, and once the
     /// log streams it had open have said their last, or a few seconds have
-    /// passed. Answers how many jobs it stopped, reruns not counted. A caller that cannot wait drops this future: the next start
-    /// fails them.
+    /// passed. Answers how many jobs it stopped, reruns not counted. A
+    /// caller that cannot wait drops this future: the next start fails
+    /// them.
     pub async fn stop(&self) -> usize {
         let stopped = {
             let running = self.running();
@@ -294,5 +295,21 @@ impl fmt::Debug for Jobs {
         f.debug_struct("Jobs")
             .field("limits", &self.inner.job_limits)
             .finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Jobs, rerun};
+
+    impl Jobs {
+        /// How many reruns are registered here: a rerun is from the moment
+        /// it starts to wait for its slot, so a test sees one wait.
+        pub(in crate::server) fn reruns(&self) -> usize {
+            self.running()
+                .keys()
+                .filter(|key| key.starts_with(rerun::RUN_PREFIX))
+                .count()
+        }
     }
 }

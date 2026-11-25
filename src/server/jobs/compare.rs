@@ -26,8 +26,9 @@ type Cell = (&'static str, String);
 /// The job's result files, in the order it lists them, against the
 /// rerun's, then each file only the rerun produced. A file of the job's
 /// that differs is read from the store and checked against its name, as
-/// the result routes read it; the two are then read value by value on a
-/// thread that holds `slot`, the rerun's, until it is done.
+/// the result routes read it; the two are then read value by value. The
+/// store call and the thread that reads the values each hold `slot`, the
+/// rerun's, until they are done.
 pub(super) async fn compare(
     jobs: &Jobs,
     job_id: &JobId,
@@ -42,8 +43,9 @@ pub(super) async fn compare(
         })
         .cloned()
         .collect();
-    let (id, differing) = (job_id.clone(), Arc::new(differing));
+    let (id, differing, held) = (job_id.clone(), Arc::new(differing), Arc::clone(&slot));
     let stored: Vec<(String, Vec<u8>)> = patiently(jobs, move |store| {
+        let _held = &held;
         differing
             .iter()
             .map(|reference| {

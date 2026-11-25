@@ -496,7 +496,7 @@ src/
     └── tests/                  the routes in process, over a real SQLite store
         ├── mod.rs              the fixtures, health, version, unknown paths and methods
         ├── shutdown.rs         the shutdown that finishes a request in progress
-        ├── faulty.rs           a store that fails, stalls, runs out of time or holds a log back on demand
+        ├── faulty.rs           a store that fails, stalls, runs out of time or holds a log or a read back on demand
         ├── history.rs          ranges read back exactly, empty answers, queries without category
         ├── markets.rs          every stored market, in order, with its span
         ├── queries.rs          the queries refused before the store is asked anything
@@ -504,7 +504,8 @@ src/
         ├── backtesting.rs      three days of candles, two packed, and a worker that backtests what it is handed
         ├── provenance.rs       a job's bars from its segments and those packed for it, and the provenance route
         ├── reruns.rs           a rerun verified after corrections, three that diverge, one that fails, one stopped unasked, one waiting for a slot, and a stop
-        ├── rerun_refusals.rs   reruns refused: a segment or bundle not held as recorded, a runtime, no result
+        ├── rerun_refusals.rs   reruns refused: a segment or bundle not held as recorded, a runtime, a span, no result
+        ├── rerun_hangups.rs    a rerun whose client hangs up, its slot held while the store still reads for it
         ├── results.rs          a result the store holds damaged, lost or unlisted, never sent
         ├── logs.rs             the log route's refusals, a stored log that reads as none, and a client that talks
         ├── segments.rs         stored bytes, 304s, unknown hashes, and damaged copies never sent

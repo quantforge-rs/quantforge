@@ -304,7 +304,7 @@ async fn a_rerun_reads_nothing_the_job_ran_on_before_a_slot_is_free() {
     stored(&bed);
     let flag = Arc::new(Mutex::new(false));
     let (worker, _release) = Holding::new(&flag);
-    let (address, _jobs) = running(&bed, worker).await;
+    let (address, jobs) = running(&bed, worker).await;
     let (job, _) = ran(address).await;
 
     // The last segment the job ran on is lost while another job, over an
@@ -328,16 +328,17 @@ async fn a_rerun_reads_nothing_the_job_ran_on_before_a_slot_is_free() {
     let other = other["job_id"].as_str().expect("a job id").to_string();
     begun(&flag).await;
 
-    // The rerun waits for the slot having read nothing: it would have been
-    // refused at once had it read the segments.
+    // The rerun waits for the slot, registered as it starts to, having read
+    // nothing: had it read the segments, it would have been refused.
     let asking = job.clone();
-    let mut asked = tokio::spawn(async move { rerun(address, &asking).await });
-    assert!(
-        tokio::time::timeout(Duration::from_millis(500), &mut asked)
-            .await
-            .is_err(),
-        "the rerun answered before a slot was free"
-    );
+    let asked = tokio::spawn(async move { rerun(address, &asking).await });
+    within("the rerun's wait for a slot", async {
+        while jobs.reruns() == 0 {
+            assert!(!asked.is_finished(), "the rerun answered before it waited");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
     connection
         .execute(
             "INSERT INTO segments(hash, format, payload_len, data) VALUES (?1, 1, ?2, ?3)",

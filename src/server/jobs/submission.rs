@@ -65,15 +65,24 @@ pub(super) async fn upload(
     Ok(Stored { new, size_bytes })
 }
 
+/// Why `selection`'s range is more than this server runs one job on, when
+/// it is: its span counted in bars of its interval, gaps and all.
+pub(super) fn beyond_span(jobs: &Jobs, selection: &Selection) -> Option<String> {
+    let (bars, most) = (selection.bars(), jobs.inner.job_limits.max_span_bars);
+    (bars > most).then(|| {
+        format!(
+            "the range spans {bars} bars of {}, more than the {most} this server runs one job on",
+            selection.interval.as_str()
+        )
+    })
+}
+
 /// Checks a submission, then queues its job.
 pub(super) async fn submit(jobs: &Jobs, submission: JobSubmission) -> Result<JobRecord, Refusal> {
     let selection = Selection::read_data(&submission.data)?;
-    let (bars, max_span_bars) = (selection.bars(), jobs.inner.job_limits.max_span_bars);
-    if bars > max_span_bars {
+    if let Some(beyond) = beyond_span(jobs, &selection) {
         return Err(Refusal::invalid(format!(
-            "the range spans {bars} bars of {}, more than the {max_span_bars} this server runs \
-             one job on; ask for a shorter range",
-            selection.interval.as_str()
+            "{beyond}; ask for a shorter range"
         )));
     }
     settings(&submission.backtest)?;

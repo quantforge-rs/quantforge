@@ -1,7 +1,8 @@
 //! The reruns refused, over the store of `backtesting`, every difference
 //! named: when the store no longer holds what the job ran on as it was
-//! recorded, when the server's runtime no longer admits the bundle, and
-//! when the job never succeeded or recorded nothing.
+//! recorded, when the server's runtime no longer admits the bundle or runs
+//! no job over the job's range, and when the job never succeeded or
+//! recorded nothing.
 
 use sha2::Digest;
 
@@ -215,4 +216,45 @@ async fn a_rerun_is_refused_by_a_server_whose_runtime_no_longer_admits_the_bundl
             "this server runs no Python bundles: it was started without --job-python".to_string()
         )
     );
+}
+
+#[tokio::test]
+async fn a_rerun_whose_range_spans_more_bars_than_the_server_runs_is_refused_before_any_read() {
+    let bed = Bed::new();
+    stored(&bed);
+    let (address, jobs) = running(&bed, Backtesting::new(Later::Same)).await;
+    let (job, _) = ran(address).await;
+    let recorded = provenance(address, &job).await;
+    jobs.stop().await;
+    let last = named(&bed, &recorded).swap_remove(2);
+    let connection = bed.connection();
+    connection
+        .execute("DELETE FROM segments WHERE hash = ?1", [&last.0])
+        .expect("a lost segment");
+
+    // The job's range, two days and 600 minutes long, spans 3,481 bars of
+    // 1m: a server that runs one bar fewer refuses it on that alone, its
+    // last segment lost, having read nothing.
+    let fewer = serve_jobs(&bed, jobs_of(&bed, Backtesting::new(Later::Same), 3480)).await;
+    assert_eq!(
+        refusal(rerun(fewer, &job).await).await,
+        (
+            409,
+            "conflict".to_string(),
+            format!(
+                "job {job} cannot be rerun on this server: the range spans 3481 bars of 1m, more \
+                 than the 3480 this server runs one job on"
+            )
+        )
+    );
+
+    // Put back, it is rerun by a server that runs exactly as many.
+    connection
+        .execute(
+            "INSERT INTO segments(hash, format, payload_len, data) VALUES (?1, 1, ?2, ?3)",
+            rusqlite::params![last.0, last.1, last.2],
+        )
+        .expect("the segment stored again");
+    let exactly = serve_jobs(&bed, jobs_of(&bed, Backtesting::new(Later::Same), 3481)).await;
+    assert_eq!(reran(exactly, &job).await.verdict, RerunVerdict::Verified);
 }

@@ -6,6 +6,7 @@
 
 use std::sync::Arc;
 
+use tokio::sync::OwnedSemaphorePermit;
 use tracing::error;
 
 use super::Jobs;
@@ -75,7 +76,7 @@ pub(super) async fn read_bars(
     })
     .await?;
     let hashes: Vec<SegmentHash> = plan.segments.iter().map(|segment| segment.hash).collect();
-    let Some(opened) = read_segments(jobs, &hashes, cancel).await? else {
+    let Some(opened) = read_segments(jobs, &hashes, cancel, None).await? else {
         return Ok(None);
     };
     let mut bars = Bars {
@@ -140,19 +141,23 @@ pub(super) async fn read_bars(
 
 /// Each segment's bars, read from the store a few segments per call and
 /// opened against their names, in the order given. `None` when `cancel`
-/// was sent meanwhile.
+/// was sent meanwhile. Each call holds `slot`, a rerun's, until it ends:
+/// a rerun's handler is dropped when its client hangs up, while a job's
+/// own task outlives its calls.
 pub(super) async fn read_segments(
     jobs: &Jobs,
     hashes: &[SegmentHash],
     cancel: &Cancel,
+    slot: Option<&Arc<OwnedSemaphorePermit>>,
 ) -> Result<Option<Vec<Result<Vec<Candle>, SegmentFault>>>, Refusal> {
     let mut opened = Vec::with_capacity(hashes.len());
     for chunk in hashes.chunks(SEGMENTS_PER_CALL) {
         if cancel.is_cancelled() {
             return Ok(None);
         }
-        let chunk = Arc::new(chunk.to_vec());
+        let (chunk, held) = (Arc::new(chunk.to_vec()), slot.cloned());
         let read = patiently(jobs, move |store| {
+            let _held = &held;
             chunk
                 .iter()
                 .map(|hash| {
