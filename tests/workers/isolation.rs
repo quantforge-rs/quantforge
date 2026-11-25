@@ -149,11 +149,7 @@ fn held_file(root: &Path, job: &str) -> Option<PathBuf> {
 #[test]
 fn a_job_reaches_no_network() {
     let pool = Pool::start(1, roomy());
-    let network = &pool.pool.posture().network;
-    if let Some(why) = unenforced(network) {
-        assert_ne!(std::env::consts::OS, "linux", "{why}");
-    }
-    if !holds(network, "network guard") {
+    if !holds(&pool.pool.posture().network, "network guard") {
         return;
     }
     let listener = TcpListener::bind("127.0.0.1:0").expect("a listener");
@@ -196,11 +192,7 @@ fn a_job_reaches_no_network() {
 #[test]
 fn a_job_cannot_leave_its_workers_process_group_where_seccomp_holds() {
     let pool = Pool::start(1, roomy());
-    let network = &pool.pool.posture().network;
-    if let Some(why) = unenforced(network) {
-        assert_ne!(std::env::consts::OS, "linux", "{why}");
-    }
-    if !holds(network, "seccomp filter") {
+    if !holds(&pool.pool.posture().network, "seccomp filter") {
         return;
     }
     let left = report(&pool.run(input(r#"workload = "leave""#, candles(1))));

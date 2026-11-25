@@ -80,9 +80,6 @@ fn a_job_reaches_no_process_but_itself_and_starts_none() {
     // a filter that refused either would stop a worker's own runtime.
     assert_eq!(reached["signal_itself"], "allowed", "{reached}");
     assert_eq!(reached["thread"], "allowed", "{reached}");
-    if !network.is_enforced() {
-        assert_ne!(std::env::consts::OS, "linux", "{network:?}");
-    }
     if !holds(&network, "seccomp filter") {
         return;
     }

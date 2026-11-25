@@ -182,8 +182,9 @@ enforce fails. Every job that runs tests on Linux sets it:
 
 An empty value is as if unset. With it set, a Linux runner whose kernel
 had no Landlock, or a build whose seccomp filter the kernel refused, fails
-`tests/workers/` in the crate's suite and `test_hostile_bundles.py` in the
-package's, where both would otherwise pass without having tested a guard.
+the tests of that guard in `tests/workers/` in the crate's suite and in
+`test_hostile_bundles.py` in the package's, where each would otherwise
+skip, or hold a bundle to getting through, without having tested the guard.
 
 What runs, on every leg:
 

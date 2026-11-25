@@ -15,11 +15,13 @@ is for.
 
 ## The short answer
 
-- **On Linux, with every guard held**, a bundle is confined: it changes no
-  file outside its scratch directory, and reads none but those of the
-  Python environment it runs in and the system's libraries; it reaches no
-  network and no other process, and starts none of its own; its CPU time,
-  memory and wall clock are limited.
+- **On Linux 6.2 or later, with every guard held**, a bundle is confined:
+  it changes no file outside its scratch directory, and reads none but
+  those of the Python environment it runs in and the system's libraries;
+  it reaches no network and no other process, and starts none of its own;
+  its CPU time, memory and wall clock are limited. An older kernel can
+  print the same line below and still let a job empty a file outside
+  ([what Landlock covers, by kernel](#what-landlock-covers-by-kernel)).
   [What that still leaves open](#what-nothing-stops) is on this page, and
   it is not nothing: the disk, the kernel itself, and a few ways to slow
   its neighbours down.
@@ -37,8 +39,8 @@ for a guard that does not hold:
 worker_isolation: cpu rlimit, memory rlimit, network seccomp, files landlock
 ```
 
-Anything but that line means that part of this page's Linux column does not
-apply to the server in front of you.
+Anything but that line, or a kernel before 6.2 under it, means that part
+of this page's Linux column does not apply to the server in front of you.
 
 ## What is protected
 
@@ -310,6 +312,7 @@ to what a worker started on each system says it enforces.
 | Submission | A path that climbs names no route and no file | `src/server/tests/hostile.rs::a_path_that_climbs_names_no_route_and_no_file` |
 | Worker | A bundle lands under `bundle/` and nowhere else | `src/server/workers/scratch.rs::a_bundle_lands_under_bundle_and_nowhere_else` |
 | Worker | A link planted where a bundle goes fails the write | `src/server/workers/scratch.rs::a_link_planted_where_a_bundle_goes_fails_the_write_and_nothing_lands_beyond_it` |
+| Worker | A directory of a bundle is made new, or was made for it, and is never a link | `src/server/workers/scratch.rs::a_directory_of_a_bundle_is_made_new_or_was_made_for_it_and_is_never_a_link` |
 | Worker | The same, through a real worker's scratch directory | `tests/workers/hostile.rs::a_link_planted_where_a_bundle_goes_takes_no_file_out_of_the_scratch_directory` |
 | Worker | Nothing a job writes lands outside its scratch directory | `tests/workers/hostile.rs::nothing_a_job_writes_lands_outside_its_scratch_directory` |
 | Worker | A job reads no file outside its scratch directory, another job's included | `tests/workers/isolation.rs::a_job_reads_neither_another_jobs_scratch_directory_nor_any_file_outside_its_own` |

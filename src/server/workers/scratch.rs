@@ -320,30 +320,23 @@ mod tests {
     fn a_link_planted_where_a_bundle_goes_fails_the_write_and_nothing_lands_beyond_it() {
         use std::os::unix::fs::symlink;
 
-        // Each place a bundle's path passes, a link out of the scratch
-        // directory stands in turn: the directory the bundle goes in, a
-        // directory of the bundle's own, and a file of it.
-        for planted in [
-            "bundle",
-            "bundle/pkg",
-            "bundle/pkg/deep",
-            "bundle/notes.txt",
-        ] {
+        // Whatever stands where the bundle's directory goes, the directory
+        // is not made new, and the write fails before a file of it is
+        // written: a link to a directory outside, a link to nothing, a
+        // file, and a directory that was there already.
+        for planted in ["a link out", "a link to nothing", "a file", "a directory"] {
             let parent = tempfile::tempdir().expect("a directory");
             let (scratch, outside) = (parent.path().join("scratch"), parent.path().join("outside"));
             fs::create_dir(&scratch).expect("a scratch directory");
             fs::create_dir(&outside).expect("a directory outside it");
-            let link = scratch.join(planted);
-            fs::create_dir_all(link.parent().expect("its directory")).expect("directories");
-            // To a directory, and for a file to a file that is not there
-            // yet, which a write that followed the link would create.
-            let target = if planted.ends_with(".txt") {
-                outside.join("written.txt")
-            } else {
-                outside.clone()
-            };
-            symlink(&target, &link).expect("a link");
-            let refused = write_bundle(&scratch, &nested()).expect_err("a link in the way");
+            let bundle = scratch.join(BUNDLE_DIR);
+            match planted {
+                "a link out" => symlink(&outside, &bundle).expect("a link"),
+                "a link to nothing" => symlink(outside.join("nowhere"), &bundle).expect("a link"),
+                "a file" => fs::write(&bundle, b"in the way").expect("a file"),
+                _ => fs::create_dir(&bundle).expect("a directory"),
+            }
+            let refused = write_bundle(&scratch, &nested()).expect_err("something in the way");
             assert_eq!(
                 refused.kind(),
                 io::ErrorKind::AlreadyExists,
@@ -355,11 +348,37 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn a_file_planted_where_a_bundles_directory_goes_fails_the_write() {
-        let dir = tempfile::tempdir().expect("a directory");
-        fs::create_dir(dir.path().join("bundle")).expect("a directory");
-        fs::write(dir.path().join("bundle/pkg"), b"in the way").expect("a file");
-        let refused = write_bundle(dir.path(), &nested()).expect_err("no bundle directory is new");
-        assert_eq!(refused.kind(), io::ErrorKind::AlreadyExists, "{refused}");
+    fn a_directory_of_a_bundle_is_made_new_or_was_made_for_it_and_is_never_a_link() {
+        use std::os::unix::fs::symlink;
+
+        let parent = tempfile::tempdir().expect("a directory");
+        let outside = parent.path().join("outside");
+        fs::create_dir(&outside).expect("a directory outside");
+        // New, and then the one an earlier file of the same bundle made.
+        let made = parent.path().join("pkg");
+        directory(&made).expect("a new directory");
+        directory(&made).expect("the directory made a moment ago");
+        assert!(fs::symlink_metadata(&made).expect("it").is_dir());
+        // A link standing there is no directory of the bundle's, wherever
+        // it leads; nor is a file.
+        let (out, nowhere, file) = (
+            parent.path().join("out"),
+            parent.path().join("nowhere"),
+            parent.path().join("file"),
+        );
+        symlink(&outside, &out).expect("a link to a directory");
+        symlink(parent.path().join("missing"), &nowhere).expect("a link to nothing");
+        fs::write(&file, b"in the way").expect("a file");
+        for taken in [&out, &nowhere, &file] {
+            let refused = directory(taken).expect_err("no directory of a bundle's");
+            assert_eq!(
+                refused.kind(),
+                io::ErrorKind::AlreadyExists,
+                "{}: {refused}",
+                taken.display()
+            );
+        }
+        assert_eq!(under(&outside), Vec::<String>::new());
+        assert!(!parent.path().join("missing").exists());
     }
 }

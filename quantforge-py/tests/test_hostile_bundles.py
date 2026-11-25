@@ -25,6 +25,7 @@ was never there."""
 
 import json
 import os
+import re
 import secrets
 import signal
 import socket
@@ -131,6 +132,12 @@ class Ran:
     def error(self):
         assert self.state["kind"] == "failed", (self.state, self.lines)
         return self.state["error"]
+
+    @property
+    def took_ms(self):
+        """How long the job ran, by the server's own record of its start
+        and its end: no upload, submission or other job counted in."""
+        return self.state["finished_at_ms"] - self.state["started_at_ms"]
 
     def succeeded(self):
         assert self.state["kind"] == "succeeded", (self.state, self.lines)
@@ -254,6 +261,14 @@ def out_of_time(request, tmp_path_factory):
     yield from serving("sqlite", request, tmp_path_factory, cpu_secs=600, wall_secs=3)
 
 
+@pytest.fixture(scope="module")
+def out_of_cpu_then_time(request, tmp_path_factory):
+    """A server whose jobs run out of CPU time first and of wall-clock time
+    seconds later: where a job that is told its CPU time is up can ignore
+    it, the wall clock is what it runs to."""
+    yield from serving("sqlite", request, tmp_path_factory, cpu_secs=1, wall_secs=8)
+
+
 def test_the_variable_that_says_the_sandbox_has_to_hold_is_unset_or_1():
     assert os.environ.get(SANDBOX_REQUIRED, "") in ("", "1"), (
         f"{SANDBOX_REQUIRED} is {os.environ[SANDBOX_REQUIRED]!r}: set it to 1 where the workers' "
@@ -302,30 +317,46 @@ class Hostile(Quiet):
 """
 
 
+# How long the processes a bundle starts wait before they exit by
+# themselves, where nothing stops them starting, and how soon after their
+# job they have to be gone: far sooner, so that one found gone was killed
+# with its worker and did not simply come to its end.
+FORKED_WAIT, GONE_WITHIN = 180, 15
+
+
 @hostile("fork-bomb", "network")
 def test_a_bundle_that_starts_processes_starts_none_or_none_that_outlives_its_job(served):
     if served.holds("network"):
         # The filter that refuses a socket refuses a process too.
-        served.run(FORK_BOMB, seconds=20).refused("PermissionError")
+        served.run(FORK_BOMB, seconds=FORKED_WAIT).refused("PermissionError")
         return
-    posix = os.name == "posix"
-    started = served.run(FORK_BOMB, seconds=20 if posix else 5).succeeded()["started"]
-    assert len(started) == 16
-    if not posix:
+    if os.name != "posix":
         # Windows kills a worker alone: what it started goes on, and ends by
-        # itself here.
+        # itself here, soon.
+        assert len(served.run(FORK_BOMB, seconds=5).succeeded()["started"]) == 16
         return
-    # Killed with the worker's process group as the job ended.
-    deadline = time.monotonic() + jobs.PATIENCE
-    left = set(started)
-    while left:
-        for child in sorted(left):
+    left = set(served.only(FORK_BOMB, seconds=FORKED_WAIT).succeeded()["started"])
+    assert len(left) == 16
+    try:
+        # Killed with the worker's process group as the job ended: looked
+        # for at once, before any other job runs.
+        deadline = time.monotonic() + GONE_WITHIN
+        while left:
+            for child in sorted(left):
+                try:
+                    os.kill(child, 0)
+                except ProcessLookupError:
+                    left.discard(child)
+            assert time.monotonic() < deadline, f"processes {sorted(left)} outlived their job"
+            time.sleep(0.05)
+    finally:
+        # One that outlived its job is not left to its three minutes.
+        for child in left:
             try:
-                os.kill(child, 0)
+                os.kill(child, signal.SIGKILL)
             except ProcessLookupError:
-                left.discard(child)
-        assert time.monotonic() < deadline, f"processes {sorted(left)} outlived their job"
-        time.sleep(0.05)
+                pass
+    assert served.only(HONEST).state["kind"] == "succeeded"
 
 
 MEMORY_BOMB = PRELUDE + """
@@ -468,8 +499,16 @@ def test_a_bundle_that_writes_outside_its_scratch_directory_leaves_nothing_there
     climbed = list(served.scratch.rglob("escaped-climbing.txt"))
     try:
         if not served.holds("files"):
-            for attempt in list(attempts)[:3]:
-                assert attempts[attempt] == "done", attempts
+            # Each write that needs no link, by its name: the line a bundle
+            # leaves lists its attempts in the order of their names.
+            for attempt in (
+                "a path that climbs out",
+                "a path from the root",
+                "the canary, by its path",
+            ):
+                assert attempts[attempt] == "done", (attempt, attempts)
+            assert len(climbed) == 1, climbed
+            assert (served.outside / "escaped-rooted.txt").read_text() == "escaped"
             assert served.canary.read_text() == "escaped"
             return
         assert len(attempts) >= 3, attempts
@@ -624,7 +663,7 @@ def test_a_bundle_that_spins_is_stopped_at_its_cpu_time_or_at_its_wall_clock(
 @hostile("cpu-spin-ignoring-the-signal", "cpu")
 @pytest.mark.skipif(not hasattr(signal, "SIGXCPU"), reason="no signal for CPU time here")
 def test_a_bundle_that_ignores_the_signal_for_its_cpu_time_is_stopped_all_the_same(
-    out_of_cpu, out_of_time
+    request, out_of_cpu
 ):
     if sys.platform.startswith("linux") and out_of_cpu.holds("cpu"):
         # The kernel kills it a second past the limit, and says no more.
@@ -633,10 +672,15 @@ def test_a_bundle_that_ignores_the_signal_for_its_cpu_time_is_stopped_all_the_sa
             "message": "the job's worker stopped before the job finished: it was stopped by "
             "signal 9 (SIGKILL)",
         }
-    else:
-        # macOS signals once and lets a job that ignores it run on.
-        ran = out_of_time.run(CPU_SPIN, ignoring=True)
-        assert ran.error == stopped_for_time(out_of_time)
+        return
+    # macOS signals once and lets a job that ignores it run on: on a server
+    # where the CPU time is up seconds before the wall clock, so that the
+    # signal is sent and a kill a second after it would end the job early.
+    limited = "out_of_cpu_then_time" if out_of_cpu.holds("cpu") else "out_of_time"
+    server = request.getfixturevalue(limited)
+    ran = server.run(CPU_SPIN, ignoring=True)
+    assert ran.error == stopped_for_time(server)
+    assert ran.took_ms >= server.wall_secs * 1000, ran.state
 
 
 WALL_SLEEP = PRELUDE + """
@@ -649,9 +693,10 @@ class Hostile(Quiet):
 
 @hostile("wall-sleep", "server")
 def test_a_bundle_that_waits_is_stopped_at_its_wall_clock(out_of_time):
-    began = time.monotonic()
-    assert out_of_time.run(WALL_SLEEP).error == stopped_for_time(out_of_time)
-    assert time.monotonic() - began >= out_of_time.wall_secs
+    ran = out_of_time.run(WALL_SLEEP)
+    assert ran.error == stopped_for_time(out_of_time)
+    # At its wall clock and not before, by the job's own start and end.
+    assert ran.took_ms >= out_of_time.wall_secs * 1000, ran.state
 
 
 FORGED_FRAME = PRELUDE + """
@@ -776,16 +821,42 @@ def test_a_bundle_that_ends_its_worker_fails_its_own_job_alone(served):
     }
 
 
+def env_of(workflow: str, job: str, step: str) -> str:
+    """What one step of one of CI's jobs sets in its environment, as
+    written: the lines under that step's own `env:`, and no other's."""
+
+    def one(pattern, text, what):
+        found = re.findall(pattern, text, re.M)
+        assert len(found) == 1, f"ci.yml has {len(found)} of {what}"
+        return found[0]
+
+    written = one(rf"^  {job}:\n(?:(?:    .*)?\n)+", workflow, f"the job {job}")
+    written = one(
+        rf"^      - name: {re.escape(step)}\n(?:(?:        .*)?\n)+",
+        written,
+        f"the step {step!r} of {job}",
+    )
+    return one(r"^        env:\n((?:          .*\n)+)", written, f"an `env:` in {job}'s {step!r}")
+
+
 def test_ci_says_that_the_sandbox_has_to_hold_wherever_it_tests_on_linux(repository, page):
     workflow = (repository / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     always = f'          {SANDBOX_REQUIRED}: "1"\n'
     on_linux = f"          {SANDBOX_REQUIRED}: " + "${{ runner.os == 'Linux' && '1' || '' }}\n"
-    # The jobs on Linux alone say so outright: `postgres` and `python`. The
-    # jobs with a leg for each platform say so for the Linux one: both of
-    # `checks`' test steps, and `wheel`'s.
-    assert workflow.count(always) == 2, workflow.count(always)
-    assert workflow.count(on_linux) == 3, workflow.count(on_linux)
-    assert workflow.count(SANDBOX_REQUIRED) == 5
+    # Each step that runs tests says so itself, in its own `env`. The jobs
+    # on Linux alone say so outright, and the jobs with a leg for each
+    # platform say so for the Linux one.
+    steps = [
+        ("checks", "test", on_linux),
+        ("checks", "test (sqlite only)", on_linux),
+        ("postgres", "test", always),
+        ("python", "check", always),
+        ("wheel", "test", on_linux),
+    ]
+    for job, step, said in steps:
+        assert said in env_of(workflow, job, step), (job, step)
+    # And nowhere else: a setting moved to another step is one of these lost.
+    assert workflow.count(SANDBOX_REQUIRED) == len(steps)
     # Every job that runs tests is in the page's table, and no other.
     listed = [job for job, _ in page("docs/ci.md").rows("sandbox required")]
     assert listed == ["`checks`", "`postgres 16`, `postgres 17`, `postgres 18`", "`python`", "`wheel`"]
