@@ -22,9 +22,10 @@ use quantforge::model::{
 use quantforge::storage::sqlite::SqliteSnapshot;
 use quantforge::{
     AnyStore, CandleQuery, CandleStore, ClosedTrade, CopyStart, EngineError, Environment,
-    ExchangeOrder, MarketId, PolicyStore, RunJournalStore, SegmentStore, SqliteStore, StorageError,
-    StoreActivation, StoreControl, StoreFactory, StoreId, StoreIdentity, TransferBegun,
-    TransferConfig, TransferEngine, TransferRecord, TransferSource, TransferState, TransferTarget,
+    ExchangeOrder, InputsIdentity, JobId, JobStore, MarketId, NewProvenance, PolicyStore,
+    RunJournalStore, SegmentStore, SqliteStore, StorageError, StoreActivation, StoreControl,
+    StoreFactory, StoreId, StoreIdentity, TransferBegun, TransferConfig, TransferEngine,
+    TransferRecord, TransferSource, TransferState, TransferTarget,
 };
 use tempfile::TempDir;
 
@@ -687,6 +688,8 @@ fn every_write_to_a_target_whose_copy_is_unfinished_is_refused_until_it_finishes
         .expect("a change the policy takes")
         .expect("a change that changes it");
     assert_refused("save_policy", store.save_policy(&changed, 2), source);
+    let recorded = store.record_provenance(&job(), &provenance(), 3);
+    assert_refused("record_provenance", recorded, source);
     assert_eq!(counts(&bed), before);
 
     query(
@@ -740,6 +743,21 @@ fn a_copy_beginning_waits_for_a_writer_holding_a_table_and_then_refuses_its_rows
     });
     assert!(bed.target().transfer_record().expect("record").is_none());
     assert_eq!(bed.count("SELECT count(*) FROM candles"), "1");
+}
+
+/// A job ID the tests' jobs have.
+fn job() -> JobId {
+    JobId::new("a".repeat(32)).expect("a job id")
+}
+
+/// A job's provenance naming no segment.
+fn provenance() -> NewProvenance {
+    NewProvenance {
+        identity: InputsIdentity::of(b"{}"),
+        provenance_json: "{}".to_string(),
+        segments: Vec::new(),
+        packed: Vec::new(),
+    }
 }
 
 /// Begins a copy in raw SQL, as `begin_transfer` does, holds it open while
@@ -802,6 +820,22 @@ fn a_write_waiting_on_a_copy_beginning_is_refused_once_the_copy_is_recorded() {
         bed.target.upsert_candles(&spot, &candles).map(|_| ())
     });
     refused_behind_a_beginning_copy(&bed, || bed.target.append_order_event("run-a", &order));
+    // A job the target holds, whose provenance waits for the copy's locks
+    // once it holds the job's row.
+    query(
+        &bed.database.url,
+        "INSERT INTO bundles VALUES ('sha256:' || repeat('cd', 32), 3, '\\x000102', 1)",
+    );
+    query(
+        &bed.database.url,
+        "INSERT INTO jobs(job_id, state, bundle_hash, request_json, submitted_at_ms) \
+         VALUES (repeat('a', 32), 'running', 'sha256:' || repeat('cd', 32), '{}', 1)",
+    );
+    refused_behind_a_beginning_copy(&bed, || {
+        bed.target
+            .record_provenance(&job(), &provenance(), 2)
+            .map(|_| ())
+    });
 }
 
 #[test]

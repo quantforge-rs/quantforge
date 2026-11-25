@@ -4,7 +4,10 @@
 //! the behavior every backend passes.
 
 use super::storage::StorageError;
-use crate::model::{BundleHash, JobId, JobOutcome, JobRecord, NewJob, ResultHash, TimestampMs};
+use crate::model::{
+    BundleHash, JobId, JobOutcome, JobRecord, NewJob, NewProvenance, ProvenanceRecord, ResultHash,
+    TimestampMs,
+};
 
 /// Bundles, jobs and their results. A bundle is stored once under its name
 /// and never changed; a job moves from queued to running to one final
@@ -12,7 +15,8 @@ use crate::model::{BundleHash, JobId, JobOutcome, JobRecord, NewJob, ResultHash,
 /// one guarded change, so a job never leaves a final phase and is never
 /// claimed twice. A succeeded job's results are stored in the change that
 /// ends it, each once under its name, and never changed; what a server
-/// kept of a job's log is stored once, under the job.
+/// kept of a job's log is stored once, under the job; and so is a job's
+/// provenance, with the segments the server packed for it.
 pub trait JobStore: Send + Sync {
     /// Stores a bundle's canonical tar under its name. Answers whether it
     /// was new: a bundle stored again changes nothing.
@@ -73,6 +77,26 @@ pub trait JobStore: Send + Sync {
     /// A job's log as it was stored, or `None` when none was: the job
     /// never ran, wrote nothing, or ran in a server that was killed.
     fn job_log(&self, job_id: &JobId) -> Result<Option<String>, StorageError>;
+
+    /// Records a job's provenance, as the server's JSON, under the job,
+    /// with the identity of its inputs, when, and this store's own backend
+    /// and schema version; and in the same change stores each segment the
+    /// server packed for the job, one the store holds already staying as it
+    /// is. Answers whether it was new: a job's provenance is recorded once,
+    /// and one recorded again changes nothing, its segments included.
+    /// Refuses a job the store does not hold, and a provenance that names a
+    /// segment the store neither holds nor was handed, storing nothing.
+    fn record_provenance(
+        &self,
+        job_id: &JobId,
+        provenance: &NewProvenance,
+        recorded_at_ms: TimestampMs,
+    ) -> Result<bool, StorageError>;
+
+    /// A job's provenance as it was recorded, or `None` when none was: the
+    /// job never started, ended before the server read its inputs, or ran
+    /// on a build that recorded none.
+    fn provenance(&self, job_id: &JobId) -> Result<Option<ProvenanceRecord>, StorageError>;
 
     /// Cancels a queued or running job, and answers its record: cancelled,
     /// or unchanged when it had already ended. `None` when there is no such

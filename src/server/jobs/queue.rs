@@ -1,9 +1,9 @@
 //! The dispatcher and a job's run. The dispatcher claims the job submitted
 //! first whenever a slot is free; a run reads the job's input from the
-//! store, hands it to the worker on a thread of its own, and writes how it
-//! ended, a succeeded job's result files in the same change, and then what
-//! is kept of its log. A cancelled job's end is the cancel: the store
-//! already says so.
+//! store and records its provenance (`inputs`), hands the input to the
+//! worker on a thread of its own, and writes how it ended, a succeeded
+//! job's result files in the same change, and then what is kept of its
+//! log. A cancelled job's end is the cancel: the store already says so.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,17 +12,14 @@ use tokio::sync::OwnedSemaphorePermit;
 use tracing::{error, info, warn};
 
 use super::Jobs;
+use super::inputs::read_input;
 use super::log::JobLog;
-use super::worker::{Cancel, JobInput, NO_RUNTIME, WorkerOutcome};
-use crate::model::{Candle, JobId, JobOutcome, JobPhase, JobRecord, StoredResult, now_utc_ms};
-use crate::ports::CandleQuery;
-use crate::protocol::bundle::{Bundle, Runtime};
+use super::worker::{Cancel, NO_RUNTIME, WorkerOutcome};
+use crate::model::{JobId, JobOutcome, JobRecord, StoredResult, now_utc_ms};
 use crate::protocol::jobs::ResultRef;
-use crate::protocol::jobs::{self, JobSubmission};
 use crate::protocol::{ErrorBody, ErrorCode};
 use crate::server::refusal::Refusal;
 use crate::server::results::ResultFile;
-use crate::server::selection::Selection;
 use crate::server::store::ServedStore;
 
 /// Why a job that ran when its server stopped failed.
@@ -39,13 +36,6 @@ const RETRY: Duration = Duration::from_secs(1);
 /// How many times a job's store call is made while the store cannot answer
 /// in time.
 const ATTEMPTS: u32 = 10;
-
-/// Why a job failed whose store could not answer in time as it started.
-const BUSY: &str =
-    "the server's store could not answer in time as the job started; submit it again";
-
-/// How many candles one store call reads for a job.
-const CHUNK: usize = 50_000;
 
 /// Claims jobs, the first submitted first, while a slot is free, until the
 /// server stops.
@@ -98,7 +88,7 @@ pub(super) async fn dispatch(jobs: Jobs) {
 }
 
 /// How a run ended.
-enum Ended {
+pub(super) enum Ended {
     /// With an outcome to write.
     Finished(JobOutcome),
     /// Stopped by its signal, before or while the worker ran it.
@@ -219,110 +209,6 @@ fn succeeded(files: &[ResultFile]) -> std::io::Result<JobOutcome> {
     })
 }
 
-/// The job's input: its submission, its bundle admitted again against the
-/// runtime, and its candles, read a chunk per store call. `None` when the
-/// job was cancelled meanwhile. The job is looked up once it is registered,
-/// so that a cancel either finds it registered or is seen here.
-async fn read_input(
-    jobs: &Jobs,
-    record: &JobRecord,
-    runtime: &Runtime,
-    cancel: &Cancel,
-) -> Result<Option<JobInput>, Ended> {
-    let unreadable = |what: &str, why: String| {
-        error!(job = %record.job_id, %why, "a job's {what} cannot be read");
-        Ended::Finished(failed(
-            ErrorCode::Internal,
-            format!("the server cannot read the job's {what}"),
-        ))
-    };
-    // A store still out of time after every attempt is worth a new
-    // submission; any other refusal is not.
-    let refused = |what: &str, refusal: Refusal| {
-        if refusal.code == ErrorCode::Unavailable {
-            Ended::Finished(failed(ErrorCode::Unavailable, BUSY))
-        } else {
-            unreadable(what, refusal.message)
-        }
-    };
-    let job_id = jobs::JobId::new(record.job_id.as_str())
-        .map_err(|failure| unreadable("id", failure.to_string()))?;
-    let submission: JobSubmission = serde_json::from_str(&record.request_json)
-        .map_err(|failure| unreadable("submission", failure.to_string()))?;
-    let selection = Selection::read_data(&submission.data)
-        .map_err(|refusal| unreadable("submission", refusal.message))?;
-    let Some(category) = selection.category else {
-        return Err(unreadable("submission", "it names no category".to_string()));
-    };
-    let market = selection.market(category);
-    let (id, hash, limits) = (record.job_id.clone(), record.bundle, jobs.inner.limits);
-    let looked_up = patiently(jobs, move |store| {
-        let running = store
-            .job(&id)
-            .map_err(|failure| Refusal::storage("reading a job", failure))?
-            .is_some_and(|job| job.phase == JobPhase::Running);
-        if !running {
-            return Ok(None);
-        }
-        let tar = store
-            .load_bundle(&hash)
-            .map_err(|failure| Refusal::storage("loading a bundle", failure))?
-            .ok_or_else(|| Refusal::internal(format!("the server holds no bundle {hash}")))?;
-        Bundle::from_canonical_tar(&tar, &limits)
-            .map(Some)
-            .map_err(|refused| Refusal::internal(refused.to_string()))
-    })
-    .await;
-    let bundle = match looked_up {
-        Ok(Some(bundle)) => bundle,
-        Ok(None) => return Ok(None),
-        Err(refusal) => return Err(refused("bundle", refusal)),
-    };
-    if let Err(refusal) = bundle.admit(runtime) {
-        return Err(Ended::Finished(failed(
-            ErrorCode::InvalidRequest,
-            refusal.to_string(),
-        )));
-    }
-    let mut candles: Vec<Candle> = Vec::new();
-    let mut next = selection.start_open_ms;
-    loop {
-        if cancel.is_cancelled() {
-            return Ok(None);
-        }
-        let (market, end) = (market.clone(), selection.end_open_ms);
-        let chunk = patiently(jobs, move |store| {
-            store
-                .load_candles(
-                    &market,
-                    CandleQuery {
-                        start_time_ms: Some(next),
-                        end_time_ms: Some(end),
-                        limit: Some(CHUNK),
-                    },
-                )
-                .map_err(|failure| Refusal::storage("reading a job's candles", failure))
-        })
-        .await
-        .map_err(|refusal| refused("candles", refusal))?;
-        let last = chunk.last().map(|candle| candle.open_time_ms);
-        let full = chunk.len() == CHUNK;
-        candles.extend(chunk);
-        match last {
-            // Open times lie within 2^53 of zero, so the step never
-            // overflows.
-            Some(last) if full => next = last + 1,
-            _ => break,
-        }
-    }
-    Ok(Some(JobInput {
-        job_id,
-        submission,
-        bundle,
-        candles,
-    }))
-}
-
 /// Writes a job's end unless it has ended already. A job whose end is never
 /// written stays running until the next start fails it.
 async fn finish(jobs: &Jobs, job_id: &JobId, outcome: JobOutcome) {
@@ -349,7 +235,7 @@ async fn finish(jobs: &Jobs, job_id: &JobId, outcome: JobOutcome) {
 /// Makes `work`'s store call, and makes it again while the store cannot
 /// answer in time, up to `ATTEMPTS` times: a job waits out a busy store
 /// rather than fail.
-async fn patiently<T, F>(jobs: &Jobs, work: F) -> Result<T, Refusal>
+pub(super) async fn patiently<T, F>(jobs: &Jobs, work: F) -> Result<T, Refusal>
 where
     T: Send + 'static,
     F: Fn(&dyn ServedStore) -> Result<T, Refusal> + Clone + Send + 'static,
@@ -373,7 +259,7 @@ fn outcome_name(outcome: &JobOutcome) -> &'static str {
 }
 
 /// A failed outcome with `code` and `message`.
-fn failed(code: ErrorCode, message: impl Into<String>) -> JobOutcome {
+pub(super) fn failed(code: ErrorCode, message: impl Into<String>) -> JobOutcome {
     written(ErrorBody {
         code,
         message: message.into(),

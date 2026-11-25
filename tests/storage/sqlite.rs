@@ -52,6 +52,10 @@ fn open(path: &Path) -> Connection {
 }
 
 impl Raw for SqliteRaw {
+    fn backend(&self) -> &'static str {
+        "sqlite"
+    }
+
     fn select(&self, sql: &str) -> Vec<Vec<Option<String>>> {
         let connection = self.connection();
         let mut stmt = connection.prepare(sql).expect("prepare");

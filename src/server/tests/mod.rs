@@ -5,18 +5,26 @@
 //! `queries`, the segment route in `segments`, uploads in `jobs`, the other
 //! job routes in `submissions`, a result the store holds damaged in
 //! `results`, the log route's refusals in `logs`, a busy store at a job's
-//! start and a stop racing the dispatcher in `queue`, and storage failures
-//! and the turns at the store in `store`, over the store of `faulty`.
+//! start and a stop racing the dispatcher in `queue`, what a job records as
+//! it starts and the provenance route in `provenance`, the rerun route in
+//! `reruns` and its refusals in `rerun_refusals`, over the store and worker
+//! of `backtesting`, and storage failures and the turns at the store in
+//! `store`, over the store of `faulty`.
 //! Literal venue names live in this file only: `tests/exchange_boundary.rs`
 //! reads the others as code.
 
+mod backtesting;
 mod faulty;
 mod history;
 mod jobs;
 mod logs;
 mod markets;
+mod provenance;
 mod queries;
 mod queue;
+mod rerun_hangups;
+mod rerun_refusals;
+mod reruns;
 mod results;
 mod segments;
 mod shutdown;

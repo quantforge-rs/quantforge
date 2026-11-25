@@ -11,7 +11,8 @@ use tokio_postgres::{GenericClient, IsolationLevel, Row};
 use super::bridge::Effect;
 use super::{PostgresStore, copying, limit};
 use crate::model::{
-    BundleHash, JobId, JobOutcome, JobPhase, JobRecord, NewJob, ResultHash, TimestampMs,
+    BundleHash, JobId, JobOutcome, JobPhase, JobRecord, NewJob, NewProvenance, ProvenanceRecord,
+    ResultHash, TimestampMs,
 };
 use crate::ports::{JobStore, StorageError};
 use crate::storage::jobs::{
@@ -309,6 +310,19 @@ impl JobStore for PostgresStore {
 
     fn job_log(&self, job_id: &JobId) -> Result<Option<String>, StorageError> {
         self.load_log(job_id)
+    }
+
+    fn record_provenance(
+        &self,
+        job_id: &JobId,
+        provenance: &NewProvenance,
+        recorded_at_ms: TimestampMs,
+    ) -> Result<bool, StorageError> {
+        self.record_job_provenance(job_id, provenance, recorded_at_ms)
+    }
+
+    fn provenance(&self, job_id: &JobId) -> Result<Option<ProvenanceRecord>, StorageError> {
+        self.job_provenance(job_id)
     }
 
     fn cancel_job(

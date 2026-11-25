@@ -5989,7 +5989,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 10,
+      "schema_version": 11,
       "environment": null,
       "activation": "inactive",
       "activation_epoch": 0
@@ -5999,7 +5999,7 @@
      "op": "migrations",
      "expect": [
       {
-       "to_version": 10,
+       "to_version": 11,
        "from_version": 0
       }
      ]
@@ -6014,7 +6014,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 10,
+      "schema_version": 11,
       "environment": null,
       "activation": "inactive",
       "activation_epoch": 0
@@ -6048,7 +6048,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 10,
+      "schema_version": 11,
       "environment": "testnet",
       "activation": "inactive",
       "activation_epoch": 0
@@ -6071,7 +6071,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 10,
+      "schema_version": 11,
       "environment": "testnet",
       "activation": "active",
       "activation_epoch": 1
@@ -6095,7 +6095,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 10,
+      "schema_version": 11,
       "environment": "testnet",
       "activation": "deactivated",
       "activation_epoch": 1
@@ -6111,7 +6111,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 10,
+      "schema_version": 11,
       "environment": "testnet",
       "activation": "active",
       "activation_epoch": 2
@@ -6201,7 +6201,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 10,
+      "schema_version": 11,
       "environment": "demo",
       "activation": "inactive",
       "activation_epoch": 0
@@ -6226,7 +6226,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 10,
+      "schema_version": 11,
       "environment": "demo",
       "activation": "active",
       "activation_epoch": 1
@@ -6247,7 +6247,7 @@
     {
      "op": "store_record",
      "expect": {
-      "schema_version": 10,
+      "schema_version": 11,
       "environment": "demo",
       "activation": "deactivated",
       "activation_epoch": 1
@@ -8375,6 +8375,432 @@
        "results_json": null,
        "failure_json": null
       }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "jobs.provenance_recorded_once",
+   "doc": "a job's provenance is recorded once under the job, its text kept as given with its identity, and read back with the time and the store's own backend and schema version; one recorded again changes nothing, its segments included, and a job with none reads nothing",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000
+     }
+    },
+    {
+     "op": "provenance",
+     "job_id": "00000000000000000000000000000001",
+     "expect": null
+    },
+    {
+     "op": "claim_job",
+     "at": 1792454400100,
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "running",
+      "started_at_ms": 1792454400100,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "record_provenance",
+     "job_id": "00000000000000000000000000000001",
+     "identity": "sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+     "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"币安人生USDT\"},\"strategy\":\"kept as given ✓\"}",
+     "segments": [
+      "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a"
+     ],
+     "packed": [
+      {
+       "hash": "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a",
+       "payload_len": 137,
+       "data": "51465345474d4e54000102030405060708090a0b0c0d0e0f1011121314151617"
+      }
+     ],
+     "at": 1792454400150,
+     "expect": true
+    },
+    {
+     "op": "provenance",
+     "job_id": "00000000000000000000000000000001",
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "identity": "sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"币安人生USDT\"},\"strategy\":\"kept as given ✓\"}",
+      "schema_version": 11,
+      "recorded_at_ms": 1792454400150
+     }
+    },
+    {
+     "op": "record_provenance",
+     "job_id": "00000000000000000000000000000001",
+     "identity": "sha256:2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b",
+     "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"BTCUSDT\"}}",
+     "segments": [
+      "sha256:2288f5b8fa00ca27bfbbf1041c7469ad456b28eff1a9f9fdbdb46a346c8a8901"
+     ],
+     "packed": [
+      {
+       "hash": "sha256:2288f5b8fa00ca27bfbbf1041c7469ad456b28eff1a9f9fdbdb46a346c8a8901",
+       "payload_len": 99,
+       "data": "51465345474d4e54010000006261727320e29c93"
+      }
+     ],
+     "at": 1792454400160,
+     "expect": false
+    },
+    {
+     "op": "provenance",
+     "job_id": "00000000000000000000000000000001",
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "identity": "sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"币安人生USDT\"},\"strategy\":\"kept as given ✓\"}",
+      "schema_version": 11,
+      "recorded_at_ms": 1792454400150
+     }
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT hash, CAST(payload_len AS TEXT), CAST(length(data) AS TEXT) FROM segments ORDER BY hash",
+     "expect": [
+      [
+       "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a",
+       "137",
+       "32"
+      ]
+     ]
+    },
+    {
+     "op": "provenance",
+     "job_id": "00000000000000000000000000000002",
+     "expect": null
+    },
+    {
+     "op": "job",
+     "job_id": "00000000000000000000000000000001",
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000,
+      "phase": "running",
+      "started_at_ms": 1792454400100,
+      "finished_at_ms": null,
+      "results_json": null,
+      "failure_json": null
+     }
+    },
+    {
+     "op": "reopen"
+    },
+    {
+     "op": "provenance",
+     "job_id": "00000000000000000000000000000001",
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "identity": "sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"币安人生USDT\"},\"strategy\":\"kept as given ✓\"}",
+      "schema_version": 11,
+      "recorded_at_ms": 1792454400150
+     }
+    }
+   ]
+  },
+  {
+   "id": "jobs.provenance_stores_its_segments",
+   "doc": "the segments packed for a job are stored with its provenance, each once under its name, the bytes stored first staying; a later provenance names a segment the store holds without handing it again",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000002",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":2}",
+      "submitted_at_ms": 1792454520000
+     }
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000003",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":3}",
+      "submitted_at_ms": 1792454580000
+     }
+    },
+    {
+     "op": "record_provenance",
+     "job_id": "00000000000000000000000000000001",
+     "identity": "sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+     "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"币安人生USDT\"},\"strategy\":\"kept as given ✓\"}",
+     "segments": [
+      "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a",
+      "sha256:2288f5b8fa00ca27bfbbf1041c7469ad456b28eff1a9f9fdbdb46a346c8a8901"
+     ],
+     "packed": [
+      {
+       "hash": "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a",
+       "payload_len": 137,
+       "data": "51465345474d4e54000102030405060708090a0b0c0d0e0f1011121314151617"
+      },
+      {
+       "hash": "sha256:2288f5b8fa00ca27bfbbf1041c7469ad456b28eff1a9f9fdbdb46a346c8a8901",
+       "payload_len": 99,
+       "data": "51465345474d4e54010000006261727320e29c93"
+      }
+     ],
+     "at": 1792454400100,
+     "expect": true
+    },
+    {
+     "op": "record_provenance",
+     "job_id": "00000000000000000000000000000002",
+     "identity": "sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+     "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"币安人生USDT\"},\"strategy\":\"kept as given ✓\"}",
+     "segments": [
+      "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a",
+      "sha256:197724eb269b9bd9db8566659abe1a6243df85185b45fe08ea04dba746fa2382"
+     ],
+     "packed": [
+      {
+       "hash": "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a",
+       "payload_len": 137,
+       "data": "27262524232221201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a0908070605040302010027262524232221201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
+      },
+      {
+       "hash": "sha256:197724eb269b9bd9db8566659abe1a6243df85185b45fe08ea04dba746fa2382",
+       "payload_len": 12,
+       "data": "27262524232221201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a09080706050403020100"
+      }
+     ],
+     "at": 1792454400200,
+     "expect": true
+    },
+    {
+     "op": "record_provenance",
+     "job_id": "00000000000000000000000000000003",
+     "identity": "sha256:2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b",
+     "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"BTCUSDT\"}}",
+     "segments": [
+      "sha256:2288f5b8fa00ca27bfbbf1041c7469ad456b28eff1a9f9fdbdb46a346c8a8901",
+      "sha256:197724eb269b9bd9db8566659abe1a6243df85185b45fe08ea04dba746fa2382"
+     ],
+     "packed": [],
+     "at": 1792454400300,
+     "expect": true
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT hash, CAST(payload_len AS TEXT), CAST(length(data) AS TEXT) FROM segments ORDER BY hash",
+     "expect": [
+      [
+       "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a",
+       "137",
+       "32"
+      ],
+      [
+       "sha256:197724eb269b9bd9db8566659abe1a6243df85185b45fe08ea04dba746fa2382",
+       "12",
+       "40"
+      ],
+      [
+       "sha256:2288f5b8fa00ca27bfbbf1041c7469ad456b28eff1a9f9fdbdb46a346c8a8901",
+       "99",
+       "20"
+      ]
+     ]
+    },
+    {
+     "op": "provenance",
+     "job_id": "00000000000000000000000000000001",
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "identity": "sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"币安人生USDT\"},\"strategy\":\"kept as given ✓\"}",
+      "schema_version": 11,
+      "recorded_at_ms": 1792454400100
+     }
+    },
+    {
+     "op": "provenance",
+     "job_id": "00000000000000000000000000000002",
+     "expect": {
+      "job_id": "00000000000000000000000000000002",
+      "identity": "sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"币安人生USDT\"},\"strategy\":\"kept as given ✓\"}",
+      "schema_version": 11,
+      "recorded_at_ms": 1792454400200
+     }
+    },
+    {
+     "op": "provenance",
+     "job_id": "00000000000000000000000000000003",
+     "expect": {
+      "job_id": "00000000000000000000000000000003",
+      "identity": "sha256:2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b",
+      "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"BTCUSDT\"}}",
+      "schema_version": 11,
+      "recorded_at_ms": 1792454400300
+     }
+    }
+   ]
+  },
+  {
+   "id": "jobs.provenance_names_held_segments",
+   "doc": "a provenance naming a segment the store neither holds nor is handed is refused, storing nothing, the segments handed with it included; one for a job the store does not hold is refused",
+   "steps": [
+    {
+     "op": "store_bundle",
+     "hash": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+     "data": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+     "expect": true
+    },
+    {
+     "op": "submit_job",
+     "job": {
+      "job_id": "00000000000000000000000000000001",
+      "bundle": "sha256:40aff2e9d2d8922e47afd4648e6967497158785fbd1da870e7110266bf944880",
+      "request_json": "{\"job\":1}",
+      "submitted_at_ms": 1792454460000
+     }
+    },
+    {
+     "op": "record_provenance",
+     "job_id": "00000000000000000000000000000001",
+     "identity": "sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+     "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"币安人生USDT\"},\"strategy\":\"kept as given ✓\"}",
+     "segments": [
+      "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a",
+      "sha256:197724eb269b9bd9db8566659abe1a6243df85185b45fe08ea04dba746fa2382"
+     ],
+     "packed": [
+      {
+       "hash": "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a",
+       "payload_len": 137,
+       "data": "51465345474d4e54000102030405060708090a0b0c0d0e0f1011121314151617"
+      }
+     ],
+     "at": 1792454400100,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the store holds no segment sha256:197724eb269b9bd9db8566659abe1a6243df85185b45fe08ea04dba746fa2382"
+     }
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT hash, CAST(payload_len AS TEXT), CAST(length(data) AS TEXT) FROM segments ORDER BY hash",
+     "expect": []
+    },
+    {
+     "op": "provenance",
+     "job_id": "00000000000000000000000000000001",
+     "expect": null
+    },
+    {
+     "op": "record_provenance",
+     "job_id": "00000000000000000000000000000009",
+     "identity": "sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+     "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"币安人生USDT\"},\"strategy\":\"kept as given ✓\"}",
+     "segments": [
+      "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a"
+     ],
+     "packed": [
+      {
+       "hash": "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a",
+       "payload_len": 137,
+       "data": "51465345474d4e54000102030405060708090a0b0c0d0e0f1011121314151617"
+      }
+     ],
+     "at": 1792454400150,
+     "refused": {
+      "kind": "invalid_argument",
+      "contains": "the store holds no job 00000000000000000000000000000009"
+     }
+    },
+    {
+     "op": "provenance",
+     "job_id": "00000000000000000000000000000009",
+     "expect": null
+    },
+    {
+     "op": "record_provenance",
+     "job_id": "00000000000000000000000000000001",
+     "identity": "sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+     "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"币安人生USDT\"},\"strategy\":\"kept as given ✓\"}",
+     "segments": [
+      "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a"
+     ],
+     "packed": [
+      {
+       "hash": "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a",
+       "payload_len": 137,
+       "data": "51465345474d4e54000102030405060708090a0b0c0d0e0f1011121314151617"
+      }
+     ],
+     "at": 1792454400200,
+     "expect": true
+    },
+    {
+     "op": "provenance",
+     "job_id": "00000000000000000000000000000001",
+     "expect": {
+      "job_id": "00000000000000000000000000000001",
+      "identity": "sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a",
+      "provenance_json": "{\"format\":1,\"inputs\":{\"symbol\":\"币安人生USDT\"},\"strategy\":\"kept as given ✓\"}",
+      "schema_version": 11,
+      "recorded_at_ms": 1792454400200
+     }
+    },
+    {
+     "op": "raw_select",
+     "sql": "SELECT hash, CAST(payload_len AS TEXT), CAST(length(data) AS TEXT) FROM segments ORDER BY hash",
+     "expect": [
+      [
+       "sha256:1815f83fb963c2ec5c5f80123606d105ce722dac920113c3d18535a6ec65875a",
+       "137",
+       "32"
+      ]
      ]
     }
    ]

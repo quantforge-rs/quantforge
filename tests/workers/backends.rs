@@ -32,8 +32,11 @@ use crate::support::{
 };
 
 /// A store of one backend.
-trait Backend {
+pub(crate) trait Backend {
     type Store: ServedStore + 'static;
+
+    /// The backend's name, as a store records it.
+    const NAME: &'static str;
 
     /// A handle on the store, each call bounded as `serve run` bounds them.
     fn store(&self) -> Self::Store;
@@ -43,13 +46,13 @@ trait Backend {
     fn hold_open(&self) -> Box<dyn Any>;
 }
 
-struct Sqlite {
+pub(crate) struct Sqlite {
     _dir: TempDir,
-    path: std::path::PathBuf,
+    pub(crate) path: std::path::PathBuf,
 }
 
 impl Sqlite {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let dir = tempfile::tempdir().expect("a directory");
         let path = dir.path().join("market.sqlite");
         CandleStore::init(&SqliteStore::new(&path)).expect("init");
@@ -59,6 +62,7 @@ impl Sqlite {
 
 impl Backend for Sqlite {
     type Store = SqliteStore;
+    const NAME: &'static str = "sqlite";
 
     fn store(&self) -> SqliteStore {
         SqliteStore::new(&self.path).within(Duration::from_secs(5))
@@ -75,7 +79,7 @@ impl Backend for Sqlite {
     }
 }
 
-fn market() -> MarketId {
+pub(crate) fn market() -> MarketId {
     MarketId::new(
         ExchangeId::BinanceSpot,
         Symbol::new("BTCUSDT").expect("a symbol"),
@@ -109,7 +113,7 @@ async fn serve<B: Backend>(backend: &B, pool: &WorkerPool, concurrency: usize) -
     address
 }
 
-fn client() -> reqwest::Client {
+pub(crate) fn client() -> reqwest::Client {
     reqwest::Client::builder()
         .no_proxy()
         .build()
@@ -117,7 +121,7 @@ fn client() -> reqwest::Client {
 }
 
 /// Uploads `bundle`, as a client does.
-async fn upload(address: SocketAddr, bundle: &Bundle) -> ContentHash {
+pub(crate) async fn upload(address: SocketAddr, bundle: &Bundle) -> ContentHash {
     let response = client()
         .put(format!(
             "http://{address}/v1/bundles/{}",
@@ -159,7 +163,7 @@ async fn submit(address: SocketAddr, hash: &ContentHash, last: i64) -> String {
 }
 
 /// The job's state once it is final.
-async fn ended(address: SocketAddr, job: &str) -> Value {
+pub(crate) async fn ended(address: SocketAddr, job: &str) -> Value {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
     loop {
         let response = client()
@@ -587,19 +591,19 @@ mod server_helpers;
 /// The store on a database of its own on the server
 /// `QUANTFORGE_TEST_POSTGRES_URL` names, with the server's pool.
 #[cfg(feature = "postgres")]
-mod postgres {
+pub(crate) mod postgres {
     use super::server_helpers::{IsolatedDatabase, VARIABLE, server_url, settings};
     use super::*;
     use quantforge::storage::postgres::PostgresStore;
 
-    pub(super) struct Postgres {
+    pub(crate) struct Postgres {
         // Dropped before the database.
         store: PostgresStore,
         _database: IsolatedDatabase,
     }
 
     impl Postgres {
-        pub(super) fn new() -> Option<Self> {
+        pub(crate) fn new() -> Option<Self> {
             let Some(server) = server_url() else {
                 eprintln!("skipping: {VARIABLE} is unset");
                 return None;
@@ -618,6 +622,7 @@ mod postgres {
 
     impl Backend for Postgres {
         type Store = PostgresStore;
+        const NAME: &'static str = "postgres";
 
         fn store(&self) -> PostgresStore {
             self.store.within(Duration::from_secs(5))

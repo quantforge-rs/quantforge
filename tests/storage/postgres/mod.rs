@@ -108,6 +108,10 @@ impl Drop for HeldLock {
 }
 
 impl Raw for PostgresRaw {
+    fn backend(&self) -> &'static str {
+        "postgres"
+    }
+
     fn select(&self, sql: &str) -> Vec<Vec<Option<String>>> {
         query(&self.0, sql)
     }

@@ -130,7 +130,7 @@ fn produced(store: &dyn ServedStore, job_id: &JobId) -> Result<Vec<ResultRef>, R
     )))
 }
 
-fn listed(record: &JobRecord) -> Result<Vec<ResultRef>, Refusal> {
+pub(super) fn listed(record: &JobRecord) -> Result<Vec<ResultRef>, Refusal> {
     serde_json::from_str(record.results_json.as_deref().unwrap_or_default()).map_err(|failure| {
         error!(job = %record.job_id, %failure, "a stored job's results cannot be read");
         Refusal::internal(format!("the server cannot read job {}", record.job_id))
@@ -179,7 +179,7 @@ fn file(
 
 /// The refusal of a result whose stored copy is not the file its job
 /// lists: nothing of it is sent.
-fn damaged(job_id: &JobId, result: &str, why: &str) -> Refusal {
+pub(super) fn damaged(job_id: &JobId, result: &str, why: &str) -> Refusal {
     error!(job = %job_id, result, why, "a stored result does not match its name, so it was not sent");
     Refusal::internal(format!(
         "the server's copy of job {job_id}'s {result} result is damaged"

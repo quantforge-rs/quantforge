@@ -7,6 +7,7 @@ use super::execution::{
     EXECUTION_ORDERS, MARGIN_RESERVATIONS, OUTBOX_EVENTS, POSITION_CYCLES, SIGNAL_DELIVERIES,
     SIGNAL_INBOX,
 };
+use super::jobs::{BUNDLES, JOB_LOGS, JOB_PROVENANCE, JOB_RESULTS, JOBS};
 
 /// What a column holds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -37,7 +38,7 @@ pub(super) const fn text(name: &'static str) -> TransferColumn {
     }
 }
 
-const fn blob(name: &'static str) -> TransferColumn {
+pub(super) const fn blob(name: &'static str) -> TransferColumn {
     TransferColumn {
         name,
         kind: ColumnKind::Blob,
@@ -246,71 +247,6 @@ pub const SEGMENT_DIRTY: TransferTable = TransferTable {
     max_batch: None,
 };
 
-/// The bundles a server was sent, by their names. A batch holds at most
-/// two: a bundle's canonical tar can take 8 MiB.
-pub const BUNDLES: TransferTable = TransferTable {
-    name: "bundles",
-    columns: &[
-        text("code_hash"),
-        integer("size_bytes"),
-        blob("data"),
-        integer("stored_at_ms"),
-    ],
-    key: "code_hash",
-    by_market: false,
-    numbered: false,
-    max_batch: Some(2),
-};
-
-/// The results of the jobs that succeeded, by their names in byte order.
-/// A row holds a whole result file, packed, so a batch holds few.
-pub const JOB_RESULTS: TransferTable = TransferTable {
-    name: "job_results",
-    columns: &[
-        text("hash"),
-        integer("size_bytes"),
-        blob("data"),
-        integer("stored_at_ms"),
-    ],
-    key: "hash",
-    by_market: false,
-    numbered: false,
-    max_batch: Some(2),
-};
-
-/// The jobs, by the sequence number the store gave each, which keeps their
-/// order: the queue runs them in it, and lists them newest first.
-pub const JOBS: TransferTable = TransferTable {
-    name: "jobs",
-    columns: &[
-        integer("seq"),
-        text("job_id"),
-        text("state"),
-        text("bundle_hash"),
-        text("request_json"),
-        integer("submitted_at_ms"),
-        integer("started_at_ms"),
-        integer("finished_at_ms"),
-        text("results_json"),
-        text("failure_json"),
-    ],
-    key: "seq",
-    by_market: false,
-    numbered: true,
-    max_batch: None,
-};
-
-/// What is kept of each job's log, by the job's ID in byte order. A row
-/// holds a whole log, so a batch holds few.
-pub const JOB_LOGS: TransferTable = TransferTable {
-    name: "job_logs",
-    columns: &[text("job_id"), text("log_json"), integer("stored_at_ms")],
-    key: "job_id",
-    by_market: false,
-    numbered: false,
-    max_batch: Some(4),
-};
-
 /// The automation profiles, by their IDs in byte order.
 pub const AUTOMATION_PROFILES: TransferTable = TransferTable {
     name: "automation_profiles",
@@ -350,12 +286,13 @@ pub const POLICY_REVISIONS: TransferTable = TransferTable {
 /// The tables a transfer copies, in the order it copies them: a run before
 /// its journals, a segment before the index entry naming it, candles before
 /// the marks on their windows, a bundle before the jobs that run it, a
-/// result before the job that lists it, a job before its log, a profile
+/// result before the job that lists it, a job before its log and its
+/// provenance, every segment before the provenance naming it, a profile
 /// before the revisions of its policy, a signal before its deliveries and
 /// its intent, an operation before its orders, its fills, the cycle it
 /// opened and its reservation, and every record before the events that
 /// tell of it. Each part of a target is whole when read.
-pub const TRANSFER_TABLES: [TransferTable; 23] = [
+pub const TRANSFER_TABLES: [TransferTable; 24] = [
     CANDLES,
     BOT_RUNS,
     ORDER_EVENTS,
@@ -367,6 +304,7 @@ pub const TRANSFER_TABLES: [TransferTable; 23] = [
     JOB_RESULTS,
     JOBS,
     JOB_LOGS,
+    JOB_PROVENANCE,
     AUTOMATION_PROFILES,
     POLICY_REVISIONS,
     SIGNAL_INBOX,

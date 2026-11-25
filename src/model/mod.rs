@@ -22,6 +22,7 @@ pub mod job;
 pub mod market;
 pub mod money;
 pub mod order;
+pub mod provenance;
 pub mod refusal;
 pub mod request;
 pub mod rules;
@@ -49,6 +50,7 @@ pub use job::{
 pub use market::{Category, ExchangeId, MarketId, Symbol, Venue};
 pub use money::{Asset, Money};
 pub use order::{AccountTrade, ExchangeOrder, Fill, OrderStatus, Side};
+pub use provenance::{InputsIdentity, NewProvenance, PackedSegment, ProvenanceRecord};
 pub use refusal::Refusal;
 pub use request::{CancelOrderRequest, KlineRequest, MarketOrderRequest, OrderQueryRequest};
 pub use rules::{AssetBalance, SymbolRules};
@@ -107,6 +109,9 @@ pub enum ModelError {
 
     #[error("invalid signal hash {0:?}: expected sha256: and 64 lowercase hex digits")]
     InvalidSignalHash(String),
+
+    #[error("invalid inputs identity {0:?}: expected sha256: and 64 lowercase hex digits")]
+    InvalidInputsIdentity(String),
 
     #[error("invalid rfc3339 timestamp: {0}")]
     InvalidTimestamp(String),

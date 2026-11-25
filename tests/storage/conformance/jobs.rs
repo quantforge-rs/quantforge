@@ -1,7 +1,8 @@
 //! The job store's steps, and the checks coded here: stores claiming at
 //! once from many queued jobs each claim jobs of their own, so every job is
-//! claimed once, none twice and none lost; and an end whose results cannot
-//! be stored ends nothing.
+//! claimed once, none twice and none lost; an end whose results cannot be
+//! stored ends nothing; and a provenance that cannot be recorded stores
+//! none of the segments handed with it.
 
 use std::collections::BTreeSet;
 use std::str::FromStr;
@@ -9,12 +10,12 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use quantforge::{
-    BundleHash, JobId, JobOutcome, JobPhase, JobStore, NewJob, ResultHash, StorageError,
-    StorageErrorKind, StoredResult,
+    BundleHash, InputsIdentity, JobId, JobOutcome, JobPhase, JobStore, NewJob, NewProvenance,
+    PackedSegment, ResultHash, SegmentHash, StorageError, StorageErrorKind, StoredResult,
 };
 
-use super::cases::JobText;
-use super::{Coded, Fixture, Step, expect_refused};
+use super::cases::{JobText, ProvenanceText};
+use super::{Coded, Fixture, Raw, Step, expect_refused};
 
 /// The checks coded here: id and statement.
 pub const CHECKS: &[(&str, &str)] = &[
@@ -26,12 +27,17 @@ pub const CHECKS: &[(&str, &str)] = &[
         "jobs.failed_end_changes_nothing",
         "an end whose results cannot all be stored changes nothing: the job still runs and holds no result, and ends once they can",
     ),
+    (
+        "jobs.failed_provenance_changes_nothing",
+        "a provenance whose record cannot be stored changes nothing: none of the segments handed with it is stored, and it is recorded once it can",
+    ),
 ];
 
 pub fn check<S: JobStore + Send>(id: &str) -> Coded<S> {
     match id {
         "jobs.claims_racing" => claims_racing,
         "jobs.failed_end_changes_nothing" => failed_end_changes_nothing,
+        "jobs.failed_provenance_changes_nothing" => failed_provenance_changes_nothing,
         other => panic!("no job check {other}"),
     }
 }
@@ -44,8 +50,9 @@ fn hash(text: &str) -> BundleHash {
     BundleHash::from_str(text).expect("a bundle hash")
 }
 
-/// Runs a job store step; `false` for a step of another port.
-pub fn step<S: JobStore + ?Sized>(store: &S, step: &Step) -> bool {
+/// Runs a job store step; `false` for a step of another port. A
+/// provenance read back names the store's own backend, which `raw` gives.
+pub fn step<S: JobStore + ?Sized>(raw: &dyn Raw, store: &S, step: &Step) -> bool {
     match step {
         Step::StoreBundle {
             hash: name,
@@ -87,6 +94,51 @@ pub fn step<S: JobStore + ?Sized>(store: &S, step: &Step) -> bool {
         Step::JobLog { job_id: id, expect } => {
             let found = store.job_log(&job_id(id)).expect("a log");
             assert_eq!(&found, expect, "the log of {id}");
+        }
+        Step::RecordProvenance {
+            job_id: id,
+            identity,
+            provenance_json,
+            segments,
+            packed,
+            at,
+            expect,
+            refused,
+        } => {
+            let provenance = NewProvenance {
+                identity: identity.parse().expect("an identity"),
+                provenance_json: provenance_json.clone(),
+                segments: segments
+                    .iter()
+                    .map(|name| name.parse().expect("a segment hash"))
+                    .collect(),
+                packed: packed.iter().map(|segment| segment.packed()).collect(),
+            };
+            let outcome = store.record_provenance(&job_id(id), &provenance, *at);
+            match (refused, expect) {
+                (Some(refused), None) => expect_refused(outcome, refused, "record a provenance"),
+                (None, Some(expect)) => assert_eq!(
+                    &outcome.expect("record a provenance"),
+                    expect,
+                    "the provenance of {id}"
+                ),
+                other => panic!("a provenance is recorded or refused, not {other:?}"),
+            }
+        }
+        Step::Provenance { job_id: id, expect } => {
+            let found = store.provenance(&job_id(id)).expect("a provenance");
+            if let Some(record) = &found {
+                assert_eq!(
+                    record.backend,
+                    raw.backend(),
+                    "the backend that recorded {id}"
+                );
+            }
+            assert_eq!(
+                &found.as_ref().map(ProvenanceText::of),
+                expect,
+                "the provenance of {id}"
+            );
         }
         Step::SubmitJob { job, refused } => {
             let outcome = store.submit_job(&job.new_job());
@@ -255,4 +307,58 @@ fn failed_end_changes_nothing<S: JobStore + Send>(fixture: &Fixture<S>) {
             Some(kept.data)
         );
     }
+}
+
+/// With the provenance table refusing every new row, a record fails whole:
+/// the segments handed with it, which the store took before the record,
+/// are gone with it, and the job has none. Once the table takes rows
+/// again, the same record goes through, segments and all.
+fn failed_provenance_changes_nothing<S: JobStore + Send>(fixture: &Fixture<S>) {
+    let (store, raw) = (&fixture.store, &fixture.raw);
+    let bundle = hash(&format!("sha256:{}", "ef".repeat(32)));
+    store.store_bundle(&bundle, b"tar", 0).expect("a bundle");
+    let id = job_id(&format!("{:032x}", 1));
+    store
+        .submit_job(&NewJob {
+            job_id: id.clone(),
+            bundle,
+            request_json: "{}".to_string(),
+            submitted_at_ms: 1,
+        })
+        .expect("a job");
+    let packed = |fill: u8| PackedSegment {
+        hash: SegmentHash::from_digest([fill; 32]),
+        payload_len: 16,
+        data: vec![fill; 3],
+    };
+    let (first, second) = (packed(0x33), packed(0x44));
+    let provenance = NewProvenance {
+        identity: InputsIdentity::of(b"inputs"),
+        provenance_json: "{}".to_string(),
+        segments: vec![first.hash, second.hash],
+        packed: vec![first, second],
+    };
+    let count = || raw.select("SELECT CAST(COUNT(*) AS TEXT) FROM segments");
+    let none = [[Some("0".to_string())]];
+
+    let [refuse, allow] = raw.write_refusal("job_provenance");
+    raw.execute(&refuse);
+    store
+        .record_provenance(&id, &provenance, 2)
+        .expect_err("the provenance table refuses the row");
+    assert_eq!(store.provenance(&id).expect("a read"), None);
+    assert_eq!(count(), none, "no segment without the record that names it");
+
+    raw.execute(&allow);
+    assert!(
+        store
+            .record_provenance(&id, &provenance, 3)
+            .expect("the record")
+    );
+    let recorded = store.provenance(&id).expect("a read").expect("the record");
+    assert_eq!(
+        (recorded.recorded_at_ms, recorded.identity),
+        (3, provenance.identity)
+    );
+    assert_eq!(count(), [[Some("2".to_string())]]);
 }

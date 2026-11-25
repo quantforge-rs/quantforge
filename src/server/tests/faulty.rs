@@ -1,16 +1,17 @@
 //! A store that fails, or stalls until released, or lists its markets
 //! backwards, or finds itself out of time for its first candle reads or
 //! for some reads of a job, or holds back or loses the write of a job's
-//! log, on demand, and otherwise answers as the store it wraps: for what
-//! no real store does on cue.
+//! log, or holds back one kind of read, on demand, and otherwise answers as
+//! the store it wraps: for what no real store does on cue.
 
 use std::sync::Mutex;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 
 use crate::model::{
-    BundleHash, Candle, JobId, JobOutcome, JobRecord, MarketCoverage, MarketId, NewJob, ResultHash,
-    SegmentHash, SegmentPlan, SegmentRefresh, TimestampMs,
+    BundleHash, Candle, JobId, JobOutcome, JobRecord, MarketCoverage, MarketId, NewJob,
+    NewProvenance, ProvenanceRecord, ResultHash, SegmentHash, SegmentPlan, SegmentRefresh,
+    TimestampMs,
 };
 use crate::ports::{CandleQuery, CandleStore, JobStore, SegmentStore, StorageError};
 
@@ -30,6 +31,8 @@ pub(super) struct Faulty<S> {
     busy_jobs: Mutex<(usize, usize)>,
     /// Whether the call that stores a job's log fails, and no other.
     loses_logs: bool,
+    /// A stall for each call of the read named, and no other call.
+    read_stall: Option<(&'static str, Stall)>,
 }
 
 /// A stall: a call says it began, then waits until released.
@@ -49,6 +52,7 @@ impl<S> Faulty<S> {
             log_stall: None,
             busy_jobs: Mutex::new((0, 0)),
             loses_logs: false,
+            read_stall: None,
         }
     }
 
@@ -111,6 +115,35 @@ impl<S> Faulty<S> {
                 release: Mutex::new(release),
             }),
             ..Self::wrapping(inner)
+        }
+    }
+
+    /// Each call of the read named `read`, `load_bundle`, `load_segment` or
+    /// `load_result`, says it began, then waits until released; every other
+    /// call answers at once.
+    pub(super) fn holding_reads(
+        inner: S,
+        read: &'static str,
+        began: Sender<()>,
+        release: Receiver<()>,
+    ) -> Self {
+        Self {
+            read_stall: Some((
+                read,
+                Stall {
+                    began: Mutex::new(began),
+                    release: Mutex::new(release),
+                },
+            )),
+            ..Self::wrapping(inner)
+        }
+    }
+
+    /// Waits, when `read` is the read this store holds back.
+    fn held(&self, read: &str) {
+        let stall = self.read_stall.as_ref().filter(|(held, _)| *held == read);
+        if let Some((_, stall)) = stall {
+            stall.wait();
         }
     }
 
@@ -206,6 +239,7 @@ impl<S: SegmentStore> SegmentStore for Faulty<S> {
     }
 
     fn load_segment(&self, hash: &SegmentHash) -> Result<Option<Vec<u8>>, StorageError> {
+        self.held("load_segment");
         self.fault()?;
         self.inner.load_segment(hash)
     }
@@ -223,6 +257,7 @@ impl<S: JobStore> JobStore for Faulty<S> {
     }
 
     fn load_bundle(&self, hash: &BundleHash) -> Result<Option<Vec<u8>>, StorageError> {
+        self.held("load_bundle");
         self.fault()?;
         self.inner.load_bundle(hash)
     }
@@ -267,6 +302,7 @@ impl<S: JobStore> JobStore for Faulty<S> {
     }
 
     fn load_result(&self, hash: &ResultHash) -> Result<Option<Vec<u8>>, StorageError> {
+        self.held("load_result");
         self.fault()?;
         self.inner.load_result(hash)
     }
@@ -290,6 +326,22 @@ impl<S: JobStore> JobStore for Faulty<S> {
     fn job_log(&self, job_id: &JobId) -> Result<Option<String>, StorageError> {
         self.fault()?;
         self.inner.job_log(job_id)
+    }
+
+    fn record_provenance(
+        &self,
+        job_id: &JobId,
+        provenance: &NewProvenance,
+        recorded_at_ms: TimestampMs,
+    ) -> Result<bool, StorageError> {
+        self.fault()?;
+        self.inner
+            .record_provenance(job_id, provenance, recorded_at_ms)
+    }
+
+    fn provenance(&self, job_id: &JobId) -> Result<Option<ProvenanceRecord>, StorageError> {
+        self.fault()?;
+        self.inner.provenance(job_id)
     }
 
     fn cancel_job(

@@ -37,7 +37,7 @@ pub(super) struct Step {
 }
 
 /// The chain, in order. A step's DDL never changes once a build ran it.
-pub(super) const STEPS: [Step; 6] = [
+pub(super) const STEPS: [Step; 7] = [
     Step {
         to: 5,
         apply: step_5_schema,
@@ -61,6 +61,10 @@ pub(super) const STEPS: [Step; 6] = [
     Step {
         to: 10,
         apply: step_10_execution,
+    },
+    Step {
+        to: 11,
+        apply: step_11_provenance,
     },
 ];
 
@@ -306,4 +310,9 @@ fn step_10_execution<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
             .batch_execute(super::execution::schema::SCHEMA_10)
             .await
     })
+}
+
+/// Schema 11 (QUA-352): each job's provenance, the reproducibility ledger.
+fn step_11_provenance<'t>(transaction: &'t Transaction<'t>) -> StepWork<'t> {
+    Box::pin(async move { transaction.batch_execute(schema::SCHEMA_11).await })
 }

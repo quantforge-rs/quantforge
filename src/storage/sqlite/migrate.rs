@@ -11,7 +11,7 @@
 use super::errors::{commit_failed, failed};
 use super::{
     META_DDL, SCHEMA_VERSION, SqliteStore, candles, control, execution, jobs, journal, policies,
-    segments,
+    provenance, segments,
 };
 use crate::storage::segments as format;
 use crate::{Interval, StorageError, now_utc_ms};
@@ -39,7 +39,7 @@ struct Step {
 
 /// The chain, in order. Each step's DDL is the text the build that
 /// introduced it wrote, which never changes again.
-const STEPS: [Step; 10] = [
+const STEPS: [Step; 11] = [
     Step {
         to: 1,
         apply: step_1_candles,
@@ -79,6 +79,10 @@ const STEPS: [Step; 10] = [
     Step {
         to: 10,
         apply: step_10_execution,
+    },
+    Step {
+        to: 11,
+        apply: step_11_provenance,
     },
 ];
 
@@ -251,6 +255,12 @@ fn step_9_policies(transaction: &Transaction<'_>) -> Result<(), StorageError> {
 /// outbox, and the store's own leases, pool revisions and activation log.
 fn step_10_execution(transaction: &Transaction<'_>) -> Result<(), StorageError> {
     batch(transaction, execution::SCHEMA_DDL)
+}
+
+/// Schema 11 (QUA-352): each job's provenance, the reproducibility ledger.
+/// No job an earlier build ran has one, since no earlier build kept any.
+fn step_11_provenance(transaction: &Transaction<'_>) -> Result<(), StorageError> {
+    batch(transaction, provenance::SCHEMA_DDL)
 }
 
 fn mark_every_window(transaction: &Transaction<'_>) -> Result<(), StorageError> {

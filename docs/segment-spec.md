@@ -96,6 +96,13 @@ those of any window the server has not packed yet. A server packs only
 final candles; QuantForge stores a candle only once a second has passed
 since its close.
 
+A backtest job that reads bars of such a window packs the bars it reads
+from it, oldest first, into a segment of the job's own, in this format and
+named the same way, which the job's provenance names and the server stores
+and serves like any other, though no index entry lists it. A window wholly
+inside the job's range packs to the segment the window itself packs to from
+the same candles; a part of a window packs to a segment of its own.
+
 A window whose candles change after it was packed, as when a sync fills a
 gap in it, is packed again under a new name. The segment it had keeps its
 name and its candles: a name never comes to stand for other candles.
@@ -346,3 +353,6 @@ which pyarrow and polars read directly. Format 1 is its own instead:
   to it on the wire. The payload, the hash and the stored names are
   unchanged.
 - QUA-359 serves segments over HTTP. The format is unchanged.
+- QUA-352 packs the bars a job reads from windows not packed yet into
+  segments of the job's own, which its provenance names. The format is
+  unchanged.

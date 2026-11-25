@@ -3,8 +3,9 @@
 //! work is split across private sibling modules — `candles` implements
 //! `CandleStore`, `journal` implements `RunJournalStore`, `segments`
 //! implements `SegmentStore`, `control` implements `StoreControl`, `jobs`
-//! implements `JobStore`, `policies` implements `PolicyStore`, `execution`
-//! implements `ExecutionStore`, and
+//! implements `JobStore`, with `provenance` keeping each job's provenance,
+//! `policies` implements `PolicyStore`, `execution` implements
+//! `ExecutionStore`, and
 //! `migrate` brings every earlier schema to [`SCHEMA_VERSION`]; `snapshot`
 //! reads a store read-only as the source of a transfer, and `reading` is
 //! the connection that cannot write, which a store opened to read
@@ -20,6 +21,7 @@ mod jobs;
 mod journal;
 mod migrate;
 mod policies;
+mod provenance;
 mod reading;
 mod segments;
 mod snapshot;
@@ -49,7 +51,7 @@ use wait::Waits;
 /// earlier schema forward in place (`docs/storage-schema.md`); a database
 /// is never deleted for a schema change. Only a database from a newer
 /// build is refused, as [`StorageError::SchemaUnsupported`].
-pub const SCHEMA_VERSION: u32 = 10;
+pub const SCHEMA_VERSION: u32 = 11;
 
 // Indentation inside this literal is load-bearing: SQLite records the exact
 // statement text in `sqlite_master`, so reformatting it would change the

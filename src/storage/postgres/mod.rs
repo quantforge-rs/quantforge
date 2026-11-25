@@ -20,6 +20,8 @@
 //!   indexed steps.
 //! - `jobs`: `JobStore`, each change one guarded statement, a claim
 //!   skipping what another claim holds locked.
+//! - `provenance`: each job's provenance, recorded once in a transaction
+//!   that holds its job and finds every segment it names.
 //! - `journal`: `RunJournalStore`, one statement per call.
 //! - `policies`: `PolicyStore`, a profile with its first revision in one
 //!   transaction, and each later revision one guarded insert.
@@ -50,6 +52,7 @@ mod jobs;
 mod journal;
 mod migrate;
 mod policies;
+mod provenance;
 mod runner;
 mod schema;
 mod segments;

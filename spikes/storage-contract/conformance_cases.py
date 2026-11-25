@@ -33,7 +33,7 @@ T = 1_792_454_400_000
 # 29 decimal places: more than a Decimal holds.
 INEXACT = "1.00000000000000000000000000001"
 # The schema every backend creates; a new store logs one step to it from 0.
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 WINDOW_BARS = 1440
 STEP_MS = {
     "1s": 1_000,
@@ -246,6 +246,8 @@ class Model:
         self.results = {}  # name -> what the store keeps of a result
         self.logs = {}  # job ID -> what a server kept of the job's log, as text
         self.jobs = []  # records, in submission order
+        self.provenance = {}  # job ID -> its provenance, as recorded
+        self.packed = {}  # name -> (payload length, bytes kept) of a segment packed for a job
         self.profiles = {}  # profile ID -> the identity it was created with
         self.policies = {}  # profile ID -> [(revision, changed_at_ms, text)], as appended
         self.foreign = {}  # (profile ID, revision) -> what a read says of a row written over
@@ -375,6 +377,38 @@ class Model:
 
     def job_log(self, job_id):
         return self.logs.get(job_id)
+
+    def record_provenance(self, job_id, identity, text, segments, packed, at):
+        """Whether it was new, and why it was refused, if it was. Recorded
+        once, with the segments packed for the job, or nothing at all."""
+        if self.find_job(job_id) is None:
+            return None, refusal(f"the store holds no job {job_id}")
+        if job_id in self.provenance:
+            return False, None
+        handed = {segment["hash"] for segment in packed}
+        for name in segments:
+            if name not in self.segments and name not in self.packed and name not in handed:
+                return None, refusal(f"the store holds no segment {name}")
+        for segment in packed:
+            # A segment is stored once: the first bytes under a name stay.
+            self.packed.setdefault(
+                segment["hash"], (segment["payload_len"], len(bytes.fromhex(segment["data"])))
+            )
+        self.provenance[job_id] = {
+            "job_id": job_id,
+            "identity": identity,
+            "provenance_json": text,
+            "schema_version": SCHEMA_VERSION,
+            "recorded_at_ms": at,
+        }
+        return True, None
+
+    def job_provenance(self, job_id):
+        found = self.provenance.get(job_id)
+        return None if found is None else dict(found)
+
+    def packed_rows(self):
+        return [[name, str(length), str(size)] for name, (length, size) in sorted(self.packed.items())]
 
     def cancel_job(self, job_id, at):
         job = self.find_job(job_id)
@@ -757,6 +791,18 @@ class Scenario:
 
     def job_log(self, job_id):
         self.step("job_log", job_id=job_id, expect=self.model.job_log(job_id))
+
+    def record_provenance(self, job_id, identity, text, segments, packed, at):
+        new, refused = self.model.record_provenance(job_id, identity, text, segments, packed, at)
+        answer = {"refused": refused} if refused else {"expect": new}
+        self.step("record_provenance", job_id=job_id, identity=identity, provenance_json=text,
+                  segments=segments, packed=packed, at=at, **answer)
+
+    def provenance(self, job_id):
+        self.step("provenance", job_id=job_id, expect=self.model.job_provenance(job_id))
+
+    def packed_segments(self):
+        self.raw_select(PACKED_SQL, self.model.packed_rows())
 
     def cancel_job(self, job_id, at):
         self.step("cancel_job", job_id=job_id, at=at, expect=self.model.cancel_job(job_id, at))
@@ -1617,6 +1663,32 @@ FAILED = {"failed": '{"code":"invalid_request","message":"the strategy raised Va
 RESTARTED = '{"code":"internal","message":"the server stopped while the job ran"}'
 
 
+# The segments a provenance writes, as each backend's SQL reads them: the
+# name, the payload's length, and how many bytes are kept, which a store
+# never reads.
+PACKED_SQL = (
+    "SELECT hash, CAST(payload_len AS TEXT), CAST(length(data) AS TEXT) FROM segments "
+    "ORDER BY hash"
+)
+
+# What a server hands a store of a job's provenance: an identity, the
+# record as text the store keeps and never reads, and segments as bytes it
+# keeps and never reads, named here by the hash of those bytes.
+IDENTITY_A = "sha256:" + "1a" * 32
+IDENTITY_B = "sha256:" + "2b" * 32
+PROVENANCE_A = '{"format":1,"inputs":{"symbol":"币安人生USDT"},"strategy":"kept as given ✓"}'
+PROVENANCE_B = '{"format":1,"inputs":{"symbol":"BTCUSDT"}}'
+SEGMENT_A = b"QFSEGMNT" + bytes(range(24))
+SEGMENT_B = b"QFSEGMNT\x01\x00\x00\x00" + "bars ✓".encode("utf-8")
+SEGMENT_C = bytes(reversed(range(40)))
+
+
+def packed(data, payload_len, name=None):
+    """One segment packed for a job, as a store is handed it: its name, its
+    payload's length, and its stored bytes as hex."""
+    return {"hash": name or bundle_name(data), "payload_len": payload_len, "data": data.hex()}
+
+
 def jobs_scenarios():
     out = []
 
@@ -1807,6 +1879,55 @@ def jobs_scenarios():
     for n in (1, 2, 3, 4):
         s.job_log(job_id(n))
     s.jobs(10)
+    out.append(s)
+
+    s = Scenario("jobs.provenance_recorded_once", "a job's provenance is recorded once under the job, its text kept as given with its identity, and read back with the time and the store's own backend and schema version; one recorded again changes nothing, its segments included, and a job with none reads nothing")
+    s.store_bundle(BUNDLE_A)
+    for n in (1, 2):
+        s.submit_job(new_job(n, BUNDLE_A))
+    s.provenance(job_id(1))
+    s.claim_job(T + 100)
+    a, b = bundle_name(SEGMENT_A), bundle_name(SEGMENT_B)
+    s.record_provenance(job_id(1), IDENTITY_A, PROVENANCE_A, [a], [packed(SEGMENT_A, 137)], T + 150)
+    s.provenance(job_id(1))
+    s.record_provenance(job_id(1), IDENTITY_B, PROVENANCE_B, [b], [packed(SEGMENT_B, 99)], T + 160)
+    s.provenance(job_id(1))
+    s.packed_segments()
+    s.provenance(job_id(2))
+    s.job(job_id(1))
+    s.reopen()
+    s.provenance(job_id(1))
+    out.append(s)
+
+    s = Scenario("jobs.provenance_stores_its_segments", "the segments packed for a job are stored with its provenance, each once under its name, the bytes stored first staying; a later provenance names a segment the store holds without handing it again")
+    s.store_bundle(BUNDLE_A)
+    for n in (1, 2, 3):
+        s.submit_job(new_job(n, BUNDLE_A))
+    a, b, c = bundle_name(SEGMENT_A), bundle_name(SEGMENT_B), bundle_name(SEGMENT_C)
+    s.record_provenance(job_id(1), IDENTITY_A, PROVENANCE_A, [a, b],
+                        [packed(SEGMENT_A, 137), packed(SEGMENT_B, 99)], T + 100)
+    # The same name handed with other bytes: the bytes stored first stay.
+    s.record_provenance(job_id(2), IDENTITY_A, PROVENANCE_A, [a, c],
+                        [packed(SEGMENT_C + SEGMENT_C, 137, name=a), packed(SEGMENT_C, 12)], T + 200)
+    s.record_provenance(job_id(3), IDENTITY_B, PROVENANCE_B, [b, c], [], T + 300)
+    s.packed_segments()
+    for n in (1, 2, 3):
+        s.provenance(job_id(n))
+    out.append(s)
+
+    s = Scenario("jobs.provenance_names_held_segments", "a provenance naming a segment the store neither holds nor is handed is refused, storing nothing, the segments handed with it included; one for a job the store does not hold is refused")
+    s.store_bundle(BUNDLE_A)
+    s.submit_job(new_job(1, BUNDLE_A))
+    a, missing = bundle_name(SEGMENT_A), bundle_name(SEGMENT_C)
+    s.record_provenance(job_id(1), IDENTITY_A, PROVENANCE_A, [a, missing],
+                        [packed(SEGMENT_A, 137)], T + 100)
+    s.packed_segments()
+    s.provenance(job_id(1))
+    s.record_provenance(job_id(9), IDENTITY_A, PROVENANCE_A, [a], [packed(SEGMENT_A, 137)], T + 150)
+    s.provenance(job_id(9))
+    s.record_provenance(job_id(1), IDENTITY_A, PROVENANCE_A, [a], [packed(SEGMENT_A, 137)], T + 200)
+    s.provenance(job_id(1))
+    s.packed_segments()
     out.append(s)
 
     s = Scenario("jobs.reopened", "a store opened again keeps every job as it stood, and claims on in order")

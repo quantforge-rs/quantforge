@@ -479,6 +479,8 @@ the job's log with its traceback.
 | `POST /v1/backtests/{job_id}/cancel` | cancels a job |
 | `GET /v1/backtests/{job_id}/result` | a succeeded job's metrics and its files: `metrics.json`, `trades.arrow`, `equity.arrow` |
 | `GET /v1/backtests/{job_id}/logs` | a job's log, a page at a time or as a WebSocket stream |
+| `GET /v1/backtests/{job_id}/provenance` | what a job ran on, recorded before it ran: its bundle's code hash, every segment holding its bars, its settings and runtime, and their identity |
+| `POST /v1/backtests/{job_id}/rerun` | runs a succeeded job again from its provenance and says whether its result came out the same, or where it first did not |
 
 - The routes need no credentials yet, and the default address takes
   connections from this machine only.
@@ -491,6 +493,10 @@ the job's log with its traceback.
   ([worker isolation](https://github.com/quantforge-rs/quantforge/blob/main/docs/worker-isolation.md)).
 - Without `--job-python` the workers have no runtime, so each job fails as
   it starts, saying so.
+- Every job runs on bars of segments its provenance names: those the
+  store has packed, and segments packed for the job from the bars no
+  segment held yet, so a later correction of the candles never changes
+  what a job ran on, and a rerun of it reads the same bars.
 - On Ctrl-C or SIGTERM the server finishes the requests in progress and
   fails the jobs that run, so that their clients submit them again; a second
   signal stops it without waiting.

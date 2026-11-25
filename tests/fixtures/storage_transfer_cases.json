@@ -655,6 +655,42 @@
         ]
       ]
     },
+    "job_provenance": {
+      "columns": [
+        "job_id",
+        "identity",
+        "provenance_json",
+        "backend",
+        "schema_version",
+        "recorded_at_ms"
+      ],
+      "rows": [
+        [
+          "00000000000000000000000000000001",
+          "sha256:f1e64581d053364dc2a2a618cbbf6f1a8e6739e10ca687b11ab3daeab25bbad6",
+          "{\"format\":1,\"inputs\":{\"code_hash\":\"sha256:f180432600770243d80a1b77b8ad4a4df0908f33f3e51247311f9f2b0df5c6f1\",\"data\":{\"exchange\":\"binance\",\"category\":\"spot\",\"symbol\":\"BTCUSDT\",\"interval\":\"1m\",\"start_open_ms\":1792454400000,\"end_open_ms\":1792454520000,\"bar_count\":3,\"segments\":[{\"hash\":\"sha256:72cfe0e9bd0a747ce5e70476e03e4b3d4ce24e32bab2aa6bca1eb906238f7f9a\",\"first_open_ms\":1792454400000,\"last_open_ms\":1792454520000,\"bar_count\":3}]},\"backtest\":{\"initial_cash\":\"10000\",\"fee_bps\":\"10\",\"close_out_at_end\":true},\"runtime\":{\"engine\":\"0.2.0\",\"python\":\"3.11\",\"deps\":{\"numpy\":\"2.4.6\"}},\"proto_version\":1},\"strategy\":{\"entry\":\"strategy.py:Strategy\",\"params\":{\"fast\":2,\"label\":\"ž\"}}}",
+          "sqlite",
+          11,
+          1792454431000
+        ],
+        [
+          "0123456789abcdef0123456789abcdef",
+          "sha256:df839544caaf020ba04d5afc79bcea8fd60c0ea9be9df63a86629e63a45b9b96",
+          "{\"format\":1,\"inputs\":{\"code_hash\":\"sha256:f180432600770243d80a1b77b8ad4a4df0908f33f3e51247311f9f2b0df5c6f1\",\"data\":{\"exchange\":\"binance\",\"category\":\"spot\",\"symbol\":\"BTCUSDT\",\"interval\":\"1m\",\"start_open_ms\":1792454400000,\"end_open_ms\":1792454520000,\"bar_count\":2,\"segments\":[{\"hash\":\"sha256:45d3494cc8c8bf7c81cbfe7c1ad13f51e79ad90c4d834997d3aed26f4bd6add5\",\"first_open_ms\":1792454400000,\"last_open_ms\":1792454460000,\"bar_count\":2}]},\"backtest\":{\"initial_cash\":\"10000\",\"fee_bps\":\"10\",\"close_out_at_end\":true},\"runtime\":{\"engine\":\"0.2.0\",\"python\":\"3.11\",\"deps\":{}},\"proto_version\":1},\"strategy\":{\"entry\":\"strategy.py:Strategy\",\"params\":{\"fast\":2,\"label\":\"ž\"}}}",
+          "sqlite",
+          11,
+          1792454451000
+        ],
+        [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sha256:5034faca94533d38a403446574a89fb60315982def43f4aaa9af100deaa4c821",
+          "{\"format\":1,\"inputs\":{\"code_hash\":\"sha256:f180432600770243d80a1b77b8ad4a4df0908f33f3e51247311f9f2b0df5c6f1\",\"data\":{\"exchange\":\"binance\",\"category\":\"spot\",\"symbol\":\"币安人生USDT\",\"interval\":\"1m\",\"start_open_ms\":1792454400000,\"end_open_ms\":1792454520000,\"bar_count\":0,\"segments\":[]},\"backtest\":{\"initial_cash\":\"10000\",\"fee_bps\":\"10\",\"close_out_at_end\":true},\"runtime\":{\"engine\":\"0.2.0\",\"python\":\"3.11\",\"deps\":{}},\"proto_version\":1},\"strategy\":{\"entry\":\"strategy.py:Strategy\",\"params\":{\"fast\":2,\"label\":\"ž\"}}}",
+          "postgres",
+          11,
+          1792454461000
+        ]
+      ]
+    },
     "automation_profiles": {
       "columns": [
         "profile_id",
@@ -1890,6 +1926,14 @@
       "first": null,
       "last": null,
       "checksum": "sha256:9efb2ac9e7e1e3ee54b74c71acad3015574f5dbda938ced4e6603d31b7462de4"
+    },
+    {
+      "table": "job_provenance",
+      "market": null,
+      "rows": 3,
+      "first": null,
+      "last": null,
+      "checksum": "sha256:4a7fd7842e2bc64b2d1e1c1b570e50aadd7edc1f702d60cb85725e4d65241799"
     },
     {
       "table": "automation_profiles",

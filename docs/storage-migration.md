@@ -43,6 +43,7 @@ Each table's columns are those of the [DDL](storage-schema.md#sqlite-ddl).
 - `job_results`: by `hash`, byte by byte
 - `jobs`: by `seq`, a number the store gave
 - `job_logs`: by `job_id`, byte by byte
+- `job_provenance`: by `job_id`, byte by byte
 - `automation_profiles`: by `profile_id`, byte by byte
 - `policy_revisions`: by `seq`, a number the store gave
 - `signal_inbox`: by `seq`, a number the store gave
@@ -61,8 +62,10 @@ Nothing is parsed or rewritten on the way: a decimal keeps its exact text
 and scale (`1.10` stays `1.10`, and text no `Decimal` holds is copied as it
 is and refused alike by both stores when read), IDs and sequence numbers
 keep their values, timestamps their milliseconds, run state, order JSON,
-policy documents and the execution store's records their bytes, and a
-segment its bytes, a replaced one too. A dirty mark keeps its revision,
+policy documents, jobs' provenance and the execution store's records their
+bytes, and a segment its bytes, a replaced one too, and one a job's
+provenance names. A provenance keeps the backend and schema version of the
+store that recorded it, so one copied from SQLite still says `sqlite`. A dirty mark keeps its revision,
 and so does every record of the execution store. The target's own
 numbering moves past the numbers copied, so the next event, trade, mark,
 job, policy revision, signal or operation it writes takes a new one, and

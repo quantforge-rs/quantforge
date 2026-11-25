@@ -58,6 +58,9 @@ pub struct Fixture<S> {
 /// over the tables of `docs/storage-schema.md`, every selected column text
 /// or `CAST(… AS TEXT)`.
 pub trait Raw {
+    /// The backend's own name, `sqlite` or `postgres`, as a store of it
+    /// records it.
+    fn backend(&self) -> &'static str;
     /// Every row the query returns, each value as its text, NULL as `None`.
     fn select(&self, sql: &str) -> Vec<Vec<Option<String>>>;
     /// Runs a statement behind the store's back, as an older or foreign
@@ -177,7 +180,7 @@ where
         jobs::CHECKS,
         jobs::check,
         |_cases, raw, reopen, store, step| {
-            shared_step(raw, reopen, store, step) || jobs::step(store, step)
+            shared_step(raw, reopen, store, step) || jobs::step(raw, store, step)
         },
     );
 }
