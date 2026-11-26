@@ -218,16 +218,28 @@ def _headers(lines):
     return headers
 
 
+def _held_to_its_version(version, headers):
+    """Refuses an answer of HTTP/1.0 that names a transfer coding. HTTP/1.0
+    has none, and an answer written in it that names one is to be read as
+    one whose framing is faulty, whatever else it is: one that only says
+    another is to come, and one of a status that has no body, as much as
+    one whose body would come in chunks."""
+    if version == b"HTTP/1.0" and "transfer-encoding" in headers:
+        raise _NotHTTP("a Transfer-Encoding in an answer of HTTP/1.0")
+
+
 def _head(stream):
     """The version an answer is written in, its status, its phrase and its
     headers. An answer that only says another is to come, a `1xx` other
     than `101`, is read past, as HTTP asks of a client: `http.client` reads
-    past a `100` alone."""
+    past a `100` alone. It is held to its version first, as the answer
+    after it is where its body is read."""
     while True:
         version, status, reason = _status(stream)
-        lines = _fields(stream)
+        headers = _headers(_fields(stream))
         if status == 101 or not 100 <= status < 200:
-            return version, status, reason, _headers(lines)
+            return version, status, reason, headers
+        _held_to_its_version(version, headers)
 
 
 def _has_no_body(status):
@@ -238,18 +250,14 @@ def _has_no_body(status):
     return status in (101, 204, 304)
 
 
-def _in_chunks(version, headers):
+def _in_chunks(headers):
     """Whether an answer's body comes in chunks: `chunked` is its one
     transfer coding, in whatever case and with whatever space around it.
     `identity`, which HTTP once had for no coding, is none. Any other is one
     the client does not read, and with it nothing says where the body ends.
 
-    HTTP/1.0 has no transfer coding: an answer written in it that names one
-    is to be read as one whose framing is faulty, and is refused. And an
-    answer says once where its body ends: a length beside its chunks is
+    An answer says once where its body ends: a length beside its chunks is
     what no sender may write, and is refused as well."""
-    if "transfer-encoding" in headers and version == b"HTTP/1.0":
-        raise _NotHTTP("a Transfer-Encoding in an answer of HTTP/1.0")
     codings = [
         coding
         for value in headers.get("transfer-encoding", ())
@@ -321,10 +329,12 @@ def _body(stream, version, status, headers):
     that states its length to that length and no further, so that a server
     that keeps its connection open is not waited for; a body longer than is
     taken by either account is a `_TooLong`, and is not read. Any other
-    ends where its connection does."""
+    ends where its connection does. Before any of that the answer is held
+    to the version it is written in, whether it has a body or not."""
+    _held_to_its_version(version, headers)
     if _has_no_body(status):
         return b""
-    if _in_chunks(version, headers):
+    if _in_chunks(headers):
         return _chunks(stream)
     stated = _stated_length(headers)
     if stated is None:

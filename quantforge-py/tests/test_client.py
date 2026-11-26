@@ -1741,11 +1741,25 @@ def test_an_answer_in_chunks_says_so_in_whatever_case_and_no_other_coding_is_rea
     # And HTTP/1.0 has no transfer coding: an answer written in it that
     # names one, `identity` among them, is one whose framing is faulty,
     # though its chunks are in order. With a length it is read as before.
+    faulty = "a Transfer-Encoding in an answer of HTTP/1.0"
     for coding in (b"chunked", b"identity", b""):
         sent = answer(b"Transfer-Encoding: " + coding, version=b"HTTP/1.0")
-        assert refused_for(sent) == "a Transfer-Encoding in an answer of HTTP/1.0", coding
-    with Raw(kept(answer(length, version=b"HTTP/1.0", body=whole))) as other:
+        assert refused_for(sent) == faulty, coding
+    in_order = answer(length, version=b"HTTP/1.0", body=whole)
+    with Raw(kept(in_order)) as other:
         qf.Client(f"http://127.0.0.1:{other.port}").handshake()
+    # It is held to that whatever kind of answer it is: one that only says
+    # another is to come, though the answer after it is in order, and one
+    # of a status that has no body, which is read for none all the same.
+    named = b"\r\nTransfer-Encoding: chunked\r\n\r\n"
+    assert refused_for(b"HTTP/1.0 103 Early Hints" + named + in_order) == faulty
+    assert refused_for(b"HTTP/1.0 204 No Content" + named) == faulty
+    # A refusal stays the refusal its status is, with that as its cause.
+    for status, phrase in ((304, b"Not Modified"), (101, b"Switching Protocols")):
+        with Raw(kept(b"HTTP/1.0 %d %b" % (status, phrase) + named)) as other:
+            error = raised(qf.RemoteError, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
+        assert (error.code, error.status) == (None, status)
+        assert f"what is not HTTP ({faulty})" in str(error.__cause__)
 
 
 def test_a_header_is_a_name_and_a_value_or_the_answer_is_not_http(monkeypatch):
