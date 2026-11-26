@@ -207,25 +207,30 @@ def test_a_body_is_cut_off_by_the_servers_silence_and_never_by_how_long_it_takes
         return int(stated), len(begun)
 
     def slowly(connection):
-        # Slow for twice as long as a silence may last, by the clock: every
-        # fifth of a silence it takes what has come, a mebibyte at most, and
-        # waits for the next. So no piece of the client's waits for longer
-        # than one such step, however late this system's timers are; and
-        # the client, which can be ahead of the server only by what the
-        # system holds between the two, has most of the body still to send
-        # when the time is up. Then the server takes the rest as fast as it
-        # comes.
+        # Slow for twice as long as a silence may last, by the clock: in
+        # every fifth of a silence it takes what has come once, a mebibyte
+        # at most, and waits for the next. So no piece of the client's
+        # waits for longer than one such step, however late this system's
+        # timers are and however coarse its clock; and the client, which
+        # can be ahead of the server only by what the system holds between
+        # the two, has most of the body still to send when the time is up.
+        # Then the server takes the rest as fast as it comes.
         #
         # A server that stayed slow to the end would be as slow to take
         # what the system still held after the client's last piece, for
         # which the client waits as for any answer: how much that is turns
         # on the system, and on one of CI's it took longer than the silence.
         stated, got = length(slow)
-        began, step = time.monotonic(), silence / 5
+        began, step, taken = time.monotonic(), silence / 5, -1
         while got < stated:
             since = time.monotonic() - began
             if since < 2 * silence:
-                time.sleep(step - since % step)
+                if since // step == taken:
+                    # This step's piece is taken. A clock that ticks seldom,
+                    # as Windows' does, may still say so after the wait.
+                    time.sleep(step - since % step)
+                    continue
+                taken = since // step
             piece = connection.recv(1024 * 1024)
             if not piece:
                 # The client gave the upload up.
@@ -245,8 +250,10 @@ def test_a_body_is_cut_off_by_the_servers_silence_and_never_by_how_long_it_takes
         wire = qf.Client(f"http://127.0.0.1:{slow.port}")._wire
         taken = wire._ask("PUT", "/v1/bundles/any", lambda value: value, body, "application/x-tar")
         assert taken == {}
+    # It was slow until twice a silence had passed by its clock, and may
+    # have taken the rest within the same tick of it.
     ((got, lasted),) = took
-    assert got == len(body) and lasted > 2 * silence, (got, lasted)
+    assert got == len(body) and lasted >= 2 * silence, (got, lasted)
     # One that takes nothing of it is given up after that silence.
     with Raw(never) as silent:
         wire = qf.Client(f"http://127.0.0.1:{silent.port}")._wire
