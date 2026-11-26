@@ -15,6 +15,7 @@ requests it sends, is in `test_bundles.py` and `test_submit.py`, and a
 class submitted to a real server in `test_submit_jobs.py`.
 """
 
+import builtins
 import functools
 import hashlib
 import importlib.util
@@ -752,6 +753,7 @@ BESIDE = """
     limit = 1
     wrap = staticmethod
     GUARD = memoryview(b"")
+    _Mine__limit = 7
 """
 
 
@@ -775,6 +777,21 @@ BESIDE = """
         # and is never set.
         ("limit: int\n    double = limit", ["limit"]),
         ("double = limit\n    limit: int", ["limit"]),
+        # What an item is added to is read before the value, which here sets
+        # the name the index reads.
+        ("items = [0, 0]\n    items[limit] += (limit := 1)", ["limit"]),
+        # A name the class deletes is set no longer, and neither is the name
+        # an exception was given, once its handler has ended.
+        ("limit = 1\n    del limit\n    value = limit", ["limit"]),
+        (
+            "try:\n        raise ValueError\n    except ValueError as limit:\n        pass\n"
+            "    value = limit",
+            ["limit"],
+        ),
+        # A loop's test is read once for certain, before its body runs.
+        ("while limit:\n        break\n    limit = 0", ["limit"]),
+        # A private name is looked up under the class's own.
+        ("__limit = __limit", ["_Mine__limit"]),
     ],
 )
 def test_a_name_a_class_reads_before_it_sets_it_is_read_outside_the_class(notebook, body, names):
@@ -842,6 +859,26 @@ def test_a_name_a_class_reads_before_it_sets_it_is_read_outside_the_class(notebo
         # body no Python evaluates an annotation at all.
         "Kind = int\n    kind: Kind = 3",
         "kind: kind = int",
+        # A key and then its value, pair by pair: the first value sets what
+        # the second key reads.
+        'pairs = {"first": (limit := 2), limit: None}',
+        "items = [0, 0]\n    limit = 0\n    items[limit] += (limit := 1)",
+        # A name is unset for certain only where every way there unsets it.
+        "limit = 1\n    value = limit\n    del limit",
+        "limit = 1\n    if not qf:\n        del limit\n    value = limit",
+        "limit = 1\n    with memoryview(b''):\n        del limit\n        limit = 2\n    value = limit",
+        "limit = 5\n    try:\n        pass\n    except ValueError as limit:\n        pass\n"
+        "    value = limit",
+        "try:\n        value = int('x')\n    except ValueError as limit:\n        seen = str(limit)\n"
+        "    limit = 3\n    other = limit",
+        "for index in ():\n        pass\n    else:\n        last = 0\n    kept = last",
+        "limit = 1\n    for index in ():\n        del limit\n    value = limit",
+        # A loop's `else` is passed over where the loop is broken out of.
+        "limit = 1\n    for index in (0,):\n        break\n    else:\n        del limit\n"
+        "    value = limit",
+        "__limit = 3\n    double = __limit * 2",
+        # A name with two underscores at either end is no private name.
+        '__doc__ = __doc__ or "kept"',
         "Kind = int\n\n    def on_start(self, ctx: Kind) -> Kind:\n        return None",
         "if qf:\n        limit: int = 3",
         "try:\n        limit: int = 3\n    except Exception:\n        limit: int = 4",
@@ -956,6 +993,156 @@ def test_the_names_a_text_reads_are_the_same_on_whichever_python_reads_it():
     # And a name a class inside the class sets is not the class's own.
     inner = "class Inner:\n        depth = 1\n\n    def on_start(self, ctx):\n        return depth"
     assert said(inner) == (["depth"], set(), set())
+    # A private name is the class's under the class's own name, in its body
+    # as in its functions; an import supplies it under that name and no other.
+    private = "__limit = 3\n\n    def on_start(self, ctx):\n        return __limit"
+    assert said(private) == (["_Mine__limit"], set(), {"_Mine__limit"})
+
+    def under(imports):
+        return _names._undefined(
+            f"{imports}\n\n\nclass Mine(qf.Strategy):\n    __limit = __limit\n"
+        )
+
+    assert under(f"{QF}\nfrom math import pi as _Mine__limit") == nothing
+    hidden = f"{QF}\n\n\nclass __Hidden(qf.Strategy):\n    __limit = __limit\n"
+    assert _names._undefined(hidden)[0] == ["_Hidden__limit"]
+    # A name the class says is the module's is the module's, and no name of
+    # the class's read too soon.
+    assert said("global counter\n    counter = counter + 1") == (["counter"], set(), set())
+    assert under(f"{QF}\nfrom math import pi as __limit") == (
+        ["_Mine__limit"],
+        {"_Mine__limit"},
+        set(),
+    )
+
+
+def test_the_builtins_a_class_may_read_are_those_every_python_has_on_every_system():
+    # A bundle runs on its server's Python, on its server's system: a name
+    # that only a later Python has for a builtin, or only Windows, is no
+    # name every server has, on whichever Python and system the class is
+    # read.
+    def said(body, imports=QF):
+        return _names._undefined(f"{imports}\n\n\nclass Mine(qf.Strategy):\n    {body}\n")[0]
+
+    method = "def on_start(self, ctx):\n        return {}"
+    assert said(method.format("PythonFinalizationError")) == ["PythonFinalizationError"]
+    assert said(method.format("WindowsError")) == ["WindowsError"]
+    assert said(method.format("ExceptionGroup, aiter, sorted, __debug__")) == []
+    # A declared import supplies such a name, as any other.
+    declared = f"{QF}\nfrom builtins import PythonFinalizationError"
+    assert said(method.format("PythonFinalizationError"), declared) == []
+    # The names are Python 3.11's, the oldest the package runs on, and every
+    # later Python still has each of them. They are asked of a Python just
+    # started: one that has run a session keeps the session's last value
+    # among its builtins, as `_`.
+    listing = "import builtins; print(' '.join(dir(builtins)))"
+    fresh = subprocess.run([sys.executable, "-c", listing], capture_output=True, text=True)
+    assert fresh.returncode == 0, fresh.stderr
+    here = set(fresh.stdout.split())
+    assert _names._BUILTINS <= here <= set(dir(builtins))
+    if sys.version_info[:2] == (3, 11):
+        assert here - {"WindowsError"} == _names._BUILTINS
+    assert len(_names._BUILTINS) == 157
+
+
+def test_a_read_that_only_some_way_through_a_body_leaves_unset_is_taken(notebook):
+    # Only what is certain is refused. Whether a loop runs, and which way a
+    # branch goes, the text does not say: a class whose read some way
+    # through its body satisfies is taken, and one that is left unset along
+    # another fails where it runs, with its traceback in the job's log. To
+    # refuse these would be to refuse the same class where its loop runs.
+    module = notebook.run(BESIDE)
+    for body, runs in [
+        ("for limit in range(1):\n        pass\n    value = limit", True),
+        ("for limit in range(0):\n        pass\n    value = limit", False),
+        ("if qf:\n        limit = 2\n    value = limit", True),
+        ("if not qf:\n        limit = 2\n    value = limit", False),
+    ]:
+        notebook.run(
+            f"class Mine(qf.Strategy):\n    {body}\n\n    def on_bar(self, ctx, bar):\n        return None\n"
+        )
+        text = file_of(module.Mine)
+        names = {"__name__": "strategy"}
+        if runs:
+            exec(compile(text, "strategy.py", "exec"), names)
+        else:
+            with pytest.raises(NameError):
+                exec(compile(text, "strategy.py", "exec"), names)
+
+
+def test_what_a_block_may_be_ended_before_is_not_unset_for_certain(notebook):
+    # What manages a `with` block may end it at any statement and go on, as
+    # `contextlib.suppress` does: a name deleted further down the block is
+    # not unset for certain after it.
+    declared = f"{QF}\nimport contextlib"
+    module = notebook.run(
+        """
+        import contextlib
+
+
+        class Mine(qf.Strategy):
+            limit = 1
+            with contextlib.suppress(ZeroDivisionError):
+                1 / 0
+                del limit
+            value = limit
+
+            def on_bar(self, ctx, bar):
+                return None
+        """
+    )
+    text = file_of(module.Mine, declared)
+    names = {"__name__": "strategy"}
+    exec(compile(text, "strategy.py", "exec"), names)
+    assert names["Mine"].value == 1
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="a function is written so from 3.12 on")
+def test_a_generic_functions_type_parameters_are_names_where_its_annotations_are_read(notebook):
+    # A function's type parameters are names in its annotations and in its
+    # body, and nowhere in the class's: where the annotations are read as
+    # the class's body would read them, they are no names to look for.
+    module = notebook.run(
+        """
+        class Mine(qf.Strategy):
+            Kind = int
+
+            def identity[T](self, value: T, kind: Kind = 0) -> T:
+                held: T = value
+                return held
+
+            def first[*Ts, **P](self, *values: *Ts) -> tuple[*Ts]:
+                return values
+
+            # A name the class sets afterwards is another name than the
+            # function's type parameter of the same spelling.
+            T = 3
+
+            def on_bar(self, ctx, bar):
+                return None
+        """
+    )
+    text = file_of(module.Mine)
+    names = {"__name__": "strategy"}
+    exec(compile(text, "strategy.py", "exec"), names)
+    assert names["Mine"]().identity(3) == 3
+    # A name such a signature reads and nothing defines is refused as in
+    # any other, and so is a type parameter's name read outside its function.
+    notebook.run(
+        """
+        Missing = int
+
+
+        class Other(qf.Strategy):
+            def identity[T](self, value: T) -> Missing:
+                return value
+
+            def on_bar(self, ctx, bar):
+                return T
+        """
+    )
+    with pytest.raises(ValueError, match="^Other uses Missing and T, which its source does not"):
+        _source._class_file(module.Other, QF, True)
 
 
 def bodies(seed: int, count: int):
@@ -995,10 +1182,17 @@ def bodies(seed: int, count: int):
                 (f"from string import digits as {n}", False),
                 (f"assert [{m}] is not None", False),
                 (f"[{m}]", False),
+                (f"{n} *= 1", False),
+                (f"[[]][0][len({m}):] += ({m} := [])", False),
+                (f"{n} = [{{0: ({m} := ()), len({m}): 1}}]", False),
+                (f"{n} = [{{len({m}): 0, 0: ({m} := ())}}]", False),
             ]
         )
 
     def statement(index, depth=0):
+        if depth == 0 and rng.random() < 0.08:
+            # Unset for certain only where nothing stands around it.
+            return f"del {rng.choice(names)}", False
         if depth > 1 or rng.random() < 0.6:
             inner, annotated = simple(index)
         else:
@@ -1030,7 +1224,7 @@ def bodies(seed: int, count: int):
 # What the reader says of `bodies(BODIES_SEED, BODIES)`, every answer in
 # order, as one hash: the same on every Python that reads them.
 BODIES_SEED, BODIES = 0x5EED_0B0D, 4000
-BODIES_SAID = "163077f81f4c6b4c810566303d5f99ca83e829cd7c3db87dc2007bad6f988f19"
+BODIES_SAID = "c729e89d0b2a9765b8862848e48d09c12762b9fc1d5af9e6f5f554868db8269a"
 
 
 def test_what_a_class_body_reads_outside_itself_is_what_python_finds_missing_as_it_runs():

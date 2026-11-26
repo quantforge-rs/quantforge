@@ -19,6 +19,12 @@ by the class itself, or as one of Python's builtins.
 - **Inside a function, a lambda or a comprehension of the class's body,**
   Python does not look in the class at all: a name the class sets is read
   outside it there.
+- **Only what is certain is refused.** Whether a loop runs and which way a
+  branch goes, the text does not say: a read that some way through the
+  body satisfies is no refusal.
+- **Python's builtins are those every Python the package runs on has,**
+  on every system: a bundle runs on its server's Python, not on the one
+  that reads the class.
 - **Nothing is run, and nothing is asked.** The text is parsed and its
   symbols read. What stands under a name where the class was written is
   told by its type and by what Python itself keeps of it: an object whose
@@ -29,6 +35,34 @@ imported when a class is first submitted.
 
 This module is private.
 """
+
+# Python's builtins, as every Python the package runs on has them: those of
+# Python 3.11, the oldest. A later Python has more, and Windows one of its
+# own: a bundle runs on its server's Python, on its server's system.
+_BUILTINS = frozenset(
+    """
+    ArithmeticError AssertionError AttributeError BaseException BaseExceptionGroup
+    BlockingIOError BrokenPipeError BufferError BytesWarning ChildProcessError
+    ConnectionAbortedError ConnectionError ConnectionRefusedError ConnectionResetError
+    DeprecationWarning EOFError Ellipsis EncodingWarning EnvironmentError Exception
+    ExceptionGroup False FileExistsError FileNotFoundError FloatingPointError FutureWarning
+    GeneratorExit IOError ImportError ImportWarning IndentationError IndexError
+    InterruptedError IsADirectoryError KeyError KeyboardInterrupt LookupError MemoryError
+    ModuleNotFoundError NameError None NotADirectoryError NotImplemented NotImplementedError
+    OSError OverflowError PendingDeprecationWarning PermissionError ProcessLookupError
+    RecursionError ReferenceError ResourceWarning RuntimeError RuntimeWarning
+    StopAsyncIteration StopIteration SyntaxError SyntaxWarning SystemError SystemExit TabError
+    TimeoutError True TypeError UnboundLocalError UnicodeDecodeError UnicodeEncodeError
+    UnicodeError UnicodeTranslateError UnicodeWarning UserWarning ValueError Warning
+    ZeroDivisionError __build_class__ __debug__ __doc__ __import__ __loader__ __name__
+    __package__ __spec__ abs aiter all anext any ascii bin bool breakpoint bytearray bytes
+    callable chr classmethod compile complex copyright credits delattr dict dir divmod
+    enumerate eval exec exit filter float format frozenset getattr globals hasattr hash help
+    hex id input int isinstance issubclass iter len license list locals map max memoryview
+    min next object oct open ord pow print property quit range repr reversed round set
+    setattr slice sorted staticmethod str sum super tuple type vars zip
+    """.split()
+)
 
 # The names every module has without defining them.
 _MODULE_NAMES = frozenset(
@@ -66,6 +100,17 @@ def _kept(value, name):
     return found if type(found) is str else None
 
 
+def _mangled(name, owner):
+    """A name as Python looks it up inside the class `owner`. One that starts
+    with two underscores and does not end with two is private to the class:
+    Python writes the class's name before it, less that name's own leading
+    underscores."""
+    if not name.startswith("__") or name.endswith("__") or "." in name:
+        return name
+    owner = owner.lstrip("_")
+    return f"_{owner}{name}" if owner else name
+
+
 class _ClassBody:
     """One class's body, read in the order it is written, for the names it
     reads before it has set them.
@@ -73,21 +118,37 @@ class _ClassBody:
     A class's body looks a name up among those the class has set so far,
     then in the module, then among Python's builtins: so `LIMIT = LIMIT`
     reads the module's `LIMIT`, though the name is the class's own in
-    Python's table of symbols. Only what is certain is reported. A read
-    inside a loop, which may run after a later statement of the loop has, is
-    left alone; a name that any statement written before the read sets, in
-    whichever branch, counts as set; and a statement this reader does not
-    know sets what it names and reads nothing.
+    Python's table of symbols.
+
+    **Only what is certain is reported.** The reader keeps the names the
+    class may have set by the statement it reads, along whichever way led
+    there: after branches of which one is taken, a name may be set if any
+    of them may have set it, and a name is unset for certain only where the
+    class deletes it, or where the handler of an exception ends, which
+    clears the name the exception was given. A read is reported where the
+    name cannot have been set. So a class is never refused for a read that
+    some way through its body satisfies; one that fails only along some
+    way, as a read after a loop that did not run, is taken, and fails where
+    it runs. A read inside a loop, which may come after a later statement
+    of the loop has run, is left alone, and a statement this reader does
+    not know sets what it names and reads nothing.
 
     An annotation is read where its statement stands, as Python up to 3.13
     evaluates one: a bundle runs on its server's Python, whichever reads the
-    class here."""
+    class here. Names are read as the class's body looks them up, a private
+    one under the class's name."""
 
-    def __init__(self):
-        self.bound, self.early, self.outer, self.loops = set(), set(), set(), 0
+    def __init__(self, owner):
+        self.owner = owner
+        # The names the class may have set by the statement being read, and
+        # every name it sets anywhere.
+        self.maybe, self.ever = set(), set()
         # What the body makes the class's own without setting it: a name it
         # annotates and gives no value, and one it deletes.
         self.own = set()
+        # What it reads where the name cannot have been set, and what it
+        # says is a function's around the class, or the module's.
+        self.early, self.outer, self.loops = set(), set(), 0
 
     def names(self, body):
         """The names the body reads before it has set them, of those that
@@ -95,11 +156,30 @@ class _ClassBody:
         function's around the class: which of the two, the table of symbols
         says."""
         self.statements(body)
-        return (self.early & (self.bound | self.own)) - self.outer
+        return (self.early & (self.ever | self.own)) - self.outer
 
     def read(self, name):
-        if name not in self.bound and not self.loops:
+        name = _mangled(name, self.owner)
+        if name not in self.maybe and not self.loops:
             self.early.add(name)
+
+    def bind(self, name):
+        name = _mangled(name, self.owner)
+        self.maybe.add(name)
+        self.ever.add(name)
+
+    def unbind(self, name):
+        self.maybe.discard(_mangled(name, self.owner))
+
+    def either(self, *ways):
+        """Reads ways of which one is taken: after them a name may be set
+        if any of them may have set it."""
+        before, after = set(self.maybe), set()
+        for way in ways:
+            self.maybe = set(before)
+            way()
+            after |= self.maybe
+        self.maybe = after
 
     def statements(self, body):
         for statement in body:
@@ -109,30 +189,36 @@ class _ClassBody:
         import ast
 
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            # What a function is decorated with, its defaults and its
-            # annotations are the class's to evaluate; its body is not.
+            # What a function is decorated with and its defaults are the
+            # class's to evaluate, and its annotations where its type
+            # parameters are names; its body is not.
             arguments = node.args
-            named = [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]
-            named += [arguments.vararg, arguments.kwarg]
+            named = [*arguments.posonlyargs, *arguments.args, arguments.vararg]
+            named += [*arguments.kwonlyargs, arguments.kwarg]
             annotations = [each.annotation for each in named if each is not None]
-            defaults = [*arguments.defaults, *arguments.kw_defaults]
-            for each in (*node.decorator_list, *defaults, *annotations, node.returns):
+            for each in (*node.decorator_list, *arguments.defaults, *arguments.kw_defaults):
                 self.expression(each)
-            self.bound.add(node.name)
+            self.generic(node, [*annotations, node.returns])
+            self.bind(node.name)
         elif isinstance(node, ast.ClassDef):
-            keywords = [keyword.value for keyword in node.keywords]
-            for each in (*node.decorator_list, *node.bases, *keywords):
+            for each in node.decorator_list:
                 self.expression(each)
-            self.bound.add(node.name)
+            self.generic(node, [*node.bases, *(keyword.value for keyword in node.keywords)])
+            self.bind(node.name)
         elif isinstance(node, ast.Assign):
             self.expression(node.value)
             for target in node.targets:
                 self.target(target)
         elif isinstance(node, ast.AugAssign):
+            # What is added to is read before the value: a name, or the
+            # object and the index of an item.
             if isinstance(node.target, ast.Name):
                 self.read(node.target.id)
+            else:
+                self.expression(node.target)
             self.expression(node.value)
-            self.target(node.target)
+            if isinstance(node.target, ast.Name):
+                self.bind(node.target.id)
         elif isinstance(node, ast.AnnAssign):
             # The value, then the name, then what annotates it. Without a
             # value the name is the class's own, and nothing is set.
@@ -140,59 +226,107 @@ class _ClassBody:
                 self.expression(node.value)
                 self.target(node.target)
             elif isinstance(node.target, ast.Name):
-                self.own.add(node.target.id)
+                self.own.add(_mangled(node.target.id, self.owner))
             else:
                 self.expression(node.target)
             self.expression(node.annotation)
         elif isinstance(node, ast.Delete):
             for target in node.targets:
-                if isinstance(target, ast.Name):
-                    self.read(target.id)
-                    self.own.add(target.id)
-                else:
-                    self.expression(target)
+                self.deleted(target)
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             for alias in node.names:
-                self.bound.add((alias.asname or alias.name).partition(".")[0])
-        elif isinstance(node, ast.Nonlocal):
-            self.outer.update(node.names)
+                self.bind((alias.asname or alias.name).partition(".")[0])
+        elif isinstance(node, (ast.Nonlocal, ast.Global)):
+            self.outer.update(_mangled(name, self.owner) for name in node.names)
         elif isinstance(node, ast.If):
             self.expression(node.test)
-            self.statements(node.body)
-            self.statements(node.orelse)
-        elif isinstance(node, (ast.For, ast.AsyncFor)):
-            self.expression(node.iter)
-            self.loops += 1
-            self.target(node.target)
-            self.statements(node.body)
-            self.statements(node.orelse)
-            self.loops -= 1
-        elif isinstance(node, ast.While):
-            self.loops += 1
-            self.expression(node.test)
-            self.statements(node.body)
-            self.statements(node.orelse)
-            self.loops -= 1
+            self.either(lambda: self.statements(node.body), lambda: self.statements(node.orelse))
+        elif isinstance(node, (ast.For, ast.AsyncFor, ast.While)):
+            self.loop(node)
         elif isinstance(node, (ast.With, ast.AsyncWith)):
             for item in node.items:
                 self.expression(item.context_expr)
                 if item.optional_vars is not None:
                     self.target(item.optional_vars)
+            entered = set(self.maybe)
             self.statements(node.body)
+            # What manages the block may end it at any statement, and go on.
+            self.maybe |= entered
         elif isinstance(node, ast.Try) or type(node).__name__ == "TryStar":
-            self.statements(node.body)
-            for handler in node.handlers:
-                self.expression(handler.type)
-                if handler.name:
-                    self.bound.add(handler.name)
-                self.statements(handler.body)
-            self.statements(node.orelse)
-            self.statements(node.finalbody)
-        elif isinstance(node, (ast.Expr, ast.Assert, ast.Raise, ast.Pass, ast.Global)):
+            self.attempt(node)
+        elif isinstance(node, (ast.Expr, ast.Assert, ast.Raise, ast.Pass)):
             for child in ast.iter_child_nodes(node):
                 self.expression(child)
         else:
             self.unknown(node)
+
+    def loop(self, node):
+        """A loop: what it runs over, or its test, is read once for certain;
+        its body may run any number of times, or not at all, and its `else`
+        runs unless the loop is broken out of."""
+        import ast
+
+        self.expression(node.test if isinstance(node, ast.While) else node.iter)
+        before = set(self.maybe)
+        self.loops += 1
+        if not isinstance(node, ast.While):
+            self.target(node.target)
+        self.statements(node.body)
+        self.loops -= 1
+        self.maybe |= before
+        ran = set(self.maybe)
+        self.statements(node.orelse)
+        self.maybe |= ran
+
+    def attempt(self, node):
+        """A `try`: an exception may leave its body at any statement, for a
+        handler or for nothing; a handler is given the exception under a
+        name that Python clears as the handler ends; and what is left to
+        `finally` runs after any of them."""
+        before = set(self.maybe)
+        self.statements(node.body)
+        raised = before | self.maybe
+        self.statements(node.orelse)
+        ends = [set(self.maybe)]
+        for handler in node.handlers:
+            self.maybe = set(raised)
+            self.expression(handler.type)
+            if handler.name:
+                self.bind(handler.name)
+            self.statements(handler.body)
+            if handler.name:
+                self.unbind(handler.name)
+            ends.append(set(self.maybe))
+        self.maybe = set().union(*ends)
+        if node.finalbody:
+            self.maybe |= raised
+            self.statements(node.finalbody)
+
+    def generic(self, node, expressions):
+        """Reads what a function or a class evaluates where its type
+        parameters are names: a function's annotations, a class's bases.
+        There they are set, and nowhere else."""
+        parameters = {_mangled(each.name, self.owner) for each in getattr(node, "type_params", ())}
+        held = set(self.maybe)
+        self.maybe |= parameters
+        for each in expressions:
+            self.expression(each)
+        self.maybe = held | (self.maybe - parameters)
+
+    def deleted(self, target):
+        """Unsets what a `del` names: a name is read, to be deleted, is the
+        class's own from then on, and is set no longer."""
+        import ast
+
+        if isinstance(target, ast.Name):
+            self.read(target.id)
+            self.own.add(_mangled(target.id, self.owner))
+            self.unbind(target.id)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            for each in target.elts:
+                self.deleted(each)
+        else:
+            self.expression(target)
 
     def unknown(self, node):
         """A statement this reader does not know, a `match` and what a later
@@ -202,13 +336,13 @@ class _ClassBody:
 
         for inner in ast.walk(node):
             if isinstance(inner, ast.Name) and not isinstance(inner.ctx, ast.Load):
-                self.bound.add(inner.id)
+                self.bind(inner.id)
             elif isinstance(inner, ast.alias):
-                self.bound.add((inner.asname or inner.name).partition(".")[0])
+                self.bind((inner.asname or inner.name).partition(".")[0])
             for field in ("name", "rest"):
                 named = getattr(inner, field, None)
                 if type(named) is str:
-                    self.bound.add(named)
+                    self.bind(named)
 
     def target(self, node):
         """Sets what an assignment's target names, and reads what a target
@@ -216,7 +350,7 @@ class _ClassBody:
         import ast
 
         if isinstance(node, ast.Name):
-            self.bound.add(node.id)
+            self.bind(node.id)
         elif isinstance(node, (ast.Tuple, ast.List)):
             for each in node.elts:
                 self.target(each)
@@ -227,7 +361,7 @@ class _ClassBody:
 
     def expression(self, node):
         """Reads an expression as the class's body evaluates it: the names
-        it loads there, in the order they are written."""
+        it loads there, in the order Python evaluates them."""
         import ast
 
         if node is None:
@@ -237,7 +371,12 @@ class _ClassBody:
                 self.read(node.id)
         elif isinstance(node, ast.NamedExpr):
             self.expression(node.value)
-            self.bound.add(node.target.id)
+            self.bind(node.target.id)
+        elif isinstance(node, ast.Dict):
+            # A key and then its value, pair by pair.
+            for key, value in zip(node.keys, node.values):
+                self.expression(key)
+                self.expression(value)
         elif isinstance(node, ast.Lambda):
             # Its defaults are evaluated here; its body is a scope of its own.
             for default in (*node.args.defaults, *node.args.kw_defaults):
@@ -261,10 +400,10 @@ def _read_early(tree):
     early, owned = set(), set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
-            body = _ClassBody()
+            body = _ClassBody(node.name)
             early |= body.names(node.body)
             if node in tree.body:
-                owned |= body.bound | body.own
+                owned |= (body.ever | body.own) - body.outer
     return early, owned
 
 
@@ -304,6 +443,20 @@ def _plainly(tree):
             return ast.GeneratorExp(ast.Tuple([node.key, node.value], ast.Load()), node.generators)
         return node
 
+    def without(node, names):
+        # A type parameter is a name where a function's annotations are
+        # evaluated, and nowhere they are written out.
+        if isinstance(node, ast.Name) and node.id in names:
+            return ast.Constant(None)
+        for field, value in ast.iter_fields(node):
+            if isinstance(value, list):
+                value[:] = [
+                    without(each, names) if isinstance(each, ast.AST) else each for each in value
+                ]
+            elif isinstance(value, ast.AST):
+                setattr(node, field, without(value, names))
+        return node
+
     def unset(target):
         # A name that is annotated and given no value is its scope's own,
         # and is not set: as one that is deleted is.
@@ -316,13 +469,14 @@ def _plainly(tree):
         for node in statements:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 arguments = node.args
+                parameters = {each.name for each in getattr(node, "type_params", ())}
                 named = [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]
                 for each in (*named, arguments.vararg, arguments.kwarg):
                     if each is not None and each.annotation is not None:
-                        written.append(ast.Expr(each.annotation))
+                        written.append(ast.Expr(without(each.annotation, parameters)))
                         each.annotation = None
                 if node.returns is not None:
-                    written.append(ast.Expr(node.returns))
+                    written.append(ast.Expr(without(node.returns, parameters)))
                     node.returns = None
                 node.body = block(node.body, True)
             elif isinstance(node, ast.ClassDef):
@@ -357,7 +511,6 @@ def _undefined(module):
     of symbols and from its statements in their order; nothing of it is
     run, and the answer is the same on whichever Python reads the text."""
     import ast
-    import builtins
     import symtable
 
     tree = ast.parse(module)
@@ -380,7 +533,7 @@ def _undefined(module):
             walk(child, False)
 
     walk(top, True)
-    unknown = (read | early) - defined - set(dir(builtins)) - _MODULE_NAMES
+    unknown = (read | early) - defined - _BUILTINS - _MODULE_NAMES
     return sorted(unknown), early & unknown, (owned & unknown) - early
 
 

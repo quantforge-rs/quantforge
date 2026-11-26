@@ -518,13 +518,28 @@ ValueError: Captures is defined inside the function make, and uses its threshold
 - **A name is the class's own where the class has set it.** A class's body
   looks a name up among those it has set so far, and then outside the
   class: one it reads before it sets it, as `LIMIT = LIMIT` does, is read
-  outside, and is refused. Inside a function, a lambda or a comprehension
-  of its body, Python does not look in the class at all: a name the class
-  sets is read outside it there, and is refused as well.
-- **The answer is the same on whichever Python reads the class.** A bundle
-  runs on its server's Python. What annotates a name is held to being
-  defined where its statement stands, as Python up to 3.13 evaluates it,
-  though a later Python would not ask until the annotation is read.
+  outside. Inside a function, a lambda or a comprehension of its body,
+  Python does not look in the class at all: a name the class sets is read
+  outside it there. Such a read is held to what any read outside the class
+  is. Where `imports` or Python's builtins define the name, it is theirs
+  that is read, and the class is taken; where nothing does, the class is
+  refused.
+- **A private name is read as Python looks it up.** Inside `Mine`,
+  `__limit` is `_Mine__limit`: that is the name an import has to give, and
+  the name a refusal says.
+- **Only what is certain is refused.** Whether a loop runs, and which way a
+  branch goes, the text does not say. A class is taken where some way
+  through its body has set a name by the time it is read. Where another
+  way leaves the name unset, as a loop that does not run, the job fails
+  there, with its traceback in the job's log.
+- **The answer is the same on whichever Python reads the class, on
+  whichever system.** A bundle runs on its server's Python. What annotates
+  a name is held to being defined where its statement stands, as Python up
+  to 3.13 evaluates it, though a later Python would not ask until the
+  annotation is read. And Python's builtins are those of Python 3.11,
+  which every Python the package runs on has: a name that only a later
+  Python has for a builtin, or only Windows, is declared by an import, or
+  refused.
 - **A name that an import gives is refused with the line to add,** such as
   `add 'import numpy as np' to imports`, read from where the class was
   written. Nothing is added for the caller: an import is declared, never
