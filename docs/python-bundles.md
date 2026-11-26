@@ -535,17 +535,24 @@ ValueError: Captures is defined inside the function make, and uses its threshold
   through its body has set a name by the time it is read. Where another
   way leaves the name unset, as a loop that does not run, the job fails
   there, with its traceback in the job's log.
-- **A block may be left before its end,** by an exception or by a `break`,
-  wherever a statement of it evaluates something, and the class's body
-  goes on from there: in a handler, after a `with` whose manager took the
-  exception, after the loop. What the block had set by then may be set
-  there, and what it had not is not: a handler that reads `limit` where
-  its `try` holds nothing but `limit = load()` runs only where `load()`
-  raised, with `limit` never set, and is refused. Every way out of a `try`
-  passes through its `finally`, and every way out of a handler clears the
-  name the handler was given: what these unset is unset wherever the body
-  goes on. What the check does not tell is that a statement never ends:
-  what follows a `raise` is read as though it ran.
+- **A block may be left before its end,** and the class's body goes on
+  from there. An exception may leave a block wherever a statement of it
+  evaluates something, for a handler, or past a `with` whose manager takes
+  it; a `break` and a `continue` leave it for their loop, and no handler
+  takes them. What the block had set by then may be set there, and what it
+  had not is not: a handler that reads `limit` where its `try` holds
+  nothing but `limit = load()` runs only where `load()` raised, with
+  `limit` never set, and is refused. Every way out of a `try` passes
+  through its `finally`, and every way out of a handler clears the name
+  the handler was given: what these unset is unset wherever the body goes
+  on.
+- **Where nothing leads, nothing is read.** What follows a `raise`, a
+  `break` or a `continue` in its block does not run, and neither does the
+  handler of a `try` that nothing can leave, as one that holds only
+  `pass`: a read there is not held against the class, and what is set
+  there is set on no way. The check takes every statement that evaluates
+  something, and every `del`, to be able to fail, whatever it evaluates:
+  the handler of `limit = 1` is read as one that may run.
 - **The answer is the same on whichever Python reads the class, on
   whichever system.** A bundle runs on its server's Python. What annotates
   a name is held to being defined where its statement stands, as Python up

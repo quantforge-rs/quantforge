@@ -15,6 +15,7 @@ requests it sends, is in `test_bundles.py` and `test_submit.py`, and a
 class submitted to a real server in `test_submit_jobs.py`.
 """
 
+import ast
 import builtins
 import functools
 import hashlib
@@ -26,6 +27,7 @@ import subprocess
 import sys
 import textwrap
 import types
+import warnings
 
 import pytest
 
@@ -863,6 +865,35 @@ BESIDE = """
             "    except ZeroDivisionError:\n        value = limit",
             ["limit"],
         ),
+        # Where nothing leads, nothing is set: after a `raise`, a `break`
+        # or a `continue` in its block, and in the handler of a `try` that
+        # nothing can leave. A name that is set only there is set on no way.
+        (
+            "try:\n        value = int('1')\n    except ValueError:\n        limit = 2\n"
+            "        raise\n    other = limit",
+            ["limit"],
+        ),
+        ("for index in (0,):\n        break\n        limit = 1\n    value = limit", ["limit"]),
+        (
+            "for index in (0,):\n        continue\n        limit = 1\n    value = limit",
+            ["limit"],
+        ),
+        (
+            "try:\n        pass\n    except ValueError:\n        limit = 1\n    value = limit",
+            ["limit"],
+        ),
+        (
+            "for index in (0,):\n        try:\n            break\n        finally:\n"
+            "            pass\n        limit = 1\n    value = limit",
+            ["limit"],
+        ),
+        # A `break` goes to its loop through the clearing of the name its
+        # handler was given, as an exception does.
+        (
+            "for index in (0,):\n        try:\n            1 / 0\n"
+            "        except ZeroDivisionError as limit:\n            break\n    value = limit",
+            ["limit"],
+        ),
         # A private name is looked up under the class's own.
         ("__limit = __limit", ["_Mine__limit"]),
     ],
@@ -979,6 +1010,32 @@ def test_a_name_a_class_reads_before_it_sets_it_is_read_outside_the_class(notebo
         # A `del` that fails at what is no name has unset nothing yet.
         "items = [0]\n    limit = 1\n    try:\n        del items[5], limit\n"
         "    except IndexError:\n        value = limit",
+        # A `break` and a `continue` go to their loop, and no handler takes
+        # them: what a handler unsets, and what follows them in their block,
+        # they leave as it was. They pass a `with`, and a `finally` runs on
+        # their way.
+        "for index in (0,):\n        try:\n            limit = 1\n            break\n"
+        "            del limit\n        except:\n            del limit\n    value = limit",
+        "for index in (0,):\n        try:\n            limit = 1\n            continue\n"
+        "            del limit\n        except:\n            del limit\n    value = limit",
+        "for index in (0,):\n        with memoryview(b''):\n            limit = 1\n"
+        "            break\n    value = limit",
+        "for index in (0,):\n        try:\n            limit = 1\n            break\n"
+        "        finally:\n            value = limit",
+        # And from inside a statement this reader does not know.
+        "for index in (0,):\n        limit = 1\n        match index:\n            case 0:\n"
+        "                break\n        del limit\n    value = limit",
+        # What a loop runs over may raise as the next round is asked for,
+        # with what the rounds before it set.
+        "def rounds():\n        yield 0\n        raise ZeroDivisionError\n\n    try:\n"
+        "        for index in rounds():\n            limit = 1\n"
+        "    except ZeroDivisionError:\n        value = limit",
+        # Where nothing leads, nothing is read: the handler of a `try` that
+        # nothing can leave, and what follows a `raise` in its block.
+        "limit = 1\n    try:\n        pass\n    except ValueError:\n        value = limit",
+        "try:\n        pass\n    except ValueError:\n        value = limit\n    limit = 1",
+        "try:\n        raise ValueError\n        value = later\n    except ValueError:\n"
+        "        pass\n    later = 1",
         # An exception goes on from where it left a handler, with what the
         # handler had set by then; and the next clause of an `except*` runs
         # from there too, though the clause that raised unsets it further
@@ -1205,14 +1262,6 @@ def test_a_read_that_only_some_way_through_a_body_leaves_unset_is_taken(notebook
         ("for limit in range(0):\n        pass\n    value = limit", False),
         ("if qf:\n        limit = 2\n    value = limit", True),
         ("if not qf:\n        limit = 2\n    value = limit", False),
-        # Nor does the text say that a statement never ends: what follows a
-        # `raise` is read as though it ran, and so is what follows a `try`
-        # whose handler always raises.
-        (
-            "try:\n        value = int('1')\n    except ValueError:\n        limit = 2\n"
-            "        raise\n    other = limit",
-            False,
-        ),
     ]:
         notebook.run(
             f"class Mine(qf.Strategy):\n    {body}\n\n    def on_bar(self, ctx, bar):\n        return None\n"
@@ -1453,7 +1502,7 @@ def test_what_a_class_body_reads_outside_itself_is_what_python_finds_missing_as_
 # What a name of the class's is where the class has not set it: read from
 # outside the class, as a notebook's name of the same spelling is.
 OUTSIDE = object()
-WAYS_NAMES = ("a", "b", "c")
+WAYS_NAMES = ("a", "b")
 
 
 class First(Exception):
@@ -1470,85 +1519,87 @@ class Unraised(Exception):
 
 class Ways:
     """A class body that may be left early, put together from a seed: its
-    statements set, read and delete three names of the class's own, and a
+    statements set, read and delete two names of the class's own, and a
     numbered point decides wherever something may raise, be taken, match or
-    run. `points` counts them; `reads` holds, for each read of a name the
-    body makes, the name and whether a `del` makes it.
+    run. `points` counts them, and `reads` holds, for each place that reads
+    a name, whether a `del` reads it there; each such place is a line of
+    its own, `lines` says which.
 
     Whatever the reader takes a statement to be able to do, some setting of
     the points has it do: a statement that evaluates something may raise as
     it begins, and one that goes on after setting a name may raise there; a
-    handler matches or not; what manages a block may fail as the block
-    ends, and takes an exception or not. A read does not raise: it finds
+    handler matches or not; what manages a block may fail as the block is
+    left, and takes an exception or not. A read does not raise: it finds
     `OUTSIDE` where the class has not set the name, as Python looks outside
     the class. Only a `del` raises by itself, where its name is not set;
-    one that follows the setting of its name cannot."""
+    one that follows the setting of its name cannot. And a block may go on
+    after a `raise`, a `break` or a `continue`, with what never runs."""
 
     def __init__(self, rng):
         self.rng, self.points, self.reads = rng, 0, []
-        self.loops = self.groups = self.deletes = self.raises = False
+        self.loops = self.groups = False
 
     def point(self):
         self.points += 1
         return self.points - 1
 
-    def read(self, name, deleting=False):
-        self.reads.append((name, deleting))
-        return len(self.reads) - 1
-
     def name(self):
         return self.rng.choice(WAYS_NAMES)
+
+    def place(self, deleting=False):
+        self.reads.append(deleting)
+        return len(self.reads) - 1
 
     def kind(self):
         """What the body has of what keeps the reader's answer from being
         exactly Python's."""
-        kinds = {
-            "loop": self.loops,
-            "group": self.groups,
-            "raise": self.raises,
-            "del": self.deletes,
-        }
+        kinds = {"loop": self.loops, "group": self.groups, "del": any(self.reads)}
         return next((kind for kind, has in kinds.items() if has), "plain")
 
+    def seen(self, name):
+        at = self.place()
+        return f"see(risk({self.point()}), reach({at}), was({at}, {name}))"
+
     def simple(self):
-        kinds = "set set unset unset read read read both del del walrus pair chain item"
+        kinds = "set set unset unset read read read both del del risk walrus pair item pass"
         kind = self.rng.choice(kinds.split())
         n, m = self.name(), self.name()
-        if kind == "set":
-            return [f"{n} = risk({self.point()})"]
+        if kind == "pass":
+            return ["pass"]
+        if kind == "risk":
+            return [f"see(risk({self.point()}))"]
+        if kind == "read":
+            return [self.seen(m)]
+        if kind == "both":
+            return [f"{n} = {self.seen(m)}"]
+        if kind == "del":
+            return [f"del {n}", f"see(risk({self.point()}), deleted({self.place(deleting=True)}))"]
         if kind == "unset":
             # Unset for certain, by a `del` that cannot fail.
             return [f"{n} = risk({self.point()})", f"del {n}"]
-        if kind == "read":
-            at = self.read(m)
-            return [f"see(risk({self.point()}), reach({at}), was({at}, {m}))"]
-        if kind == "both":
-            at = self.read(m)
-            return [f"{n} = see(risk({self.point()}), reach({at}), was({at}, {m}))"]
-        if kind == "del":
-            self.deletes = True
-            at = self.read(n, deleting=True)
-            return [f"del {n}", f"see(risk({self.point()}), deleted({at}))"]
         if kind == "walrus":
             return [f"see(risk({self.point()}), ({n} := 0), risk({self.point()}))"]
         if kind == "pair":
             return [f"{n}, {m} = risk({self.point()}), 0"]
-        if kind == "chain":
-            return [f"{n} = {m} = risk({self.point()})"]
-        # The name is set, and then what the item is of is evaluated.
-        return [f"{n}, slot(risk({self.point()}))[0] = risk({self.point()}), 0"]
+        if kind == "item":
+            # The name is set, and then what the item is of is evaluated.
+            return [f"{n}, slot(risk({self.point()}))[0] = risk({self.point()}), 0"]
+        return [f"{n} = risk({self.point()})"]
 
     def test(self):
         return f"risk({self.point()}) or on({self.point()})"
 
     def block(self, depth, loop):
-        lines = []
-        for _ in range(self.rng.choice([1, 1, 2])):
-            lines += self.statement(depth, loop)
-        if self.rng.random() < 0.06:
-            self.raises = True
-            lines.append("raise Second()")
-        return ["    " + line for line in lines]
+        statements = [self.statement(depth, loop) for _ in range(self.rng.choice([1, 1, 2]))]
+        ends = self.rng.random()
+        if ends < 0.25:
+            # What ends a block for good, with what follows it or not. A
+            # `while` here ends with a `break`, which a `continue` would
+            # pass for ever.
+            leaving = self.rng.choice(["break", "continue"]) if loop == "for" else "break"
+            ended = "raise Second()" if ends < 0.08 or not loop else leaving
+            statements.insert(self.rng.randint(0, len(statements)), [ended])
+        return ["    " + line for lines in statements for line in lines]
 
     def last(self, depth):
         """What is left to a `finally`: a block, or nothing at all."""
@@ -1559,14 +1610,12 @@ class Ways:
 
     def statement(self, depth, loop):
         rng = self.rng
-        if loop and rng.random() < 0.2:
-            # A `while` here ends with a `break`, which a `continue` would
-            # pass for ever.
+        if loop and rng.random() < 0.15:
             leaving = rng.choice(["break", "continue"]) if loop == "for" else "break"
             return [f"if {self.test()}:", f"    {leaving}"]
-        if depth >= 3 or rng.random() < (0.3 if depth == 0 else 0.55):
+        if depth >= 3 or (depth and rng.random() < 0.6):
             return self.simple()
-        kinds = "if else try try try finally finally with with for while group group"
+        kinds = "if else try try try try finally finally with with for for for while group"
         kind = rng.choice(kinds.split())
         inner = depth + 1
         if kind in ("if", "else"):
@@ -1575,13 +1624,13 @@ class Ways:
         if kind == "finally":
             return ["try:", *self.block(inner, loop), *self.last(inner)]
         if kind == "with":
-            given = f" as {self.name()}" if rng.random() < 0.5 else ""
+            given = f" as {self.name()}" if rng.random() < 0.3 else ""
             managed = f"held(risk({self.point()}), {self.point()}, {self.point()})"
             return [f"with {managed}{given}:", *self.block(inner, loop)]
         if kind == "for":
             self.loops = True
             over = f"times(risk({self.point()}), {self.point()})"
-            lines = [f"for {self.name()} in {over}:", *self.block(inner, "for")]
+            lines = [f"for {rng.choice(['a', 'b', 'each'])} in {over}:", *self.block(inner, "for")]
         elif kind == "while":
             self.loops = True
             lines = [f"while {self.test()}:", *self.block(inner, "while"), "    break"]
@@ -1593,41 +1642,60 @@ class Ways:
             matched = rng.sample(["First", "Second", "BaseException"], rng.randint(1, 2))
             if kind == "try":
                 matched = [f"matching({self.point()})" for _ in range(rng.randint(1, 2))]
-                if rng.random() < 0.2:
+                if rng.random() < 0.4:
                     # The last handler may name nothing, and take whatever
                     # was raised.
                     matched[-1] = ""
             for what in matched:
-                if what and rng.random() < 0.25:
+                if what and rng.random() < 0.2:
                     what = f"({self.name()} := {what})"
-                given = f" as {self.name()}" if what and rng.random() < 0.4 else ""
-                clause = "except" if kind == "try" else "except*"
-                lines += [
-                    f"{clause} {what}{given}".rstrip() + ":",
-                    *self.block(inner, kind == "try" and loop),
-                ]
+                given = f" as {self.name()}" if what and rng.random() < 0.3 else ""
+                clause = f"{'except' if kind == 'try' else 'except*'} {what}{given}".rstrip()
+                lines += [f"{clause}:", *self.block(inner, kind == "try" and loop)]
             if rng.random() < 0.35:
                 return lines + self.last(inner)
-        if rng.random() < 0.3:
+        if rng.random() < 0.25:
             lines += ["else:", *self.block(inner, loop)]
         return lines
 
     @classmethod
     def made(cls, seed, count, most):
-        """`count` bodies of at most `most` points, each with its text."""
+        """`count` bodies of at most `most` points, each with its text. A
+        body may set a name, goes through one or two statements that have
+        blocks, and reads a name or two after them: what is asked of it is
+        what those statements leave set."""
         rng = random.Random(seed)
         while count:
             body = cls(rng)
-            lines = [line for _ in range(rng.randint(2, 4)) for line in body.statement(0, False)]
-            if body.points <= most and body.reads:
+            lines = [f"{body.name()} = risk({body.point()})"] if rng.random() < 0.5 else []
+            for _ in range(rng.randint(1, 2)):
+                lines += body.statement(0, False)
+            lines += [body.seen(body.name()) for _ in range(rng.randint(1, 2))]
+            if body.points <= most:
                 count -= 1
-                yield "class Mine:\n" + textwrap.indent("\n".join(lines), "    ") + "\n", body
+                yield body.text(lines), body
+
+    def text(self, lines):
+        """The class whose body the lines are, ended by setting every name,
+        which makes each the class's own wherever it is read; `lines` then
+        holds the line of each place that reads a name."""
+        lines = [*lines, " = ".join(WAYS_NAMES) + " = 0"]
+
+        def line(told):
+            # The class's statement is the text's first line.
+            return next(at for at, line in enumerate(lines, start=2) if told in line)
+
+        self.lines = [
+            line(f"deleted({place})") - 1 if deleting else line(f"reach({place}),")
+            for place, deleting in enumerate(self.reads)
+        ]
+        return "class Mine:\n" + textwrap.indent("\n".join(lines), "    ") + "\n"
 
     def every_way(self, text):
         """Runs the body once for every setting of its points, and for a
         body with an `except*` for each make of what a point raises. Gives
-        the reads that some run reached, and those that some run found set
-        by the class."""
+        the places that some run reached, and those at which some run found
+        the name set by the class."""
         reached, found = set(), set()
         way = types.SimpleNamespace(setting=0, raised=())
 
@@ -1639,9 +1707,9 @@ class Ways:
                 raise ExceptionGroup("left", [part() for part in way.raised])
             return 0
 
-        def was(read, value):
+        def was(place, value):
             if value is not OUTSIDE:
-                found.add(read)
+                found.add(place)
 
         class Held:
             def __init__(self, takes, fails):
@@ -1676,7 +1744,11 @@ class Ways:
             "First": First,
             "Second": Second,
         }
-        program = compile(text, "ways.py", "exec")
+        with warnings.catch_warnings():
+            # A `break` in a `finally` is Python, which a later Python
+            # warns of.
+            warnings.simplefilter("ignore", SyntaxWarning)
+            program = compile(text, "ways.py", "exec")
         parts = [(First, Second), (First,), (Second,)] if self.groups else [(First, Second)]
         for way.raised, way.setting in itertools.product(parts, range(1 << self.points)):
             try:
@@ -1689,10 +1761,140 @@ class Ways:
         return reached, found
 
 
+class Small(Ways):
+    """One small class body of one name: the name set first or not, then
+    one statement that has blocks, with another such statement in one of
+    its blocks, then a read of the name. `every` gives each such body in
+    turn, so that none is left to a seed.
+
+    A statement is a letter. `S` sets the name; `D` deletes it, with a
+    `del` that may fail; `U` sets and deletes it, which cannot; `R` reads
+    it; `Z` raises; and `B`, in a loop, breaks out of it. Of those with
+    blocks, `T` is a `try` whose handler names nothing; `M` one whose
+    handler matches or not; `F` a `try` with a `finally`; `W` a `with`;
+    and `L` a loop."""
+
+    def __init__(self):
+        super().__init__(None)
+
+    def written(self, statement):
+        if statement == "S":
+            return [f"a = risk({self.point()})"]
+        if statement == "D":
+            return ["del a", f"see(risk({self.point()}), deleted({self.place(deleting=True)}))"]
+        if statement == "U":
+            return [f"a = risk({self.point()})", "del a"]
+        if statement == "R":
+            return [self.seen("a")]
+        if statement == "Z":
+            return ["raise Second()"]
+        if statement == "B":
+            return ["break"]
+        kind, *blocks = statement
+        inside = [
+            ["    " + line for each in block for line in self.written(each)] for block in blocks
+        ]
+        if kind == "T":
+            return ["try:", *inside[0], "except:", *inside[1]]
+        if kind == "M":
+            return ["try:", *inside[0], f"except matching({self.point()}):", *inside[1]]
+        if kind == "F":
+            return ["try:", *inside[0], "finally:", *inside[1]]
+        if kind == "W":
+            return [f"with held(risk({self.point()}), {self.point()}, {self.point()}):", *inside[0]]
+        self.loops = True
+        return [f"for each in times(risk({self.point()}), {self.point()}):", *inside[0]]
+
+    @classmethod
+    def having(cls, kinds, simple, inner=""):
+        """Every statement of `kinds`, each block of it one or two of the
+        `simple` statements, or, in a loop, a `break`; with `inner`, one of
+        its blocks holds a statement of those kinds, alone or beside one
+        simple statement."""
+        for kind in kinds:
+            here = simple + "B" if kind == "L" and "B" not in simple else simple
+            plain = [[one] for one in here] + [[one, two] for one in here for two in here]
+            around = plain
+            if inner:
+                around = [[each] for each in cls.having(inner, here)]
+                around += [
+                    pair for each in around for one in here for pair in ([one, *each], [*each, one])
+                ]
+            if kind in "WL":
+                yield from ((kind, block) for block in around)
+                continue
+            yield from ((kind, first, second) for first in around for second in plain)
+            if inner:
+                yield from ((kind, first, second) for first in plain for second in around)
+
+    @classmethod
+    def every(cls, outer, inner, simple):
+        """Every body of a statement of `outer` that holds one of `inner`."""
+        for statement in cls.having(outer, simple, inner):
+            for first in ("", "S"):
+                body = cls()
+                yield (
+                    body.text(
+                        [line for each in (*first, statement, "R") for line in body.written(each)]
+                    ),
+                    body,
+                )
+
+
+def refused_at(reader, text):
+    """The lines of a body at which the reader refuses a read of one of the
+    body's names: the reader itself, noting where it is as it reports. In
+    these bodies a line reads such a name once at most."""
+
+    class Sited(reader._ClassBody):
+        def statement(self, node):
+            self.line = node.lineno
+            super().statement(node)
+
+        def read(self, name):
+            held, self.early = self.early, set()
+            super().read(name)
+            if name in self.early and name in WAYS_NAMES:
+                lines.add(self.line)
+            self.early |= held
+
+    lines = set()
+    (mine,) = ast.parse(text).body
+    names = Sited(mine.name).names(mine.body)
+    return lines, names
+
+
+def held_to_python(text, body, whole=True):
+    """Holds what the reader says of a body to what Python finds on every
+    way through it, read by read: what is said of a line and what is found
+    there are said of the same read. Gives the names the reader refuses."""
+    lines, names = refused_at(_names, text)
+    # What is said of the `whole` text is what is said line by line.
+    assert not whole or set(_names._undefined(text)[0]) & set(WAYS_NAMES) == names, text
+    assert lines <= set(body.lines) and bool(lines) == bool(names), text
+    reached, found = body.every_way(text)
+    for place, deleting in enumerate(body.reads):
+        refuses = body.lines[place] in lines
+        # A class is never refused for a read that some way through its body
+        # satisfies, nor for a `del` that succeeds on some way.
+        assert not (refuses and place in found), text
+        if body.kind() == "plain":
+            # And in a body with no loop, no `except*` and no `del` that may
+            # fail, the answer is exactly Python's: a read is refused where
+            # some way reaches it and none satisfies it, and nowhere else. A
+            # read that no way reaches is none.
+            assert refuses == (place in reached - found), text
+    # Elsewhere the reader takes some class that fails, and refuses some for
+    # a read that no way reaches: it does not say how often a loop runs, nor
+    # which parts of a group a clause matches, nor whether a `del` fails and
+    # what else is set where it does.
+    return names
+
+
 # What the reader says of `Ways.made(WAYS_SEED, WAYS, WAYS_POINTS)`, every
 # answer in order, as one hash: the same on every Python that reads them.
 WAYS_SEED, WAYS, WAYS_POINTS = 0x5EED_0A75, 1000, 11
-WAYS_SAID = "ca18e931473e90c0dcdf3ae262176c471f7062dc216304439cae993d909b5af6"
+WAYS_SAID = "7dfef7bf200cdbd261828392d02dd61e9ce68219ca48993ea931125bb4603261"
 
 
 def test_what_a_class_body_reads_is_what_python_finds_on_every_way_through_it():
@@ -1701,40 +1903,32 @@ def test_what_a_class_body_reads_is_what_python_finds_on_every_way_through_it():
     # points that decide what raises, what is taken, what matches and what
     # runs.
     said = hashlib.sha256()
-    kinds, refusals, runs = dict.fromkeys(("plain", "del", "raise", "group", "loop"), 0), 0, 0
+    kinds, refusals, runs = dict.fromkeys(("plain", "del", "group", "loop"), 0), 0, 0
     for text, body in Ways.made(WAYS_SEED, WAYS, WAYS_POINTS):
         unknown, early, within = _names._undefined(text)
         said.update(repr((unknown, sorted(early), sorted(within))).encode())
-        refused = set(unknown) & set(WAYS_NAMES)
-        reached, found = body.every_way(text)
-        # What the reader refuses, no way through the body has set where it
-        # is read: a class is never refused for a read that some way
-        # satisfies.
-        never = {name for read, (name, _) in enumerate(body.reads) if read not in found}
-        assert refused <= never, text
+        refusals += bool(held_to_python(text, body))
         kinds[body.kind()] += 1
-        refusals += bool(refused)
         runs += (3 if body.groups else 1) << body.points
-        if body.kind() != "plain":
-            # The reader takes some such class that fails. It does not say
-            # how often a loop runs, nor which parts of a group a clause
-            # matches; nor that a statement never ends, a `raise` or a
-            # `del` of a name never set, and keeps what follows it from
-            # running; nor what else is set where a `del` fails.
-            continue
-        # And in a body of none of those, a read that is reached and that no
-        # way satisfies is refused: there the answer is exactly Python's.
-        certain = {
-            name
-            for read, (name, deleting) in enumerate(body.reads)
-            if read in reached and read not in found and not deleting
-        }
-        assert certain <= refused, text
     assert all(count > WAYS // 25 for count in kinds.values()), kinds
     assert WAYS // 10 < refusals < WAYS - WAYS // 10
     assert runs > 500_000
     # And what it says is the same on whichever Python reads the bodies.
     assert said.hexdigest() == WAYS_SAID, (kinds, refusals, runs)
+
+
+def test_every_small_body_around_a_loop_is_read_as_python_runs_it():
+    # What a seed puts together misses what few bodies show: so every small
+    # body is held to Python too, where the reader is not exact and a wrong
+    # refusal is rare. A loop is left by a `break` that no handler takes,
+    # through every `finally` on its way: each body here is a loop around a
+    # `try`, a `with` or another loop, of blocks of one statement or two
+    # that set the name, delete it, or break out.
+    bodies = refusals = 0
+    for text, body in Small.every("L", "TMFWL", "SD"):
+        refusals += bool(held_to_python(text, body, whole=False))
+        bodies += 1
+    assert bodies == 6384 and 1000 < refusals < bodies - 1000, (bodies, refusals)
 
 
 def test_what_a_class_reads_too_soon_is_told_beside_what_it_does_not_define_at_all(notebook):

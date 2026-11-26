@@ -23,11 +23,12 @@ by the class itself, or as one of Python's builtins.
 - **Only what is certain is refused.** Whether a loop runs and which way a
   branch goes, the text does not say: a read that some way through the
   body satisfies is no refusal.
-- **A block may be left before its end,** by an exception or by a `break`,
-  and the class's body goes on from where it was left. What may be set
-  there is told place by place; every way out of a `try` passes through
-  its `finally`. What is not told is that a statement never ends: what
-  follows a `raise` is read as though it ran.
+- **A block may be left before its end,** and the class's body goes on
+  from where it was left: an exception for a handler, a `break` for its
+  loop, which no handler takes. What may be set there is told place by
+  place; every way out of a `try` passes through its `finally`. And where
+  nothing leads, after a `raise` or in the handler of a `try` that nothing
+  can leave, nothing is read.
 - **Python's builtins are those every Python the package runs on has,**
   on every system: a bundle runs on its server's Python, not on the one
   that reads the class.
@@ -117,6 +118,12 @@ def _mangled(name, owner):
     return f"_{owner}{name}" if owner else name
 
 
+# What the names that may be set are kept with where the class's body can come
+# to the statement being read at all. It is no name: where it is missing,
+# nothing leads there, and nothing read there is read.
+_HERE = "."
+
+
 class _ClassBody:
     """One class's body, read in the order it is written, for the names it
     reads before it has set them.
@@ -136,14 +143,21 @@ class _ClassBody:
 
     **A block may be left before its end**, the body of a `try`, of a
     `with` or of a loop, and the class's body goes on from where it was
-    left: in a handler, after a `with` whose manager took the exception,
-    after the loop. A block may be left where a statement of it begins,
-    since whatever a statement evaluates may raise, and where a statement
-    has set a name and goes on to something that may raise. A `del` is
-    left otherwise: where it fails at a name, that name was not set.
+    left. An exception goes to a handler, or past a `with` whose manager
+    takes it. It may leave a block where a statement of it begins, since
+    whatever a statement evaluates may raise, and where a statement has
+    set a name and goes on to something that may raise; a `del` is left
+    otherwise, since where it fails at a name, that name was not set. A
+    `break` and a `continue` go to their loop, and no handler takes them.
     **Every way out of a `try` passes through its `finally`**, and every
     way out of a handler through the clearing of its name: what these
     unset is unset wherever the body goes on from there.
+
+    **Where nothing leads, nothing is read.** What follows a `raise`, a
+    `break` or a `continue` in its block does not run, and neither does
+    the handler of a `try` that nothing can leave: a read there is no
+    read, and what is set there is set on no way. It still makes the name
+    the class's own, as it does in Python's table of symbols.
 
     So a class is never refused for a read that some way through its body
     satisfies; one that fails only along some way, as a read after a loop
@@ -159,9 +173,10 @@ class _ClassBody:
 
     def __init__(self, owner):
         self.owner = owner
-        # The names the class may have set by the statement being read, and
-        # every name it sets anywhere.
-        self.maybe, self.ever = set(), set()
+        # The names the class may have set by the statement being read, with
+        # `_HERE` where its body can come there; and every name it sets
+        # anywhere.
+        self.maybe, self.ever = {_HERE}, set()
         # What the body makes the class's own without setting it: a name it
         # annotates and gives no value, and one it deletes.
         self.own = set()
@@ -171,9 +186,10 @@ class _ClassBody:
         # Above zero where a read is not reported: inside a loop, and in a
         # `finally` that is read a second time.
         self.silent = 0
-        # For each block being read that may be left before its end, the
-        # names that may be set where it is left; the innermost block last.
-        self.exits = []
+        # What may be set where a block being read is left before its end,
+        # the innermost block last: by an exception, and for the next round
+        # of the loop around it or for that loop's end.
+        self.exits, self.rounds = [], []
 
     def names(self, body):
         """The names the body reads before it has set them, of those that
@@ -185,7 +201,7 @@ class _ClassBody:
 
     def read(self, name):
         name = _mangled(name, self.owner)
-        if name not in self.maybe and not self.silent:
+        if _HERE in self.maybe and name not in self.maybe and not self.silent:
             self.early.add(name)
 
     def bind(self, name, last=False):
@@ -193,31 +209,49 @@ class _ClassBody:
         what the statement goes on to may raise: the block being read may
         be left with the name set."""
         name = _mangled(name, self.owner)
-        self.maybe.add(name)
         self.ever.add(name)
-        if self.exits and not last:
-            self.exits[-1].add(name)
+        if _HERE in self.maybe:
+            self.maybe.add(name)
+            if not last:
+                self.leave()
 
     def unbind(self, name):
         self.maybe.discard(_mangled(name, self.owner))
 
     def leave(self, names=None):
-        """Notes that the block being read may be left with `names` set:
-        unless given, here, with what may be set now."""
+        """Notes that an exception may leave the block being read with
+        `names` set: unless given, here, with what may be set now."""
         if self.exits:
             self.exits[-1] |= self.maybe if names is None else names
 
+    def go(self, names):
+        """Notes that the block being read may be left with `names` set for
+        the next round of the loop around it, or for the loop's end."""
+        if self.rounds:
+            self.rounds[-1] |= names
+
     def left(self, read):
         """Reads a block that may be left before its end, and gives the
-        names that may be set where it is left. Where the class's body goes
-        on from there is its caller's to say: nothing is noted for the
-        block around it."""
+        names that may be set where an exception leaves it. Where the
+        class's body goes on from there is its caller's to say: nothing is
+        noted for the block around it."""
         self.exits.append(set())
         try:
             read()
         finally:
             exits = self.exits.pop()
         return exits
+
+    def both(self, read):
+        """Reads a block as `left` does, and gives beside it the names that
+        may be set where the block is left for the loop around it: what
+        this block does to those on their way, its caller says."""
+        self.rounds.append(set())
+        try:
+            exits = self.left(read)
+        finally:
+            rounds = self.rounds.pop()
+        return exits, rounds
 
     def either(self, *ways):
         """Reads ways of which one is taken: after them a name may be set
@@ -236,11 +270,10 @@ class _ClassBody:
     def statement(self, node):
         import ast
 
-        still = (ast.Try, ast.TryStar, ast.Pass, ast.Global, ast.Nonlocal)
+        still = (ast.Try, ast.TryStar, ast.Pass, ast.Global, ast.Nonlocal, ast.Break, ast.Continue)
         if not isinstance(node, (*still, ast.Delete)):
-            # Whatever a statement evaluates may raise as it begins. A `try`,
-            # a `pass` and a `global` evaluate nothing themselves, and a
-            # `del` says where it is left.
+            # Whatever a statement evaluates may raise as it begins. These
+            # evaluate nothing themselves, and a `del` says where it is left.
             self.leave()
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             # What a function is decorated with and its defaults are the
@@ -302,17 +335,27 @@ class _ClassBody:
                 self.expression(item.context_expr)
                 if item.optional_vars is not None:
                     self.targets([item.optional_vars], more=True)
-            left = self.left(lambda: self.statements(node.body))
-            # An exception goes on from where it left the block, as does one
-            # that what manages the block raises as the block ends; and
-            # where what manages the block takes it, the class's body does.
-            self.leave(left | self.maybe)
+            left, gone = self.both(lambda: self.statements(node.body))
+            # What manages the block may raise as the block ends, or as it
+            # is left for the loop around it; an exception goes on from
+            # where it left the block; and where what manages the block
+            # takes it, the class's body goes on.
+            self.leave(left | gone | self.maybe)
+            self.go(gone)
             self.maybe |= left
         elif isinstance(node, (ast.Try, ast.TryStar)):
             self.attempt(node)
+        elif isinstance(node, (ast.Break, ast.Continue)):
+            # For the next round of its loop, or for the loop's end: no
+            # handler takes it, and what follows it does not run.
+            self.go(self.maybe)
+            self.maybe = set()
         elif isinstance(node, (ast.Expr, ast.Assert, ast.Raise, ast.Pass)):
             for child in ast.iter_child_nodes(node):
                 self.expression(child)
+            if isinstance(node, ast.Raise):
+                # What follows it does not run.
+                self.maybe = set()
         else:
             self.unknown(node)
 
@@ -331,25 +374,28 @@ class _ClassBody:
             self.statements(node.body)
 
         self.silent += 1
-        # It may be broken out of, or gone round again, wherever its body
-        # may be left, and an exception goes on from there.
-        left = self.left(body) | self.maybe
+        left, gone = self.both(body)
         self.silent -= 1
-        self.leave(left)
-        self.maybe = before | left
+        # A round ends at the end of the body, or where it is left for the
+        # next round or for the loop's end; and an exception goes on from
+        # wherever a round was left, or from where the next was asked for.
+        gone |= self.maybe
+        self.leave(left | gone)
+        self.maybe = before | gone
         ran = set(self.maybe)
         self.statements(node.orelse)
         self.maybe |= ran
 
     def attempt(self, node):
-        """A `try`. A handler runs from wherever the body was left. Which
-        handler takes an exception is found by evaluating what each names,
-        in turn; the handler is given the exception under a name that
-        Python clears however the handler ends. Of the handlers of a `try`
-        one runs; of the clauses of an `except*` every one that matches a
-        part of what was raised, one after the other, and one that raises
-        does not keep the next from running. And however the statement is
-        left, what is left to `finally` runs first."""
+        """A `try`. A handler runs from wherever an exception left the body.
+        Which handler takes it is found by evaluating what each names, in
+        turn; the handler is given the exception under a name that Python
+        clears however the handler ends. Of the handlers of a `try` one
+        runs; of the clauses of an `except*` every one that matches a part
+        of what was raised, one after the other, and one that raises does
+        not keep the next from running. And however the statement is left,
+        by an exception or for the loop around it, what is left to
+        `finally` runs first."""
         import ast
 
         every = isinstance(node, ast.TryStar)
@@ -374,10 +420,12 @@ class _ClassBody:
                         self.bind(handler.name)
                     self.statements(handler.body)
 
-                left = self.left(handled)
+                left, gone = self.both(handled)
                 if handler.name:
                     self.unbind(handler.name)
                     left.discard(_mangled(handler.name, self.owner))
+                    gone.discard(_mangled(handler.name, self.owner))
+                self.go(gone)
                 ends.append(set(self.maybe))
                 if every:
                     self.maybe |= passed | left
@@ -391,32 +439,39 @@ class _ClassBody:
             if every:
                 ends.append(set(self.maybe))
 
-        left = self.left(tried)
-        self.maybe = set().union(*ends)
+        left, gone = self.both(tried)
+        ended = set().union(*ends)
         if not node.finalbody:
             self.leave(left)
+            self.go(gone)
+            self.maybe = ended
             return
-        ended = set(self.maybe)
         # `finally` runs from wherever the statement ended or was left: what
-        # it reads is held to both, and it may be left itself from either.
-        self.maybe |= left
+        # it reads is held to each, and it may be left itself from any.
+        began = ended | left | gone
+        self.maybe = set(began)
         self.statements(node.finalbody)
         after = sets = self.maybe
-        if ended != left:
+        if any(way and way != began for way in (ended, left, gone)):
             # After it, a name is set that `finally` sets itself, or that
             # was set where `finally` began and that it leaves set. What it
             # sets itself is told by reading it again from nothing set, with
             # nothing reported and nowhere left a second time. Python's
-            # compiler writes a `finally` out twice too.
-            self.maybe = set()
+            # compiler writes a `finally` out more than once too.
+            self.maybe = {_HERE}
             self.silent += 1
-            self.left(lambda: self.statements(node.finalbody))
+            self.both(lambda: self.statements(node.finalbody))
             self.silent -= 1
             sets = self.maybe
+
+        def through(way):
+            return after & way | sets if way else set()
+
         # What left the statement goes on from the end of `finally`, and the
         # class's body goes on from there where the statement had ended.
-        self.leave(after & left | sets)
-        self.maybe = after & ended | sets
+        self.leave(through(left))
+        self.go(through(gone))
+        self.maybe = through(ended)
 
     def generic(self, node, expressions):
         """Reads what a function or a class evaluates where its type
@@ -460,9 +515,11 @@ class _ClassBody:
     def unknown(self, node):
         """A statement this reader does not know, a `match` and what a later
         Python adds: every name it could set counts as set, and nothing it
-        reads is reported."""
+        reads is reported. Where it holds a `break` or a `continue`, its
+        loop may be left from inside it, with any of those names set."""
         import ast
 
+        leaves = False
         for inner in ast.walk(node):
             if isinstance(inner, ast.Name) and not isinstance(inner.ctx, ast.Load):
                 self.bind(inner.id)
@@ -472,6 +529,9 @@ class _ClassBody:
                 named = getattr(inner, field, None)
                 if type(named) is str:
                     self.bind(named)
+            leaves = leaves or isinstance(inner, (ast.Break, ast.Continue))
+        if leaves:
+            self.go(self.maybe)
 
     def targets(self, targets, more=False):
         """Sets what the targets of an assignment name, from left to right,
