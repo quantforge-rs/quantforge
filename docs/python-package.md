@@ -693,11 +693,15 @@ They hold the installed package to the checkout they are in:
   with the server's message word for word; a server that checks its token,
   which no QuantForge server does yet, refusing a missing and a wrong one
   as an `AuthError`; a request sent again while the server is busy, five
-  tries in all at most; a server that is not there, a connection that breaks, an
-  answer cut short, a redirect and what is not HTTP, each named for what it
-  is; and every status the protocol does not write refused, member by
-  member. Then against a real `quantforge serve run` on SQLite and on
-  PostgreSQL, its workers the interpreter of the run, with a job in each
+  tries in all at most; a server that is not there, a connection that
+  breaks, an answer cut short, a redirect and what is not HTTP, each named
+  for what it is; an answer read to the most that is read and no further,
+  whatever it says of its length or of a chunk's; answers put together by
+  a seed from what a server sends and what none does, each read or raised
+  as an exception of the client's own; and every status the protocol does
+  not write refused, member by member. Then against a real
+  `quantforge serve run` on SQLite and on PostgreSQL, its workers the
+  interpreter of the run, with a job in each
   state: one that succeeded, one that failed, one that runs until it is
   cancelled, and one queued behind it. The client lists and gets them as
   the server's own routes give them, cancels the queued one and the

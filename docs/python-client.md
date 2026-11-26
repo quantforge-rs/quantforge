@@ -429,6 +429,7 @@ and names the server by its URL:
 | `502`, `503` or `504` without the protocol's error envelope | `ServerUnavailable` |
 | Any other status that is no success without it, a redirect among them | `RemoteError` |
 | A success whose body is not what the protocol says the route answers | `RemoteError` |
+| What is not HTTP, an answer that does not say where it ends among it | `RemoteError` |
 | An answer longer than any QuantForge server sends, by the length it states or by what came | `RemoteError` |
 | A connection for a token over `http` that does not end on this machine | `RemoteError` |
 <!-- end: without an envelope -->
@@ -480,6 +481,20 @@ nothing, and a cancel nothing more the second time.
   is.
 - **A call can take as long as its tries and its waits together.** None of
   these is an argument yet.
+- **No more than the 64 MiB of an answer are read, whatever the answer says
+  of itself.** It is read in pieces of the client's own size, so neither
+  the length it states nor the size it gives a chunk decides how much is
+  read at once, and one that is longer is a `RemoteError` that says so. An
+  answer that states its length is read to it and no further, and one of a
+  status that has no body, a `204` and a `304` among them, is read for
+  none.
+- **An answer that does not say where it ends is not HTTP.** A length that
+  is said twice is one length where both say the same. Two that differ, a
+  length that is not digits, and a chunk whose size no read can be asked
+  for are each a `RemoteError` that names what was wrong.
+- **The 60 seconds are the longest silence, not the longest answer.** A
+  server that keeps sending, however slowly, is read for as long as it
+  sends.
 
 ## Connections
 

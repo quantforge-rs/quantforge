@@ -11,11 +11,14 @@ to raise `AuthError`. What the client does with a real `serve run` and its
 jobs is in `test_client_jobs.py`.
 """
 
+import collections
 import concurrent.futures
 import copy
+import http.client
 import http.server
 import json
 import pickle
+import random
 import re
 import socket
 import ssl
@@ -196,6 +199,27 @@ class Raw:
 
     def __exit__(self, *raised):
         self.close()
+
+
+def kept(sent: bytes):
+    """What a `Raw` does to a connection: it sends this, and keeps the
+    connection until the client closes it, as a server that serves more
+    than one request on a connection does."""
+
+    def serve(connection):
+        connection.sendall(sent)
+        try:
+            connection.recv(1)
+        except OSError:
+            pass
+
+    return serve
+
+
+def in_chunks(*chunks: bytes) -> bytes:
+    """A body as chunks write it: each with its size before it, and the
+    last chunk, of no bytes, after them."""
+    return b"".join(b"%x\r\n%b\r\n" % (len(chunk), chunk) for chunk in chunks) + b"0\r\n\r\n"
 
 
 @pytest.fixture
@@ -1320,6 +1344,190 @@ def test_an_answer_of_a_stated_length_is_not_waited_for_past_its_end(monkeypatch
             assert (client.server_version, client.proto_version) == ("0.2.0", 1)
 
 
+def test_an_answer_without_a_body_is_read_for_none_though_it_says_how_one_would_come(monkeypatch):
+    # A `304` may say how the body it stands for would have come, in chunks
+    # among other ways, and has none itself. Nothing is read for one: the
+    # answer is the refusal its status is, at once, whether the server keeps
+    # its connection or closes it.
+    chunked = b"\r\nTransfer-Encoding: chunked\r\n\r\n"
+    not_modified = b"HTTP/1.1 304 Not Modified" + chunked
+    early = b"HTTP/1.1 103 Early Hints" + chunked
+    no_content = b"HTTP/1.1 204 No Content" + chunked
+
+    def closed(sent: bytes):
+        return lambda connection: connection.sendall(sent)
+
+    # A second and a half would be waited out, were a body waited for.
+    monkeypatch.setattr(_wire, "_READ_SECONDS", 1.5)
+    for serve, said, status in [
+        (kept(not_modified), "304 Not Modified", 304),
+        (closed(not_modified), "304 Not Modified", 304),
+        (kept(early), "103 Early Hints", 103),
+    ]:
+        with Raw(serve) as other:
+            error = raised(qf.RemoteError, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
+        assert str(error) == (
+            f"the server at http://127.0.0.1:{other.port}/ answered {said} without QuantForge's "
+            "error envelope; is it a QuantForge server?"
+        )
+        assert (error.code, error.status) == (None, status)
+    with Raw(kept(no_content)) as other:
+        error = raised(qf.RemoteError, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
+    assert str(error) == (
+        f"the server at http://127.0.0.1:{other.port}/ answered GET /version with a body the "
+        "protocol does not read: it is not JSON; is it a QuantForge server?"
+    )
+
+
+def test_an_answer_in_chunks_is_read_to_its_last_chunk_and_to_the_most_that_is_read(monkeypatch):
+    whole = json.dumps(SPEAKS).encode()
+    head = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+
+    def chunk(data: bytes, extension: bytes = b"") -> bytes:
+        return b"%x%b\r\n%b\r\n" % (len(data), extension, data)
+
+    # In three chunks, the third with an extension, and with a trailer
+    # after the last: the answer ends where its chunks say, and the server,
+    # which keeps its connection, is not waited for.
+    body = chunk(whole[:1]) + chunk(whole[1:20]) + chunk(whole[20:], b";note=kept")
+    monkeypatch.setattr(_wire, "_READ_SECONDS", 1.5)
+    with Raw(kept(head + body + b"0\r\nChecked: yes\r\n\r\n")) as other:
+        client = qf.Client(f"http://127.0.0.1:{other.port}")
+        client.handshake()
+        assert (client.server_version, client.proto_version) == ("0.2.0", 1)
+    # As long as the longest is taken, and one byte more is not.
+    monkeypatch.setattr(_wire, "_MOST_ANSWER_BYTES", 256)
+    longest = whole.ljust(256)
+    with Raw(kept(head + in_chunks(longest[:100], longest[100:]))) as other:
+        qf.Client(f"http://127.0.0.1:{other.port}").handshake()
+    with Raw(kept(head + in_chunks(longest[:100], longest[100:], b" "))) as other:
+        error = raised(qf.RemoteError, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
+    assert str(error) == (
+        f"the server at http://127.0.0.1:{other.port}/ answered GET /version with more than 256 "
+        "bytes, more than a QuantForge server sends; is it one?"
+    )
+
+
+def test_no_chunk_decides_how_much_of_an_answer_is_read_at_once(monkeypatch):
+    whole = json.dumps(SPEAKS).encode()
+    head = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+    monkeypatch.setattr(_wire, "_READ_SECONDS", 1.5)
+    monkeypatch.setattr(_wire, "_MOST_ANSWER_BYTES", 256)
+    # A chunk that states a size below zero has `http.client` read to the
+    # end of the connection, whatever was asked for, and one that states a
+    # size beyond any answer says as little of what follows. Either is read
+    # in the client's own pieces, to the most that is read and no further:
+    # the server, which sends more than that and keeps its connection, is
+    # neither read to its end nor waited for.
+    too_long = "more than 256 bytes, more than a QuantForge server sends; is it one?"
+    no_size = "what is not HTTP (a chunk whose size is no size); is it a QuantForge server?"
+    for size, said in [
+        (b"-1", too_long),
+        (b"-8" + b"0" * 15, too_long),
+        (b"7" + b"f" * 15, too_long),
+        (b"f" * 20, too_long),
+        # A size no read can be asked for is no chunk's. `http.client` asks
+        # for it all the same, and raises what no caller of it expects: the
+        # client refuses the answer in its own words.
+        (b"-" + b"f" * 16, no_size),
+    ]:
+        with Raw(kept(head + size + b"\r\n" + b"x" * 4096)) as other:
+            error = raised(qf.RemoteError, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
+        assert str(error) == (
+            f"the server at http://127.0.0.1:{other.port}/ answered GET /version with {said}"
+        ), size
+        assert (error.code, error.status, error.__cause__) == (None, None, None)
+    # And what follows a size below zero is no answer, though it reads as
+    # one and the connection ends after it.
+    with Raw(lambda connection: connection.sendall(head + b"-1\r\n" + whole)) as other:
+        client = qf.Client(f"http://127.0.0.1:{other.port}")
+        error = raised(qf.ServerUnavailable, client.handshake)
+    assert ": IncompleteRead: IncompleteRead(" in str(error)
+    assert (client.server_version, client.proto_version) == (None, None)
+
+
+def test_an_answer_is_read_in_pieces_of_the_clients_own_size(server, monkeypatch):
+    asked = []
+
+    class Listening(http.client.HTTPResponse):
+        def read1(self, n=-1):
+            asked.append(n)
+            return super().read1(n)
+
+    monkeypatch.setattr(http.client.HTTPConnection, "response_class", Listening)
+    client = qf.Client(server.url)
+    client.handshake()
+    # A short answer is asked for whole, by the length it states.
+    assert asked and max(asked) == len(json.dumps(SPEAKS))
+    # A long one is asked for a piece at a time, however much of it is left.
+    del asked[:]
+    long = json.dumps({"jobs": []}).ljust(3 * _wire._PIECE_BYTES + 1)
+    server.says("GET", "/v1/backtests", (200, long))
+    assert client.backtest.list() == []
+    assert asked[0] == max(asked) == _wire._PIECE_BYTES and min(asked) > 0
+
+
+def test_an_answer_states_one_length_or_it_is_not_http(monkeypatch):
+    whole = json.dumps(SPEAKS).encode()
+    n, more = str(len(whole)).encode(), str(len(whole) + 1).encode()
+
+    def answer(*headers: bytes, body: bytes = whole) -> bytes:
+        lines = b"".join(header + b"\r\n" for header in headers)
+        return b"HTTP/1.1 200 OK\r\n" + lines + b"\r\n" + body
+
+    monkeypatch.setattr(_wire, "_READ_SECONDS", 1.5)
+    # A length said more than once is one length where each says the same,
+    # in two headers or in one, and with zeros before it or without. The
+    # answer is held to it: read to it and no further, though the server
+    # keeps its connection.
+    for headers in [
+        (b"Content-Length: " + n, b"Content-Length: " + n),
+        (b"Content-Length: " + n + b", " + n,),
+        (b"Content-Length: " + n, b"Content-Length:\t00" + n + b" "),
+    ]:
+        with Raw(kept(answer(*headers))) as other:
+            client = qf.Client(f"http://127.0.0.1:{other.port}")
+            client.handshake()
+            assert (client.server_version, client.proto_version) == ("0.2.0", 1), headers
+    # And cut short where fewer bytes came, though they read as an answer.
+    twice = answer(b"Content-Length: " + more, b"Content-Length: " + more)
+    with Raw(lambda connection: connection.sendall(twice)) as other:
+        error = raised(qf.ServerUnavailable, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
+    assert str(error).endswith(f"IncompleteRead({len(whole)} bytes read, 1 more expected)")
+    # Two that differ say nothing of where the answer ends, whichever comes
+    # first, and neither does one that is not written as HTTP writes a
+    # length, in digits alone.
+    differ, no_digits = "two Content-Lengths that differ", "a Content-Length that is not digits"
+    for headers, wrong in [
+        ((b"Content-Length: 5", b"Content-Length: " + n), differ),
+        ((b"Content-Length: " + n, b"Content-Length: 5"), differ),
+        ((b"Content-Length: " + n + b", 5",), differ),
+        ((b"Content-Length: +" + n,), no_digits),
+        ((b"Content-Length: -1",), no_digits),
+        ((b"Content-Length: " + n[:1] + b"_" + n[1:],), no_digits),
+        ((b"Content-Length: " + n + b",",), no_digits),
+        ((b"Content-Length:",), no_digits),
+    ]:
+        with Raw(kept(answer(*headers))) as other:
+            client = qf.Client(f"http://127.0.0.1:{other.port}")
+            error = raised(qf.RemoteError, client.handshake)
+        assert str(error) == (
+            f"the server at http://127.0.0.1:{other.port}/ answered GET /version with what is not "
+            f"HTTP ({wrong}); is it a QuantForge server?"
+        ), headers
+        assert (error.code, error.status, error.__cause__) == (None, None, None)
+        assert (client.server_version, client.proto_version) == (None, None)
+    # In chunks, an answer's length is its chunks', and one stated beside
+    # them is not read: an answer is in chunks where `http.client` decodes
+    # it as one, which the first such header says, though a second follows.
+    twice = (b"Transfer-Encoding: chunked", b"Transfer-Encoding: chunked")
+    for headers in [twice, (*twice, b"Content-Length: " + more), (*twice, b"Content-Length: x")]:
+        with Raw(kept(answer(*headers, body=in_chunks(whole)))) as other:
+            client = qf.Client(f"http://127.0.0.1:{other.port}")
+            client.handshake()
+            assert (client.server_version, client.proto_version) == ("0.2.0", 1), headers
+
+
 def test_a_read_that_fails_lets_go_of_its_connection_at_once(monkeypatch):
     let_go = threading.Event()
 
@@ -1345,6 +1553,151 @@ def test_a_read_that_fails_lets_go_of_its_connection_at_once(monkeypatch):
         # the answer's among them: its connection is closed all the same.
         assert let_go.wait(3), "the client holds on to the connection of a read that failed"
     assert str(error).endswith(": TimeoutError: timed out")
+
+
+# Whatever a server sends: answers put together by a seed, from what a
+# QuantForge server sends and from what none does.
+HOSTILE_SEED = 0x51A7E5F00D5EED02
+HOSTILE_ANSWERS = 1500
+
+STATUS_LINES = [
+    *[b"HTTP/1.1 200 OK"] * 6,
+    b"HTTP/1.0 200 OK",
+    b"HTTP/1.1 304 Not Modified",
+    b"HTTP/1.1 204 No Content",
+    b"HTTP/1.1 103 Early Hints",
+    b"HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK",
+    b"HTTP/1.1 500 Oops",
+    b"HTTP/1.1 503 Busy",
+    b"HTTP/1.1 301 Moved",
+    b"HTTP/1.1 999 Z",
+    b"HTTP/1.1 200",
+    b"HTTP/2 200 OK",
+    b"HTTP/1.1 20 OK",
+    b"HTTP/1.1 " + b"9" * 5000 + b" OK",
+    b"ICY 200 OK",
+    b"",
+]
+# What a chunk states its size as, in the place of its size.
+CHUNK_SIZES = [
+    b"-1",
+    b"-0",
+    b"0",
+    b"+5",
+    b" 5",
+    b"0x5",
+    b"5_0",
+    b"5;note=kept",
+    b"zz",
+    b"",
+    b"7" + b"f" * 15,
+    b"8" + b"0" * 15,
+    b"-8" + b"0" * 15,
+    b"-" + b"f" * 16,
+    b"f" * 20,
+    b"-" + b"f" * 20,
+    b"1" * 70000,
+    b"-" + b"1" * 70000,
+]
+TRANSFER_ENCODINGS = [
+    *[b"chunked"] * 4,
+    b"Chunked",
+    b"chunked ",
+    b"identity",
+    b"gzip",
+    b"gzip, chunked",
+    b"chunked, gzip",
+    b"",
+]
+# How many headers of a kind an answer has.
+COUNTS = [0, 1, 1, 1, 1, 2, 3]
+
+
+def hostile_answer(chosen: random.Random) -> bytes:
+    """One answer to `GET /version`, put together from parts `chosen`
+    picks: a status line, lengths and transfer encodings that agree with
+    the body or do not, a body whole or not, in chunks of the sizes they
+    have or of sizes no chunk has, and cut anywhere."""
+    whole = json.dumps(SPEAKS).encode()
+    n = len(whole)
+    lengths = [
+        *[b"%d" % n] * 6,
+        b"%d" % (n + 1),
+        b"%d" % (n - 1),
+        b"0",
+        b"-1",
+        b"+%d" % n,
+        b"",
+        b"9" * 5000,
+        b"0" * 5000 + b"%d" % n,
+        b"%d, %d" % (n, n),
+        b"%d, 5" % n,
+        b"0x10",
+        b"%d_" % n,
+        b"1e2",
+        b"%d" % 2**64,
+    ]
+    lines = [chosen.choice(STATUS_LINES)]
+    lines += [b"Content-Length: " + chosen.choice(lengths) for _ in range(chosen.choice(COUNTS))]
+    lines += [
+        b"Transfer-Encoding: " + chosen.choice(TRANSFER_ENCODINGS)
+        for _ in range(chosen.choice(COUNTS))
+    ]
+    if chosen.random() < 0.2:
+        lines.append(b"Retry-After: " + chosen.choice([b"0", b"9" * 5000, b"-1", b"x", b""]))
+    if chosen.random() < 0.05:
+        lines.append(b"a line that is no header")
+    if chosen.random() < 0.02:
+        lines.append(b"X-Long: " + b"a" * 70000)
+    if chosen.random() < 0.02:
+        lines += [b"X-%d: 1" % number for number in range(150)]
+    body = chosen.choice(
+        [*[whole] * 6, whole[: n // 2], b"", b"{", whole + b" ", b"[" * 100000, b"\xff\xfe"]
+    )
+    if chosen.random() < 0.5:
+        chunks, left = b"", body
+        while left:
+            taken = chosen.randint(1, len(left))
+            piece, left = left[:taken], left[taken:]
+            size = b"%x" % len(piece) if chosen.random() < 0.8 else chosen.choice(CHUNK_SIZES)
+            chunks += size + b"\r\n" + piece + chosen.choice([b"\r\n", b"\r\n", b"\n", b""])
+        last = [b"0\r\n\r\n", b"0\r\n\r\n", b"0\r\nT: 1\r\n\r\n", b"0\r\n", b""]
+        body = chunks + chosen.choice(last)
+    answer = b"\r\n".join(lines) + b"\r\n\r\n" + body
+    if chosen.random() < 0.1:
+        answer = answer[: chosen.randint(0, len(answer))]
+    return answer
+
+
+def test_whatever_a_server_sends_a_client_reads_an_answer_or_raises_an_exception_of_its_own(
+    monkeypatch, no_waiting
+):
+    chosen = random.Random(HOSTILE_SEED)
+    sent = [b""]
+    made = collections.Counter()
+    # No answer here is waited for: each is sent whole, and its connection
+    # closed. A read that waits all the same fails its answer, not the run.
+    monkeypatch.setattr(_wire, "_READ_SECONDS", 5)
+    with Raw(lambda connection: connection.sendall(sent[0])) as other:
+        url = f"http://127.0.0.1:{other.port}"
+        for number in range(HOSTILE_ANSWERS):
+            sent[0] = hostile_answer(chosen)
+            try:
+                qf.Client(url).handshake()
+            except qf.RemoteError as refused:
+                made[type(refused).__name__] += 1
+            except Exception as foreign:
+                pytest.fail(
+                    f"answer {number} of seed {HOSTILE_SEED:#x} was raised as "
+                    f"{type(foreign).__name__}, which is none of the client's: {foreign}; "
+                    f"it began {sent[0][:200]!r}"
+                )
+            else:
+                made["read"] += 1
+    # Every answer was read, refused as no QuantForge server's, or was one
+    # that did not come whole; and each of the three happened.
+    assert set(made) == {"read", "RemoteError", "ServerUnavailable"}, made
+    assert sum(made.values()) == HOSTILE_ANSWERS
 
 
 # Jobs, as a server writes them.

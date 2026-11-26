@@ -300,6 +300,7 @@ def test_the_page_says_what_is_raised_where_no_quantforge_server_answered(page, 
         "RemoteError",
         "RemoteError",
         "RemoteError",
+        "RemoteError",
     ]
 
 

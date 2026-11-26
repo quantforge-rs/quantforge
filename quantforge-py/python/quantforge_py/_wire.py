@@ -59,6 +59,11 @@ _MOST_RETRY_SECONDS = 5
 # jobs that each failed at the length a failure is cut to, is under this.
 _MOST_ANSWER_BYTES = 64 * 1024 * 1024
 
+# The most bytes of an answer that one read asks for. An answer is read in
+# pieces of the client's own size, so that nothing the answer says of
+# itself, its length or a chunk's, decides how much is read at once.
+_PIECE_BYTES = 64 * 1024
+
 # How much of a value that is refused is quoted.
 _QUOTED = 80
 
@@ -73,6 +78,11 @@ _MOST_INTEGER = 2**63
 
 class _Unreadable(Exception):
     """An answer that is not what the protocol says its route answers."""
+
+
+class _NotHTTP(Exception):
+    """An answer that does not say where its body ends, in its headers or
+    in a chunk's size: what is wrong with it, as a refusal names it."""
 
 
 def _wrong_type(what, takes, value):
@@ -246,22 +256,75 @@ def _retry_after(text):
     return _at_most(text, _MOST_RETRY_SECONDS)
 
 
+def _has_no_body(status):
+    """Whether an answer of this status has no body, whatever its headers
+    say of one: a `204`, a `304` and the `1xx`. Such an answer may state the
+    length of the body it stands for, and how that one would have come, in
+    chunks among other ways; neither is its own."""
+    return status in (204, 304) or 100 <= status < 200
+
+
 def _stated_length(response):
     """How many bytes an answer says its body has, or `None` where it says
-    none that counts: at most one more than the bytes of an answer that are
-    read, which is how one that is too long is told. An answer that has no
-    body, a `204` or a `304` among them, may state the length of the one it
-    stands for, which is not its own."""
-    if response.status in (204, 304) or 100 <= response.status < 200:
-        return None
+    none, or comes in chunks: at most one more than the bytes of an answer
+    that are read, which is how one that is too long is told. A length that
+    is said more than once is one length where each says the same; one that
+    is not digits, or two that differ, is a `_NotHTTP`, since nothing then
+    says where the body ends."""
     # In chunks, an answer's length is its chunks', and one stated beside
-    # them is not read: as `http.client` itself tells the two apart.
-    if (response.getheader("Transfer-Encoding") or "").lower() == "chunked":
+    # them is not read. Told by the rule `http.client` decodes one by, the
+    # first such header and its exact word, so that the two never differ on
+    # which answer is in chunks.
+    if (response.headers.get("Transfer-Encoding") or "").lower() == "chunked":
         return None
-    text = response.getheader("Content-Length", "").strip()
-    if not (text.isascii() and text.isdigit()):
+    lines = response.headers.get_all("Content-Length")
+    if lines is None:
         return None
-    return _at_most(text, _MOST_ANSWER_BYTES + 1)
+    stated = {part.strip(" \t") for line in lines for part in line.split(",")}
+    if not all(text.isascii() and text.isdigit() for text in stated):
+        raise _NotHTTP("a Content-Length that is not digits")
+    if len({text.lstrip("0") for text in stated}) != 1:
+        raise _NotHTTP("two Content-Lengths that differ")
+    return _at_most(stated.pop(), _MOST_ANSWER_BYTES + 1)
+
+
+def _body(response):
+    """An answer's body, or `None` where it is longer than is read by its
+    own account, and then none of it is read. An answer that has no body is
+    read for none. One that states its length is read to it and no further,
+    so that a server that keeps its connection open is not waited for, and
+    is an `IncompleteRead` where fewer bytes came. Any other is read to its
+    end, and to one byte past the most that is read at the longest.
+
+    It is read in pieces of at most `_PIECE_BYTES`. A read of all that is
+    left would leave the size of each read to the answer: `http.client`
+    reads a chunk of the size the chunk states, whatever was asked for, and
+    for one that states a size below zero it reads to the end of the
+    connection."""
+    import http.client
+
+    if _has_no_body(response.status):
+        return b""
+    stated = _stated_length(response)
+    if stated is not None and stated > _MOST_ANSWER_BYTES:
+        return None
+    most = _MOST_ANSWER_BYTES + 1 if stated is None else stated
+    body = bytearray()
+    try:
+        while len(body) < most:
+            piece = response.read1(min(_PIECE_BYTES, most - len(body)))
+            if not piece:
+                break
+            body += piece
+    except OverflowError:
+        # A chunk that states a size no read can be asked for, which
+        # `http.client` asks for all the same.
+        raise _NotHTTP("a chunk whose size is no size") from None
+    # Fewer came where the connection closed first, and a read says nothing
+    # of that: an answer cut short is no answer.
+    if stated is not None and len(body) < stated:
+        raise http.client.IncompleteRead(bytes(body), stated - len(body))
+    return bytes(body)
 
 
 def _parsed(body):
@@ -393,6 +456,14 @@ class _Wire:
                 f"{peer} here, and a token goes over http to this machine alone; nothing was sent"
             )
 
+    def _not_http(self, method, target, wrong):
+        """The exception an answer that is not HTTP is raised as: `wrong` is
+        what was wrong with it."""
+        return RemoteError(
+            f"the server at {self.server.shown} answered {method} {target} with what is not "
+            f"HTTP ({wrong}); is it a QuantForge server?"
+        )
+
     def _once(self, method, target):
         """One request, on a connection of its own, and its answer."""
         import http.client
@@ -413,27 +484,11 @@ class _Wire:
             # An answer that closes its connection holds the socket itself:
             # it is closed here, however reading it ends.
             with connection.getresponse() as response:
-                stated = _stated_length(response)
-                if stated is None:
-                    # To its end, and to one byte past the most that is read
-                    # at the longest.
-                    body = response.read(_MOST_ANSWER_BYTES + 1)
-                elif stated > _MOST_ANSWER_BYTES:
-                    # Too long by its own account: none of it is read.
-                    body = None
-                else:
-                    # The bytes it states and no more, so that a server that
-                    # keeps its connection open is not waited for. Fewer came
-                    # where the connection closed first, and a read says
-                    # nothing of that: an answer cut short is no answer.
-                    body = response.read(stated)
-                    if len(body) < stated:
-                        raise http.client.IncompleteRead(body, stated - len(body))
                 answer = _Answer(
                     response.status,
                     response.reason,
                     response.getheader("Retry-After"),
-                    body,
+                    _body(response),
                     forgotten,
                 )
         except (OSError, http.client.IncompleteRead) as failure:
@@ -444,10 +499,12 @@ class _Wire:
                 f"could not reach the server at {self.server.shown}: {cause}"
             ) from failure
         except http.client.HTTPException as failure:
-            raise RemoteError(
-                f"the server at {self.server.shown} answered {method} {target} with what is not "
-                f"HTTP ({type(failure).__name__}); is it a QuantForge server?"
-            ) from failure
+            # What `http.client` could not read, named by its exception.
+            raise self._not_http(method, target, type(failure).__name__) from failure
+        except _NotHTTP as wrong:
+            # What the client itself refuses of how an answer says where it
+            # ends, in its own words.
+            raise self._not_http(method, target, wrong) from None
         finally:
             if connection is not None:
                 connection.close()
