@@ -213,10 +213,12 @@ python3.15`, which runs, in order:
 - **Clippy for the crate**, with and without the default features, and
   `cargo check` with Rust 1.85.
 - **The `quantforge` binary**: `cargo build`, since the tests of the candle
-  reader read stores the command line itself wrote, and the worker's run
+  reader read stores the command line itself wrote, the worker's run
   strategy bundles on its `serve run`, whose workers are the Python of the
-  run ([the Python worker](python-worker.md#testing-it)). The script tells
-  every run below where it is, in `QUANTFORGE_PY_TEST_CLI`.
+  run ([the Python worker](python-worker.md#testing-it)), and the client's
+  list, get and cancel the jobs of one
+  ([the Python client](python-client.md)). The script tells every run below
+  where it is, in `QUANTFORGE_PY_TEST_CLI`.
 - **The wheel**: `maturin build` once, then the tests against it in a fresh
   virtualenv of each Python named, where it is installed with its two
   extras, as `pip install "quantforge-py[numpy,pandas]"` installs it.
@@ -455,6 +457,14 @@ on both backends in every leg, and `test_reader_stores.py` in `python`:
 stores the command line wrote, read from Python on SQLite and on the job's
 PostgreSQL, the same batch from either. They are on Binance's Spot line,
 the one a command stores candles of today.
+
+**The Python side of `jobs.lifecycle` has ALG-530 and ALG-703 for its
+evidence too.** Until they land, what holds the Python client to a job's
+states is `test_client_jobs.py` in `python` and in each `wheel` leg: a real
+`serve run` with a job that succeeded, one that failed, one that is running
+and one queued, listed, got and cancelled from Python, on SQLite and, where
+the job has a server, on PostgreSQL. Submitting a job from Python is
+QUA-462's, and following one to its result QUA-468's.
 
 **The goldens are evidence of their own.** The matrix names them, as
 ALG-383, for `strategy.backtest_local`: the frozen SMA-cross results

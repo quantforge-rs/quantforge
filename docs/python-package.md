@@ -21,7 +21,9 @@ themselves are read from the store the command line wrote, SQLite or
 PostgreSQL, by `CandleReader` ([the candle reader](python-reader.md)). A
 QuantForge server runs strategy bundles in workers that are a Python
 interpreter with the package installed, through the same bindings
-([the Python worker](python-worker.md)).
+([the Python worker](python-worker.md)), and `Client` reaches such a
+server from Python: it lists the server's backtest jobs, gets one and
+cancels one ([the Python client](python-client.md)).
 
 ## Contents
 
@@ -78,8 +80,10 @@ directory.
 
 What the package says about itself, the engine's types, the strategy a
 class implements, the function that runs one, the two conversions between a
-decimal and a float, the reader of the candles a store holds, and the four
-functions that give or take a pandas DataFrame:
+decimal and a float, the reader of the candles a store holds, the four
+functions that give or take a pandas DataFrame, the client of a QuantForge
+server with the job and the status it gives, and what a request to a
+server fails with:
 
 <!-- begin: public names -->
 | Name | What it is |
@@ -109,6 +113,16 @@ functions that give or take a pandas DataFrame:
 | `dataframe_to_candles` | A pandas DataFrame of candles as a batch |
 | `trades_to_dataframe` | The closed trades of a backtest's result as a pandas DataFrame |
 | `equity_to_dataframe` | The equity curve of a backtest's result as a pandas DataFrame |
+| `Client` | The client of a QuantForge server: its backtest jobs listed, got and cancelled |
+| `Job` | One backtest job a server holds: its ID, the status the server last gave of it, and what can be asked of it |
+| `JobStatus` | Where a job stood when the server was last asked: its state, its times, why it failed, and what it runs |
+| `RemoteError` | A request to a server that did not get its answer: every exception below is one |
+| `AuthError` | The server refused the request's credentials |
+| `ValidationError` | The server refused the request as malformed or as naming something invalid, in the server's words |
+| `NotFound` | What the request names does not exist on the server |
+| `Conflict` | The request contradicts the state of what it names |
+| `ServerUnavailable` | The server could not be reached, or cannot answer now |
+| `VersionMismatch` | The server and the package share no protocol version |
 <!-- end: public names -->
 
 ```python
@@ -124,8 +138,10 @@ functions that give or take a pandas DataFrame:
 These are `quantforge_py.__all__`, and the package holds no other public
 name. Importing it opens no store and no connection. A `CandleReader` is
 the one object that holds a store, and with PostgreSQL the one that holds a
-credential: no other type does, what a reader gives carries neither, and a
-backtest opens no store: it runs on the candles it is handed.
+database's credential: what a reader gives carries neither, and a backtest
+opens no store: it runs on the candles it is handed. A `Client` is the one
+object that reaches a server, when it is first used and not before, and
+the one that holds a server's token, which it never shows.
 
 [The Python types](python-types.md) is what each type takes and gives: how
 a decimal crosses, every signature and field, what each refuses, how a
@@ -138,7 +154,10 @@ frames of candles and of a result, which
 [candles and results as pandas DataFrames](python-pandas.md) is the
 contract of. [The candle reader](python-reader.md) is the contract of
 `CandleReader`: which store it opens, what it reads, and what it never does
-to a store.
+to a store. [The Python client](python-client.md) is the contract of
+`Client`, `Job`, `JobStatus` and the exceptions: which server a client
+reaches and with which token, what it agrees on with the server, what a
+job's status holds, and what is raised for each way a request fails.
 
 ## Two versions
 
@@ -237,6 +256,11 @@ made of a batch's arrays, so the `pandas` extra asks for the NumPy the
 `numpy` extra asks for, in the same words
 ([candles and results as pandas DataFrames](python-pandas.md)).
 
+- **The client needs neither, and nothing else.** It is written with the
+  standard library alone, and imports what a request takes, `http.client`
+  and `ssl` among it, when it first asks a server: importing the package
+  imports nothing of the network
+  ([the Python client](python-client.md#connections)).
 - **Without either, everything else works.** What needs one raises an
   `ImportError` that says what to install, where Python finds none and
   where the one it finds is one the extra does not take: a NumPy older than
@@ -349,9 +373,14 @@ quantforge-py/
 │   └── candle_arrays.py    how long a batch of candles takes to cross to NumPy arrays and back: figures to read, which no test holds a run to
 ├── python/
 │   └── quantforge_py/
-│       ├── __init__.py     the package: publishes the extension module's names, and the four functions of the module beside it
+│       ├── __init__.py     the package: publishes the extension module's names, and those of the modules written in Python beside it: the four functions of the frames, the client, its job and its status, and the exceptions
+│       ├── _answer.py      one answer of a server as the client reads it from its connection: held to what HTTP writes, its body to the longest that is taken and what frames it to a limit of its own, with the standard library alone
+│       ├── _client.py      Client: the client of a QuantForge server, which is where the server is, the token it sends, and the server's backtest jobs
+│       ├── _errors.py      RemoteError and the six exceptions derived from it: what a request to a server fails with, each raised by the code of the protocol's error envelope
 │       ├── _frames.py      candles and a backtest's result as pandas DataFrames, and a frame of candles as a batch: written in Python, with pandas' own calls
+│       ├── _jobs.py        Job and JobStatus: a server's backtest jobs listed and got, the handle on one, and its status read strictly from what the protocol writes, into the package's own types
 │       ├── _runtime.py     the runtime a strategy bundle runs in, in Python: the environment a worker offers, a bundle's strategy imported from its files and built from its parameters, what its own code may import, its lines and its failures
+│       ├── _wire.py        a server as a client's requests reach it, with the standard library alone: its URL and the token checked, the protocol version agreed on, each request on a connection of its own, what is asked again, and an answer given as its route's or raised as the exception it is
 │       └── _worker.py      the worker a QuantForge server runs Python bundles in, `python -m quantforge_py._worker`: what the server gave it closed, its frames moved off standard output, then the extension's worker
 ├── src/
 │   ├── adapter.rs          the engine's Strategy over a Python object: a thread attached for each callback, a failure with its traceback
@@ -379,11 +408,14 @@ quantforge-py/
 │   ├── trade.rs            ClosedTrade: one closed round trip, with the venue's order IDs as text
 │   └── worker.rs           the worker a server runs Python bundles in: the server's own frames, limits and sandbox, the environment it offers, what its job writes taken into the job's log
 └── tests/
-    ├── conftest.py         what the tests share: the checkout's manifests, the installed distribution, how a page and a refusal are read, how a strategy is run on either host, how a result is compared with a fixture's, and where a store lives on each backend
-    ├── jobs.py             what the job tests share: a `serve run` whose workers are this interpreter, on a store of either backend, bundles as their canonical tar, the job routes spoken to with the standard library alone, and a result's Arrow files read back as text
+    ├── conftest.py         what the tests share: the checkout's manifests, the installed distribution, how a page and a refusal are read, how a strategy is run on either host, how a result is compared with a fixture's, where a store lives on each backend, and the protocol's codes and states as the crate has them
+    ├── jobs.py             what the job tests share: a `serve run` whose workers are this interpreter, on a store of either backend, bundles as their canonical tar, the job routes spoken to with the standard library alone, a result's Arrow files read back as text, and a job in each state for a client to list, get and cancel
     ├── stores.py           what the reader's tests share: stores the quantforge command line wrote from an exchange that answers on this machine, a SQLite file and a PostgreSQL database of its own, and the server spoken to with the standard library alone
     ├── test_backtest.py    a backtest's config, a closed trade, an equity point and a result
     ├── test_candles.py     a candle, and a batch of candles by its candles and by its columns, with the market it names
+    ├── test_client.py      the client against servers of the test's own: what it refuses before it asks, which token it sends and where it sends none, the version it agrees on, the exception each of the protocol's codes is raised as, a refused token, what is asked again, and every answer it refuses to read
+    ├── test_client_jobs.py  the client against a real `serve run` on either backend: its jobs in every state listed and got as the server's own routes give them, a queued and a running one cancelled, and the server's refusals raised in its words
+    ├── test_client_page.py  the page of the client, held to the package, its examples run against a real server
     ├── test_decimals.py    how a decimal crosses, what is refused, and the float policy's shared cases
     ├── test_distribution.py  the installed distribution: its name, its Pythons, its license, its files
     ├── test_end_to_end.py  a strategy that decides from its bars, run over fixture candles: the engine's decisions and result, and what each figure means
@@ -651,6 +683,36 @@ They hold the installed package to the checkout they are in:
   and printed. Then the runtime in the test's own process: every import
   rule and every refusal, word for word, and what a worker offers
   ([the Python worker](python-worker.md#testing-it)).
+- **The client** (`test_client.py`, `test_client_jobs.py`,
+  `test_client_page.py`): first against servers of the test's own, which
+  answer what a test tells them to and record what they were asked. What
+  is no server's URL and no token refused before anything is asked; the
+  token as the argument, then the variable, then none, sent with every
+  request, never shown, and never made for a server it may not cross the
+  network to; the protocol version agreed on at the first use and once;
+  every code the protocol has, read from the crate, raised as its exception
+  with the server's message word for word; a server that checks its token,
+  which no QuantForge server does yet, refusing a missing and a wrong one
+  as an `AuthError`; a request sent again while the server is busy, five
+  tries in all at most; a server that is not there, a connection that
+  breaks, an answer cut short, a redirect and what is not HTTP, each named
+  for what it is; an answer read by the client itself and held to what
+  HTTP writes, to the longest body that is taken and to the most that is
+  taken of what frames one; answers put together by a seed from what a
+  server sends and what none does, each read or raised as an exception of
+  the client's own; and every status the protocol does not write refused,
+  member by member. Then against a real
+  `quantforge serve run` on SQLite and on PostgreSQL, its workers the
+  interpreter of the run, with a job in each
+  state: one that succeeded, one that failed, one that runs until it is
+  cancelled, and one queued behind it. The client lists and gets them as
+  the server's own routes give them, cancels the queued one and the
+  running one, is refused for one that has ended, for a job the server
+  does not hold and for a limit it does not take, each in the server's
+  words, and reaches the next server on the same store after the first
+  stopped. And every table and example of
+  [python-client.md](python-client.md), the examples against such a
+  server.
 - **The page of the types** (`test_types_page.py`): every table of
   [python-types.md](python-types.md), every signature, every refusal it
   shows, and its examples, which run as they are written.
@@ -800,5 +862,7 @@ The spikes under `spikes/` are workspaces of their own, as before.
 | --- | --- |
 | The goldens reproduced from candles read out of each store, and by a server's job | QUA-458 |
 | A Python strategy run by the command line | QUA-461 |
+| A bundle built from a strategy's files and submitted as a job, from Python | QUA-462 |
+| A job waited for, its log followed, its result as DataFrames, and its provenance | QUA-468 |
 | Type stubs and the `py.typed` marker | QUA-471 |
 | The release to PyPI, and whether it carries a source distribution | QUA-476 |

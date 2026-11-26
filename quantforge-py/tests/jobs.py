@@ -15,6 +15,9 @@ back as text (docs/python-worker.md).
 - **A result's files** are read by a reader of Arrow's published layout,
   written for the two tables of the result spec and no other: every value
   as the text the engine wrote, every time as its integer.
+- **A job in each state** a job can be put in and left is what the client's
+  tests list, get and cancel (`OneOfEach`): one that succeeded, one that
+  failed, one that runs until it is cancelled, and one queued behind it.
 """
 
 import contextlib
@@ -308,6 +311,109 @@ class Served:
 def served(place, scratch: pathlib.Path, *arguments, python=None, variables=None):
     with Served(place, scratch, *arguments, python=python, variables=variables) as server:
         yield server
+
+
+# Three strategies for jobs whose strategy is not the point: one holds
+# nothing, and its job succeeds; one raises at its first bar, and its job
+# fails; and one waits as it starts, so its job runs for as long as it is
+# left to, until it is cancelled or its server stops.
+HOLDS = """
+    import quantforge_py as qf
+
+
+    class Strategy(qf.Strategy):
+        def on_bar(self, ctx, bar):
+            return None
+"""
+
+RAISES = """
+    import quantforge_py as qf
+
+
+    class Strategy(qf.Strategy):
+        name = "fragile"
+
+        def on_bar(self, ctx, bar):
+            raise RuntimeError("no")
+"""
+
+WAITS = """
+    import time
+
+    import quantforge_py as qf
+
+
+    class Strategy(qf.Strategy):
+        def on_start(self, ctx):
+            time.sleep(3600)
+
+        def on_bar(self, ctx, bar):
+            return None
+"""
+
+# The first thirty minutes of the goldens' day, which `OneOfEach` runs its
+# jobs on: the open times of the first and the last.
+HALF_HOUR = (stores.NOON, stores.NOON + 29 * stores.MINUTE)
+
+
+class OneOfEach:
+    """A job in each state a job can be put in and left, on a server that
+    runs one job at a time and stores the goldens' first thirty minutes:
+    `succeeded`, `failed`, `running` and `queued`, each by its ID and
+    submitted in that order. `hashes` is the code hash of each job's
+    bundle."""
+
+    def __init__(self, server: Served):
+        self.server = server
+        self.url = f"http://127.0.0.1:{server.port}"
+        self.hashes = {}
+        self.succeeded = self.submit(HOLDS)
+        assert server.ended(self.succeeded)["kind"] == "succeeded"
+        self.failed = self.submit(RAISES)
+        assert server.ended(self.failed)["kind"] == "failed"
+        self.running = self.submit(WAITS)
+        self.reached(self.running, "running")
+        # The server's one worker is taken: this job waits for it.
+        self.queued = self.submit(HOLDS)
+        self.reached(self.queued, "queued")
+
+    def submit(self, source: str) -> str:
+        """Submits a backtest of a strategy over the thirty minutes, and
+        answers the job's ID."""
+        files = {
+            "quantforge.toml": manifest("strategy.py:Strategy"),
+            "strategy.py": strategy_file(source),
+        }
+        stored = self.server.upload(files)
+        job = self.server.submit(stored, *HALF_HOUR)
+        self.hashes[job] = stored
+        return job
+
+    def reached(self, job: str, kind: str) -> dict:
+        """Waits for a job to be in a state, by the server's own route."""
+        deadline = time.monotonic() + PATIENCE
+        while (state := self.server.status(job)["state"])["kind"] != kind:
+            assert time.monotonic() < deadline, f"job {job} is {state}, not {kind}"
+            time.sleep(0.02)
+        return state
+
+    @property
+    def newest_first(self) -> list[str]:
+        """The four jobs as the server lists them."""
+        return [self.queued, self.running, self.failed, self.succeeded]
+
+
+@contextlib.contextmanager
+def one_of_each(place, directory: pathlib.Path):
+    """A server on `place` with a job in each state: the place is given the
+    thirty minutes of candles its jobs run on, and the server's workers
+    their scratch directories in `directory`."""
+    scratch = directory / "scratch"
+    scratch.mkdir()
+    with stores.Exchange({("BTCUSDT", "1m"): golden_klines()[:30]}) as exchange:
+        place.sync(exchange)
+    with served(place, scratch) as server:
+        yield OneOfEach(server)
 
 
 # A reader of the two tables of a result, after Arrow's published layout

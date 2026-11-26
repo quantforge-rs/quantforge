@@ -118,7 +118,8 @@ def test_every_example_on_the_page_runs_as_written(session):
 
 
 def test_the_page_gives_the_four_functions_as_python_does(page, quoted):
-    assert qf.__all__[-len(FUNCTIONS) :] == FUNCTIONS
+    first = qf.__all__.index(FUNCTIONS[0])
+    assert qf.__all__[first : first + len(FUNCTIONS)] == FUNCTIONS
     lines = page(PAGE).section("signatures")
     assert (lines[0], lines[-1]) == ("```text", "```")
     assert lines[1:-1] == [f"{name}{inspect.signature(getattr(qf, name))}" for name in FUNCTIONS]

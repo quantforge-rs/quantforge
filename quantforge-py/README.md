@@ -6,8 +6,9 @@ the `quantforge` command line.
 
 **Not released yet.** The package is being built in the open. So far it
 says what it is, holds the engine's types, each built by the engine's own
-rule, has the class a strategy derives from, runs a backtest, and reads the
-candles the command line stored:
+rule, has the class a strategy derives from, runs a backtest, reads the
+candles the command line stored, and reaches the backtest jobs of a
+QuantForge server:
 
 ```python
 from decimal import Decimal
@@ -170,6 +171,31 @@ and a trade count the exchange did not report is missing, never a number.
 The frames are for computing with: their amounts are floats, and the exact
 decimals stay in the batch and in the result
 ([candles and results as pandas DataFrames](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-pandas.md)).
+
+A QuantForge server, `quantforge serve run`, runs backtests as jobs, and a
+`Client` reaches one from Python, with the standard library alone:
+
+```python
+client = qf.Client("http://127.0.0.1:9600")  # asks nothing yet; a token is read from QF_REMOTE_TOKEN
+jobs = client.backtest.list()                # the server's jobs, the last submitted first
+if jobs:                                     # none, on a server no job was submitted to
+    job = client.backtest.get(jobs[0].id)    # one of them, by its ID
+    job.status.state                         # 'queued', 'running', 'succeeded', 'failed' or 'cancelled'
+    job.status.market                        # what it runs on, in the package's own types
+    if not job.status.ended:
+        job.cancel()                         # asks the server, and keeps what it answers
+```
+
+A client agrees on a protocol version with its server when it is first
+used. A job is a handle: reading it asks nothing, and `refresh` and `cancel`
+ask the server and keep its answer as the job's status. A request the
+server refuses raises what the server said, word for word, as the exception
+its code names: `qf.ValidationError`, `qf.NotFound`, `qf.Conflict`,
+`qf.AuthError`, `qf.ServerUnavailable` or `qf.VersionMismatch`, each of
+them a `qf.RemoteError`. A token goes only over `https`, or to a server on
+this machine, and is never shown. Jobs are submitted by the command line's
+`backtest --remote` for now
+([the Python client](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-client.md)).
 
 The package installs as `quantforge-py` and imports as `quantforge_py`.
 `quantforge` on PyPI is another project.

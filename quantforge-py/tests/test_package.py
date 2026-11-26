@@ -9,7 +9,7 @@ import sys
 import pytest
 
 import quantforge_py
-from quantforge_py import _frames, _native
+from quantforge_py import _answer, _client, _errors, _frames, _jobs, _native, _wire
 
 # MAJOR.MINOR.PATCH without leading zeros: an engine version as a strategy
 # bundle's `engine` requirement names one (docs/bundle-spec.md).
@@ -17,8 +17,9 @@ ENGINE_VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 
 # What the package publishes, in the order `__all__` gives it: what it says
 # about itself, the engine's types, the function that runs a backtest, the
-# two conversions, the reader of a store's candles, and the functions that
-# give or take a pandas DataFrame.
+# two conversions, the reader of a store's candles, the functions that give
+# or take a pandas DataFrame, the client of a server with what it gives, and
+# what a request to a server fails with.
 ABOUT = ["__version__", "ENGINE_VERSION", "STORAGE_BACKENDS"]
 TYPES = [
     "Symbol",
@@ -48,6 +49,32 @@ FRAMES = [
     "equity_to_dataframe",
 ]
 
+# Classes as the types are, written in Python with the standard library
+# alone: the client of a QuantForge server, the handle it gives on a job,
+# and where a job stood when the server was last asked.
+CLIENT = ["Client", "Job", "JobStatus"]
+# Exceptions, which are derived from as any exception is: the first is the
+# one every other is derived from.
+ERRORS = [
+    "RemoteError",
+    "AuthError",
+    "ValidationError",
+    "NotFound",
+    "Conflict",
+    "ServerUnavailable",
+    "VersionMismatch",
+]
+
+# The private module each name written in Python is written in. Every other
+# name is the extension module's.
+WRITTEN_IN = {
+    **dict.fromkeys(FRAMES, _frames),
+    "Client": _client,
+    "Job": _jobs,
+    "JobStatus": _jobs,
+    **dict.fromkeys(ERRORS, _errors),
+}
+
 # The one class that exists to be derived from.
 DERIVED_FROM = "Strategy"
 
@@ -57,28 +84,41 @@ def public(module) -> list[str]:
 
 
 def test_the_package_publishes_its_names_and_holds_no_other_public_one():
-    assert quantforge_py.__all__ == ABOUT + TYPES + FUNCTIONS + READER + FRAMES
+    assert quantforge_py.__all__ == ABOUT + TYPES + FUNCTIONS + READER + FRAMES + CLIENT + ERRORS
+    assert len(quantforge_py.__all__) == len(set(quantforge_py.__all__)) == 35
     published = sorted(name for name in quantforge_py.__all__ if not name.startswith("_"))
     assert public(quantforge_py) == published
-    # The extension module holds the same names and no other, but for the
-    # functions written in Python.
-    assert public(_native) == sorted(set(published) - set(FRAMES))
+    assert sorted(WRITTEN_IN) == sorted(FRAMES + CLIENT + ERRORS)
+    # The extension module holds the same names and no other, but for what
+    # is written in Python.
+    assert public(_native) == sorted(set(published) - set(WRITTEN_IN))
 
 
-def test_every_published_name_is_the_extension_modules_own_or_the_frame_modules():
+def test_every_published_name_is_the_extension_modules_own_or_a_private_modules():
     for name in quantforge_py.__all__:
-        home = _frames if name in FRAMES else _native
+        home = WRITTEN_IN.get(name, _native)
         assert getattr(quantforge_py, name) is getattr(home, name), name
     # A function written in Python says which module it is written in, which
     # is private as the extension module is.
     for name in FRAMES:
         assert getattr(quantforge_py, name).__module__ == _frames.__name__, name
-    assert _frames.__name__ == "quantforge_py._frames"
-    assert pathlib.Path(_frames.__file__).parent == pathlib.Path(quantforge_py.__file__).parent
+    # Every module of the package is private, and lies beside the others:
+    # the five of the client among them, two of which, how a request reaches
+    # a server and how its answer is read, publish nothing.
+    package = pathlib.Path(quantforge_py.__file__).parent
+    modules = [_answer, _client, _errors, _frames, _jobs, _wire]
+    assert set(WRITTEN_IN.values()) == set(modules) - {_answer, _wire}
+    for module in modules:
+        assert module.__name__.startswith("quantforge_py._"), module
+        assert pathlib.Path(module.__file__).parent == package
+        # What a module holds under a public name is a name the package
+        # publishes, or a module of the standard library it imports.
+        held = {name for name in public(module) if not inspect.ismodule(getattr(module, name))}
+        assert held <= set(quantforge_py.__all__), module
 
 
 def test_every_type_is_a_class_of_the_package_and_a_strategy_alone_is_derived_from():
-    for name in TYPES + READER:
+    for name in TYPES + READER + CLIENT:
         bound = getattr(quantforge_py, name)
         assert isinstance(bound, type), name
         # A class says where it is imported from, not where it is compiled.
@@ -96,6 +136,16 @@ def test_every_type_is_a_class_of_the_package_and_a_strategy_alone_is_derived_fr
         assert callable(bound) and not isinstance(bound, type), name
         assert bound.__name__ == name
         assert bound.__doc__, name
+    # An exception is a class of the package too, and is derived from as any
+    # exception is.
+    for name in ERRORS:
+        bound = getattr(quantforge_py, name)
+        assert isinstance(bound, type) and issubclass(bound, Exception), name
+        assert (bound.__module__, bound.__qualname__) == ("quantforge_py", name)
+        assert repr(bound) == f"<class 'quantforge_py.{name}'>"
+        assert bound.__doc__, name
+        assert issubclass(bound, quantforge_py.RemoteError), name
+        assert issubclass(type("Derived", (bound,), {}), bound)
 
 
 def test_the_extension_module_is_private_and_built_for_the_stable_abi():

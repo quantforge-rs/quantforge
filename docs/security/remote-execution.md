@@ -408,7 +408,8 @@ files, which anyone it is shared with can read.*
 **What a job's log draws.** A job's log and its failure are its bundle's
 words. `quantforge backtest --remote` prints them with every control
 character written out; any other client that shows them must do its own
-escaping.
+escaping. The Python package's client gives a failed job's message as the
+server wrote it, and says so ([python-client.md](../python-client.md)).
 
 **The server's command line.** A store's URL given as `--postgres-url` is
 in the process list for every user of the machine, and for a job where no
