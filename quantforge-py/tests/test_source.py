@@ -16,9 +16,11 @@ class submitted to a real server in `test_submit_jobs.py`.
 """
 
 import functools
+import hashlib
 import importlib.util
 import itertools
 import linecache
+import random
 import subprocess
 import sys
 import textwrap
@@ -28,7 +30,7 @@ import pytest
 
 import jobs
 import quantforge_py as qf
-from quantforge_py import _source
+from quantforge_py import _names, _source
 
 QF = "import quantforge_py as qf"
 
@@ -346,6 +348,72 @@ def test_a_class_written_twice_in_one_cell_is_sent_as_the_statement_that_made_it
     assert "return None" in file_of(module.Earlier) and "FLAT" not in file_of(module.Earlier)
 
 
+def test_a_class_found_by_its_name_alone_is_refused_where_its_file_defines_the_name_twice(
+    module_of,
+):
+    # A class that defines no function of its own is found as `inspect`
+    # finds one. From Python 3.13 on a class says which line it starts on.
+    # Before, its name is all there is, and the first statement of that
+    # name was taken: the text of another class than the one submitted.
+    module = module_of(
+        """
+        import quantforge_py as qf
+
+
+        class Mine(qf.Strategy):
+            LIMIT = 3
+
+
+        class Mine(qf.Strategy):
+            LIMIT = 5
+
+
+        class Once(qf.Strategy):
+            LIMIT = 7
+        """
+    )
+    assert module.Mine.LIMIT == 5
+    if sys.version_info >= (3, 13):
+        assert file_of(module.Mine) == f"{QF}\n\n\nclass Mine(qf.Strategy):\n    LIMIT = 5\n"
+    else:
+        with pytest.raises(ValueError) as refused:
+            _source._class_file(module.Mine, QF, True)
+        assert str(refused.value) == (
+            f"Mine is defined 2 times in {module.__file__}, and defines no function of its own "
+            "by which the statement that made it would be found: before Python 3.13 a class says "
+            "no more of where it was written than its name. Give each of them a name of its own, "
+            "or submit the file with submit()"
+        )
+    # One that is defined once is found by its name on every Python.
+    assert file_of(module.Once) == f"{QF}\n\n\nclass Once(qf.Strategy):\n    LIMIT = 7\n"
+    # And one with a function of its own is found by that, on every Python,
+    # whichever of two statements of its name made it.
+    module = module_of(
+        """
+        import quantforge_py as qf
+
+
+        class Mine(qf.Strategy):
+            LIMIT = 3
+
+            def on_bar(self, ctx, bar):
+                return None
+
+
+        Earlier = Mine
+
+
+        class Mine(qf.Strategy):
+            LIMIT = 5
+
+            def on_bar(self, ctx, bar):
+                return None
+        """
+    )
+    assert "LIMIT = 5" in file_of(module.Mine) and "LIMIT = 3" not in file_of(module.Mine)
+    assert "LIMIT = 3" in file_of(module.Earlier) and "LIMIT = 5" not in file_of(module.Earlier)
+
+
 def test_a_class_is_found_by_any_function_of_its_own_whatever_it_is_wrapped_in(notebook):
     module = notebook.run(
         """
@@ -440,6 +508,107 @@ def test_finding_a_class_runs_nothing_of_it_again(notebook):
     assert module.defined == ["the class's body ran"]
 
 
+@pytest.fixture
+def probes():
+    """A module, `probes`, whose `Probe` answers for every attribute it has
+    not got with code of its own: it notes what it was asked for in `asked`,
+    and raises."""
+    module = types.ModuleType("probes")
+    exec(
+        textwrap.dedent(
+            """
+            asked = []
+
+
+            class Probe:
+                def __getattr__(self, name):
+                    asked.append(name)
+                    raise RuntimeError(f"a probe was asked for {name}")
+            """
+        ),
+        vars(module),
+    )
+    sys.modules["probes"] = module
+    yield module
+    sys.modules.pop("probes", None)
+
+
+def test_nothing_is_asked_of_what_a_class_holds_or_of_what_stands_beside_it(notebook, probes):
+    # What a class's attributes hold is told by its type. An object whose
+    # class answers for its attributes with code of its own was asked for
+    # `__func__`, which ran that code and, where it raised, ended the
+    # submission.
+    declared = f"{QF}\nimport probes"
+    module = notebook.run(
+        """
+        import probes
+
+        gadget = probes.Probe()
+
+
+        class Mine(qf.Strategy):
+            probe = probes.Probe()
+
+            def on_bar(self, ctx, bar):
+                return None
+
+
+        class Bare(qf.Strategy):
+            probe = probes.Probe()
+            limit = None
+
+
+        class Leans(qf.Strategy):
+            probe = probes.Probe()
+
+            def on_bar(self, ctx, bar):
+                return gadget
+        """
+    )
+    text = file_of(module.Mine, declared)
+    assert text.endswith(
+        "    probe = probes.Probe()\n\n    def on_bar(self, ctx, bar):\n        return None\n"
+    )
+    assert probes.asked == []
+    # A class that reads a name it does not define is told what to do about
+    # it from what stands under the name where it was written: which is
+    # asked nothing either, whatever it is.
+    with pytest.raises(ValueError) as refused:
+        _source._class_file(module.Leans, declared, True)
+    assert str(refused.value).endswith("; define gadget inside the class")
+    assert probes.asked == []
+
+    # Nor is anything asked to say what a class defined inside a function
+    # takes from it, or where a class without a function of its own was
+    # written.
+    def make(threshold):
+        class Captures(qf.Strategy):
+            probe = probes.Probe()
+
+            def on_bar(self, ctx, bar):
+                return None if bar.close > threshold else None
+
+        return Captures
+
+    with pytest.raises(ValueError, match="^Captures is defined inside the function make, and"):
+        _source._class_file(make(3), declared, True)
+    assert _source._written_in(module.Bare) is vars(module)
+    assert probes.asked == []
+
+    # What Python's own wrappers hold is still found, and nothing else is
+    # taken for a function: not what merely answers to their names.
+    def function(self):
+        return None
+
+    assert _source._own_function(function) is function
+    for wrapped in (staticmethod(function), classmethod(function), property(function)):
+        assert _source._own_function(wrapped) is function
+    lookalike = types.SimpleNamespace(__func__=function, fget=function)
+    for other in (lookalike, probes.Probe(), property(), functools.partial(function), len, None):
+        assert _source._own_function(other) is None
+    assert probes.asked == []
+
+
 # What a class's source may read.
 
 
@@ -525,7 +694,8 @@ def test_every_name_a_class_reads_is_defined_by_its_imports_by_itself_or_by_pyth
         (
             "LIMIT = 3\n\n    def on_start(self, ctx):\n        return LIMIT",
             "LIMIT",
-            "LIMIT is defined nowhere the class was written",
+            "LIMIT is set in the class's body, where a function, a lambda or a comprehension "
+            "inside the class does not look: there Python reads it outside the class",
         ),
         (
             "def on_start(self, ctx, depth=THRESHOLD):\n        return depth",
@@ -569,6 +739,347 @@ def test_a_name_a_class_reads_and_does_not_define_is_refused_with_what_to_do(
     assert str(refused.value) == (
         f"Mine uses {uses}, which its source does not define: submit_class sends the class's own "
         f"source below imports, and nothing else of where it was written; {advice}"
+    )
+
+
+# What the notebook of the two tests below defines beside the class: every
+# name a body of theirs reads, so that each class is one Python makes here.
+BESIDE = """
+    LIMIT = 3
+    SERIES = [1, 2]
+    depth = 1
+    count = 0
+    limit = 1
+    wrap = staticmethod
+    GUARD = memoryview(b"")
+"""
+
+
+@pytest.mark.parametrize(
+    "body, names",
+    [
+        ("LIMIT = LIMIT", ["LIMIT"]),
+        ("depth = depth + 1", ["depth"]),
+        ("count += 1", ["count"]),
+        ("first, LIMIT = LIMIT, 1", ["LIMIT"]),
+        ("def scaled(self, by=LIMIT):\n        return by\n\n    LIMIT = 4", ["LIMIT"]),
+        ("pick = lambda value, default=LIMIT: value\n    LIMIT = 4", ["LIMIT"]),
+        ("@wrap\n    def wrapped():\n        return 1\n\n    wrap = None", ["wrap"]),
+        ("values = [value for value in SERIES]\n    SERIES = []", ["SERIES"]),
+        ("if LIMIT:\n        pass\n    LIMIT = 4", ["LIMIT"]),
+        ("with GUARD:\n        pass\n    GUARD = None", ["GUARD"]),
+        ("class Inner:\n        depth = depth", ["depth"]),
+        ("class Inner(SERIES.__class__):\n        pass\n\n    SERIES = []", ["SERIES"]),
+        ("LIMIT = LIMIT\n    depth = depth", ["LIMIT", "depth"]),
+        # A name that is annotated and given no value is the class's own,
+        # and is never set.
+        ("limit: int\n    double = limit", ["limit"]),
+        ("double = limit\n    limit: int", ["limit"]),
+    ],
+)
+def test_a_name_a_class_reads_before_it_sets_it_is_read_outside_the_class(notebook, body, names):
+    # A class's body looks a name up among those the class has set so far,
+    # and then outside the class: `LIMIT = LIMIT` reads the notebook's
+    # `LIMIT`, which does not travel, though the name is the class's own.
+    module = notebook.run(BESIDE)
+    statement = f"class Mine(qf.Strategy):\n    {body}\n\n    def on_bar(self, ctx, bar):\n        return None\n"
+    notebook.run(statement)
+    with pytest.raises(ValueError) as refused:
+        _source._class_file(module.Mine, QF, True)
+    listed = " and ".join(names)
+    it = "it" if len(names) == 1 else "them"
+    assert str(refused.value) == (
+        f"Mine uses {listed}, which its source does not define: submit_class sends the class's "
+        "own source below imports, and nothing else of where it was written; the class reads "
+        f"{listed} before it sets {it}, where Python looks outside the class: set {it} from what "
+        "the class itself defines"
+    )
+    # And it is so: the file such a class would be sent as does not run.
+    with pytest.raises(NameError) as failed:
+        exec(compile(f"{QF}\n\n\n{statement}", "strategy.py", "exec"), {"__name__": "strategy"})
+    assert failed.value.name in names
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "LIMIT = 3\n    WIDEST = LIMIT * 2",
+        "counter = 0\n    counter += 1",
+        "a = b = 1\n    c = a + b",
+        "first, *rest = [1, 2]\n    most = len(rest)",
+        "limit: int\n    other = 1",
+        "limit: int = 3\n    double = limit * 2",
+        "max = max",
+        "z = (y := 1) + y",
+        "import math\n    root = math.sqrt",
+        "from statistics import mean as average\n    middle = average",
+        "def helper(value):\n        return value\n\n    made = helper(1)",
+        "class Inner:\n        pass\n\n    inner = Inner",
+        "squares = [n * n for n in range(3)]",
+        "key = lambda item, default=None: item or default",
+        # Set in whichever branch a statement written before the read took.
+        "if qf:\n        LIMIT = 1\n    else:\n        LIMIT = 2\n    double = LIMIT * 2",
+        "try:\n        import statistics as st\n    except ImportError:\n        st = None\n    mean = st",
+        "try:\n        value = int('x')\n    except ValueError as refused:\n        value = str(refused)\n    shown = value",
+        "with memoryview(b'x') as view:\n        first = view[0]\n    kept = first",
+        "match 1:\n        case found:\n            pass\n    kept = found",
+        # What a statement this reader does not know sets counts as set, also
+        # where the class sets the same name again below.
+        "match 1:\n        case found:\n            pass\n    kept = found\n    found = 2",
+        "match [1, 2]:\n        case [first, *others]:\n            pass\n    kept = others\n    others = []",
+        # Inside a loop a read may come after a statement written below it.
+        "for index in range(2):\n        if index:\n            seen = total\n        total = index",
+        "while False:\n        late = early\n        early = 1\n    early = 2",
+        "for index in range(3):\n        pass\n    last = index",
+        # A name of a function around a class is that function's.
+        "def scale(self):\n        factor = 2\n\n        class Inner:\n            value = factor\n\n"
+        "        return Inner.value",
+        # A name a class says is the function's around it is that function's.
+        "def scale(self):\n        total = 1\n\n        class Inner:\n            nonlocal total\n"
+        "            total = total + 1\n\n        return total",
+        # What annotates a name is read where its statement stands, by
+        # which the class has set what it reads; and inside a function's
+        # body no Python evaluates an annotation at all.
+        "Kind = int\n    kind: Kind = 3",
+        "kind: kind = int",
+        "Kind = int\n\n    def on_start(self, ctx: Kind) -> Kind:\n        return None",
+        "if qf:\n        limit: int = 3",
+        "try:\n        limit: int = 3\n    except Exception:\n        limit: int = 4",
+        "def on_start(self, ctx):\n        level: NeverDefined = 1\n        self.level = level",
+    ],
+)
+def test_a_name_a_class_sets_before_it_reads_it_is_its_own(notebook, body):
+    module = notebook.run(BESIDE)
+    notebook.run(
+        f"class Mine(qf.Strategy):\n    {body}\n\n    def on_bar(self, ctx, bar):\n        return None\n"
+    )
+    text = file_of(module.Mine)
+    # And it is so: the file the class is sent as runs, where nothing but
+    # its imports is defined.
+    names = {"__name__": "strategy"}
+    exec(compile(text, "strategy.py", "exec"), names)
+    assert issubclass(names["Mine"], qf.Strategy)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "LIMIT = 4\n    doubled = [LIMIT * value for value in range(3)]",
+        "LIMIT = 4\n    doubled = {LIMIT * value for value in range(3)}",
+        "LIMIT = 4\n    doubled = {value: LIMIT for value in range(3)}",
+        "LIMIT = 4\n    doubled = list(LIMIT * value for value in range(3))",
+        "LIMIT = 4\n    doubled = [value for value in range(3) if value < LIMIT]",
+        "LIMIT = 4\n    doubled = (lambda value: value * LIMIT)(2)",
+        "LIMIT = 4\n\n    def on_start(self, ctx):\n        self.limit = LIMIT",
+    ],
+)
+def test_a_name_a_class_sets_is_not_seen_inside_a_function_or_a_comprehension_of_its_body(
+    notebook, body
+):
+    # A function, a lambda and a comprehension inside a class's body look a
+    # name up in themselves and then outside the class, never in it. Python
+    # from 3.12 on no longer shows a comprehension as a scope of its own in
+    # its table of symbols, where such a read then passed.
+    module = notebook.run(BESIDE)
+    statement = f"class Mine(qf.Strategy):\n    {body}\n\n    def on_bar(self, ctx, bar):\n        return None\n"
+    notebook.run(statement)
+    with pytest.raises(ValueError) as refused:
+        _source._class_file(module.Mine, QF, True)
+    assert str(refused.value) == (
+        "Mine uses LIMIT, which its source does not define: submit_class sends the class's own "
+        "source below imports, and nothing else of where it was written; LIMIT is set in the "
+        "class's body, where a function, a lambda or a comprehension inside the class does not "
+        "look: there Python reads it outside the class"
+    )
+    # And it is so, on every Python: the file such a class would be sent as
+    # fails as the class is made, or as its function is called.
+    names = {"__name__": "strategy"}
+    with pytest.raises(NameError) as failed:
+        exec(compile(f"{QF}\n\n\n{statement}", "strategy.py", "exec"), names)
+        names["Mine"]().on_start(None)
+    assert failed.value.name == "LIMIT"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "kind: Kind = 3\n    Kind = int",
+        "def on_start(self, ctx: Kind) -> None:\n        return None\n\n    Kind = int",
+        "def on_start(self, ctx) -> Kind:\n        return None\n\n    Kind = int",
+    ],
+)
+def test_what_annotates_a_name_is_read_where_its_statement_stands_on_every_python(notebook, body):
+    # Up to Python 3.13 an annotation is evaluated as its statement runs;
+    # later Pythons evaluate it when it is asked for, in a scope of its own.
+    # A bundle runs on its server's Python, whichever reads the class here:
+    # the answer is the earlier Pythons', on every one.
+    module = notebook.run("Kind = int")
+    statement = f"class Mine(qf.Strategy):\n    {body}\n\n    def on_bar(self, ctx, bar):\n        return None\n"
+    notebook.run(statement)
+    with pytest.raises(ValueError) as refused:
+        _source._class_file(module.Mine, QF, True)
+    assert str(refused.value).endswith(
+        "; the class reads Kind before it sets it, where Python looks outside the class: set it "
+        "from what the class itself defines"
+    )
+    names = {"__name__": "strategy"}
+    program = compile(f"{QF}\n\n\n{statement}", "strategy.py", "exec")
+    if sys.version_info >= (3, 14):
+        exec(program, names)
+    else:
+        with pytest.raises(NameError):
+            exec(program, names)
+
+
+def test_the_names_a_text_reads_are_the_same_on_whichever_python_reads_it():
+    # What the table of symbols of one Python says and another's does not:
+    # a name it makes up for annotations inside a block, a name that only
+    # annotates a variable of a function, and a name that is deleted.
+    def said(body):
+        return _names._undefined(f"{QF}\n\n\nclass Mine(qf.Strategy):\n    {body}\n")
+
+    nothing = ([], set(), set())
+    assert said("if qf:\n        limit: int = 3\n    else:\n        limit: float = 4.0") == nothing
+    assert said("def on_start(self, ctx):\n        level: NeverDefined = 1") == nothing
+    assert said("Kind = int\n    kind: Kind = 3\n    other: Kind") == nothing
+    assert said("kind: NeverDefined = 3") == (["NeverDefined"], set(), set())
+    assert said("del gone") == (["gone"], {"gone"}, set())
+    assert said("LIMIT = 4\n    doubled = [LIMIT for _ in range(3)]") == (
+        ["LIMIT"],
+        set(),
+        {"LIMIT"},
+    )
+    assert said("LIMIT = 4\n    doubled = [value for value in range(LIMIT)]") == nothing
+    # A name a function annotates and gives no value is that function's,
+    # and no name the module is asked for.
+    assert said("def on_start(self, ctx):\n        level: int\n        return level") == nothing
+    # And a name a class inside the class sets is not the class's own.
+    inner = "class Inner:\n        depth = 1\n\n    def on_start(self, ctx):\n        return depth"
+    assert said(inner) == (["depth"], set(), set())
+
+
+def bodies(seed: int, count: int):
+    """Class bodies put together from a seed: statements that each run once,
+    in the order written, over three names of the class's own; with each,
+    whether an annotation in it reads one of them."""
+    rng = random.Random(seed)
+    names = ["a", "b", "c"]
+
+    def simple(index):
+        n, m, k = rng.choice(names), rng.choice(names), rng.choice(names)
+        return rng.choice(
+            [
+                (f"{n} = []", False),
+                (f"{n} = [{m}]", False),
+                (f"{n} = ({m}, {k})", False),
+                (f"{n}, {m} = [], []", False),
+                (f"{n} = [x for x in {m}]", False),
+                (f"{n} = [{m} for _ in [0]]", False),
+                (f"{n} = (lambda value={m}: value)()", False),
+                (f"{n} = ({m} := [])", False),
+                (f"{n} = [{m}, ({k} := [])]", False),
+                (f"{n} = [({k} := []), {m}]", False),
+                (f"{n}: list = {m}", False),
+                (f"{n}: list", False),
+                (f"{n}: {m} = []", True),
+                (f"{n}: {m}", True),
+                (f"def h_{index}(self, value: {m}) -> {k}:\n    return value", True),
+                (f"def f_{index}(self, value={m}):\n    return value", False),
+                (
+                    f"@(lambda function, by={m}: function)\ndef g_{index}(self):\n    return None",
+                    False,
+                ),
+                (f"class C_{index}:\n    inner = {m}", False),
+                (f"class D_{index}:\n    {n} = {n}", False),
+                (f"class E_{index}(([{m}], object)[1]):\n    pass", False),
+                (f"from string import digits as {n}", False),
+                (f"assert [{m}] is not None", False),
+                (f"[{m}]", False),
+            ]
+        )
+
+    def statement(index, depth=0):
+        if depth > 1 or rng.random() < 0.6:
+            inner, annotated = simple(index)
+        else:
+            inner, annotated = statement(index, depth + 1)
+        block = textwrap.indent(inner, "    ")
+        wrapper = rng.choice(["plain", "plain", "if", "try", "with", "handler", "as"])
+        if wrapper == "if":
+            inner = f"if True:\n{block}"
+        elif wrapper == "try":
+            inner = f"try:\n{block}\nfinally:\n    pass"
+        elif wrapper == "with":
+            inner = f"with memoryview(b''):\n{block}"
+        elif wrapper == "handler":
+            inner = f"try:\n    raise KeyError\nexcept KeyError:\n{block}"
+        elif wrapper == "as":
+            inner = f"with contextlib.nullcontext([]) as {rng.choice(names)}:\n{block}"
+        return inner, annotated
+
+    for _ in range(count):
+        made = [statement(index) for index in range(rng.randint(1, 6))]
+        body = textwrap.indent("\n".join(inner for inner, _ in made), "    ")
+        yield (
+            f"import contextlib\n\n{QF}\n\n\nclass Mine(qf.Strategy):\n{body}\n\n"
+            "    def on_bar(self, ctx, bar):\n        return None\n",
+            any(annotated for _, annotated in made),
+        )
+
+
+# What the reader says of `bodies(BODIES_SEED, BODIES)`, every answer in
+# order, as one hash: the same on every Python that reads them.
+BODIES_SEED, BODIES = 0x5EED_0B0D, 4000
+BODIES_SAID = "163077f81f4c6b4c810566303d5f99ca83e829cd7c3db87dc2007bad6f988f19"
+
+
+def test_what_a_class_body_reads_outside_itself_is_what_python_finds_missing_as_it_runs():
+    # The reader is held to Python itself. Each body's statements run once,
+    # in the order written: so the file runs exactly when the reader finds
+    # no name to refuse, and where it does not run, the name Python misses
+    # is one the reader named.
+    said = hashlib.sha256()
+    ran = 0
+    for text, annotated in bodies(BODIES_SEED, BODIES):
+        unknown, early, within = _names._undefined(text)
+        said.update(repr((unknown, sorted(early), sorted(within))).encode())
+        if annotated and sys.version_info >= (3, 14):
+            # A later Python evaluates an annotation when it is asked for:
+            # the answer for such a body is the earlier Pythons', which the
+            # hash below holds this one to.
+            continue
+        try:
+            exec(compile(text, "strategy.py", "exec"), {"__name__": "strategy"})
+        except NameError as missing:
+            assert missing.name in unknown, text
+        else:
+            ran += 1
+            assert unknown == [], text
+    assert 200 < ran < BODIES - 200
+    # And what it says is the same on whichever Python reads the bodies.
+    assert said.hexdigest() == BODIES_SAID
+
+
+def test_what_a_class_reads_too_soon_is_told_beside_what_it_does_not_define_at_all(notebook):
+    module = notebook.run(
+        """
+        LIMIT = 3
+        THRESHOLD = 4
+
+
+        class Mine(qf.Strategy):
+            floor = THRESHOLD
+            LIMIT = LIMIT
+
+            def on_bar(self, ctx, bar):
+                return None
+        """
+    )
+    with pytest.raises(ValueError) as refused:
+        _source._class_file(module.Mine, QF, True)
+    assert str(refused.value).endswith(
+        "; define THRESHOLD inside the class; the class reads LIMIT before it sets it, where "
+        "Python looks outside the class: set it from what the class itself defines"
     )
 
 

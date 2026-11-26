@@ -384,7 +384,7 @@ from it,** one for each way a caller acts on one:
 | `ValidationError` | The server refused the request as malformed or as naming something invalid | Change the request: sent again as it is, it fails again |
 | `NotFound` | What the request names does not exist on the server | Name something else |
 | `Conflict` | The request contradicts the state of what it names | Ask how it stands |
-| `ServerUnavailable` | The server could not be reached, or cannot answer now | Ask again later |
+| `ServerUnavailable` | The server could not be reached, or cannot answer now | Ask again later; for a submission, list the server's jobs first |
 | `VersionMismatch` | The server and this package share no protocol version | Upgrade the older of the two |
 <!-- end: exceptions -->
 
@@ -561,8 +561,9 @@ held to what HTTP writes, and to two limits of its own.
   and nothing is sent.
 - **Each request is made on a connection of its own,** and closes it. A
   bundle is uploaded on one, a piece at a time, and the 60 seconds are the
-  server's longest silence there too: an upload that keeps moving, however
-  slowly, goes on.
+  server's longest silence there too: each piece has that long to be
+  taken, and the answer that long to begin once the last piece is handed
+  to the system. An upload that keeps moving, however slowly, goes on.
 - **The package imports nothing of the network until a client asks its
   server.** `import quantforge_py` is as fast with a client in it as
   without, and a program that never makes one pays nothing for it.

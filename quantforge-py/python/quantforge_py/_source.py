@@ -18,16 +18,22 @@ text, read again by its Python, and what the text needs has to be in it.
   globals and the variables of where the class was written stay behind.
 - **Every name the text reads has to be defined in it:** by `imports`, by
   the class itself, or as one of Python's builtins. Any other name is a
-  refusal that says which, before anything is sent. The check reads the
-  text and runs nothing: a name looked up some other way, by `globals()`
-  or by `eval`, is not seen by it.
+  refusal that says which, before anything is sent
+  (`quantforge_py._names`). The check reads the text and runs nothing: a
+  name looked up some other way, by `globals()` or by `eval`, is not seen
+  by it.
+- **Nothing of the class is run to find any of this.** What a class's
+  attributes hold is told by its exact type and never asked: an object
+  whose class answers for its attributes with code of its own is left
+  alone.
 
 Importing this module imports nothing but the package's own: `inspect`,
-`ast` and `symtable` are imported when a class is first submitted.
+`ast` and `linecache` are imported when a class is first submitted.
 
 This module is private.
 """
 
+from ._names import _advice, _listed, _undefined
 from ._native import Strategy
 from ._wire import _wrong_type
 
@@ -35,11 +41,6 @@ from ._wire import _wrong_type
 # imports written above a class whose caller declares none.
 _FILE = "strategy.py"
 _IMPORTS = "import quantforge_py as qf"
-
-# The names every module has without defining them.
-_MODULE_NAMES = frozenset(
-    {"__name__", "__doc__", "__file__", "__package__", "__spec__", "__loader__", "__builtins__"}
-)
 
 # What `submit_class` says where its caller has not said that it knows.
 _CAVEATS = (
@@ -51,12 +52,20 @@ _CAVEATS = (
 )
 
 
-def _listed(names):
-    """Names as a sentence lists them: `a`, `a and b`, `a, b and c`."""
-    names = list(names)
-    if len(names) < 3:
-        return " and ".join(names)
-    return f"{', '.join(names[:-1])} and {names[-1]}"
+def _own_function(value):
+    """The function an attribute of a class is, or the one that Python's own
+    `staticmethod`, `classmethod` or `property` wraps; `None` for anything
+    else. It is told by the attribute's exact type, and read from that
+    type's own slot: nothing is asked of an object whose class could answer
+    with code of its own, as an attribute hook does."""
+    import types
+
+    kind = type(value)
+    if kind is staticmethod or kind is classmethod:
+        value = value.__func__
+    elif kind is property:
+        value = value.fget
+    return value if type(value) is types.FunctionType else None
 
 
 def _acknowledged(source_only):
@@ -89,11 +98,13 @@ def _a_strategy_class(strategy):
         return
     if outer.endswith("<locals>"):
         function = outer.removesuffix(".<locals>").rpartition(".")[2]
+        functions = [_own_function(value) for value in vars(strategy).values()]
         taken = sorted(
             {
                 free
-                for value in vars(strategy).values()
-                for free in getattr(getattr(value, "__code__", None), "co_freevars", ())
+                for function in functions
+                if function is not None
+                for free in function.__code__.co_freevars
                 if free != "__class__"
             }
         )
@@ -116,11 +127,10 @@ def _from_a_method(strategy):
     defines no function of its own."""
     import ast
     import linecache
-    import types
 
     for value in vars(strategy).values():
-        function = getattr(value, "__func__", None) or getattr(value, "fget", None) or value
-        if not isinstance(function, types.FunctionType):
+        function = _own_function(value)
+        if function is None:
             continue
         if function.__qualname__ != f"{strategy.__qualname__}.{function.__name__}":
             continue
@@ -142,11 +152,46 @@ def _from_a_method(strategy):
     return None
 
 
+def _by_its_name(strategy):
+    """The statement that defined a class, as `inspect` finds one in the
+    file of the class's module; `None` where it finds none. This is how a
+    class that defines no function of its own is found.
+
+    From Python 3.13 on a class says which line its statement starts on,
+    and that statement is the one found. Before, a class says no more of
+    where it was written than its name, and the first statement of that
+    name in the file is taken: so a file that has more than one is refused,
+    since which of them made the class is not known."""
+    import ast
+    import inspect
+
+    try:
+        lines, _ = inspect.findsource(strategy)
+        source = inspect.getsource(strategy)
+    except (OSError, TypeError):
+        return None
+    if "__firstlineno__" in vars(strategy):
+        return source
+    name = strategy.__name__
+    try:
+        body = ast.parse("".join(lines)).body
+    except (SyntaxError, ValueError):
+        body = []
+    written = sum(isinstance(node, ast.ClassDef) and node.name == name for node in body)
+    if written > 1:
+        raise ValueError(
+            f"{name} is defined {written} times in {inspect.getsourcefile(strategy)}, and defines "
+            "no function of its own by which the statement that made it would be found: before "
+            "Python 3.13 a class says no more of where it was written than its name. Give each "
+            "of them a name of its own, or submit the file with submit()"
+        )
+    return source
+
+
 def _statement(strategy):
     """The `class` statement that defined a class, as text that ends with a
     line feed: one statement, at the top level, of that class's name."""
     import ast
-    import inspect
 
     name = strategy.__name__
     # Where one of the class's own functions was compiled from says exactly
@@ -155,10 +200,7 @@ def _statement(strategy):
     # function is left to `inspect`, which reads its module's file.
     source = _from_a_method(strategy)
     if source is None:
-        try:
-            source = inspect.getsource(strategy)
-        except (OSError, TypeError):
-            source = None
+        source = _by_its_name(strategy)
     if source is None:
         raise ValueError(
             f"the source of {name} cannot be read: Python keeps none of it, as of a class made "
@@ -214,34 +256,6 @@ def _declared(imports):
     return text
 
 
-def _undefined(module):
-    """The names the text of a module reads and nothing in it defines: not
-    its imports, not its class, and no builtin of Python's. Read from the
-    text's own table of symbols; nothing of it is run."""
-    import builtins
-    import symtable
-
-    top = symtable.symtable(module, _FILE, "exec")
-    defined = {
-        symbol.get_name()
-        for symbol in top.get_symbols()
-        if symbol.is_assigned() or symbol.is_imported() or symbol.is_namespace()
-    }
-    read = set()
-
-    def walk(table, outermost):
-        for symbol in table.get_symbols():
-            # Inside the class and its functions a name that is neither
-            # theirs nor an enclosing function's is looked up in the module.
-            if symbol.is_referenced() and (outermost or symbol.is_global()):
-                read.add(symbol.get_name())
-        for child in table.get_children():
-            walk(child, False)
-
-    walk(top, True)
-    return sorted(read - defined - set(dir(builtins)) - _MODULE_NAMES)
-
-
 def _written_in(strategy):
     """The names defined where a class was written: the globals its own
     functions were defined with, or, for a class that has none, those of
@@ -250,52 +264,12 @@ def _written_in(strategy):
     import types
 
     for value in vars(strategy).values():
-        function = getattr(value, "__func__", None) or getattr(value, "fget", None) or value
-        if isinstance(function, types.FunctionType):
+        function = _own_function(value)
+        if function is not None:
             return function.__globals__
-    return vars(sys.modules.get(strategy.__module__, types.ModuleType("nowhere")))
-
-
-def _advice(strategy, names):
-    """What to do about names a class's source reads and does not define,
-    by what each is where the class was written: a module or a name that an
-    import statement gives, something defined beside the class, or
-    nothing."""
-    import sys
-    import types
-
-    around = _written_in(strategy)
-    imported, beside, nowhere = [], [], []
-    for name in names:
-        if name not in around:
-            nowhere.append(name)
-            continue
-        value = around[name]
-        if isinstance(value, types.ModuleType):
-            alias = "" if name == value.__name__ else f" as {name}"
-            imported.append(f"import {value.__name__}{alias}")
-            continue
-        home, known = getattr(value, "__module__", None), getattr(value, "__name__", None)
-        if (
-            isinstance(home, str)
-            and isinstance(known, str)
-            # A builtin under another name was given that name here.
-            and home not in (strategy.__module__, "builtins")
-            and getattr(sys.modules.get(home), known, None) is value
-        ):
-            alias = "" if name == known else f" as {name}"
-            imported.append(f"from {home} import {known}{alias}")
-        else:
-            beside.append(name)
-    advice = []
-    if imported:
-        advice.append(f"add {_listed(repr(line) for line in imported)} to imports")
-    if beside:
-        advice.append(f"define {_listed(beside)} inside the class")
-    if nowhere:
-        is_or_are = "is" if len(nowhere) == 1 else "are"
-        advice.append(f"{_listed(nowhere)} {is_or_are} defined nowhere the class was written")
-    return "; ".join(advice)
+    named = vars(strategy).get("__module__")
+    module = sys.modules.get(named) if type(named) is str else None
+    return vars(module) if type(module) is types.ModuleType else {}
 
 
 def _class_file(strategy, imports, source_only):
@@ -311,7 +285,7 @@ def _class_file(strategy, imports, source_only):
     module = f"{declared}\n\n\n{statement}" if declared else statement
     try:
         compile(module, _FILE, "exec", dont_inherit=True)
-        unknown = _undefined(module)
+        unknown, early, within = _undefined(module)
         text = module.encode("utf-8")
     except SyntaxError as error:
         raise ValueError(
@@ -323,10 +297,11 @@ def _class_file(strategy, imports, source_only):
             f"the source of {name} holds a lone surrogate, which no file holds"
         ) from None
     if unknown:
+        home = vars(strategy).get("__module__")
         its = "its source does" if declared else "its source, which has no imports, does"
         raise ValueError(
             f"{name} uses {_listed(unknown)}, which {its} not define: submit_class sends the "
             f"class's own source below imports, and nothing else of where it was written; "
-            f"{_advice(strategy, unknown)}"
+            f"{_advice(_written_in(strategy), home, unknown, early, within)}"
         )
     return (_FILE, text), f"{_FILE}:{name}"

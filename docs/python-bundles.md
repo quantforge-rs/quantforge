@@ -461,6 +461,15 @@ know before the call is made:
   read from that file as it is now, which is not the class in memory if the
   file changed since it was imported. A class of a notebook is read from
   the cell that defined it.
+- **A class is found by its own functions:** where one of them was
+  compiled says which statement made the class, in a file as in a cell. A
+  class that defines none is found by its name in its module's file, and
+  before Python 3.13 a class says no more of where it was written than
+  that: where the file defines the name more than once, such a class is
+  refused.
+- **Nothing of the class is run or asked to find its source.** What its
+  attributes hold is told by its type: an object whose class answers for
+  its attributes with code of its own is left alone.
 - **A class Python keeps no source of is refused:** one made by calling
   `type`, and one typed at a prompt that keeps none. So is anything that is
   no class: a function, a `lambda`, an object of a strategy.
@@ -506,6 +515,16 @@ ValueError: Captures is defined inside the function make, and uses its threshold
   Python's own compiler finds in the file. A name looked up some other
   way, through `globals()`, `eval` or `getattr` on a module, is not seen
   by it, and fails where the job runs, with its traceback in the job's log.
+- **A name is the class's own where the class has set it.** A class's body
+  looks a name up among those it has set so far, and then outside the
+  class: one it reads before it sets it, as `LIMIT = LIMIT` does, is read
+  outside, and is refused. Inside a function, a lambda or a comprehension
+  of its body, Python does not look in the class at all: a name the class
+  sets is read outside it there, and is refused as well.
+- **The answer is the same on whichever Python reads the class.** A bundle
+  runs on its server's Python. What annotates a name is held to being
+  defined where its statement stands, as Python up to 3.13 evaluates it,
+  though a later Python would not ask until the annotation is read.
 - **A name that an import gives is refused with the line to add,** such as
   `add 'import numpy as np' to imports`, read from where the class was
   written. Nothing is added for the caller: an import is declared, never

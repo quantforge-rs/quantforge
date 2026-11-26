@@ -679,6 +679,11 @@ def test_a_server_that_goes_away_as_a_job_is_submitted_is_unavailable_and_not_as
         server.says("POST", "/v1/backtests", (502, "bad gateway"))
         error = raised(qf.ServerUnavailable, lambda: submit(server, strategy))
         assert error.status == 502 and len(server.sent("POST")) == 1
+    # Which the exception itself says to whoever reads it: it may be asked
+    # again, but for a submission.
+    said = " ".join(qf.ServerUnavailable.__doc__.split())
+    assert "The request may be made again, but for a submission:" in said
+    assert "the server's jobs are listed before it is submitted again" in said
 
 
 # A class.

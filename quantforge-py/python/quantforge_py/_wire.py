@@ -31,7 +31,9 @@ library alone:
   tar or a submission's JSON, sent with the media type the caller names and
   the length it has, a piece at a time: the server's longest silence is
   held to while it takes them as it is while it answers, so an upload that
-  keeps moving is never cut off for being long.
+  keeps moving is never cut off for being long. Each piece has that long
+  to be taken, and the answer that long to begin once the last piece is
+  handed to the system.
 
 Importing this module imports nothing of the network. `http.client`, `ssl`
 and what else a request takes are imported when a client first needs them,

@@ -16,6 +16,7 @@ from quantforge_py import (
     _errors,
     _frames,
     _jobs,
+    _names,
     _native,
     _source,
     _submit,
@@ -121,12 +122,14 @@ def test_every_published_name_is_the_extension_modules_own_or_a_private_modules(
     for name in FRAMES:
         assert getattr(quantforge_py, name).__module__ == _frames.__name__, name
     # Every module of the package is private, and lies beside the others:
-    # the eight of the client among them, four of which publish nothing:
+    # the nine of the client among them, five of which publish nothing:
     # how a request reaches a server, how its answer is read, how a class's
-    # source is found, and the order a submission is made in.
+    # source is found, what its text reads and does not define, and the
+    # order a submission is made in.
     package = pathlib.Path(quantforge_py.__file__).parent
-    modules = [_answer, _bundles, _client, _errors, _frames, _jobs, _source, _submit, _wire]
-    assert set(WRITTEN_IN.values()) == set(modules) - {_answer, _source, _submit, _wire}
+    modules = [_answer, _bundles, _client, _errors, _frames, _jobs, _names, _source, _submit]
+    modules.append(_wire)
+    assert set(WRITTEN_IN.values()) == set(modules) - {_answer, _names, _source, _submit, _wire}
     for module in modules:
         assert module.__name__.startswith("quantforge_py._"), module
         assert pathlib.Path(module.__file__).parent == package

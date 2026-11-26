@@ -516,11 +516,14 @@ def test_a_file_that_is_no_py_file_is_refused_as_a_strategy_whatever_entry_is_gi
 
 
 def test_a_file_whose_name_is_no_text_is_refused_by_the_path_rules(tmp_path):
-    # A file system may hold a name whose bytes are no text. It is named
-    # with a mark in their place, as the spec's own walk of a directory
-    # names one, and is no path of a bundle.
+    # A file system may hold a name whose bytes are no text, which Python
+    # gives with a lone surrogate in the place of each such byte. It is
+    # named with a mark there, as the spec's own walk of a directory names
+    # one, and is no path of a bundle. The name is written out here as
+    # `os.fsdecode` gives it where a file system holds bytes: on Windows,
+    # which holds text, the same call refuses the bytes.
     assert _bundles._named("strategy.py") == "strategy.py"
-    name = os.fsdecode(b"str\xffategy.py")
+    name = "str\udcffategy.py"
     assert _bundles._named(name) == "str\ufffdategy.py"
     with pytest.raises(qf.BundleError) as refused:
         _bundles._Draft.of_files([(_bundles._named(name), HOLD)], "strategy.py:Hold", None, None)
@@ -529,7 +532,7 @@ def test_a_file_whose_name_is_no_text_is_refused_by_the_path_rules(tmp_path):
     try:
         (tmp_path / name).write_bytes(HOLD)
     except (OSError, UnicodeError):
-        # This file system takes text alone, as macOS's and Windows' do.
+        # This file system takes no such name, as macOS's takes none.
         return
     with pytest.raises(qf.BundleError) as refused:
         _bundles._Draft.of_path(tmp_path / name, "strategy.py:Hold", None, None)

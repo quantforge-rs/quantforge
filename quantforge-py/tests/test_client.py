@@ -197,7 +197,8 @@ def test_a_body_is_cut_off_by_the_servers_silence_and_never_by_how_long_it_takes
     # it answers. A body goes out a piece at a time, each with that long: a
     # server that takes it slowly takes all of it, though the whole takes
     # longer than any silence may last.
-    body = bytes(range(256)) * (64 * 1024)
+    silence = 1.0
+    body = bytes(range(256)) * (128 * 1024)
     took = []
 
     def length(listener) -> tuple[int, int]:
@@ -206,11 +207,26 @@ def test_a_body_is_cut_off_by_the_servers_silence_and_never_by_how_long_it_takes
         return int(stated), len(begun)
 
     def slowly(connection):
+        # Slow for twice as long as a silence may last, by the clock: every
+        # fifth of a silence it takes what has come, a mebibyte at most, and
+        # waits for the next. So no piece of the client's waits for longer
+        # than one such step, however late this system's timers are; and
+        # the client, which can be ahead of the server only by what the
+        # system holds between the two, has most of the body still to send
+        # when the time is up. Then the server takes the rest as fast as it
+        # comes.
+        #
+        # A server that stayed slow to the end would be as slow to take
+        # what the system still held after the client's last piece, for
+        # which the client waits as for any answer: how much that is turns
+        # on the system, and on one of CI's it took longer than the silence.
         stated, got = length(slow)
-        began = time.monotonic()
+        began, step = time.monotonic(), silence / 5
         while got < stated:
-            time.sleep(0.01)
-            piece = connection.recv(256 * 1024)
+            since = time.monotonic() - began
+            if since < 2 * silence:
+                time.sleep(step - since % step)
+            piece = connection.recv(1024 * 1024)
             if not piece:
                 # The client gave the upload up.
                 break
@@ -218,32 +234,33 @@ def test_a_body_is_cut_off_by_the_servers_silence_and_never_by_how_long_it_takes
         took.append((got, time.monotonic() - began))
         connection.sendall(b"HTTP/1.1 201 Created\r\nContent-Length: 2\r\n\r\n{}")
 
+    given_up = threading.Event()
+
     def never(connection):
         # Takes no more of it, for as long as the client holds on.
-        try:
-            connection.recv(1, socket.MSG_PEEK)
-            time.sleep(3)
-        except OSError:
-            pass
+        given_up.wait(30)
 
-    monkeypatch.setattr(_wire, "_READ_SECONDS", 0.3)
+    monkeypatch.setattr(_wire, "_READ_SECONDS", silence)
     with Raw(slowly) as slow:
         wire = qf.Client(f"http://127.0.0.1:{slow.port}")._wire
         taken = wire._ask("PUT", "/v1/bundles/any", lambda value: value, body, "application/x-tar")
         assert taken == {}
     ((got, lasted),) = took
-    assert got == len(body) and lasted > 0.3, (got, lasted)
+    assert got == len(body) and lasted > 2 * silence, (got, lasted)
     # One that takes nothing of it is given up after that silence.
     with Raw(never) as silent:
         wire = qf.Client(f"http://127.0.0.1:{silent.port}")._wire
         began = time.monotonic()
-        error = raised(
-            qf.ServerUnavailable,
-            lambda: wire._ask(
-                "PUT", "/v1/bundles/any", lambda value: value, body, "application/x-tar"
-            ),
-        )
-        assert time.monotonic() - began < 2.5
+        try:
+            error = raised(
+                qf.ServerUnavailable,
+                lambda: wire._ask(
+                    "PUT", "/v1/bundles/any", lambda value: value, body, "application/x-tar"
+                ),
+            )
+            assert silence <= time.monotonic() - began < 4 * silence
+        finally:
+            given_up.set()
     assert str(error).endswith(": TimeoutError: timed out")
 
 

@@ -389,8 +389,9 @@ quantforge-py/
 │       ├── _errors.py      RemoteError and the six exceptions derived from it: what a request to a server fails with, each raised by the code of the protocol's error envelope
 │       ├── _frames.py      candles and a backtest's result as pandas DataFrames, and a frame of candles as a batch: written in Python, with pandas' own calls
 │       ├── _jobs.py        Job and JobStatus: a server's backtest jobs listed, got and submitted, the handle on one, and its status read strictly from what the protocol writes, into the package's own types
+│       ├── _names.py       what the text of a class sent by its source reads and does not define: the same answer on every Python, a class's body read in the order it is written, and what to do about each name, with nothing run and nothing asked
 │       ├── _runtime.py     the runtime a strategy bundle runs in, in Python: the environment a worker offers, a bundle's strategy imported from its files and built from its parameters, what its own code may import, its lines and its failures
-│       ├── _source.py      a class as submit_class sends one: the text of its class statement, found in its module's file or its notebook's cell, below the imports its caller declares, and every name it reads held to being defined there
+│       ├── _source.py      a class as submit_class sends one: the text of its class statement, found in its module's file or its notebook's cell by the class's own functions, below the imports its caller declares
 │       ├── _submit.py      a backtest job submitted: what is checked before a server is asked, then its runtime, the bars it stores, the bundle uploaded under the hash computed here, and the job submitted once
 │       ├── _wire.py        a server as a client's requests reach it, with the standard library alone: its URL and the token checked, the protocol version agreed on, each request on a connection of its own, what is asked again, and an answer given as its route's or raised as the exception it is
 │       └── _worker.py      the worker a QuantForge server runs Python bundles in, `python -m quantforge_py._worker`: what the server gave it closed, its frames moved off standard output, then the extension's worker
@@ -453,7 +454,7 @@ quantforge-py/
     ├── test_repository.py  this page, the readme and the manifests, held to the package
     ├── test_run_backtest.py  run_backtest: what it takes, the order it checks that in, the market a batch names, what the engine refuses, and that a run repeats
     ├── test_runtime.py     the runtime a bundle runs in, in this process: its strategy built from its entry and its parameters, what its own code may import and what quantforge_py imports for it, every refusal and its traceback, its lines, and what a worker offers
-    ├── test_source.py      a class as submit_class sends one: its statement found in a file and in a notebook's cell, the imports written above it, every name it reads and does not define refused with what to do, and every class that is not sent
+    ├── test_source.py      a class as submit_class sends one: its statement found in a file and in a notebook's cell, the imports written above it, every name it reads and does not define refused with what to do, the same on every Python and held to what running the file gives, and every class that is not sent
     ├── test_strategy.py    a target, a context, and the class a strategy derives from
     ├── test_strategy_cases.py  the strategy boundary's shared cases: a Python strategy called and obeyed as the engine's own is
     ├── test_strategy_failures.py  a callback that raises or returns what it may not, a strategy's name, and what is no strategy
@@ -750,9 +751,15 @@ They hold the installed package to the checkout they are in:
   `submit_class` sends one: its statement found in a file and, for a class
   whose module has none, in the cell that defined it, as a notebook's
   kernel keeps one; the file it writes run where nothing else is defined;
-  every name its source reads and does not define refused with what to do;
-  and every class it does not send, one that takes a variable from the
-  function around it among them. Then the requests, against servers of the
+  every name its source reads and does not define refused with what to do,
+  one its body reads before the class has set it and one the class sets
+  and reads inside a function or a comprehension among them; that answer
+  held to Python itself, over four thousand class bodies put together from
+  a seed, each of which runs exactly when the reader finds no name to
+  refuse, and held to one hash, so that it is the same on whichever Python
+  reads them; nothing asked of what a class's attributes hold; and every
+  class it does not send, one that takes a variable from the function
+  around it among them. Then the requests, against servers of the
   test's own that record what they were asked: their order, what is sent,
   the window read within the bars the server stores, nothing asked for
   what is refused locally and nothing uploaded for a bundle the server's
