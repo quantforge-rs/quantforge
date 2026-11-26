@@ -23,6 +23,11 @@ by the class itself, or as one of Python's builtins.
 - **Only what is certain is refused.** Whether a loop runs and which way a
   branch goes, the text does not say: a read that some way through the
   body satisfies is no refusal.
+- **A block may be left before its end,** by an exception or by a `break`,
+  and the class's body goes on from where it was left. What may be set
+  there is told place by place; every way out of a `try` passes through
+  its `finally`. What is not told is that a statement never ends: what
+  follows a `raise` is read as though it ran.
 - **Python's builtins are those every Python the package runs on has,**
   on every system: a bundle runs on its server's Python, not on the one
   that reads the class.
@@ -126,16 +131,26 @@ class _ClassBody:
     there: after branches of which one is taken, a name may be set if any
     of them may have set it, and a name is unset for certain only where the
     class deletes it, or where the handler of an exception ends, which
-    clears the name the exception was given. A block that may be left
-    before its end, the body of a `try`, of a `with` or of a loop, may have
-    been left at any statement of it: what it set anywhere may be set
-    after it, though it unset it further down. A read is reported where the
-    name cannot have been set. So a class is never refused for a read that
-    some way through its body satisfies; one that fails only along some
-    way, as a read after a loop that did not run, is taken, and fails where
-    it runs. A read inside a loop, which may come after a later statement
-    of the loop has run, is left alone, and a statement this reader does
-    not know sets what it names and reads nothing.
+    clears the name the exception was given. A read is reported where the
+    name cannot have been set.
+
+    **A block may be left before its end**, the body of a `try`, of a
+    `with` or of a loop, and the class's body goes on from where it was
+    left: in a handler, after a `with` whose manager took the exception,
+    after the loop. A block may be left where a statement of it begins,
+    since whatever a statement evaluates may raise, and where a statement
+    has set a name and goes on to something that may raise. A `del` is
+    left otherwise: where it fails at a name, that name was not set.
+    **Every way out of a `try` passes through its `finally`**, and every
+    way out of a handler through the clearing of its name: what these
+    unset is unset wherever the body goes on from there.
+
+    So a class is never refused for a read that some way through its body
+    satisfies; one that fails only along some way, as a read after a loop
+    that did not run, is taken, and fails where it runs. A read inside a
+    loop, which may come after a later statement of the loop has run, is
+    left alone, and a statement this reader does not know sets what it
+    names and reads nothing.
 
     An annotation is read where its statement stands, as Python up to 3.13
     evaluates one: a bundle runs on its server's Python, whichever reads the
@@ -152,10 +167,13 @@ class _ClassBody:
         self.own = set()
         # What it reads where the name cannot have been set, and what it
         # says is a function's around the class, or the module's.
-        self.early, self.outer, self.loops = set(), set(), 0
-        # What is set while a block is read, for each block being read
-        # that may be left before its end.
-        self.blocks = []
+        self.early, self.outer = set(), set()
+        # Above zero where a read is not reported: inside a loop, and in a
+        # `finally` that is read a second time.
+        self.silent = 0
+        # For each block being read that may be left before its end, the
+        # names that may be set where it is left; the innermost block last.
+        self.exits = []
 
     def names(self, body):
         """The names the body reads before it has set them, of those that
@@ -167,30 +185,39 @@ class _ClassBody:
 
     def read(self, name):
         name = _mangled(name, self.owner)
-        if name not in self.maybe and not self.loops:
+        if name not in self.maybe and not self.silent:
             self.early.add(name)
 
-    def bind(self, name):
+    def bind(self, name, last=False):
+        """Sets a name. Unless that is the `last` thing its statement does,
+        what the statement goes on to may raise: the block being read may
+        be left with the name set."""
         name = _mangled(name, self.owner)
         self.maybe.add(name)
         self.ever.add(name)
-        for block in self.blocks:
-            block.add(name)
-
-    def anywhere(self, read):
-        """Reads a block that may be left before its end, and gives the
-        names it sets at any statement of it: what may be set where it was
-        left, whatever a statement further down unsets."""
-        block = set()
-        self.blocks.append(block)
-        try:
-            read()
-        finally:
-            self.blocks.pop()
-        return block
+        if self.exits and not last:
+            self.exits[-1].add(name)
 
     def unbind(self, name):
         self.maybe.discard(_mangled(name, self.owner))
+
+    def leave(self, names=None):
+        """Notes that the block being read may be left with `names` set:
+        unless given, here, with what may be set now."""
+        if self.exits:
+            self.exits[-1] |= self.maybe if names is None else names
+
+    def left(self, read):
+        """Reads a block that may be left before its end, and gives the
+        names that may be set where it is left. Where the class's body goes
+        on from there is its caller's to say: nothing is noted for the
+        block around it."""
+        self.exits.append(set())
+        try:
+            read()
+        finally:
+            exits = self.exits.pop()
+        return exits
 
     def either(self, *ways):
         """Reads ways of which one is taken: after them a name may be set
@@ -209,6 +236,12 @@ class _ClassBody:
     def statement(self, node):
         import ast
 
+        still = (ast.Try, ast.TryStar, ast.Pass, ast.Global, ast.Nonlocal)
+        if not isinstance(node, (*still, ast.Delete)):
+            # Whatever a statement evaluates may raise as it begins. A `try`,
+            # a `pass` and a `global` evaluate nothing themselves, and a
+            # `del` says where it is left.
+            self.leave()
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             # What a function is decorated with and its defaults are the
             # class's to evaluate, and its annotations where its type
@@ -220,16 +253,15 @@ class _ClassBody:
             for each in (*node.decorator_list, *arguments.defaults, *arguments.kw_defaults):
                 self.expression(each)
             self.generic(node, [*annotations, node.returns])
-            self.bind(node.name)
+            self.bind(node.name, last=True)
         elif isinstance(node, ast.ClassDef):
             for each in node.decorator_list:
                 self.expression(each)
             self.generic(node, [*node.bases, *(keyword.value for keyword in node.keywords)])
-            self.bind(node.name)
+            self.bind(node.name, last=True)
         elif isinstance(node, ast.Assign):
             self.expression(node.value)
-            for target in node.targets:
-                self.target(target)
+            self.targets(node.targets)
         elif isinstance(node, ast.AugAssign):
             # What is added to is read before the value: a name, or the
             # object and the index of an item.
@@ -239,24 +271,25 @@ class _ClassBody:
                 self.expression(node.target)
             self.expression(node.value)
             if isinstance(node.target, ast.Name):
-                self.bind(node.target.id)
+                self.bind(node.target.id, last=True)
         elif isinstance(node, ast.AnnAssign):
             # The value, then the name, then what annotates it. Without a
             # value the name is the class's own, and nothing is set.
             if node.value is not None:
                 self.expression(node.value)
-                self.target(node.target)
+                self.targets([node.target], more=True)
             elif isinstance(node.target, ast.Name):
                 self.own.add(_mangled(node.target.id, self.owner))
             else:
                 self.expression(node.target)
             self.expression(node.annotation)
         elif isinstance(node, ast.Delete):
-            for target in node.targets:
-                self.deleted(target)
+            self.deleted(node.targets)
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            # One after the other: a later one may fail to be imported.
             for alias in node.names:
-                self.bind((alias.asname or alias.name).partition(".")[0])
+                name = (alias.asname or alias.name).partition(".")[0]
+                self.bind(name, last=alias is node.names[-1])
         elif isinstance(node, (ast.Nonlocal, ast.Global)):
             self.outer.update(_mangled(name, self.owner) for name in node.names)
         elif isinstance(node, ast.If):
@@ -268,11 +301,14 @@ class _ClassBody:
             for item in node.items:
                 self.expression(item.context_expr)
                 if item.optional_vars is not None:
-                    self.target(item.optional_vars)
-            entered = set(self.maybe)
-            # What manages the block may end it at any statement, and go on.
-            self.maybe |= entered | self.anywhere(lambda: self.statements(node.body))
-        elif isinstance(node, ast.Try) or type(node).__name__ == "TryStar":
+                    self.targets([item.optional_vars], more=True)
+            left = self.left(lambda: self.statements(node.body))
+            # An exception goes on from where it left the block, as does one
+            # that what manages the block raises as the block ends; and
+            # where what manages the block takes it, the class's body does.
+            self.leave(left | self.maybe)
+            self.maybe |= left
+        elif isinstance(node, (ast.Try, ast.TryStar)):
             self.attempt(node)
         elif isinstance(node, (ast.Expr, ast.Assert, ast.Raise, ast.Pass)):
             for child in ast.iter_child_nodes(node):
@@ -291,52 +327,96 @@ class _ClassBody:
 
         def body():
             if not isinstance(node, ast.While):
-                self.target(node.target)
+                self.targets([node.target], more=True)
             self.statements(node.body)
 
-        self.loops += 1
-        # It may be broken out of at any statement of its body.
-        self.maybe |= before | self.anywhere(body)
-        self.loops -= 1
+        self.silent += 1
+        # It may be broken out of, or gone round again, wherever its body
+        # may be left, and an exception goes on from there.
+        left = self.left(body) | self.maybe
+        self.silent -= 1
+        self.leave(left)
+        self.maybe = before | left
         ran = set(self.maybe)
         self.statements(node.orelse)
         self.maybe |= ran
 
     def attempt(self, node):
-        """A `try`: an exception may leave its body at any statement, for a
-        handler or for nothing; a handler is given the exception under a
-        name that Python clears as the handler ends; of the handlers of a
-        `try` one runs, and of the clauses of an `except*` every one that
-        matches a part of what was raised, one after the other; and what is
-        left to `finally` runs after any of them, or as an exception passes
-        through, from wherever it was raised."""
-        before = set(self.maybe)
-        every = type(node).__name__ == "TryStar"
+        """A `try`. A handler runs from wherever the body was left. Which
+        handler takes an exception is found by evaluating what each names,
+        in turn; the handler is given the exception under a name that
+        Python clears however the handler ends. Of the handlers of a `try`
+        one runs; of the clauses of an `except*` every one that matches a
+        part of what was raised, one after the other, and one that raises
+        does not keep the next from running. And however the statement is
+        left, what is left to `finally` runs first."""
+        import ast
+
+        every = isinstance(node, ast.TryStar)
         ends = []
 
         def tried():
-            raised = before | self.anywhere(lambda: self.statements(node.body)) | self.maybe
+            raised = self.left(lambda: self.statements(node.body))
             self.statements(node.orelse)
             ends.append(set(self.maybe))
+            self.maybe = raised
             for handler in node.handlers:
-                self.maybe = set(raised)
-                self.expression(handler.type)
-                if handler.name:
-                    self.bind(handler.name)
-                within = self.anywhere(lambda: self.statements(handler.body))
+                # A handler that names nothing takes whatever was raised:
+                # nothing is evaluated for it, and nothing passes it.
+                passed = set()
+                if handler.type is not None:
+                    self.leave()
+                    self.expression(handler.type)
+                    passed = set(self.maybe)
+
+                def handled():
+                    if handler.name:
+                        self.bind(handler.name)
+                    self.statements(handler.body)
+
+                left = self.left(handled)
                 if handler.name:
                     self.unbind(handler.name)
-                    within.discard(_mangled(handler.name, self.owner))
+                    left.discard(_mangled(handler.name, self.owner))
                 ends.append(set(self.maybe))
                 if every:
-                    # A clause that raises does not keep the next from running.
-                    raised |= self.maybe | within
+                    self.maybe |= passed | left
+                else:
+                    self.leave(left)
+                    self.maybe = passed
+            # What no handler took goes on from here, and what the clauses
+            # of an `except*` raised with it; where every clause took its
+            # part, the statement ends here.
+            self.leave()
+            if every:
+                ends.append(set(self.maybe))
 
-        anywhere = self.anywhere(tried)
+        left = self.left(tried)
         self.maybe = set().union(*ends)
-        if node.finalbody:
-            self.maybe |= before | anywhere
-            self.statements(node.finalbody)
+        if not node.finalbody:
+            self.leave(left)
+            return
+        ended = set(self.maybe)
+        # `finally` runs from wherever the statement ended or was left: what
+        # it reads is held to both, and it may be left itself from either.
+        self.maybe |= left
+        self.statements(node.finalbody)
+        after = sets = self.maybe
+        if ended != left:
+            # After it, a name is set that `finally` sets itself, or that
+            # was set where `finally` began and that it leaves set. What it
+            # sets itself is told by reading it again from nothing set, with
+            # nothing reported and nowhere left a second time. Python's
+            # compiler writes a `finally` out twice too.
+            self.maybe = set()
+            self.silent += 1
+            self.left(lambda: self.statements(node.finalbody))
+            self.silent -= 1
+            sets = self.maybe
+        # What left the statement goes on from the end of `finally`, and the
+        # class's body goes on from there where the statement had ended.
+        self.leave(after & left | sets)
+        self.maybe = after & ended | sets
 
     def generic(self, node, expressions):
         """Reads what a function or a class evaluates where its type
@@ -349,20 +429,33 @@ class _ClassBody:
             self.expression(each)
         self.maybe = held | (self.maybe - parameters)
 
-    def deleted(self, target):
-        """Unsets what a `del` names: a name is read, to be deleted, is the
-        class's own from then on, and is set no longer."""
+    def deleted(self, targets):
+        """Unsets what a `del` names, from left to right: a name is read,
+        to be deleted, is the class's own from then on, and is set no
+        longer. Where the statement fails at a name, the name was not set:
+        the block may be left once the first is unset, and not before."""
         import ast
 
-        if isinstance(target, ast.Name):
-            self.read(target.id)
-            self.own.add(_mangled(target.id, self.owner))
-            self.unbind(target.id)
-        elif isinstance(target, (ast.Tuple, ast.List)):
-            for each in target.elts:
-                self.deleted(each)
-        else:
-            self.expression(target)
+        flat = []
+
+        def each(target):
+            if isinstance(target, (ast.Tuple, ast.List)):
+                for inner in target.elts:
+                    each(inner)
+            else:
+                flat.append(target)
+
+        for target in targets:
+            each(target)
+        for at, target in enumerate(flat):
+            if isinstance(target, ast.Name):
+                self.read(target.id)
+                self.own.add(_mangled(target.id, self.owner))
+                self.unbind(target.id)
+            else:
+                self.expression(target)
+            if not at:
+                self.leave()
 
     def unknown(self, node):
         """A statement this reader does not know, a `match` and what a later
@@ -380,20 +473,36 @@ class _ClassBody:
                 if type(named) is str:
                     self.bind(named)
 
-    def target(self, node):
-        """Sets what an assignment's target names, and reads what a target
-        is made of: the object of an attribute, the container of an item."""
+    def targets(self, targets, more=False):
+        """Sets what the targets of an assignment name, from left to right,
+        and reads what a target is made of: the object of an attribute, the
+        container of an item. A name is the last thing set where nothing
+        after it can fail: no unpacking, no target that is no name, and,
+        with `more`, nothing the statement goes on to."""
         import ast
 
-        if isinstance(node, ast.Name):
-            self.bind(node.id)
-        elif isinstance(node, (ast.Tuple, ast.List)):
-            for each in node.elts:
-                self.target(each)
-        elif isinstance(node, ast.Starred):
-            self.target(node.value)
-        else:
-            self.expression(node)
+        steps = []
+
+        def each(target):
+            if isinstance(target, (ast.Tuple, ast.List)):
+                # Unpacked before any of its names is set.
+                steps.append(None)
+                for inner in target.elts:
+                    each(inner)
+            elif isinstance(target, ast.Starred):
+                each(target.value)
+            else:
+                steps.append(target)
+
+        for target in targets:
+            each(target)
+        fails = [at for at, step in enumerate(steps) if not isinstance(step, ast.Name)]
+        after = len(steps) if more else max(fails, default=-1)
+        for at, step in enumerate(steps):
+            if isinstance(step, ast.Name):
+                self.bind(step.id, last=at > after)
+            elif step is not None:
+                self.expression(step)
 
     def expression(self, node):
         """Reads an expression as the class's body evaluates it: the names

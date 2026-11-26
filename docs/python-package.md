@@ -756,7 +756,12 @@ They hold the installed package to the checkout they are in:
   and reads inside a function or a comprehension among them; that answer
   held to Python itself, over four thousand class bodies put together from
   a seed, each of which runs exactly when the reader finds no name to
-  refuse, and held to one hash, so that it is the same on whichever Python
+  refuse, and on every way through a thousand more that may be left early,
+  each run once for every setting of the points that decide what raises in
+  it, what is taken and what matches: nothing the reader refuses is set on
+  any way where it is read, and in a body with no loop, no `except*`, no
+  `raise` and no `del` that may fail, every read that no way satisfies is
+  refused; each held to one hash, so that it is the same on whichever Python
   reads them; nothing asked of what a class's attributes hold; and every
   class it does not send, one that takes a variable from the function
   around it among them. Then the requests, against servers of the

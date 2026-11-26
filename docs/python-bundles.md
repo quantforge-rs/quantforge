@@ -535,6 +535,17 @@ ValueError: Captures is defined inside the function make, and uses its threshold
   through its body has set a name by the time it is read. Where another
   way leaves the name unset, as a loop that does not run, the job fails
   there, with its traceback in the job's log.
+- **A block may be left before its end,** by an exception or by a `break`,
+  wherever a statement of it evaluates something, and the class's body
+  goes on from there: in a handler, after a `with` whose manager took the
+  exception, after the loop. What the block had set by then may be set
+  there, and what it had not is not: a handler that reads `limit` where
+  its `try` holds nothing but `limit = load()` runs only where `load()`
+  raised, with `limit` never set, and is refused. Every way out of a `try`
+  passes through its `finally`, and every way out of a handler clears the
+  name the handler was given: what these unset is unset wherever the body
+  goes on. What the check does not tell is that a statement never ends:
+  what follows a `raise` is read as though it ran.
 - **The answer is the same on whichever Python reads the class, on
   whichever system.** A bundle runs on its server's Python. What annotates
   a name is held to being defined where its statement stands, as Python up
