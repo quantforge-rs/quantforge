@@ -1619,18 +1619,20 @@ def test_a_body_is_read_in_pieces_of_the_clients_own_size():
     # By the length it states: a piece at a time, and what is left of it at
     # the last. Nothing is asked for past it.
     stated = headers(b"Content-Length: %d" % len(long))
-    assert _answer._body(_answer._Stream(Recording(long + b"more")), 200, stated) == long
+    stream = _answer._Stream(Recording(long + b"more"))
+    assert _answer._body(stream, b"HTTP/1.1", 200, stated) == long
     assert asked == [piece, piece, piece, 1]
     # In chunks: each chunk a piece at a time.
     del asked[:]
     chunked = headers(b"Transfer-Encoding: chunked")
     stream = _answer._Stream(Recording(in_chunks(long, b"y")))
-    assert _answer._body(stream, 200, chunked) == long + b"y"
+    assert _answer._body(stream, b"HTTP/1.1", 200, chunked) == long + b"y"
     assert asked == [piece, piece, piece, 1, 1]
     # To the end of its connection: a piece at a time, to the read that
     # finds nothing.
     del asked[:]
-    assert _answer._body(_answer._Stream(Recording(long)), 200, headers(b"X: 1")) == long
+    stream = _answer._Stream(Recording(long))
+    assert _answer._body(stream, b"HTTP/1.0", 200, headers(b"X: 1")) == long
     assert asked == [piece] * 5
 
 
@@ -1690,29 +1692,36 @@ def test_an_answer_in_chunks_says_so_in_whatever_case_and_no_other_coding_is_rea
     whole = json.dumps(SPEAKS).encode()
     more = str(len(whole) + 1).encode()
 
-    def answer(*headers: bytes) -> bytes:
+    def answer(*headers: bytes, version: bytes = b"HTTP/1.1", body: bytes = b"") -> bytes:
         lines = b"".join(header + b"\r\n" for header in headers)
-        return b"HTTP/1.1 200 OK\r\n" + lines + b"\r\n" + in_chunks(whole)
+        return version + b" 200 OK\r\n" + lines + b"\r\n" + (body or in_chunks(whole))
 
     monkeypatch.setattr(_wire, "_READ_SECONDS", 1.5)
     # `chunked` in whatever case, and with whatever space around it, which
     # is no part of a header's value: `http.client` knows the one word as
     # it is written here, and hands on the chunks of any other spelling as
-    # the body. `identity` is no coding. And in chunks, an answer's length
-    # is its chunks': one stated beside them is not read.
+    # the body. `identity` is no coding.
     for headers in [
         (b"Transfer-Encoding: chunked",),
         (b"Transfer-Encoding: chunked ",),
         (b"Transfer-Encoding:\tChunked\t",),
         (b"Transfer-Encoding: identity, chunked",),
         (b"Transfer-Encoding: identity", b"Transfer-Encoding: chunked"),
-        (b"Transfer-Encoding: chunked", b"Content-Length: " + more),
-        (b"Transfer-Encoding: chunked", b"Content-Length: x"),
     ]:
         with Raw(kept(answer(*headers))) as other:
             client = qf.Client(f"http://127.0.0.1:{other.port}")
             client.handshake()
             assert (client.server_version, client.proto_version) == ("0.2.0", 1), headers
+
+    def refused_for(sent: bytes) -> str:
+        with Raw(kept(sent)) as other:
+            error = raised(qf.RemoteError, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
+        said = f"the server at http://127.0.0.1:{other.port}/ answered GET /version with what is "
+        assert str(error).startswith(said + "not HTTP (")
+        assert str(error).endswith("); is it a QuantForge server?")
+        wrong = str(error).removeprefix(said + "not HTTP (")
+        return wrong.removesuffix("); is it a QuantForge server?")
+
     # Any other coding is one the client does not read, `chunked` twice
     # among them, and nothing then says where the body ends.
     for headers in [
@@ -1721,12 +1730,22 @@ def test_an_answer_in_chunks_says_so_in_whatever_case_and_no_other_coding_is_rea
         (b"Transfer-Encoding: chunked, chunked",),
         (b"Transfer-Encoding: chunked", b"Transfer-Encoding: chunked"),
     ]:
-        with Raw(kept(answer(*headers))) as other:
-            error = raised(qf.RemoteError, qf.Client(f"http://127.0.0.1:{other.port}").handshake)
-        assert str(error) == (
-            f"the server at http://127.0.0.1:{other.port}/ answered GET /version with what is not "
-            "HTTP (a Transfer-Encoding other than chunked); is it a QuantForge server?"
-        ), headers
+        assert refused_for(answer(*headers)) == "a Transfer-Encoding other than chunked", headers
+    # An answer says once where its body ends. A length beside its chunks
+    # is what no sender may write, whether it is the chunks' length or not,
+    # and whether it is a length at all.
+    length = b"Content-Length: %d" % len(whole)
+    for stated in (length, b"Content-Length: " + more, b"Content-Length: x"):
+        headers = (b"Transfer-Encoding: chunked", stated)
+        assert refused_for(answer(*headers)) == "a Content-Length beside a Transfer-Encoding"
+    # And HTTP/1.0 has no transfer coding: an answer written in it that
+    # names one, `identity` among them, is one whose framing is faulty,
+    # though its chunks are in order. With a length it is read as before.
+    for coding in (b"chunked", b"identity", b""):
+        sent = answer(b"Transfer-Encoding: " + coding, version=b"HTTP/1.0")
+        assert refused_for(sent) == "a Transfer-Encoding in an answer of HTTP/1.0", coding
+    with Raw(kept(answer(length, version=b"HTTP/1.0", body=whole))) as other:
+        qf.Client(f"http://127.0.0.1:{other.port}").handshake()
 
 
 def test_a_header_is_a_name_and_a_value_or_the_answer_is_not_http(monkeypatch):
@@ -2014,8 +2033,8 @@ def made_of(sent: bytes, chosen: random.Random | None = None):
     stream = Counted(sent, chosen)
     reading = _answer._Stream(stream)
     try:
-        status, _, headers = _answer._head(reading)
-        made = (status, _answer._body(reading, status, headers))
+        version, status, _, headers = _answer._head(reading)
+        made = (status, _answer._body(reading, version, status, headers))
     except (_answer._NotHTTP, _answer._TooLong, http.client.HTTPException) as failure:
         made = (type(failure).__name__, str(failure))
     return made, stream.count
@@ -2024,16 +2043,18 @@ def made_of(sent: bytes, chosen: random.Random | None = None):
 def orderly_answer(chosen: random.Random, body: bytes) -> bytes:
     """An answer that holds `body` and is in order, in one of the ways HTTP
     writes one that `chosen` picks."""
-    lines = [chosen.choice([b"HTTP/1.1 200 OK", b"HTTP/1.0 200 OK", b"HTTP/1.1 200"])]
-    lines += [b"Server: here", b"X-Note: begins\r\n  and goes on"][: chosen.randint(0, 2)]
     ends = chosen.choice([b"length", b"chunks", b"connection"])
+    # HTTP/1.0 has no chunks.
+    versions = [b"HTTP/1.1 200 OK", b"HTTP/1.1 200"] + [b"HTTP/1.0 200 OK"] * (ends != b"chunks")
+    lines = [chosen.choice(versions)]
+    lines += [b"Server: here", b"X-Note: begins\r\n  and goes on"][: chosen.randint(0, 2)]
     if ends == b"length":
         length = b"Content-Length:" + chosen.choice([b" ", b"", b"\t00"]) + b"%d" % len(body)
         lines += [length] * chosen.choice([1, 1, 2])
         body += chosen.choice([b"", b"and what is no part of it"])
     elif ends == b"chunks":
         coding = chosen.choice([b"chunked", b"Chunked ", b"identity, chunked", b"\tCHUNKED"])
-        lines += [b"Transfer-Encoding: " + coding] + [b"Content-Length: 5"][: chosen.randint(0, 1)]
+        lines += [b"Transfer-Encoding: " + coding]
         chunks, left = b"", body
         while left:
             taken = chosen.randint(1, len(left))
@@ -2066,7 +2087,9 @@ def test_the_reader_of_an_answer_keeps_to_its_limits_however_the_bytes_come(monk
         # What is made of an answer does not turn on how its bytes come,
         # down to the words it is refused in.
         for _ in range(2):
-            assert made_of(sent, chosen)[0] == answer, sent[:200]
+            again, count = made_of(sent, chosen)
+            assert again == answer, sent[:200]
+            assert count <= most, sent[:200]
         made[answer[0]] += 1
     assert {200, "_NotHTTP", "_TooLong", "IncompleteRead", "BadStatusLine"} <= set(made), made
     # And an answer in order is read as it was written, whichever way it
@@ -2074,7 +2097,9 @@ def test_the_reader_of_an_answer_keeps_to_its_limits_however_the_bytes_come(monk
     for _ in range(4 * HOSTILE_ANSWERS):
         body = bytes(chosen.randrange(256) for _ in range(chosen.choice([0, 1, 20, 63, 64])))
         sent = orderly_answer(chosen, body)
-        assert made_of(sent, chosen)[0] == (200, body), sent[:200]
+        answer, count = made_of(sent, chosen)
+        assert answer == (200, body), sent[:200]
+        assert count <= most, sent[:200]
 
 
 def test_whatever_a_server_sends_a_client_reads_an_answer_or_raises_an_exception_of_its_own(

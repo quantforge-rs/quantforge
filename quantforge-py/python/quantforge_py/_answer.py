@@ -12,13 +12,17 @@ here holds it to what HTTP writes, and to limits of its own:
   long as its `Content-Length` says, or comes in chunks, or ends where its
   connection does; an answer of a status that has no body has none. A
   length is digits and one number, a transfer coding is `chunked` or none,
-  and a chunk states its size in hex digits and ends where that says.
+  and a chunk states its size in hex digits and ends where that says. It
+  is said once: no length stands beside chunks, and HTTP/1.0 has no
+  transfer coding to name.
 - **What frames a body is a line at a time,** each a status line, a header,
   a chunk's size or a trailer as HTTP writes one, and all of it counted: no
-  more of it is read than `_MOST_FRAMING_BYTES`.
+  more of it is taken than `_MOST_FRAMING_BYTES`.
 - **A body is read in pieces of the client's own size,** to the longest
   that is taken, `_MOST_ANSWER_BYTES`, and one that is longer by its own
   account is not read at all.
+- **A limit is what is taken.** To tell an answer that is past one, one
+  byte past it is read, and no more.
 - **An answer that only says another is to come is read past,** to the
   answer after it.
 - **An answer that ends before it says it does was cut short.**
@@ -41,7 +45,7 @@ _MOST_ANSWER_BYTES = 64 * 1024 * 1024
 # of the client's own size, and held as it comes.
 _PIECE_BYTES = 64 * 1024
 
-# The most bytes that are read of what frames an answer's body: its status
+# The most bytes that are taken of what frames an answer's body: its status
 # line, its headers, the sizes of its chunks and its trailers, and any
 # answer before it that only says one is to come. A server's own come to a
 # few hundred bytes.
@@ -85,14 +89,14 @@ def _at_most(digits, most):
 
 class _Stream:
     """One answer as it comes from its connection: what frames its body a
-    line at a time, counted against the most that is read of it, and its
+    line at a time, counted against the most that is taken of it, and its
     body in pieces of the client's own size."""
 
     __slots__ = ("_file", "_framing")
 
     def __init__(self, file):
         self._file = file
-        # How much of what frames the body may still be read.
+        # How much of what frames the body may still be taken.
         self._framing = _MOST_FRAMING_BYTES
 
     def line(self):
@@ -147,7 +151,8 @@ class _Stream:
 
 
 def _status(stream):
-    """An answer's status line, as its status and its phrase."""
+    """An answer's status line, as the version it is written in, its status
+    and its phrase."""
     import http.client
 
     line = stream.line()
@@ -164,7 +169,8 @@ def _status(stream):
     status = words[1] if len(words) > 1 else b""
     if not (len(status) == 3 and status.isdigit() and status[:1] != b"0"):
         raise http.client.BadStatusLine(line.decode("iso-8859-1"))
-    return int(status), words[2].strip().decode("iso-8859-1") if len(words) > 2 else ""
+    reason = words[2].strip().decode("iso-8859-1") if len(words) > 2 else ""
+    return version, int(status), reason
 
 
 def _fields(stream):
@@ -213,14 +219,15 @@ def _headers(lines):
 
 
 def _head(stream):
-    """An answer's status, its phrase and its headers. An answer that only
-    says another is to come, a `1xx` other than `101`, is read past, as HTTP
-    asks of a client: `http.client` reads past a `100` alone."""
+    """The version an answer is written in, its status, its phrase and its
+    headers. An answer that only says another is to come, a `1xx` other
+    than `101`, is read past, as HTTP asks of a client: `http.client` reads
+    past a `100` alone."""
     while True:
-        status, reason = _status(stream)
+        version, status, reason = _status(stream)
         lines = _fields(stream)
         if status == 101 or not 100 <= status < 200:
-            return status, reason, _headers(lines)
+            return version, status, reason, _headers(lines)
 
 
 def _has_no_body(status):
@@ -231,12 +238,18 @@ def _has_no_body(status):
     return status in (101, 204, 304)
 
 
-def _in_chunks(headers):
+def _in_chunks(version, headers):
     """Whether an answer's body comes in chunks: `chunked` is its one
     transfer coding, in whatever case and with whatever space around it.
     `identity`, which HTTP once had for no coding, is none. Any other is one
-    the client does not read, and with it nothing says where the body
-    ends."""
+    the client does not read, and with it nothing says where the body ends.
+
+    HTTP/1.0 has no transfer coding: an answer written in it that names one
+    is to be read as one whose framing is faulty, and is refused. And an
+    answer says once where its body ends: a length beside its chunks is
+    what no sender may write, and is refused as well."""
+    if "transfer-encoding" in headers and version == b"HTTP/1.0":
+        raise _NotHTTP("a Transfer-Encoding in an answer of HTTP/1.0")
     codings = [
         coding
         for value in headers.get("transfer-encoding", ())
@@ -245,6 +258,8 @@ def _in_chunks(headers):
     ]
     if codings and codings != ["chunked"]:
         raise _NotHTTP("a Transfer-Encoding other than chunked")
+    if codings and "content-length" in headers:
+        raise _NotHTTP("a Content-Length beside a Transfer-Encoding")
     return bool(codings)
 
 
@@ -300,7 +315,7 @@ def _chunks(stream):
     return bytes(body)
 
 
-def _body(stream, status, headers):
+def _body(stream, version, status, headers):
     """An answer's body, whole. An answer of a status that has no body is
     read for none. One that comes in chunks is read by its chunks, and one
     that states its length to that length and no further, so that a server
@@ -309,7 +324,7 @@ def _body(stream, status, headers):
     ends where its connection does."""
     if _has_no_body(status):
         return b""
-    if _in_chunks(headers):
+    if _in_chunks(version, headers):
         return _chunks(stream)
     stated = _stated_length(headers)
     if stated is None:

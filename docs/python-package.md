@@ -698,7 +698,7 @@ They hold the installed package to the checkout they are in:
   breaks, an answer cut short, a redirect and what is not HTTP, each named
   for what it is; an answer read by the client itself and held to what
   HTTP writes, to the longest body that is taken and to the most that is
-  read of what frames one; answers put together by a seed from what a
+  taken of what frames one; answers put together by a seed from what a
   server sends and what none does, each read or raised as an exception of
   the client's own; and every status the protocol does not write refused,
   member by member. Then against a real

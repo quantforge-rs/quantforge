@@ -500,8 +500,10 @@ held to what HTTP writes, and to two limits of its own.
   are no length. `chunked` is the one transfer coding that is read, in
   whatever case and with whatever space around it; any other is none the
   client reads. A chunk states its size in hex digits and nothing else,
-  and ends where that says. Each of these, and a status line or a header
-  that is none, is a `RemoteError` that names what was wrong.
+  and ends where that says. And an answer says it once: a length beside
+  its chunks is what no sender may write, and HTTP/1.0 has no transfer
+  coding to name. Each of these, and a status line or a header that is
+  none, is a `RemoteError` that names what was wrong.
 - **An answer that only says another is to come is read past.** A `100` or
   a `103` is no answer: the one after it, on the same connection, is.
 - **A status that has no body is read for none:** a `204` and a `304`,

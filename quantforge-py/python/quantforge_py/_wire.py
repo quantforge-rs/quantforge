@@ -20,7 +20,7 @@ library alone:
 - **An answer is read by the client itself,** in `quantforge_py._answer`,
   and not by `http.client`, which opens the connection and writes the
   request: an answer says where it ends as HTTP writes that, or it is
-  refused, and its body and what frames it are each read to a limit.
+  refused, and its body and what frames it are each held to a limit.
 - **Every request made here may be sent again,** and is, a few times, while
   the server answers `503` with `Retry-After`: a read changes nothing, and a
   cancel nothing more the second time. A submission, which a later story
@@ -399,10 +399,10 @@ class _Wire:
         its body was not read is kept, to be its cause. A body that was cut
         short is another matter, and is raised as it is: the answer did not
         come whole, and asked again the server may give it whole."""
-        status, reason, headers = _answer._head(stream)
+        version, status, reason, headers = _answer._head(stream)
         unread = None
         try:
-            body = _answer._body(stream, status, headers)
+            body = _answer._body(stream, version, status, headers)
         except _answer._NotHTTP as wrong:
             unread = self._not_http(method, target, wrong)
         except _answer._TooLong:
