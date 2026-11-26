@@ -520,10 +520,13 @@ ValueError: Captures is defined inside the function make, and uses its threshold
   class: one it reads before it sets it, as `LIMIT = LIMIT` does, is read
   outside. Inside a function, a lambda or a comprehension of its body,
   Python does not look in the class at all: a name the class sets is read
-  outside it there. Such a read is held to what any read outside the class
-  is. Where `imports` or Python's builtins define the name, it is theirs
-  that is read, and the class is taken; where nothing does, the class is
-  refused.
+  outside it there. A comprehension's first iterable is no part of that:
+  the class's body evaluates it, so with `LIMIT = 4` set before,
+  `[n for n in range(LIMIT)]` reads the class's `LIMIT`, where
+  `[LIMIT for n in range(4)]` reads no name of the class's. A read outside
+  the class is held to what any such read is. Where `imports` or Python's
+  builtins define the name, it is theirs that is read, and the class is
+  taken; where nothing does, the class is refused.
 - **A private name is read as Python looks it up.** Inside `Mine`,
   `__limit` is `_Mine__limit`: that is the name an import has to give, and
   the name a refusal says.

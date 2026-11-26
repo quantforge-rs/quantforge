@@ -18,7 +18,8 @@ by the class itself, or as one of Python's builtins.
   class's own.
 - **Inside a function, a lambda or a comprehension of the class's body,**
   Python does not look in the class at all: a name the class sets is read
-  outside it there.
+  outside it there. A comprehension's first iterable is no part of that:
+  the class's body evaluates it, as it does a lambda's defaults.
 - **Only what is certain is refused.** Whether a loop runs and which way a
   branch goes, the text does not say: a read that some way through the
   body satisfies is no refusal.
@@ -125,7 +126,10 @@ class _ClassBody:
     there: after branches of which one is taken, a name may be set if any
     of them may have set it, and a name is unset for certain only where the
     class deletes it, or where the handler of an exception ends, which
-    clears the name the exception was given. A read is reported where the
+    clears the name the exception was given. A block that may be left
+    before its end, the body of a `try`, of a `with` or of a loop, may have
+    been left at any statement of it: what it set anywhere may be set
+    after it, though it unset it further down. A read is reported where the
     name cannot have been set. So a class is never refused for a read that
     some way through its body satisfies; one that fails only along some
     way, as a read after a loop that did not run, is taken, and fails where
@@ -149,6 +153,9 @@ class _ClassBody:
         # What it reads where the name cannot have been set, and what it
         # says is a function's around the class, or the module's.
         self.early, self.outer, self.loops = set(), set(), 0
+        # What is set while a block is read, for each block being read
+        # that may be left before its end.
+        self.blocks = []
 
     def names(self, body):
         """The names the body reads before it has set them, of those that
@@ -167,6 +174,20 @@ class _ClassBody:
         name = _mangled(name, self.owner)
         self.maybe.add(name)
         self.ever.add(name)
+        for block in self.blocks:
+            block.add(name)
+
+    def anywhere(self, read):
+        """Reads a block that may be left before its end, and gives the
+        names it sets at any statement of it: what may be set where it was
+        left, whatever a statement further down unsets."""
+        block = set()
+        self.blocks.append(block)
+        try:
+            read()
+        finally:
+            self.blocks.pop()
+        return block
 
     def unbind(self, name):
         self.maybe.discard(_mangled(name, self.owner))
@@ -249,9 +270,8 @@ class _ClassBody:
                 if item.optional_vars is not None:
                     self.target(item.optional_vars)
             entered = set(self.maybe)
-            self.statements(node.body)
             # What manages the block may end it at any statement, and go on.
-            self.maybe |= entered
+            self.maybe |= entered | self.anywhere(lambda: self.statements(node.body))
         elif isinstance(node, ast.Try) or type(node).__name__ == "TryStar":
             self.attempt(node)
         elif isinstance(node, (ast.Expr, ast.Assert, ast.Raise, ast.Pass)):
@@ -268,12 +288,16 @@ class _ClassBody:
 
         self.expression(node.test if isinstance(node, ast.While) else node.iter)
         before = set(self.maybe)
+
+        def body():
+            if not isinstance(node, ast.While):
+                self.target(node.target)
+            self.statements(node.body)
+
         self.loops += 1
-        if not isinstance(node, ast.While):
-            self.target(node.target)
-        self.statements(node.body)
+        # It may be broken out of at any statement of its body.
+        self.maybe |= before | self.anywhere(body)
         self.loops -= 1
-        self.maybe |= before
         ran = set(self.maybe)
         self.statements(node.orelse)
         self.maybe |= ran
@@ -281,25 +305,37 @@ class _ClassBody:
     def attempt(self, node):
         """A `try`: an exception may leave its body at any statement, for a
         handler or for nothing; a handler is given the exception under a
-        name that Python clears as the handler ends; and what is left to
-        `finally` runs after any of them."""
+        name that Python clears as the handler ends; of the handlers of a
+        `try` one runs, and of the clauses of an `except*` every one that
+        matches a part of what was raised, one after the other; and what is
+        left to `finally` runs after any of them, or as an exception passes
+        through, from wherever it was raised."""
         before = set(self.maybe)
-        self.statements(node.body)
-        raised = before | self.maybe
-        self.statements(node.orelse)
-        ends = [set(self.maybe)]
-        for handler in node.handlers:
-            self.maybe = set(raised)
-            self.expression(handler.type)
-            if handler.name:
-                self.bind(handler.name)
-            self.statements(handler.body)
-            if handler.name:
-                self.unbind(handler.name)
+        every = type(node).__name__ == "TryStar"
+        ends = []
+
+        def tried():
+            raised = before | self.anywhere(lambda: self.statements(node.body)) | self.maybe
+            self.statements(node.orelse)
             ends.append(set(self.maybe))
+            for handler in node.handlers:
+                self.maybe = set(raised)
+                self.expression(handler.type)
+                if handler.name:
+                    self.bind(handler.name)
+                within = self.anywhere(lambda: self.statements(handler.body))
+                if handler.name:
+                    self.unbind(handler.name)
+                    within.discard(_mangled(handler.name, self.owner))
+                ends.append(set(self.maybe))
+                if every:
+                    # A clause that raises does not keep the next from running.
+                    raised |= self.maybe | within
+
+        anywhere = self.anywhere(tried)
         self.maybe = set().union(*ends)
         if node.finalbody:
-            self.maybe |= raised
+            self.maybe |= before | anywhere
             self.statements(node.finalbody)
 
     def generic(self, node, expressions):
@@ -445,8 +481,9 @@ def _plainly(tree):
 
     def without(node, names):
         # A type parameter is a name where a function's annotations are
-        # evaluated, and nowhere they are written out.
-        if isinstance(node, ast.Name) and node.id in names:
+        # evaluated, and nowhere they are written out. What an annotation
+        # sets under such a name, as a comprehension in it may, is its own.
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in names:
             return ast.Constant(None)
         for field, value in ast.iter_fields(node):
             if isinstance(value, list):

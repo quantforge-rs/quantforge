@@ -790,6 +790,20 @@ BESIDE = """
         ),
         # A loop's test is read once for certain, before its body runs.
         ("while limit:\n        break\n    limit = 0", ["limit"]),
+        # The name one clause of an `except*` was given is cleared before
+        # the next clause runs.
+        (
+            'try:\n        raise ExceptionGroup("both", [ValueError(), TypeError()])\n'
+            "    except* ValueError as limit:\n        pass\n    except* TypeError:\n"
+            "        value = limit",
+            ["limit"],
+        ),
+        (
+            'try:\n        raise ExceptionGroup("both", [ValueError(), TypeError()])\n'
+            "    except* ValueError as limit:\n        limit = 3\n    except* TypeError:\n"
+            "        value = limit",
+            ["limit"],
+        ),
         # A private name is looked up under the class's own.
         ("__limit = __limit", ["_Mine__limit"]),
     ],
@@ -873,6 +887,22 @@ def test_a_name_a_class_reads_before_it_sets_it_is_read_outside_the_class(notebo
         "    limit = 3\n    other = limit",
         "for index in ():\n        pass\n    else:\n        last = 0\n    kept = last",
         "limit = 1\n    for index in ():\n        del limit\n    value = limit",
+        # A block that may be left before its end may have been left at any
+        # statement of it: what it set anywhere may be set after it, though
+        # it unsets it further down. The body of a `try`, for its handlers
+        # and its `finally`; and the body of a loop that is broken out of.
+        "try:\n        limit = 1\n        1 / 0\n        del limit\n    except ZeroDivisionError:\n"
+        "        value = limit",
+        "try:\n        limit = 1\n        1 / 0\n        del limit\n    except ZeroDivisionError:\n"
+        "        pass\n    finally:\n        value = limit",
+        "try:\n        try:\n            limit = 1\n            1 / 0\n            del limit\n"
+        "        finally:\n            value = limit\n    except ZeroDivisionError:\n        pass",
+        "for index in (0, 1):\n        limit = 1\n        if index:\n            break\n"
+        "        del limit\n    value = limit",
+        # Of the clauses of an `except*`, every one that matches a part of
+        # what was raised runs, one after the other.
+        'try:\n        raise ExceptionGroup("both", [ValueError(), TypeError()])\n'
+        "    except* ValueError:\n        limit = 1\n    except* TypeError:\n        value = limit",
         # A loop's `else` is passed over where the loop is broken out of.
         "limit = 1\n    for index in (0,):\n        break\n    else:\n        del limit\n"
         "    value = limit",
@@ -1089,12 +1119,28 @@ def test_what_a_block_may_be_ended_before_is_not_unset_for_certain(notebook):
 
             def on_bar(self, ctx, bar):
                 return None
+
+
+        class Inside(qf.Strategy):
+            with contextlib.suppress(ZeroDivisionError):
+                limit = 2
+                1 / 0
+                del limit
+            value = limit
+
+            def on_bar(self, ctx, bar):
+                return None
         """
     )
     text = file_of(module.Mine, declared)
     names = {"__name__": "strategy"}
     exec(compile(text, "strategy.py", "exec"), names)
     assert names["Mine"].value == 1
+    # And what the block set before it was ended is set after it, though a
+    # statement further down the block unsets it.
+    text = file_of(module.Inside, declared)
+    exec(compile(text, "strategy.py", "exec"), names)
+    assert names["Inside"].value == 2
 
 
 @pytest.mark.skipif(sys.version_info < (3, 12), reason="a function is written so from 3.12 on")
@@ -1113,6 +1159,11 @@ def test_a_generic_functions_type_parameters_are_names_where_its_annotations_are
 
             def first[*Ts, **P](self, *values: *Ts) -> tuple[*Ts]:
                 return values
+
+            # What an annotation sets under a type parameter's name is the
+            # annotation's own.
+            def third[T](self, value: [T for T in (int,)] = None):
+                return value
 
             # A name the class sets afterwards is another name than the
             # function's type parameter of the same spelling.
