@@ -124,6 +124,49 @@ def _mangled(name, owner):
 _HERE = "."
 
 
+def _settable(node):
+    """Every name a statement could set, wherever in it: what it assigns,
+    imports, defines, deletes, or is given by a handler or a pattern."""
+    import ast
+
+    for inner in ast.walk(node):
+        if isinstance(inner, ast.Name) and not isinstance(inner.ctx, ast.Load):
+            yield inner.id
+        elif isinstance(inner, ast.alias):
+            yield (inner.asname or inner.name).partition(".")[0]
+        for field in ("name", "rest"):
+            named = getattr(inner, field, None)
+            if type(named) is str:
+                yield named
+
+
+def _leaving(node):
+    """The kinds of statement in a statement, `ast.Break` and
+    `ast.Continue`, that leave the loop around it. Those of a loop inside
+    it are that loop's, but for what stands in that loop's `else`; a
+    function and a class have none."""
+    import ast
+
+    kinds, inside = set(), [node]
+    while inside:
+        each = inside.pop()
+        if isinstance(each, (ast.Break, ast.Continue)):
+            kinds.add(type(each))
+        elif isinstance(each, (ast.For, ast.AsyncFor, ast.While)):
+            inside += each.orelse
+        elif not isinstance(
+            each, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        ):
+            inside += ast.iter_child_nodes(each)
+    return kinds
+
+
+def _named(held):
+    """The name that something held among the names that may be set stands
+    for: the name itself, or the name a loop's mark carries."""
+    return held if type(held) is str else held[1]
+
+
 class _ClassBody:
     """One class's body, read in the order it is written, for the names it
     reads before it has set them.
@@ -218,8 +261,11 @@ class _ClassBody:
             if not last:
                 self.leave()
 
-    def unbind(self, name):
-        self.maybe.discard(_mangled(name, self.owner))
+    def unbind(self, name, held=None):
+        """Unsets a name among what may be set now, or among what is `held`
+        elsewhere: the name, and what a loop carries of it."""
+        name, held = _mangled(name, self.owner), self.maybe if held is None else held
+        held.difference_update([each for each in held if _named(each) == name])
 
     def leave(self, names=None):
         """Notes that an exception may leave the block being read with
@@ -383,26 +429,40 @@ class _ClassBody:
         its body may run any number of times, or not at all. A round ends
         at the end of the body or at a `continue`, and the next is asked
         for, which may raise. Where no round follows, what is left to
-        `else` runs; a `break` passes it."""
+        `else` runs; a `break` passes it. The body is read once, however
+        many loops stand around it."""
         import ast
 
         self.expression(node.test if isinstance(node, ast.While) else node.iter)
         before = set(self.maybe)
 
+        # A round begins from before the loop, or from where the one before
+        # it ended, with more set. The body is read once all the same: each
+        # name it could set goes through it as a mark of this loop's, which
+        # is unset where the name is. Where a mark is left, the name is set
+        # there in a later round, if a round can end with it set.
+        mark, begun = object(), set()
+        if _HERE in self.maybe:
+            names = {_mangled(name, self.owner) for name in _settable(node)}
+            self.maybe |= {(mark, name) for name in names}
+
         def body():
             if not isinstance(node, ast.While):
                 self.targets([node.target], more=True)
+            begun.update(self.maybe)
             self.statements(node.body)
 
-        # A round begins from before the loop, or from where the one before
-        # it ended: the body is read once for where a round ends, and then
-        # from wherever one may begin. What it reads is left alone.
+        def later(held):
+            marks = {each for each in held if type(each) is tuple and each[0] is mark}
+            return held - marks | {name for _, name in marks if name in carried}
+
+        # What the body reads is left alone.
         self.silent += 1
-        on = self.both(body)[1][0] | self.maybe
-        self.maybe = before | on
         left, (on, out) = self.both(body)
         self.silent -= 1
         on |= self.maybe
+        carried = {each for each in on - begun if type(each) is str}
+        left, on, out = later(left), later(on), later(out)
         self.leave(left | on)
         self.maybe = before | on
         self.statements(node.orelse)
@@ -444,9 +504,8 @@ class _ClassBody:
 
                 left, gone = self.both(handled)
                 if handler.name:
-                    self.unbind(handler.name)
-                    for each in (left, *gone):
-                        each.discard(_mangled(handler.name, self.owner))
+                    for each in (self.maybe, left, *gone):
+                        self.unbind(handler.name, each)
                 self.go(*gone)
                 ends.append(set(self.maybe))
                 if every:
@@ -537,23 +596,19 @@ class _ClassBody:
     def unknown(self, node):
         """A statement this reader does not know, a `match` and what a later
         Python adds: every name it could set counts as set, and nothing it
-        reads is reported. Where it holds a `break` or a `continue`, its
-        loop may be left from inside it, with any of those names set."""
+        reads is reported. Where it holds a `break` or a `continue` of the
+        loop around it, that loop may be left from inside it, for its next
+        round or for its end as the statement says, with any of those
+        names set."""
         import ast
 
-        leaves = False
-        for inner in ast.walk(node):
-            if isinstance(inner, ast.Name) and not isinstance(inner.ctx, ast.Load):
-                self.bind(inner.id)
-            elif isinstance(inner, ast.alias):
-                self.bind((inner.asname or inner.name).partition(".")[0])
-            for field in ("name", "rest"):
-                named = getattr(inner, field, None)
-                if type(named) is str:
-                    self.bind(named)
-            leaves = leaves or isinstance(inner, (ast.Break, ast.Continue))
-        if leaves:
-            self.go(self.maybe, self.maybe)
+        for name in _settable(node):
+            self.bind(name)
+        kinds = _leaving(node)
+        self.go(
+            on=self.maybe if ast.Continue in kinds else (),
+            out=self.maybe if ast.Break in kinds else (),
+        )
 
     def targets(self, targets, more=False):
         """Sets what the targets of an assignment name, from left to right,
