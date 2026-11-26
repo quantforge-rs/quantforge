@@ -887,8 +887,38 @@ BESIDE = """
             "            pass\n        limit = 1\n    value = limit",
             ["limit"],
         ),
-        # A `break` goes to its loop through the clearing of the name its
-        # handler was given, as an exception does.
+        # A `break` leaves its loop for good, past the loop's `else`: what
+        # was set where it left is set neither in a handler around the
+        # loop, which no round leads to after it, nor in the `else`. And
+        # what the `else` deletes is deleted after a loop with no `break`.
+        (
+            "def rounds():\n        raise ValueError\n        yield 0\n\n    try:\n"
+            "        for index in rounds():\n            limit = 1\n            break\n"
+            "    except ValueError:\n        value = limit",
+            ["limit"],
+        ),
+        (
+            "for index in ():\n        limit = 1\n        break\n    else:\n        value = limit",
+            ["limit"],
+        ),
+        (
+            "limit = 1\n    for index in ():\n        pass\n    else:\n        del limit\n"
+            "    value = limit",
+            ["limit"],
+        ),
+        # A `break` and a `continue` go to their loop through a `finally`,
+        # and through the clearing of the name their handler was given, as
+        # an exception does.
+        (
+            "for index in (0,):\n        try:\n            limit = 1\n            continue\n"
+            "        finally:\n            del limit\n    value = limit",
+            ["limit"],
+        ),
+        (
+            "for index in (0,):\n        try:\n            1 / 0\n"
+            "        except ZeroDivisionError as limit:\n            continue\n    value = limit",
+            ["limit"],
+        ),
         (
             "for index in (0,):\n        try:\n            1 / 0\n"
             "        except ZeroDivisionError as limit:\n            break\n    value = limit",
@@ -1022,14 +1052,28 @@ def test_a_name_a_class_reads_before_it_sets_it_is_read_outside_the_class(notebo
         "            break\n    value = limit",
         "for index in (0,):\n        try:\n            limit = 1\n            break\n"
         "        finally:\n            value = limit",
-        # And from inside a statement this reader does not know.
+        # A `continue` leads to the next round, and so to the `else`; and a
+        # `break` in a later round leaves with what an earlier one set.
+        "for index in (0,):\n        limit = 1\n        continue\n    else:\n        value = limit",
+        "for index in (0, 1):\n        if index:\n            break\n        limit = 1\n"
+        "    else:\n        del limit\n    value = limit",
+        "for index in (0,):\n        with memoryview(b''):\n            limit = 1\n"
+        "            continue\n    else:\n        value = limit",
+        # And from inside a statement this reader does not know, for the
+        # next round or past the `else`, whichever it holds.
         "for index in (0,):\n        limit = 1\n        match index:\n            case 0:\n"
         "                break\n        del limit\n    value = limit",
+        "for index in (0,):\n        limit = 1\n        match index:\n            case 0:\n"
+        "                break\n    else:\n        del limit\n    value = limit",
         # What a loop runs over may raise as the next round is asked for,
         # with what the rounds before it set.
         "def rounds():\n        yield 0\n        raise ZeroDivisionError\n\n    try:\n"
         "        for index in rounds():\n            limit = 1\n"
         "    except ZeroDivisionError:\n        value = limit",
+        "def again(asked=[]):\n        asked.append(0)\n        return 1 // (2 - len(asked))\n\n"
+        "    try:\n        while again():\n            try:\n                limit = 1\n"
+        "            except:\n                pass\n    except ZeroDivisionError:\n"
+        "        value = limit",
         # Where nothing leads, nothing is read: the handler of a `try` that
         # nothing can leave, and what follows a `raise` in its block.
         "limit = 1\n    try:\n        pass\n    except ValueError:\n        value = limit",
@@ -1211,6 +1255,12 @@ def test_the_names_a_text_reads_are_the_same_on_whichever_python_reads_it():
     assert under(f"{QF}\nfrom math import pi as _Mine__limit") == nothing
     hidden = f"{QF}\n\n\nclass __Hidden(qf.Strategy):\n    __limit = __limit\n"
     assert _names._undefined(hidden)[0] == ["_Hidden__limit"]
+    # Only a name of the class's own is held to the order its body runs in.
+    # One that is no one's is refused wherever the text reads it, where
+    # nothing leads as anywhere: that it is defined is asked of the text.
+    dead = "try:\n        pass\n    except ValueError:\n        value = {}\n    limit = 1"
+    assert said(dead.format("limit")) == nothing
+    assert said(dead.format("nowhere")) == (["nowhere"], set(), set())
     # A name the class says is the module's is the module's, and no name of
     # the class's read too soon.
     assert said("global counter\n    counter = counter + 1") == (["counter"], set(), set())
@@ -1316,6 +1366,38 @@ def test_what_a_block_may_be_ended_before_is_not_unset_for_certain(notebook):
     text = file_of(module.Inside, declared)
     exec(compile(text, "strategy.py", "exec"), names)
     assert names["Inside"].value == 2
+    # Of two managers the first manages the second: where the second fails
+    # as a `break` leaves the block, the first may take that, and the
+    # class's body goes on after the statement.
+    module = notebook.run(
+        """
+        import contextlib
+
+
+        class Twice(qf.Strategy):
+            class Failing:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, kind, *raised):
+                    if kind is None:
+                        raise ValueError
+
+            for index in (0,):
+                with contextlib.suppress(ValueError), Failing():
+                    limit = 1
+                    break
+                saved = 1
+            else:
+                # No `break` came of it: the round ended, and the loop.
+                value = limit + saved
+
+            def on_bar(self, ctx, bar):
+                return None
+        """
+    )
+    exec(compile(file_of(module.Twice, declared), "strategy.py", "exec"), names)
+    assert names["Twice"].value == 2
     # But every way out of a `try` passes through its `finally`, the way
     # that a manager around it takes among them: what that deletes is unset
     # after the block. And a `del` that a block begins with has unset its
@@ -1626,6 +1708,9 @@ class Ways:
         if kind == "with":
             given = f" as {self.name()}" if rng.random() < 0.3 else ""
             managed = f"held(risk({self.point()}), {self.point()}, {self.point()})"
+            if rng.random() < 0.3:
+                # Two managers, of which the first manages the second.
+                managed += f", held(risk({self.point()}), {self.point()}, {self.point()})"
             return [f"with {managed}{given}:", *self.block(inner, loop)]
         if kind == "for":
             self.loops = True
@@ -1771,8 +1856,8 @@ class Small(Ways):
     `del` that may fail; `U` sets and deletes it, which cannot; `R` reads
     it; `Z` raises; and `B`, in a loop, breaks out of it. Of those with
     blocks, `T` is a `try` whose handler names nothing; `M` one whose
-    handler matches or not; `F` a `try` with a `finally`; `W` a `with`;
-    and `L` a loop."""
+    handler matches or not; `F` a `try` with a `finally`; `W` a `with` and
+    `V` one of two managers; `L` a loop and `E` one with an `else`."""
 
     def __init__(self):
         super().__init__(None)
@@ -1800,10 +1885,15 @@ class Small(Ways):
             return ["try:", *inside[0], f"except matching({self.point()}):", *inside[1]]
         if kind == "F":
             return ["try:", *inside[0], "finally:", *inside[1]]
-        if kind == "W":
-            return [f"with held(risk({self.point()}), {self.point()}, {self.point()}):", *inside[0]]
+        if kind in "WV":
+            managers = [
+                f"held(risk({self.point()}), {self.point()}, {self.point()})"
+                for _ in range(1 + (kind == "V"))
+            ]
+            return [f"with {', '.join(managers)}:", *inside[0]]
         self.loops = True
-        return [f"for each in times(risk({self.point()}), {self.point()}):", *inside[0]]
+        loop = [f"for each in times(risk({self.point()}), {self.point()}):", *inside[0]]
+        return loop if kind == "L" else [*loop, "else:", *inside[1]]
 
     @classmethod
     def having(cls, kinds, simple, inner=""):
@@ -1811,21 +1901,25 @@ class Small(Ways):
         `simple` statements, or, in a loop, a `break`; with `inner`, one of
         its blocks holds a statement of those kinds, alone or beside one
         simple statement."""
+
+        def blocks(simple):
+            plain = [[one] for one in simple] + [[one, two] for one in simple for two in simple]
+            if not inner:
+                return plain, plain
+            around = [[each] for each in cls.having(inner, simple)]
+            pairs = [([one, *each], [*each, one]) for each in around for one in simple]
+            return plain, around + [block for pair in pairs for block in pair]
+
         for kind in kinds:
-            here = simple + "B" if kind == "L" and "B" not in simple else simple
-            plain = [[one] for one in here] + [[one, two] for one in here for two in here]
-            around = plain
-            if inner:
-                around = [[each] for each in cls.having(inner, here)]
-                around += [
-                    pair for each in around for one in here for pair in ([one, *each], [*each, one])
-                ]
-            if kind in "WL":
+            # A loop's body may break out of it; its `else` is no part of it.
+            plain, around = blocks(simple + "B" * (kind in "LE" and "B" not in simple))
+            if kind in "WVL":
                 yield from ((kind, block) for block in around)
                 continue
-            yield from ((kind, first, second) for first in around for second in plain)
+            after, held = blocks(simple) if kind == "E" else (plain, around)
+            yield from ((kind, first, second) for first in around for second in after)
             if inner:
-                yield from ((kind, first, second) for first in plain for second in around)
+                yield from ((kind, first, second) for first in plain for second in held)
 
     @classmethod
     def every(cls, outer, inner, simple):
@@ -1894,7 +1988,7 @@ def held_to_python(text, body, whole=True):
 # What the reader says of `Ways.made(WAYS_SEED, WAYS, WAYS_POINTS)`, every
 # answer in order, as one hash: the same on every Python that reads them.
 WAYS_SEED, WAYS, WAYS_POINTS = 0x5EED_0A75, 1000, 11
-WAYS_SAID = "7dfef7bf200cdbd261828392d02dd61e9ce68219ca48993ea931125bb4603261"
+WAYS_SAID = "b65c5a009fe425a4020be346a8f37c2e82acdcbe3ac91a7b422e24c11389540b"
 
 
 def test_what_a_class_body_reads_is_what_python_finds_on_every_way_through_it():
@@ -1917,18 +2011,30 @@ def test_what_a_class_body_reads_is_what_python_finds_on_every_way_through_it():
     assert said.hexdigest() == WAYS_SAID, (kinds, refusals, runs)
 
 
-def test_every_small_body_around_a_loop_is_read_as_python_runs_it():
+@pytest.mark.parametrize(
+    "outer, inner, simple, bodies",
+    [
+        # A loop around a `try`, a `with` or another loop, of blocks that
+        # set the name, delete it or break out: a `break` goes to its loop,
+        # through every `finally` on its way, and no handler takes it.
+        ("L", "TMFWL", "SD", 6384),
+        # A loop around a `with` of two managers: where the second fails as
+        # a `break` leaves the block, the first may take that.
+        ("L", "V", "SD", 168),
+        # A loop with an `else`, which a `break` passes and which reads the
+        # name too.
+        ("E", "", "SDR", 480),
+    ],
+)
+def test_every_small_body_around_a_loop_is_read_as_python_runs_it(outer, inner, simple, bodies):
     # What a seed puts together misses what few bodies show: so every small
     # body is held to Python too, where the reader is not exact and a wrong
-    # refusal is rare. A loop is left by a `break` that no handler takes,
-    # through every `finally` on its way: each body here is a loop around a
-    # `try`, a `with` or another loop, of blocks of one statement or two
-    # that set the name, delete it, or break out.
-    bodies = refusals = 0
-    for text, body in Small.every("L", "TMFWL", "SD"):
+    # refusal is rare.
+    refusals = 0
+    for text, body in Small.every(outer, inner, simple):
         refusals += bool(held_to_python(text, body, whole=False))
-        bodies += 1
-    assert bodies == 6384 and 1000 < refusals < bodies - 1000, (bodies, refusals)
+        bodies -= 1
+    assert not bodies and refusals
 
 
 def test_what_a_class_reads_too_soon_is_told_beside_what_it_does_not_define_at_all(notebook):

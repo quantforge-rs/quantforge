@@ -762,8 +762,9 @@ They hold the installed package to the checkout they are in:
   is refused that some way satisfies, and in a body with no loop, no
   `except*` and no `del` that may fail, a read is refused exactly where
   some way reaches it and none satisfies it; so is every small body of a
-  loop around another statement that has blocks, none of them left to a
-  seed; the seeded ones held to one hash each, the same on whichever Python
+  loop around another statement that has blocks, of a loop around a `with`
+  of two managers and of a loop with an `else`, none of them left to a seed;
+  the seeded ones held to one hash each, the same on whichever Python
   reads them; nothing asked of what a class's attributes hold; and every
   class it does not send, one that takes a variable from the function
   around it among them. Then the requests, against servers of the
