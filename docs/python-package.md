@@ -374,12 +374,13 @@ quantforge-py/
 ├── python/
 │   └── quantforge_py/
 │       ├── __init__.py     the package: publishes the extension module's names, and those of the modules written in Python beside it: the four functions of the frames, the client, its job and its status, and the exceptions
+│       ├── _answer.py      one answer of a server as the client reads it from its connection: held to what HTTP writes, its body to the longest that is taken and what frames it to a limit of its own, with the standard library alone
 │       ├── _client.py      Client: the client of a QuantForge server, which is where the server is, the token it sends, and the server's backtest jobs
 │       ├── _errors.py      RemoteError and the six exceptions derived from it: what a request to a server fails with, each raised by the code of the protocol's error envelope
 │       ├── _frames.py      candles and a backtest's result as pandas DataFrames, and a frame of candles as a batch: written in Python, with pandas' own calls
 │       ├── _jobs.py        Job and JobStatus: a server's backtest jobs listed and got, the handle on one, and its status read strictly from what the protocol writes, into the package's own types
 │       ├── _runtime.py     the runtime a strategy bundle runs in, in Python: the environment a worker offers, a bundle's strategy imported from its files and built from its parameters, what its own code may import, its lines and its failures
-│       ├── _wire.py        a server as a client's requests reach it, with the standard library alone: its URL and the token checked, the protocol version agreed on, each request on a connection of its own, what is asked again, and an answer read or raised
+│       ├── _wire.py        a server as a client's requests reach it, with the standard library alone: its URL and the token checked, the protocol version agreed on, each request on a connection of its own, what is asked again, and an answer given as its route's or raised as the exception it is
 │       └── _worker.py      the worker a QuantForge server runs Python bundles in, `python -m quantforge_py._worker`: what the server gave it closed, its frames moved off standard output, then the extension's worker
 ├── src/
 │   ├── adapter.rs          the engine's Strategy over a Python object: a thread attached for each callback, a failure with its traceback
@@ -695,11 +696,12 @@ They hold the installed package to the checkout they are in:
   as an `AuthError`; a request sent again while the server is busy, five
   tries in all at most; a server that is not there, a connection that
   breaks, an answer cut short, a redirect and what is not HTTP, each named
-  for what it is; an answer read to the most that is read and no further,
-  whatever it says of its length or of a chunk's; answers put together by
-  a seed from what a server sends and what none does, each read or raised
-  as an exception of the client's own; and every status the protocol does
-  not write refused, member by member. Then against a real
+  for what it is; an answer read by the client itself and held to what
+  HTTP writes, to the longest body that is taken and to the most that is
+  read of what frames one; answers put together by a seed from what a
+  server sends and what none does, each read or raised as an exception of
+  the client's own; and every status the protocol does not write refused,
+  member by member. Then against a real
   `quantforge serve run` on SQLite and on PostgreSQL, its workers the
   interpreter of the run, with a job in each
   state: one that succeeded, one that failed, one that runs until it is

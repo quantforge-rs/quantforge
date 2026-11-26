@@ -20,7 +20,7 @@ import jobs
 import quantforge_py as qf
 import stores
 from conftest import REMOTE_TOKEN
-from quantforge_py import _errors, _jobs, _wire
+from quantforge_py import _answer, _errors, _jobs, _wire
 
 PAGE = "docs/python-client.md"
 PACKAGE_PAGE = "docs/python-package.md"
@@ -311,9 +311,11 @@ def test_the_page_states_the_limits_a_request_is_held_to(page):
         f"{_wire._READ_SECONDS} seconds",
         str(_wire._ATTEMPTS),
         f"The seconds `Retry-After` names, {_wire._MOST_RETRY_SECONDS} at most",
-        f"{_wire._MOST_ANSWER_BYTES // (1024 * 1024)} MiB",
+        f"{_answer._MOST_ANSWER_BYTES // (1024 * 1024)} MiB",
+        f"{_answer._MOST_FRAMING_BYTES // (1024 * 1024)} MiB",
     ]
-    assert _wire._MOST_ANSWER_BYTES % (1024 * 1024) == 0
+    assert _answer._MOST_ANSWER_BYTES % (1024 * 1024) == 0
+    assert _answer._MOST_FRAMING_BYTES % (1024 * 1024) == 0
     # And the one protocol version the package speaks.
     assert _wire._MIN_SUPPORTED == _wire._PROTO_VERSION
     assert f"This package speaks version {_wire._PROTO_VERSION}." in page(PAGE).text

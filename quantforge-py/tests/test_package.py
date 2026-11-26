@@ -9,7 +9,7 @@ import sys
 import pytest
 
 import quantforge_py
-from quantforge_py import _client, _errors, _frames, _jobs, _native, _wire
+from quantforge_py import _answer, _client, _errors, _frames, _jobs, _native, _wire
 
 # MAJOR.MINOR.PATCH without leading zeros: an engine version as a strategy
 # bundle's `engine` requirement names one (docs/bundle-spec.md).
@@ -103,11 +103,11 @@ def test_every_published_name_is_the_extension_modules_own_or_a_private_modules(
     for name in FRAMES:
         assert getattr(quantforge_py, name).__module__ == _frames.__name__, name
     # Every module of the package is private, and lies beside the others:
-    # the four of the client among them, one of which, how a request reaches
-    # a server, publishes nothing.
+    # the five of the client among them, two of which, how a request reaches
+    # a server and how its answer is read, publish nothing.
     package = pathlib.Path(quantforge_py.__file__).parent
-    modules = [_client, _errors, _frames, _jobs, _wire]
-    assert set(WRITTEN_IN.values()) == set(modules) - {_wire}
+    modules = [_answer, _client, _errors, _frames, _jobs, _wire]
+    assert set(WRITTEN_IN.values()) == set(modules) - {_answer, _wire}
     for module in modules:
         assert module.__name__.startswith("quantforge_py._"), module
         assert pathlib.Path(module.__file__).parent == package

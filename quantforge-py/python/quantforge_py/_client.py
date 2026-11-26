@@ -2,9 +2,9 @@
 (`docs/python-client.md`).
 
 A client is where its server is, the token it sends, and the server's
-backtest jobs. What reaches the server is `quantforge_py._wire`, the jobs
-are `quantforge_py._jobs`, and what a request fails with is
-`quantforge_py._errors`.
+backtest jobs. What reaches the server is `quantforge_py._wire`, what reads
+its answer `quantforge_py._answer`, the jobs are `quantforge_py._jobs`, and
+what a request fails with is `quantforge_py._errors`.
 
 This module is private: import its names from `quantforge_py`.
 """

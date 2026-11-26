@@ -33,6 +33,7 @@ and one queued behind it.
 - [Refreshing and cancelling](#refreshing-and-cancelling)
 - [What is raised](#what-is-raised)
 - [What is asked again](#what-is-asked-again)
+- [How an answer is read](#how-an-answer-is-read)
 - [Connections](#connections)
 - [Refusals](#refusals)
 - [What is left](#what-is-left)
@@ -429,8 +430,8 @@ and names the server by its URL:
 | `502`, `503` or `504` without the protocol's error envelope | `ServerUnavailable` |
 | Any other status that is no success without it, a redirect among them | `RemoteError` |
 | A success whose body is not what the protocol says the route answers | `RemoteError` |
-| What is not HTTP, an answer that does not say where it ends among it | `RemoteError` |
-| An answer longer than any QuantForge server sends, by the length it states or by what came | `RemoteError` |
+| What is not HTTP: a status line or a header that is none, or a success that does not say where its body ends | `RemoteError` |
+| A success with a body longer than any QuantForge server sends, by the length it states or by what came | `RemoteError` |
 | A connection for a token over `http` that does not end on this machine | `RemoteError` |
 <!-- end: without an envelope -->
 
@@ -472,7 +473,8 @@ nothing, and a cancel nothing more the second time.
 | The server's silence while it answers | 60 seconds |
 | Tries of one request while the server answers `503` with `Retry-After` | 5 |
 | One wait between two tries | The seconds `Retry-After` names, 5 at most |
-| One answer | 64 MiB |
+| An answer's body | 64 MiB |
+| What frames an answer's body: its status line, its headers, the sizes of its chunks and its trailers | 1 MiB |
 <!-- end: limits -->
 
 - **A `503` that names no whole number of seconds is raised at once,** and
@@ -481,20 +483,47 @@ nothing, and a cancel nothing more the second time.
   is.
 - **A call can take as long as its tries and its waits together.** None of
   these is an argument yet.
-- **No more than the 64 MiB of an answer are read, whatever the answer says
-  of itself.** It is read in pieces of the client's own size, so neither
-  the length it states nor the size it gives a chunk decides how much is
-  read at once, and one that is longer is a `RemoteError` that says so. An
-  answer that states its length is read to it and no further, and one of a
-  status that has no body, a `204` and a `304` among them, is read for
-  none.
-- **An answer that does not say where it ends is not HTTP.** A length that
-  is said twice is one length where both say the same. Two that differ, a
-  length that is not digits, and a chunk whose size no read can be asked
-  for are each a `RemoteError` that names what was wrong.
 - **The 60 seconds are the longest silence, not the longest answer.** A
   server that keeps sending, however slowly, is read for as long as it
-  sends.
+  sends, to the two limits of how much.
+
+## How an answer is read
+
+**The client reads an answer itself.** The standard library opens the
+connection and sends the request. What comes back is read by the client,
+held to what HTTP writes, and to two limits of its own.
+
+- **An answer says where its body ends, or it is not HTTP.** A body is as
+  long as its `Content-Length` says, or comes in chunks, or ends where its
+  connection does. A length that is said more than once is one length
+  where each says the same; one that is not digits, and two that differ,
+  are no length. `chunked` is the one transfer coding that is read, in
+  whatever case and with whatever space around it; any other is none the
+  client reads. A chunk states its size in hex digits and nothing else,
+  and ends where that says. Each of these, and a status line or a header
+  that is none, is a `RemoteError` that names what was wrong.
+- **An answer that only says another is to come is read past.** A `100` or
+  a `103` is no answer: the one after it, on the same connection, is.
+- **A status that has no body is read for none:** a `204` and a `304`,
+  whatever their headers say of the body they stand for.
+- **The longest body that is taken is 64 MiB, and what frames it, 1 MiB:**
+  its status line, its headers, the sizes of its chunks and its trailers,
+  and any answer before it that only says one is to come. An answer past
+  either is a `RemoteError` that says so. It is read no further than the
+  one byte that tells it is past, and not at all where it says so itself:
+  a body whose stated length, or whose next chunk, would make it longer
+  than is taken is not read.
+- **An answer that was cut short is no answer,** a `ServerUnavailable`: one
+  that ends before the length it states, and one in chunks that ends
+  before its last chunk and the empty line after its trailers. Asked
+  again, the server may give it whole.
+- **A refusal is told by its status where its body cannot be read.** A
+  refusal's body is read for the protocol's error envelope and nothing
+  else. One that is longer than is taken, or does not say where it ends,
+  has none: the refusal is raised as its status is without an envelope, a
+  proxy's `401` as an `AuthError`, and why its body was not read is its
+  `__cause__`. One that was cut short did not come whole, and stays a
+  `ServerUnavailable`.
 
 ## Connections
 
