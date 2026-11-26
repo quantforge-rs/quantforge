@@ -27,6 +27,7 @@ import subprocess
 import sys
 import textwrap
 import threading
+import time
 import types
 
 import pytest
@@ -34,131 +35,11 @@ import pytest
 import quantforge_py as qf
 from conftest import REMOTE_TOKEN
 from quantforge_py import _answer, _errors, _jobs, _wire
-
-# What a server of this release says of itself.
-SPEAKS = {"version": "0.2.0", "proto_version": 1, "min_supported": 1}
+from standin import BUNDLE, JOB, SPEAKS, StandIn, refusal, written
 
 # A token no line could hold by chance. It is words, and holds no digit, so
 # that no scanner of the repository takes it for a secret someone left.
 TOKEN = "a-sentinel-token-no-line-holds"
-
-# One job, as the protocol writes its status.
-JOB = "57917a9825f44d75ad4a2e6329d00ec7"
-BUNDLE = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-
-
-def written(job_id=JOB, state=None, **changed) -> dict:
-    """A job's status as a server writes it: queued, unless `state` says
-    otherwise, with the members `changed` names in the place of its own."""
-    status = {
-        "job_id": job_id,
-        "submitted_at_ms": 1_792_454_400_000,
-        "submission": {
-            "bundle": BUNDLE,
-            "data": {
-                "exchange": "binance",
-                "category": "spot",
-                "symbol": "BTCUSDT",
-                "interval": "1m",
-                "start_open_ms": 1_792_454_400_000,
-                "end_open_ms": 1_792_540_740_000,
-            },
-            "backtest": {"initial_cash": "10000", "fee_bps": "7.50", "close_out_at_end": True},
-        },
-        "state": state or {"kind": "queued"},
-    }
-    status.update(changed)
-    return status
-
-
-def refusal(status: int, code: str, message: str, headers=None, **more):
-    """An answer that is the protocol's error envelope."""
-    return status, {"error": {"code": code, "message": message, **more}}, headers or {}
-
-
-class StandIn:
-    """A server of the test's own, on this machine: it answers each route
-    with what the test told it to, one answer after another and the last
-    one from then on, `GET /version` with `SPEAKS` unless told otherwise,
-    and any other route as a QuantForge server answers one it does not
-    have. An answer that is a function is called as it is asked for, which
-    is how a test holds one back. `asked` is what it was asked, in order."""
-
-    def __init__(self, speaks=SPEAKS):
-        self.asked = []
-        self._answers = {("GET", "/version"): [(200, speaks, {})]}
-        stand_in = self
-
-        class Handler(http.server.BaseHTTPRequestHandler):
-            def answer(self):
-                length = int(self.headers.get("Content-Length") or 0)
-                sent = self.rfile.read(length) if length else b""
-                stand_in.asked.append((self.command, self.path, dict(self.headers), sent))
-                answers = stand_in._answers.get((self.command, self.path))
-                if not answers:
-                    answers = [
-                        refusal(
-                            404, "not_found", f"this server answers no {self.command} {self.path}"
-                        )
-                    ]
-                answer = answers.pop(0) if len(answers) > 1 else answers[0]
-                if callable(answer):
-                    answer = answer()
-                status, body, headers = answer
-                if isinstance(body, (dict, list)):
-                    body = json.dumps(body).encode()
-                    headers = {"Content-Type": "application/json", **headers}
-                elif isinstance(body, str):
-                    body = body.encode()
-                self.send_response(status)
-                for name, value in headers.items():
-                    self.send_header(name, value)
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-            do_GET = do_POST = do_PUT = answer
-
-            def log_message(self, *arguments):
-                pass
-
-        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        self.thread = threading.Thread(
-            target=self.server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
-        )
-        self.thread.start()
-
-    @property
-    def port(self) -> int:
-        return self.server.server_address[1]
-
-    @property
-    def url(self) -> str:
-        return f"http://127.0.0.1:{self.port}"
-
-    def says(self, method: str, target: str, *answers) -> "StandIn":
-        """From now on `method target` is answered with `answers`, each a
-        status, a body and headers, in order."""
-        self._answers[(method, target)] = [
-            answer if callable(answer) or len(answer) == 3 else (*answer, {}) for answer in answers
-        ]
-        return self
-
-    @property
-    def routes(self) -> list[str]:
-        """What it was asked, each as its method and its target."""
-        return [f"{method} {target}" for method, target, *_ in self.asked]
-
-    def close(self):
-        self.server.shutdown()
-        self.server.server_close()
-        self.thread.join()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *raised):
-        self.close()
 
 
 class Raw:
@@ -287,6 +168,83 @@ def test_every_request_says_who_asks_and_goes_on_a_connection_of_its_own(server)
         assert headers["Connection"] == "close"
         assert "Authorization" not in headers
         assert sent == b""
+
+
+def test_what_a_request_carries_is_sent_whole_with_its_length_and_its_media_type(server):
+    # What an upload and a submission carry: bytes the client made, of the
+    # media type it names, as long as they are.
+    server.says("PUT", "/v1/bundles/any", (201, {"taken": True}))
+    wire = qf.Client(server.url)._wire
+    for body in (bytes(range(256)) * 1024, b"x", b""):
+        answered = wire.ask(
+            "PUT", "bundles/any", lambda value: value, body=body, media_type="application/x-tar"
+        )
+        assert answered == {"taken": True}
+        method, target, headers, sent = server.asked[-1]
+        assert (method, target, sent) == ("PUT", "/v1/bundles/any", body)
+        assert headers["Content-Type"] == "application/x-tar"
+        assert int(headers["Content-Length"]) == len(body)
+        # Its length is stated: it is not sent in chunks, which a server
+        # would have to put together to know how much is to come.
+        assert "Transfer-Encoding" not in headers
+        assert headers["User-Agent"] == f"quantforge-py/{qf.__version__}"
+    # A request that carries nothing names no type for it.
+    assert "Content-Type" not in server.asked[0][2]
+
+
+def test_a_body_is_cut_off_by_the_servers_silence_and_never_by_how_long_it_takes(monkeypatch):
+    # The longest silence is held to while a server takes a body as while
+    # it answers. A body goes out a piece at a time, each with that long: a
+    # server that takes it slowly takes all of it, though the whole takes
+    # longer than any silence may last.
+    body = bytes(range(256)) * (64 * 1024)
+    took = []
+
+    def length(listener) -> tuple[int, int]:
+        head, _, begun = listener.heard[-1].partition(b"\r\n\r\n")
+        (stated,) = re.findall(rb"Content-Length: (\d+)", head)
+        return int(stated), len(begun)
+
+    def slowly(connection):
+        stated, got = length(slow)
+        began = time.monotonic()
+        while got < stated:
+            time.sleep(0.01)
+            piece = connection.recv(256 * 1024)
+            if not piece:
+                # The client gave the upload up.
+                break
+            got += len(piece)
+        took.append((got, time.monotonic() - began))
+        connection.sendall(b"HTTP/1.1 201 Created\r\nContent-Length: 2\r\n\r\n{}")
+
+    def never(connection):
+        # Takes no more of it, for as long as the client holds on.
+        try:
+            connection.recv(1, socket.MSG_PEEK)
+            time.sleep(3)
+        except OSError:
+            pass
+
+    monkeypatch.setattr(_wire, "_READ_SECONDS", 0.3)
+    with Raw(slowly) as slow:
+        wire = qf.Client(f"http://127.0.0.1:{slow.port}")._wire
+        taken = wire._ask("PUT", "/v1/bundles/any", lambda value: value, body, "application/x-tar")
+        assert taken == {}
+    ((got, lasted),) = took
+    assert got == len(body) and lasted > 0.3, (got, lasted)
+    # One that takes nothing of it is given up after that silence.
+    with Raw(never) as silent:
+        wire = qf.Client(f"http://127.0.0.1:{silent.port}")._wire
+        began = time.monotonic()
+        error = raised(
+            qf.ServerUnavailable,
+            lambda: wire._ask(
+                "PUT", "/v1/bundles/any", lambda value: value, body, "application/x-tar"
+            ),
+        )
+        assert time.monotonic() - began < 2.5
+    assert str(error).endswith(": TimeoutError: timed out")
 
 
 def test_a_server_under_a_path_is_asked_under_it(server):
@@ -2634,7 +2592,8 @@ def test_no_class_of_the_client_is_built_derived_from_changed_or_pickled(server,
     job = job_of(server, written())
     refused(
         TypeError,
-        "a Job cannot be built: Client.backtest gives one, by get(job_id) or in list()",
+        "a Job cannot be built: Client.backtest gives one, by get(job_id), in list(), or for a "
+        "job it submits",
         qf.Job,
     )
     refused(

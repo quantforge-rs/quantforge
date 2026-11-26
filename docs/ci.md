@@ -215,10 +215,13 @@ python3.15`, which runs, in order:
 - **The `quantforge` binary**: `cargo build`, since the tests of the candle
   reader read stores the command line itself wrote, the worker's run
   strategy bundles on its `serve run`, whose workers are the Python of the
-  run ([the Python worker](python-worker.md#testing-it)), and the client's
+  run ([the Python worker](python-worker.md#testing-it)), the client's
   list, get and cancel the jobs of one
-  ([the Python client](python-client.md)). The script tells every run below
-  where it is, in `QUANTFORGE_PY_TEST_CLI`.
+  ([the Python client](python-client.md)), and those of a submission hold
+  the bundle the client builds to the one the binary's own
+  `backtest --remote` builds of the same files
+  ([submitting a backtest from Python](python-bundles.md)). The script
+  tells every run below where it is, in `QUANTFORGE_PY_TEST_CLI`.
 - **The wheel**: `maturin build` once, then the tests against it in a fresh
   virtualenv of each Python named, where it is installed with its two
   extras, as `pip install "quantforge-py[numpy,pandas]"` installs it.

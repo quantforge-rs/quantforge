@@ -64,7 +64,7 @@ src/
 │   ├── backtest/               a command that runs, and holds the jobs group
 │   │   ├── mod.rs              quantforge backtest: simulate the strategy on stored candles, or a bundle on a --remote server
 │   │   ├── remote.rs           a run on a server: the bundle uploaded, the job submitted, its log followed, its report
-│   │   ├── strategy.rs         --strategy, --entry and --params made into a bundle, its manifest written here
+│   │   ├── strategy.rs         --strategy, --entry and --params made into a bundle, beside the manifest written for them
 │   │   ├── report.rs           the report a local and a remote run both print
 │   │   └── jobs/               the jobs a server holds
 │   │       ├── mod.rs          quantforge backtest jobs: subcommand enum and dispatch
@@ -106,6 +106,7 @@ src/
 │   │   ├── archive.rs          the canonical tar writer and the code hash
 │   │   ├── reader.rs           the strict reader a server checks an upload with
 │   │   ├── manifest.rs         Manifest: quantforge.toml as bundle TOML, checked key by key
+│   │   ├── written.rs          written_manifest: the manifest a client writes for a strategy without one, in one canonical form
 │   │   ├── entry.rs            Entry: the module and class the worker runs
 │   │   ├── params.rs           Params: the strategy's parameters as JSON
 │   │   ├── requirement.rs      EngineVersion, EngineRequirement, PythonVersion

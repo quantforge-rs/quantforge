@@ -40,6 +40,7 @@ use quantforge::{
 use crate::candles::CandleBatch;
 use crate::market::MarketId;
 use range::{Edge, bound};
+pub(crate) use range::{bounds, rfc3339};
 use settings::Given;
 
 /// The logger a reader says on why a range held no candle.

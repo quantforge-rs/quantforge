@@ -46,3 +46,11 @@ quantforge = { path = "..", default-features = false }
 # The engine's decimal, named where a value crosses: the crate's own version
 # of it, which the lock file holds.
 rust_decimal = "1"
+# Reads the JSON a server answers of its runtime into the protocol's own
+# type, and writes a manifest's params as the JSON a strategy is handed: the
+# crate's own version of it, which the lock file holds.
+serde_json = "1"
+# The values of a manifest's params, as the writer every client shares takes
+# them (`quantforge::protocol::bundle::written_manifest`): the crate's own
+# version of it, which reads and writes TOML 1.0.
+toml = { version = "0.8", default-features = false }

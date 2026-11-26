@@ -1,16 +1,18 @@
 //! A Python strategy as `--strategy`, `--entry` and `--params` name it,
 //! made into a bundle by the bundle spec: a directory with a
 //! `quantforge.toml` of its own as it is, or a `.py` file or a directory
-//! without one, beside the manifest written for it here. Everything is
-//! read and checked before any server is asked, and the manifest takes its
-//! Python version from the server's runtime once it is known.
+//! without one, beside the manifest written for it, in the one form every
+//! client writes one. Everything is read and checked before any server is
+//! asked, and the manifest takes its Python version from the server's
+//! runtime once it is known.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use quantforge::ENGINE_VERSION;
-use quantforge::protocol::bundle::{Bundle, BundleLimits, Entry, MANIFEST_FILE};
+use quantforge::protocol::bundle::{Bundle, BundleLimits, Entry, MANIFEST_FILE, written_manifest};
 
 /// The Python version a written manifest is checked with before the
 /// server's is known: any does, since only admission reads it.
@@ -155,81 +157,18 @@ pub(super) fn parse_params(text: &str) -> Result<toml::Table> {
     }
 }
 
-/// The manifest written for `written`, in one canonical form, so that the
-/// same flags make the same bundle: its keys in the spec's order, the
-/// params sorted by name. Its engine is this build's own version, so a
-/// server runs the engine a local run would.
+/// The manifest written for `written`, in the one canonical form every
+/// client writes (`written_manifest`), so that the same flags make the same
+/// bundle. Its engine is this build's own version, so a server runs the
+/// engine a local run would, and it declares no package.
 fn manifest(written: &Written, python: &str) -> String {
-    let mut text = format!(
-        "format = 1\nentry = {}\nengine = {}\npython = {}\n",
-        string(&written.entry.to_string()),
-        string(&format!("=={ENGINE_VERSION}")),
-        string(python)
-    );
-    if !written.params.is_empty() {
-        text.push_str("\n[params]\n");
-        for (key, value) in &written.params {
-            text.push_str(&format!("{} = {}\n", key_text(key), value_text(value)));
-        }
-    }
-    text
-}
-
-/// A TOML basic string.
-fn string(text: &str) -> String {
-    let mut quoted = String::from("\"");
-    for c in text.chars() {
-        match c {
-            '"' => quoted.push_str("\\\""),
-            '\\' => quoted.push_str("\\\\"),
-            '\n' => quoted.push_str("\\n"),
-            '\t' => quoted.push_str("\\t"),
-            '\r' => quoted.push_str("\\r"),
-            c if c.is_control() => quoted.push_str(&format!("\\u{:04X}", u32::from(c))),
-            c => quoted.push(c),
-        }
-    }
-    quoted.push('"');
-    quoted
-}
-
-/// A key, bare where TOML allows.
-fn key_text(key: &str) -> String {
-    let bare = !key.is_empty()
-        && key
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'));
-    if bare { key.to_string() } else { string(key) }
-}
-
-/// A value as TOML writes it. A float keeps its point or exponent, so it
-/// reads back as a float; a value no manifest holds is written as TOML has
-/// it, for the bundle check to refuse in its own words.
-fn value_text(value: &toml::Value) -> String {
-    match value {
-        toml::Value::String(text) => string(text),
-        toml::Value::Integer(number) => number.to_string(),
-        toml::Value::Float(number) if number.is_nan() => "nan".to_string(),
-        toml::Value::Float(number) if number.is_infinite() => {
-            if *number > 0.0 { "inf" } else { "-inf" }.to_string()
-        }
-        toml::Value::Float(number) => format!("{number:?}"),
-        toml::Value::Boolean(flag) => flag.to_string(),
-        toml::Value::Datetime(moment) => moment.to_string(),
-        toml::Value::Array(items) => format!(
-            "[{}]",
-            items.iter().map(value_text).collect::<Vec<_>>().join(", ")
-        ),
-        toml::Value::Table(table) if table.is_empty() => "{}".to_string(),
-        toml::Value::Table(table) => format!(
-            "{{ {} }}",
-            table
-                .iter()
-                .map(|(key, value)| format!("{} = {}", key_text(key), value_text(value)))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-    }
+    written_manifest(
+        &written.entry.to_string(),
+        &format!("=={ENGINE_VERSION}"),
+        python,
+        &written.params,
+        &BTreeMap::new(),
+    )
 }
 
 #[cfg(test)]

@@ -25,6 +25,11 @@
 //! it is part of what the code hash names, and decides what runs, so a new
 //! key comes with a new [`BUNDLE_FORMAT`].
 //!
+//! A client that is given a strategy's files without a manifest writes one
+//! with [`written_manifest`], which gives one text for the same strategy:
+//! every client that writes with it makes the same bundle of the same
+//! files.
+//!
 //! [bundle spec]: <https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md>
 //!
 //! ```
@@ -60,6 +65,7 @@ mod problems;
 mod reader;
 mod requirement;
 mod runtime;
+mod written;
 
 use std::fmt;
 use std::path::Path;
@@ -75,6 +81,7 @@ pub use path::{BundleFile, BundlePath, MAX_PATH_BYTES, RESERVED_NAMES};
 pub use problems::{BundleError, BundleProblem, ProblemCode};
 pub use requirement::{EngineRequirement, EngineVersion, PythonVersion};
 pub use runtime::Runtime;
+pub use written::written_manifest;
 
 /// The bundle format this build writes and reads, which a manifest names as
 /// `format = 1`.
