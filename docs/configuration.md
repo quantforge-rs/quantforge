@@ -326,6 +326,14 @@ three things: it reads no proxy from the environment, it follows no
 redirect whether it has a token or not, and it refuses a URL that carries a
 user name or a password.
 
+**It submits a job as `backtest --remote` does:**
+`client.backtest.submit` asks the server the same questions in the same
+order, builds and checks the bundle with the same code, and writes a
+manifest with the same writer, so the same files, entry and parameters make
+the same bundle from either, under the same code hash. `start` and `end`
+mean there what `--start` and `--end` mean here
+([python-bundles.md](python-bundles.md)).
+
 ## Environment variables QuantForge does not own
 
 These are conventions shared across Rust and Unix tools, read by dependencies

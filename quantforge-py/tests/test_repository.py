@@ -338,17 +338,25 @@ def test_the_readme_shows_only_names_the_package_publishes_and_its_example_runs(
     assert shown, "the readme shows the package at work"
     assert set(shown) <= set(quantforge_py.__all__)
     # What PyPI shows is what a reader copies: every example runs as it is
-    # written, one after another. The last is of the client, the only one
-    # that needs a server, which the client's own tests give it
-    # (`test_client_jobs.py`). The two before it are of the arrays and of the
-    # frames, the only ones that need NumPy, and pandas with it, and the one
-    # before them is of the candle reader, the only one that needs a store.
-    *examples, of_the_reader, of_the_arrays, of_the_frames, of_the_client = readme.fences(
-        "python"
-    )
-    assert "qf.Client(" in of_the_client
+    # written, one after another. The last two are of the client and of a
+    # backtest it submits, the only ones that need a server, which their own
+    # tests give them (`test_client_jobs.py`, `test_submit_jobs.py`). The
+    # two before them are of the arrays and of the frames, the only ones
+    # that need NumPy, and pandas with it, and the one before them is of the
+    # candle reader, the only one that needs a store.
+    (
+        *examples,
+        of_the_reader,
+        of_the_arrays,
+        of_the_frames,
+        of_the_client,
+        of_a_submission,
+    ) = readme.fences("python")
+    assert "qf.Client(" in of_the_client and "backtest.submit" not in of_the_client
+    assert "client.backtest.submit(" in of_a_submission and "qf.Client(" not in of_a_submission
     assert not any(
-        "Client" in example for example in [*examples, of_the_reader, of_the_arrays, of_the_frames]
+        "Client" in example or "backtest.submit" in example
+        for example in [*examples, of_the_reader, of_the_arrays, of_the_frames]
     )
     assert examples and "to_numpy" in of_the_arrays and "to_dataframe" in of_the_frames
     assert not any("numpy" in example or "dataframe" in example for example in examples)

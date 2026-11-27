@@ -10,14 +10,17 @@
 //! strategy over candles in the engine (`run.rs`); a batch of candles as
 //! NumPy arrays, and back (`arrays.rs`); what the package's pandas
 //! functions, which are written in Python, are built on (`frames.rs`); the
-//! reader of the candles a store holds (`reader.rs`); and the runtime a
+//! reader of the candles a store holds (`reader.rs`); the runtime a
 //! strategy bundle runs in (`runtime.rs`), with the worker a QuantForge
-//! server runs bundles in (`worker.rs`).
+//! server runs bundles in (`worker.rs`); and what the package's client,
+//! which is written in Python, builds a bundle with before it submits one
+//! (`bundle.rs`).
 //! `docs/python-package.md` says how the package is named, built and
 //! tested, `docs/python-types.md` what each type takes and gives and how a
 //! backtest is run, `docs/python-numpy.md` what crosses to NumPy and how,
-//! `docs/python-pandas.md` what a frame of candles and of a result is, and
-//! `docs/python-reader.md` which store a reader opens and what it reads.
+//! `docs/python-pandas.md` what a frame of candles and of a result is,
+//! `docs/python-reader.md` which store a reader opens and what it reads,
+//! and `docs/python-bundles.md` how a bundle is built and submitted.
 
 // As in the `quantforge` crate. The unsafe code an extension module needs is
 // what PyO3's macros expand to, which the lint leaves alone.
@@ -30,6 +33,7 @@ mod adapter;
 mod arrays;
 mod backtest;
 mod bench;
+mod bundle;
 mod candles;
 mod convert;
 mod extra;
@@ -58,6 +62,10 @@ mod native {
     // it.
     #[pymodule_export]
     use crate::bench::embedded_backtest;
+    // Private: what the client builds a bundle with, writes a manifest by
+    // and reads a server's runtime by, each the engine's own code.
+    #[pymodule_export]
+    use crate::bundle::{bundle, manifest, runtime};
     #[pymodule_export]
     use crate::candles::{Candle, CandleBatch};
     #[pymodule_export]
@@ -70,6 +78,10 @@ mod native {
     use crate::market::{Category, ExchangeId, Interval, MarketId, Symbol};
     #[pymodule_export]
     use crate::reader::CandleReader;
+    // Private: the window of a job a client submits, read as a reader
+    // reads a range, and a time as the engine writes one.
+    #[pymodule_export]
+    use crate::reader::{bounds, rfc3339};
     #[pymodule_export]
     use crate::run::run_backtest;
     #[pymodule_export]

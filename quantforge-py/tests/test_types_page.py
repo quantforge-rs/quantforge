@@ -34,6 +34,7 @@ CLIENT = [
     "Client",
     "Job",
     "JobStatus",
+    "BundleError",
     "RemoteError",
     "AuthError",
     "ValidationError",

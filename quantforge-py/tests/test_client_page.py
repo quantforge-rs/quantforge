@@ -125,6 +125,8 @@ def test_the_page_gives_the_client_and_a_job_as_python_does(page, quoted, sessio
         f"Client.handshake{called(qf.Client.handshake)}",
         f"Client.backtest.list{called(backtests.list)}",
         f"Client.backtest.get{called(backtests.get)}",
+        f"Client.backtest.submit{called(backtests.submit)}",
+        f"Client.backtest.submit_class{called(backtests.submit_class)}",
         f"Job.refresh{called(qf.Job.refresh)}",
         f"Job.cancel{called(qf.Job.cancel)}",
     ]
@@ -137,7 +139,12 @@ def test_the_page_gives_the_client_and_a_job_as_python_does(page, quoted, sessio
         "proto_version": "property",
         "handshake": "function",
     }
-    assert public(backtests) == {"list": "function", "get": "function"}
+    assert public(backtests) == {
+        "list": "function",
+        "get": "function",
+        "submit": "function",
+        "submit_class": "function",
+    }
     assert [quoted(member) for member, _ in page(PAGE).rows("members")] == [
         f"Client{inspect.signature(qf.Client)}",
         f"handshake{called(qf.Client.handshake)}",
@@ -145,6 +152,8 @@ def test_the_page_gives_the_client_and_a_job_as_python_does(page, quoted, sessio
         "backtest",
         f"backtest.list{called(backtests.list)}",
         f"backtest.get{called(backtests.get)}",
+        f"backtest.submit{called(backtests.submit)}",
+        f"backtest.submit_class{called(backtests.submit_class)}",
         "server_version",
         "proto_version",
     ]
@@ -267,12 +276,15 @@ def test_the_page_names_every_exception_and_the_one_each_code_is_raised_as(
     assert [quoted(name) for name, *_ in page(PAGE).rows("exceptions")] == ERRORS
     first = qf.__all__.index(ERRORS[0])
     assert qf.__all__[first : first + len(ERRORS)] == ERRORS
-    # No other name the package publishes is an exception.
-    assert ERRORS == [
+    # No other name the package publishes is the exception of a request:
+    # the one beside them is a bundle's, refused before anything is sent,
+    # which the page of a submission is the contract of.
+    assert ["BundleError", *ERRORS] == [
         name
         for name in qf.__all__
         if isinstance(getattr(qf, name), type) and issubclass(getattr(qf, name), BaseException)
     ]
+    assert not issubclass(qf.BundleError, qf.RemoteError)
     rows = [
         (quoted(code), int(status), quoted(kind)) for code, status, kind in page(PAGE).rows("codes")
     ]
@@ -356,14 +368,11 @@ def test_the_page_writes_a_job_and_a_client_as_python_writes_them(page, session)
 
 def test_what_the_page_leaves_to_later_stories_is_what_the_packages_page_does(page, quoted):
     left = dict(row for row in table(page(PAGE), "## What is left"))
-    assert sorted(left.values()) == ["QUA-345", "QUA-462", "QUA-468"]
+    assert sorted(left.values()) == ["QUA-345", "QUA-468"]
     package = dict(row for row in table(page(PACKAGE_PAGE), "## What is left"))
-    # A client's own stories, as the package's page lists them among what is
+    # A client's own story, as the package's page lists it among what is
     # left of the package; the server's is the server's.
-    assert {story for story in left.values() if story in package.values()} == {
-        "QUA-462",
-        "QUA-468",
-    }
+    assert {story for story in left.values() if story in package.values()} == {"QUA-468"}
 
 
 def table(read, heading: str) -> list[list[str]]:

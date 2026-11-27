@@ -1723,6 +1723,8 @@ dependencies = [
  "pyo3",
  "quantforge",
  "rust_decimal",
+ "serde_json",
+ "toml",
 ]
 
 [[package]]

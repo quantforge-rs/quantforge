@@ -8,7 +8,7 @@ the `quantforge` command line.
 says what it is, holds the engine's types, each built by the engine's own
 rule, has the class a strategy derives from, runs a backtest, reads the
 candles the command line stored, and reaches the backtest jobs of a
-QuantForge server:
+QuantForge server, to which it submits a strategy's files as a job:
 
 ```python
 from decimal import Decimal
@@ -193,9 +193,36 @@ server refuses raises what the server said, word for word, as the exception
 its code names: `qf.ValidationError`, `qf.NotFound`, `qf.Conflict`,
 `qf.AuthError`, `qf.ServerUnavailable` or `qf.VersionMismatch`, each of
 them a `qf.RemoteError`. A token goes only over `https`, or to a server on
-this machine, and is never shown. Jobs are submitted by the command line's
-`backtest --remote` for now
+this machine, and is never shown
 ([the Python client](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-client.md)).
+
+A backtest is submitted from Python too. `submit` makes a strategy's files
+into a bundle, checks it with the code a server checks an upload with,
+uploads it and submits a job of it:
+
+```python
+job = client.backtest.submit(
+    "my_strategy",                    # the directory of a strategy's files, or one .py file
+    entry="sma_cross.py:SmaCross",    # its file and its class, as a bundle's manifest names them
+    params={"fast": 20, "slow": 50},  # what the class is built from: SmaCross(fast=20, slow=50)
+    market=market,                    # on the candles the server stores of the market,
+    start="2026-01-01T00:00:00Z",     # from here on, to the last it stores
+    config=config,
+)
+job.status.bundle                     # 'sha256:...': the bundle's code hash, computed here
+job.refresh().state                   # asks the server where the job stands
+```
+
+Nothing is pickled: a strategy travels as its source files, and its
+parameters as plain values in the bundle's manifest. A bundle that breaks
+the [bundle spec](https://github.com/quantforge-rs/quantforge/blob/main/docs/bundle-spec.md),
+with a file too large or of another kind in it, or that needs a package the
+server does not offer, raises `qf.BundleError` before anything is uploaded,
+with every problem by the spec's code. For a class written in a notebook,
+`submit_class` sends the class's own source text, and takes
+`source_only=True` as its caller's word that nothing else of the notebook
+goes with it
+([submitting a backtest from Python](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-bundles.md)).
 
 The package installs as `quantforge-py` and imports as `quantforge_py`.
 `quantforge` on PyPI is another project.

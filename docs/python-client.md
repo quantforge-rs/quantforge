@@ -1,17 +1,22 @@
 # The Python client
 
 `Client` reaches a QuantForge server, `quantforge serve run`, from Python:
-it lists the server's backtest jobs, gets one by its ID, and cancels one,
-with the standard library alone. This page is the contract of it: which
-server a client reaches and with which token, what it agrees on with the
-server and when, what a job and its status are, what is raised for each way
-a request fails, and what the client never does.
+it lists the server's backtest jobs, gets one by its ID, cancels one, and
+submits one, and needs nothing beside the package but the standard library.
+This page is the contract of it: which server a client reaches and with
+which token, what it agrees on with the server and when, what a job and its
+status are, what is raised for each way a request fails, and what the
+client never does.
 
 It applies two pages and restates neither. What a server's routes take and
 answer is the protocol, which the `quantforge` crate's own documentation
 specifies (`quantforge::protocol`). Which token goes where is the command
 line's rule for `--remote-token`, in
 [configuration](configuration.md#remote-backtests), which a client follows.
+And one page applies it: how a strategy's files are made into a bundle and
+submitted as a job is
+[submitting a backtest from Python](python-bundles.md), the contract of
+`submit` and `submit_class`.
 
 ```python
 >>> import quantforge_py as qf
@@ -48,6 +53,8 @@ Client(base_url, token=None)
 Client.handshake()
 Client.backtest.list(*, limit=None)
 Client.backtest.get(job_id)
+Client.backtest.submit(strategy, *, entry=None, params=None, deps=None, market, start=None, end=None, config)
+Client.backtest.submit_class(strategy, *, imports='import quantforge_py as qf', params=None, deps=None, market, start=None, end=None, config, source_only=False)
 Job.refresh()
 Job.cancel()
 ```
@@ -59,9 +66,11 @@ Job.cancel()
 | `Client(base_url, token=None)` | A client of the server that answers at `base_url`. It asks the server nothing |
 | `handshake()` | Asks the server which protocol versions it speaks, and agrees on one: what the client's first use does, done now |
 | `url` | The server's URL, as the client asks it |
-| `backtest` | The server's backtest jobs: `list` and `get` |
+| `backtest` | The server's backtest jobs: `list`, `get`, `submit` and `submit_class` |
 | `backtest.list(*, limit=None)` | The jobs the server holds, the last submitted first, as a list of `Job` |
 | `backtest.get(job_id)` | The job of that ID, as a `Job` |
+| `backtest.submit(strategy, *, entry=None, params=None, deps=None, market, start=None, end=None, config)` | Submits a backtest of a strategy's files, bundled and checked here, and gives the job the server queued, as a `Job` |
+| `backtest.submit_class(strategy, *, imports='import quantforge_py as qf', params=None, deps=None, market, start=None, end=None, config, source_only=False)` | Submits a backtest of a class by its source, and gives the job the server queued, as a `Job` |
 | `server_version` | The server's release, as it names it; `None` until the server has been asked |
 | `proto_version` | The protocol version agreed with the server; `None` until the server has been asked |
 <!-- end: members -->
@@ -80,8 +89,8 @@ Job.cancel()
   pickled, and no class is derived from it. It holds no connection: each
   request is made on one of its own, so a client is used by any number of
   threads at once, and has nothing to close.
-- **Reading an attribute never asks the server.** `handshake`, `list` and
-  `get` do, and a job's `refresh` and `cancel`.
+- **Reading an attribute never asks the server.** `handshake`, `list`,
+  `get`, `submit` and `submit_class` do, and a job's `refresh` and `cancel`.
 
 ## Which server it reaches
 
@@ -182,9 +191,10 @@ sides speak. This package speaks version 1.
 ## Jobs
 
 **`client.backtest` is the server's backtest jobs.** A job backtests a
-strategy bundle on candles the server stores; it is submitted by the
-command line's `backtest --remote` today
-([what is left](#what-is-left)).
+strategy bundle on candles the server stores. `submit` and `submit_class`
+make one of a strategy's files or of a class, and give its `Job`
+([submitting a backtest from Python](python-bundles.md)); the command
+line's `backtest --remote` submits jobs to the same server.
 
 ```python
 >>> jobs = client.backtest.list()
@@ -217,8 +227,9 @@ True
 <!-- end: job members -->
 
 - **A `Job` is a handle on one job, and not a value.** `client.backtest`
-  gives one, and none is built. Two handles on one job are two handles:
-  each keeps what it was last given.
+  gives one, by `list`, by `get`, or for the job it submitted, and none is
+  built. Two handles on one job are two handles: each keeps what it was
+  last given.
 - **Reading a job asks nothing.** `status` is what the server last
   answered this handle, a moment or an hour ago; `refresh()` asks again.
 - **`repr()` of a job is its ID and the state it was last given,** as in
@@ -373,7 +384,7 @@ from it,** one for each way a caller acts on one:
 | `ValidationError` | The server refused the request as malformed or as naming something invalid | Change the request: sent again as it is, it fails again |
 | `NotFound` | What the request names does not exist on the server | Name something else |
 | `Conflict` | The request contradicts the state of what it names | Ask how it stands |
-| `ServerUnavailable` | The server could not be reached, or cannot answer now | Ask again later |
+| `ServerUnavailable` | The server could not be reached, or cannot answer now | Ask again later; for a submission, list the server's jobs first |
 | `VersionMismatch` | The server and this package share no protocol version | Upgrade the older of the two |
 <!-- end: exceptions -->
 
@@ -454,17 +465,26 @@ True
 (None, None)
 ```
 
-**A `ServerUnavailable` may be asked again.** A read that failed changed
-nothing. A cancel whose answer never came may have been taken all the same:
-asked again, it cancels the job or finds it cancelled.
+**A `ServerUnavailable` may be asked again,** but for a submission. A read
+that failed changed nothing. A cancel whose answer never came may have been
+taken all the same: asked again, it cancels the job or finds it cancelled.
+A submission whose answer never came may have queued its job: the server's
+jobs are listed before it is submitted again.
 
 ## What is asked again
 
 **A request is sent again while the server answers `503` with
 `Retry-After`,** a few times, waiting as long as the server asks: the
 server's own answer where its store could not answer in time, and a
-proxy's. Every request a client makes today may be: a read changes
-nothing, and a cancel nothing more the second time.
+proxy's. A read may be, which changes nothing; a cancel, which changes
+nothing more the second time; and the upload of a bundle, which a server
+stores once, under the hash of its bytes.
+
+**A submission is never sent again.** One the server took but could not
+answer for would run twice: its `503` is raised at once, whatever it says
+of waiting, and a submission that fails as a `ServerUnavailable` may have
+been taken all the same
+([what is checked, and when](python-bundles.md#what-is-checked-and-when)).
 
 <!-- begin: limits -->
 | What | Limit |
@@ -539,7 +559,11 @@ held to what HTTP writes, and to two limits of its own.
   system trusts and the name the URL gives, by Python's own defaults
   (`ssl.create_default_context`). One that fails is a `ServerUnavailable`,
   and nothing is sent.
-- **Each request is made on a connection of its own,** and closes it.
+- **Each request is made on a connection of its own,** and closes it. A
+  bundle is uploaded on one, a piece at a time, and the 60 seconds are the
+  server's longest silence there too: each piece has that long to be
+  taken, and the answer that long to begin once the last piece is handed
+  to the system. An upload that keeps moving, however slowly, goes on.
 - **The package imports nothing of the network until a client asks its
   server.** `import quantforge_py` is as fast with a client in it as
   without, and a program that never makes one pays nothing for it.
@@ -548,7 +572,8 @@ held to what HTTP writes, and to two limits of its own.
 
 A value of the wrong type is a `TypeError`, and one the rules refuse a
 `ValueError`, before anything is asked. Each row is what Python raises for
-the call, where `client` is a client:
+the call, where `client` is a client; what `submit` and `submit_class`
+refuse is on [their own page](python-bundles.md#refusals):
 
 <!-- begin: refusals -->
 | Call | Raises |
@@ -567,7 +592,7 @@ the call, where `client` is a client:
 | `client.backtest.get("no such job")` | `ValueError: invalid job id 'no such job': expected 1 to 64 ASCII letters, digits, '-', or '_'` |
 | `client.backtest.get(7)` | `TypeError: job_id must be a str, not int` |
 | `client.backtest.list(limit="3")` | `TypeError: limit must be an int or None, not str` |
-| `qf.Job()` | `TypeError: a Job cannot be built: Client.backtest gives one, by get(job_id) or in list()` |
+| `qf.Job()` | `TypeError: a Job cannot be built: Client.backtest gives one, by get(job_id), in list(), or for a job it submits` |
 | `qf.JobStatus()` | `TypeError: a JobStatus cannot be built: it is what a server answered of a job` |
 <!-- end: refusals -->
 
@@ -583,6 +608,5 @@ was sent. The token is QF_REMOTE_TOKEN's: pass token="" to send none`.
 
 | What | Story |
 | --- | --- |
-| A bundle built from a strategy's files and submitted as a job, from Python | QUA-462 |
 | A job waited for, its log followed, its result as DataFrames, and its provenance | QUA-468 |
 | A server that checks the token it is sent | QUA-345 |

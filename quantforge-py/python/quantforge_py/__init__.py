@@ -39,6 +39,12 @@ refused in the engine's own words:
   ``client.backtest`` lists the server's backtest jobs and gets one by its
   ID, each as a ``Job``: its ID, the ``JobStatus`` the server last gave of
   it, and ``refresh`` and ``cancel``, which ask the server.
+  ``client.backtest.submit`` makes a strategy's files into a bundle, checks
+  it, uploads it and submits a backtest of it, and
+  ``client.backtest.submit_class`` does so for a class, by its source.
+- ``BundleError``: a strategy bundle that is refused before anything of it
+  is sent, because it breaks the bundle spec or its server cannot run it,
+  with every problem by the spec's code. It is a ``ValueError``.
 - ``RemoteError``: a request to a server that did not get its answer, and
   the six exceptions derived from it, one for each way a caller acts on
   one: ``AuthError``, ``ValidationError``, ``NotFound``, ``Conflict``,
@@ -65,10 +71,15 @@ NumPy too. Neither is imported before it is needed, and where one is missing
 what needs it says what to install. The client is written with the standard
 library alone, and imports what a request takes when it first makes one.
 
+Nothing the package does pickles an object. A strategy is submitted as its
+source files, or as the source text of its class, with its parameters as
+plain values, and none of it is imported or run where it is submitted from.
+
 The types come from the compiled extension module, ``quantforge_py._native``,
 the DataFrame functions from ``quantforge_py._frames``, and the client, its
-jobs and its exceptions from ``quantforge_py._client``, ``quantforge_py._jobs``
-and ``quantforge_py._errors``. Every module of the package is private: import
+jobs, its bundles and its exceptions from ``quantforge_py._client``,
+``quantforge_py._jobs``, ``quantforge_py._bundles`` and
+``quantforge_py._errors``. Every module of the package is private: import
 the names from here.
 """
 
@@ -103,6 +114,7 @@ from ._frames import (
 )
 from ._client import Client
 from ._jobs import Job, JobStatus
+from ._bundles import BundleError
 from ._errors import (
     AuthError,
     Conflict,
@@ -142,6 +154,7 @@ __all__ = [
     "Client",
     "Job",
     "JobStatus",
+    "BundleError",
     "RemoteError",
     "AuthError",
     "ValidationError",

@@ -13,7 +13,10 @@ The reference implementation is
 [`quantforge::protocol::bundle`](../src/protocol/bundle/mod.rs). The shared
 cases in [`tests/fixtures/bundle_cases.json`](../tests/fixtures/bundle_cases.json)
 hold every implementation to this document: an implementation conforms when
-it passes all of them.
+it passes all of them. QuantForge's own clients, the command line's
+`backtest --remote` and the Python package's `client.backtest.submit`, both
+build and check a bundle with the reference implementation
+([submitting a backtest from Python](python-bundles.md)).
 
 ## Contents
 
@@ -104,13 +107,16 @@ can make two directories differ:
 
 ## The manifest
 
-`quantforge.toml` is written in bundle TOML: TOML 1.0 that both Rust's
-`toml` 0.8 and Python's `tomllib` read the same way. A manifest is bundle
-TOML when it
+`quantforge.toml` is written in bundle TOML: TOML 1.0, as Rust's `toml` 0.8
+reads it, and as Python's `tomllib` reads it up to Python 3.14. A manifest
+is bundle TOML when it
 
 - is at most 65536 bytes of UTF-8, without a byte-order mark;
 - parses as TOML 1.0, so TOML 1.1's trailing commas and newlines in inline
-  tables, `\e` and `\x` escapes, and times without seconds are refused;
+  tables, `\e` and `\x` escapes, and times without seconds are refused.
+  Python's `tomllib` reads TOML 1.1 from Python 3.15 on, and takes each of
+  these: there it is no check of a manifest
+  ([notes for implementers](#notes-for-implementers));
 - holds no value nested more than 32 levels deep, counting the root table
   as one level and each table or array inside a value as one more;
 - holds no `nan` or infinity, and no integer outside the 64-bit range.
@@ -132,6 +138,16 @@ A manifest with any other key is refused. That differs on purpose from the
 wire's messages, which ignore fields they do not know: the manifest is part
 of what the code hash names and decides what runs, so a new key comes only
 with a new format.
+
+**A client that is given a strategy without a manifest writes one, in one
+form.** Any manifest that keeps these rules is a manifest, however it is
+laid out. QuantForge's own clients write one with a single writer
+(`quantforge::protocol::bundle::written_manifest`): the keys in the order
+above, then `[params]` and `[deps]`, each sorted by name, a string as a
+basic string, and an array or a table inside `params` inline. So the same
+entry, parameters and packages make the same manifest, and with the same
+files the same bundle and the same code hash, whether the command line
+wrote it or the Python package did.
 
 ### `entry`
 
@@ -409,6 +425,11 @@ implementation.
 - `bool` is an `int` in Python: check a value with `type(value) is int`.
 - Reject a byte-order mark before parsing the manifest; Rust's TOML parser
   strips one, Python's refuses it, and the spec refuses it.
+- Read a manifest with a reader of TOML 1.0. Python's `tomllib` is one up
+  to Python 3.14, and reads TOML 1.1 from Python 3.15 on, where it takes a
+  manifest every server refuses: the shared case of TOML 1.1 syntax fails
+  there. The Python package reads a manifest with the reference
+  implementation, on every Python.
 - In Python, `os.DirEntry.is_symlink()` is false for a junction: check
   `is_junction()` too, from Python 3.12.
 - Use the reserved names above, not `os.path.isreserved`, which is newer

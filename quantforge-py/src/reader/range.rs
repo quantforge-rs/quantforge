@@ -150,6 +150,30 @@ pub(crate) fn bound(value: Option<&Bound<'_, PyAny>>, edge: Edge) -> PyResult<Op
     }
 }
 
+/// The two bounds of a range, each as the engine's millisecond, or `None`
+/// where it is left out: `_bounds(start, end)`. Private: a client reads the
+/// window of a job it submits as a reader reads a range, by the same rule
+/// and with the same refusals.
+#[pyfunction]
+#[pyo3(name = "_bounds", signature = (start, end))]
+pub(crate) fn bounds(
+    start: Option<&Bound<'_, PyAny>>,
+    end: Option<&Bound<'_, PyAny>>,
+) -> PyResult<(Option<i64>, Option<i64>)> {
+    let start = bound(start, Edge::Start)?.map(|at| at.ms);
+    let end = bound(end, Edge::End)?.map(|at| at.ms);
+    Ok((start, end))
+}
+
+/// A millisecond since the Unix epoch as the engine writes a time, RFC 3339
+/// in UTC: `_rfc3339(ms)`. Private: what the client says of a time is what
+/// the command line says of it.
+#[pyfunction]
+#[pyo3(name = "_rfc3339", signature = (ms, /))]
+pub(crate) fn rfc3339(ms: i64) -> String {
+    quantforge::ms_to_rfc3339(ms)
+}
+
 /// Whether an RFC 3339 time, which the engine has read, holds anything past
 /// its millisecond: a digit other than zero after the third of its
 /// fraction of a second. The fraction is the one place such a time has a

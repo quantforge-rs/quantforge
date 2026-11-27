@@ -1,7 +1,8 @@
 """A server's backtest jobs as a client holds them: `Job`, the handle on
 one job, and `JobStatus`, where a job stood when the server was last asked,
 which the package publishes; a status read strictly from what the protocol
-writes; and the server's jobs listed and got (`docs/python-client.md`).
+writes; and the server's jobs listed, got and submitted
+(`docs/python-client.md`, `docs/python-bundles.md`).
 
 What a job runs is given in the package's own types, built by the engine's
 own rules: its market a `MarketId`, and how its fills are simulated a
@@ -361,9 +362,9 @@ class Job:
     """One backtest job a server holds: its ID, where it stood when the
     server was last asked, and what can be asked of it.
 
-    `Client.backtest` gives a job, by `get` or in `list`, and none is built.
-    Reading an attribute never asks the server: `refresh` and `cancel` do,
-    and keep what it answers as `status`.
+    `Client.backtest` gives a job, by `get`, in `list` or for one it
+    submits, and none is built. Reading an attribute never asks the server:
+    `refresh` and `cancel` do, and keep what it answers as `status`.
 
     - `id`: the job's ID, the server's name for it.
     - `status`: where the job stood when the server was last asked, a
@@ -374,7 +375,8 @@ class Job:
 
     def __init__(self, *args, **kwargs):
         raise TypeError(
-            "a Job cannot be built: Client.backtest gives one, by get(job_id) or in list()"
+            "a Job cannot be built: Client.backtest gives one, by get(job_id), in list(), or "
+            "for a job it submits"
         )
 
     @classmethod
@@ -462,6 +464,97 @@ class _Backtests:
         gave. An ID the server holds no job of is a `NotFound`."""
         job_id = _job_id(job_id)
         return Job._of(self._wire, self._wire.ask("GET", f"backtests/{job_id}", _status_of(job_id)))
+
+    def submit(
+        self,
+        strategy,
+        *,
+        entry=None,
+        params=None,
+        deps=None,
+        market,
+        start=None,
+        end=None,
+        config,
+    ):
+        """Submits a backtest of a strategy's files, and gives the job the
+        server queued, as a `Job`.
+
+        The files are made into a strategy bundle, which is checked here by
+        the code a server checks an upload with, uploaded under the code
+        hash computed here, and submitted. Nothing is uploaded for a bundle
+        that is refused, a `BundleError`, and nothing is pickled or run.
+
+        - `strategy`: a `.py` file, or the directory of a strategy's files,
+          a `str` or an `os.PathLike`. A directory's own `quantforge.toml`
+          is its manifest; without one, and for a file, one is written from
+          `entry`, `params` and `deps`.
+        - `entry`: the strategy's file in the bundle and its class, such as
+          `"strategy.py:MyStrategy"`.
+        - `params`: the strategy's parameters, a dict of values JSON holds:
+          the class is built from them, as keyword arguments.
+        - `deps`: the packages the strategy imports: a dict that pins each
+          at a version, or a list of names, each pinned at the version the
+          server offers.
+        - `market`: the market to run on, a `MarketId`.
+        - `start` and `end`: the window, each an `int` of milliseconds, a
+          `datetime.datetime` with a time zone or an RFC 3339 `str`. The job
+          runs on the bars the server stores between them, and one left out
+          reaches the first or the last bar it stores.
+        - `config`: how fills are simulated, a `BacktestConfig`.
+
+        A submission is sent once. One that fails as a `ServerUnavailable`
+        may have been taken all the same: list the server's jobs before
+        submitting it again.
+        """
+        from ._bundles import _Draft
+        from ._submit import _asked, _submitted
+
+        asked = _asked(market, start, end, config)
+        draft = _Draft.of_path(strategy, entry, params, deps)
+        return Job._of(self._wire, _submitted(self._wire, draft, *asked))
+
+    def submit_class(
+        self,
+        strategy,
+        *,
+        imports="import quantforge_py as qf",
+        params=None,
+        deps=None,
+        market,
+        start=None,
+        end=None,
+        config,
+        source_only=False,
+    ):
+        """Submits a backtest of a class by its source, for a class written
+        in a notebook, and gives the job the server queued, as a `Job`.
+
+        The class's own source text is the one Python file of the bundle,
+        below `imports`. Nothing else of where the class was written is
+        sent, and nothing is pickled: no import, no global and no variable
+        around the class, and not the class as it is in memory. The server
+        runs the text.
+
+        - `strategy`: a class derived from `Strategy`, written at the top
+          level of a module or of a notebook's cell.
+        - `imports`: the import statements the class's source needs, written
+          above it. A name the source reads that neither they, nor the
+          class, nor Python's builtins define is refused, with the name.
+        - `source_only`: `True` says that the caller knows all of the above.
+          Without it the call is refused before anything is read.
+
+        `params`, `deps`, `market`, `start`, `end` and `config` are
+        `submit`'s. A strategy kept in files is submitted with `submit`.
+        """
+        from ._bundles import _Draft
+        from ._source import _class_file
+        from ._submit import _asked, _submitted
+
+        file, entry = _class_file(strategy, imports, source_only)
+        asked = _asked(market, start, end, config)
+        draft = _Draft.of_files([file], entry, params, deps)
+        return Job._of(self._wire, _submitted(self._wire, draft, *asked))
 
     def __repr__(self):
         return f"<backtests of {self._wire.server.shown}>"

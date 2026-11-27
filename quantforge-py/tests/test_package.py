@@ -9,7 +9,19 @@ import sys
 import pytest
 
 import quantforge_py
-from quantforge_py import _answer, _client, _errors, _frames, _jobs, _native, _wire
+from quantforge_py import (
+    _answer,
+    _bundles,
+    _client,
+    _errors,
+    _frames,
+    _jobs,
+    _names,
+    _native,
+    _source,
+    _submit,
+    _wire,
+)
 
 # MAJOR.MINOR.PATCH without leading zeros: an engine version as a strategy
 # bundle's `engine` requirement names one (docs/bundle-spec.md).
@@ -18,8 +30,9 @@ ENGINE_VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 # What the package publishes, in the order `__all__` gives it: what it says
 # about itself, the engine's types, the function that runs a backtest, the
 # two conversions, the reader of a store's candles, the functions that give
-# or take a pandas DataFrame, the client of a server with what it gives, and
-# what a request to a server fails with.
+# or take a pandas DataFrame, the client of a server with what it gives,
+# what a bundle is refused with before it is sent, and what a request to a
+# server fails with.
 ABOUT = ["__version__", "ENGINE_VERSION", "STORAGE_BACKENDS"]
 TYPES = [
     "Symbol",
@@ -53,8 +66,11 @@ FRAMES = [
 # alone: the client of a QuantForge server, the handle it gives on a job,
 # and where a job stood when the server was last asked.
 CLIENT = ["Client", "Job", "JobStatus"]
-# Exceptions, which are derived from as any exception is: the first is the
-# one every other is derived from.
+# An exception of the client's that is no failure of a request: a strategy
+# bundle refused before anything of it is sent, which is a `ValueError`.
+BUNDLES = ["BundleError"]
+# The exceptions of a request, which are derived from as any exception is:
+# the first is the one every other is derived from.
 ERRORS = [
     "RemoteError",
     "AuthError",
@@ -72,6 +88,7 @@ WRITTEN_IN = {
     "Client": _client,
     "Job": _jobs,
     "JobStatus": _jobs,
+    "BundleError": _bundles,
     **dict.fromkeys(ERRORS, _errors),
 }
 
@@ -84,11 +101,13 @@ def public(module) -> list[str]:
 
 
 def test_the_package_publishes_its_names_and_holds_no_other_public_one():
-    assert quantforge_py.__all__ == ABOUT + TYPES + FUNCTIONS + READER + FRAMES + CLIENT + ERRORS
-    assert len(quantforge_py.__all__) == len(set(quantforge_py.__all__)) == 35
+    assert quantforge_py.__all__ == (
+        ABOUT + TYPES + FUNCTIONS + READER + FRAMES + CLIENT + BUNDLES + ERRORS
+    )
+    assert len(quantforge_py.__all__) == len(set(quantforge_py.__all__)) == 36
     published = sorted(name for name in quantforge_py.__all__ if not name.startswith("_"))
     assert public(quantforge_py) == published
-    assert sorted(WRITTEN_IN) == sorted(FRAMES + CLIENT + ERRORS)
+    assert sorted(WRITTEN_IN) == sorted(FRAMES + CLIENT + BUNDLES + ERRORS)
     # The extension module holds the same names and no other, but for what
     # is written in Python.
     assert public(_native) == sorted(set(published) - set(WRITTEN_IN))
@@ -103,11 +122,14 @@ def test_every_published_name_is_the_extension_modules_own_or_a_private_modules(
     for name in FRAMES:
         assert getattr(quantforge_py, name).__module__ == _frames.__name__, name
     # Every module of the package is private, and lies beside the others:
-    # the five of the client among them, two of which, how a request reaches
-    # a server and how its answer is read, publish nothing.
+    # the nine of the client among them, five of which publish nothing:
+    # how a request reaches a server, how its answer is read, how a class's
+    # source is found, what its text reads and does not define, and the
+    # order a submission is made in.
     package = pathlib.Path(quantforge_py.__file__).parent
-    modules = [_answer, _client, _errors, _frames, _jobs, _wire]
-    assert set(WRITTEN_IN.values()) == set(modules) - {_answer, _wire}
+    modules = [_answer, _bundles, _client, _errors, _frames, _jobs, _names, _source, _submit]
+    modules.append(_wire)
+    assert set(WRITTEN_IN.values()) == set(modules) - {_answer, _names, _source, _submit, _wire}
     for module in modules:
         assert module.__name__.startswith("quantforge_py._"), module
         assert pathlib.Path(module.__file__).parent == package
@@ -137,14 +159,16 @@ def test_every_type_is_a_class_of_the_package_and_a_strategy_alone_is_derived_fr
         assert bound.__name__ == name
         assert bound.__doc__, name
     # An exception is a class of the package too, and is derived from as any
-    # exception is.
-    for name in ERRORS:
+    # exception is. Each of a request's is a `RemoteError`; a bundle's is
+    # none, and is a `ValueError`.
+    for name in BUNDLES + ERRORS:
         bound = getattr(quantforge_py, name)
         assert isinstance(bound, type) and issubclass(bound, Exception), name
         assert (bound.__module__, bound.__qualname__) == ("quantforge_py", name)
         assert repr(bound) == f"<class 'quantforge_py.{name}'>"
         assert bound.__doc__, name
-        assert issubclass(bound, quantforge_py.RemoteError), name
+        assert issubclass(bound, quantforge_py.RemoteError) == (name in ERRORS), name
+        assert issubclass(bound, ValueError) == (name in BUNDLES), name
         assert issubclass(type("Derived", (bound,), {}), bound)
 
 
@@ -156,9 +180,15 @@ def test_the_extension_module_is_private_and_built_for_the_stable_abi():
     assert extension.parent == pathlib.Path(quantforge_py.__file__).parent
 
 
-def test_the_extension_module_holds_six_private_entries_which_the_package_does_not_publish():
+def test_the_extension_module_holds_eleven_private_entries_which_the_package_does_not_publish():
     private = [name for name in vars(_native) if name.startswith("_") and not name.startswith("__")]
     assert sorted(private) == [
+        # The window of a job a client submits, read as a reader reads a
+        # range.
+        "_bounds",
+        # What the client builds a bundle with: a bundle collected, checked
+        # and packed by the engine's own code.
+        "_bundle",
         # A backtest as a host that embeds Python runs one, for the package's
         # own tests: the run Python hosts is `run_backtest`, which is
         # published.
@@ -167,24 +197,43 @@ def test_the_extension_module_holds_six_private_entries_which_the_package_does_n
         # result's equity curve and its trades column by column, and NumPy
         # and pandas as they are found.
         "_equity_columns",
+        # The manifest a client writes for a strategy without one, by the
+        # writer the command line writes with.
+        "_manifest",
         "_numpy",
         "_pandas",
+        # A time as the engine writes one.
+        "_rfc3339",
         # The worker a server runs Python bundles in, which
         # `quantforge_py._worker` starts.
         "_run_worker",
+        # What a server's workers run bundles on, read as the protocol reads
+        # it.
+        "_server_runtime",
         "_trade_columns",
     ]
+    package = pathlib.Path(quantforge_py.__file__).parent
     for name in private:
         assert not hasattr(quantforge_py, name), name
         assert name not in quantforge_py.__all__
         assert getattr(_native, name).__doc__, name
-    assert [str(inspect.signature(getattr(_native, name))) for name in sorted(private)[1:]] == [
-        "(result, /)",
-        "()",
-        "()",
-        "(frames)",
-        "(result, /)",
-    ]
+        # Nor has one the name of a module of the package, which the
+        # package holds under that name once the module is imported.
+        assert not (package / f"{name}.py").exists(), name
+    signatures = {name: str(inspect.signature(getattr(_native, name))) for name in private}
+    del signatures["_embedded_backtest"]
+    assert signatures == {
+        "_bounds": "(start, end)",
+        "_bundle": "(root, files, limits=None, runtime=None)",
+        "_equity_columns": "(result, /)",
+        "_manifest": "(entry, python, params, deps)",
+        "_numpy": "()",
+        "_pandas": "()",
+        "_rfc3339": "(ms, /)",
+        "_run_worker": "(frames)",
+        "_server_runtime": "(text)",
+        "_trade_columns": "(result, /)",
+    }
     # It takes what the published function takes.
     taken = inspect.signature(_native._embedded_backtest)
     assert str(taken) == "(candles, strategy, config, *, market=None)"

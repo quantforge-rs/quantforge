@@ -21,11 +21,19 @@ library alone:
   and not by `http.client`, which opens the connection and writes the
   request: an answer says where it ends as HTTP writes that, or it is
   refused, and its body and what frames it are each held to a limit.
-- **Every request made here may be sent again,** and is, a few times, while
-  the server answers `503` with `Retry-After`: a read changes nothing, and a
-  cancel nothing more the second time. A submission, which a later story
-  adds, is never sent twice: one the server took but could not answer for
-  would run twice.
+- **A request that changes nothing, or nothing more the second time, is
+  sent again,** a few times, while the server answers `503` with
+  `Retry-After`: a read, a cancel, and the upload of a bundle, which a
+  server stores once under the hash of its bytes. **A submission is never
+  sent twice:** one the server took but could not answer for would run
+  twice.
+- **What a request carries is bytes the caller made,** a bundle's canonical
+  tar or a submission's JSON, sent with the media type the caller names and
+  the length it has, a piece at a time: the server's longest silence is
+  held to while it takes them as it is while it answers, so an upload that
+  keeps moving is never cut off for being long. Each piece has that long
+  to be taken, and the answer that long to begin once the last piece is
+  handed to the system.
 
 Importing this module imports nothing of the network. `http.client`, `ssl`
 and what else a request takes are imported when a client first needs them,
@@ -414,9 +422,21 @@ class _Wire:
         wait = headers.get("retry-after", (None,))[0]
         return _Answer(status, reason, wait, body, forgotten, unread)
 
-    def _once(self, method, target):
-        """One request, on a connection of its own, and its answer."""
+    def _once(self, method, target, body=None, media_type=None):
+        """One request, on a connection of its own, and its answer. `body`
+        is what it carries, bytes of `media_type`, where it carries
+        anything."""
         import http.client
+
+        headers, pieces = self._headers, None
+        if body is not None:
+            # Its length stated, and sent a piece at a time: each piece has
+            # as long as the server may stay silent, and no more is asked of
+            # the whole than that it keeps moving.
+            length, piece = len(body), _answer._PIECE_BYTES
+            headers = {**headers, "Content-Type": media_type, "Content-Length": str(length)}
+            sent = memoryview(body)
+            pieces = (sent[at : at + piece] for at in range(0, length, piece))
 
         connection = None
         try:
@@ -430,7 +450,7 @@ class _Wire:
             # Counted as the request leaves: a refusal of a version that
             # comes after this is newer than what this request is answered.
             forgotten = self._forgotten
-            connection.request(method, target, headers=self._headers)
+            connection.request(method, target, body=pieces, headers=headers)
             # The answer is read here, from the connection itself, and the
             # connection is let go of however reading it ends.
             with connection.sock.makefile("rb") as file:
@@ -453,13 +473,14 @@ class _Wire:
             if connection is not None:
                 connection.close()
 
-    def _answered(self, method, target):
+    def _answered(self, method, target, body=None, media_type=None, again=True):
         """A request's answer, the request sent again while the server
-        answers `503` with `Retry-After`, a few times."""
+        answers `503` with `Retry-After`, a few times: unless `again` says
+        that it is one a server must not be sent twice."""
         attempt = 1
         while True:
-            answer = self._once(method, target)
-            if answer.status != 503 or attempt >= _ATTEMPTS:
+            answer = self._once(method, target, body, media_type)
+            if answer.status != 503 or attempt >= _ATTEMPTS or not again:
                 return answer
             wait = _retry_after(answer.retry_after)
             if wait is None:
@@ -507,10 +528,11 @@ class _Wire:
                 f"protocol does not read: {unreadable}; is it a QuantForge server?"
             ) from None
 
-    def _ask(self, method, target, read):
+    def _ask(self, method, target, read, body=None, media_type=None, again=True):
         """A request's answer as `read` makes of its JSON, or the exception
         it failed with."""
-        return self._made_of(self._answered(method, target), method, target, read)
+        answer = self._answered(method, target, body, media_type, again)
+        return self._made_of(answer, method, target, read)
 
     def handshake(self):
         """The server's release and the protocol version agreed with it, the
@@ -546,8 +568,11 @@ class _Wire:
                 self.agreed = agreed
         return agreed
 
-    def ask(self, method, route, read):
+    def ask(self, method, route, read, *, body=None, media_type=None, again=True):
         """The answer of a route under the agreed version, as `read` makes
-        of it."""
+        of it. `body` is what the request carries, bytes of `media_type`,
+        and `again=False` says that it is sent once and never again, as a
+        submission is."""
         _, version = self.handshake()
-        return self._ask(method, f"{self.server.path}v{version}/{route}", read)
+        target = f"{self.server.path}v{version}/{route}"
+        return self._ask(method, target, read, body, media_type, again)

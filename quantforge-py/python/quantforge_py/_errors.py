@@ -73,6 +73,8 @@ class ServerUnavailable(RemoteError):
     one that broke or timed out, the protocol's `unavailable`, HTTP 503, once
     it was asked again a few times, or a 502, 503 or 504 that something in
     front of the server answered in its place. The request may be made
+    again, but for a submission: one that fails so may have been taken all
+    the same, and the server's jobs are listed before it is submitted
     again."""
 
 
