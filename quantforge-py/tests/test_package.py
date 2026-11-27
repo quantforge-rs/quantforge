@@ -16,10 +16,14 @@ from quantforge_py import (
     _errors,
     _frames,
     _jobs,
+    _logs,
     _names,
     _native,
+    _provenance,
+    _results,
     _source,
     _submit,
+    _websocket,
     _wire,
 )
 
@@ -30,9 +34,9 @@ ENGINE_VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 # What the package publishes, in the order `__all__` gives it: what it says
 # about itself, the engine's types, the function that runs a backtest, the
 # two conversions, the reader of a store's candles, the functions that give
-# or take a pandas DataFrame, the client of a server with what it gives,
-# what a bundle is refused with before it is sent, and what a request to a
-# server fails with.
+# or take a pandas DataFrame, the client of a server with what it gives and
+# what a job of it gives, what a bundle is refused with before it is sent,
+# and what a request to a server fails with.
 ABOUT = ["__version__", "ENGINE_VERSION", "STORAGE_BACKENDS"]
 TYPES = [
     "Symbol",
@@ -66,6 +70,10 @@ FRAMES = [
 # alone: the client of a QuantForge server, the handle it gives on a job,
 # and where a job stood when the server was last asked.
 CLIENT = ["Client", "Job", "JobStatus"]
+# And what a job gives beside its status: a line of its log, what it
+# produced with each file of that, and what it ran on with each segment of
+# its bars.
+JOBS = ["LogLine", "JobResult", "ResultFile", "Provenance", "ProvenanceSegment"]
 # An exception of the client's that is no failure of a request: a strategy
 # bundle refused before anything of it is sent, which is a `ValueError`.
 BUNDLES = ["BundleError"]
@@ -88,6 +96,11 @@ WRITTEN_IN = {
     "Client": _client,
     "Job": _jobs,
     "JobStatus": _jobs,
+    "LogLine": _logs,
+    "JobResult": _results,
+    "ResultFile": _results,
+    "Provenance": _provenance,
+    "ProvenanceSegment": _provenance,
     "BundleError": _bundles,
     **dict.fromkeys(ERRORS, _errors),
 }
@@ -102,12 +115,12 @@ def public(module) -> list[str]:
 
 def test_the_package_publishes_its_names_and_holds_no_other_public_one():
     assert quantforge_py.__all__ == (
-        ABOUT + TYPES + FUNCTIONS + READER + FRAMES + CLIENT + BUNDLES + ERRORS
+        ABOUT + TYPES + FUNCTIONS + READER + FRAMES + CLIENT + JOBS + BUNDLES + ERRORS
     )
-    assert len(quantforge_py.__all__) == len(set(quantforge_py.__all__)) == 36
+    assert len(quantforge_py.__all__) == len(set(quantforge_py.__all__)) == 41
     published = sorted(name for name in quantforge_py.__all__ if not name.startswith("_"))
     assert public(quantforge_py) == published
-    assert sorted(WRITTEN_IN) == sorted(FRAMES + CLIENT + BUNDLES + ERRORS)
+    assert sorted(WRITTEN_IN) == sorted(FRAMES + CLIENT + JOBS + BUNDLES + ERRORS)
     # The extension module holds the same names and no other, but for what
     # is written in Python.
     assert public(_native) == sorted(set(published) - set(WRITTEN_IN))
@@ -122,14 +135,15 @@ def test_every_published_name_is_the_extension_modules_own_or_a_private_modules(
     for name in FRAMES:
         assert getattr(quantforge_py, name).__module__ == _frames.__name__, name
     # Every module of the package is private, and lies beside the others:
-    # the nine of the client among them, five of which publish nothing:
-    # how a request reaches a server, how its answer is read, how a class's
-    # source is found, what its text reads and does not define, and the
-    # order a submission is made in.
+    # the thirteen of the client among them, six of which publish nothing:
+    # how a request reaches a server, how its answer is read, how a stream
+    # is read, how a class's source is found, what its text reads and does
+    # not define, and the order a submission is made in.
     package = pathlib.Path(quantforge_py.__file__).parent
-    modules = [_answer, _bundles, _client, _errors, _frames, _jobs, _names, _source, _submit]
-    modules.append(_wire)
-    assert set(WRITTEN_IN.values()) == set(modules) - {_answer, _names, _source, _submit, _wire}
+    modules = [_answer, _bundles, _client, _errors, _frames, _jobs, _logs, _names, _provenance]
+    modules += [_results, _source, _submit, _websocket, _wire]
+    silent = {_answer, _names, _source, _submit, _websocket, _wire}
+    assert set(WRITTEN_IN.values()) == set(modules) - silent
     for module in modules:
         assert module.__name__.startswith("quantforge_py._"), module
         assert pathlib.Path(module.__file__).parent == package
@@ -140,7 +154,7 @@ def test_every_published_name_is_the_extension_modules_own_or_a_private_modules(
 
 
 def test_every_type_is_a_class_of_the_package_and_a_strategy_alone_is_derived_from():
-    for name in TYPES + READER + CLIENT:
+    for name in TYPES + READER + CLIENT + JOBS:
         bound = getattr(quantforge_py, name)
         assert isinstance(bound, type), name
         # A class says where it is imported from, not where it is compiled.
@@ -180,7 +194,7 @@ def test_the_extension_module_is_private_and_built_for_the_stable_abi():
     assert extension.parent == pathlib.Path(quantforge_py.__file__).parent
 
 
-def test_the_extension_module_holds_eleven_private_entries_which_the_package_does_not_publish():
+def test_the_extension_module_holds_fourteen_private_entries_which_the_package_does_not_publish():
     private = [name for name in vars(_native) if name.startswith("_") and not name.startswith("__")]
     assert sorted(private) == [
         # The window of a job a client submits, read as a reader reads a
@@ -202,6 +216,13 @@ def test_the_extension_module_holds_eleven_private_entries_which_the_package_doe
         "_manifest",
         "_numpy",
         "_pandas",
+        # What the client reads a remote job's result with: the equity
+        # curve of its `equity.arrow`, its metrics written as the
+        # `metrics.json` the result format gives them, and the closed
+        # trades of its `trades.arrow`, each by the engine's own code.
+        "_result_equity",
+        "_result_metrics",
+        "_result_trades",
         # A time as the engine writes one.
         "_rfc3339",
         # The worker a server runs Python bundles in, which
@@ -229,6 +250,11 @@ def test_the_extension_module_holds_eleven_private_entries_which_the_package_doe
         "_manifest": "(entry, python, params, deps)",
         "_numpy": "()",
         "_pandas": "()",
+        "_result_equity": "(file, /)",
+        "_result_metrics": (
+            "(initial_cash, final_equity, total_return_pct, max_drawdown_pct, trade_count)"
+        ),
+        "_result_trades": "(file, /)",
         "_rfc3339": "(ms, /)",
         "_run_worker": "(frames)",
         "_server_runtime": "(text)",

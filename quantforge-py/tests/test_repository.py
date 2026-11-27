@@ -338,12 +338,13 @@ def test_the_readme_shows_only_names_the_package_publishes_and_its_example_runs(
     assert shown, "the readme shows the package at work"
     assert set(shown) <= set(quantforge_py.__all__)
     # What PyPI shows is what a reader copies: every example runs as it is
-    # written, one after another. The last two are of the client and of a
-    # backtest it submits, the only ones that need a server, which their own
-    # tests give them (`test_client_jobs.py`, `test_submit_jobs.py`). The
-    # two before them are of the arrays and of the frames, the only ones
-    # that need NumPy, and pandas with it, and the one before them is of the
-    # candle reader, the only one that needs a store.
+    # written, one after another. The last three are of the client, of a
+    # backtest it submits and of that job followed, the only ones that need
+    # a server, which their own tests give them (`test_client_jobs.py`,
+    # `test_submit_jobs.py`, `test_handle_jobs.py`). The two before them are
+    # of the arrays and of the frames, the only ones that need NumPy, and
+    # pandas with it, and the one before them is of the candle reader, the
+    # only one that needs a store.
     (
         *examples,
         of_the_reader,
@@ -351,9 +352,13 @@ def test_the_readme_shows_only_names_the_package_publishes_and_its_example_runs(
         of_the_frames,
         of_the_client,
         of_a_submission,
+        of_a_job,
     ) = readme.fences("python")
     assert "qf.Client(" in of_the_client and "backtest.submit" not in of_the_client
     assert "client.backtest.submit(" in of_a_submission and "qf.Client(" not in of_a_submission
+    for call in ("job.stream_logs()", "job.wait()", "job.result()", "job.provenance()"):
+        assert call in of_a_job and call not in of_a_submission, call
+    assert "Client" not in of_a_job and "backtest.submit" not in of_a_job
     assert not any(
         "Client" in example or "backtest.submit" in example
         for example in [*examples, of_the_reader, of_the_arrays, of_the_frames]

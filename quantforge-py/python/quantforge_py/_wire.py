@@ -34,6 +34,12 @@ library alone:
   keeps moving is never cut off for being long. Each piece has that long
   to be taken, and the answer that long to begin once the last piece is
   handed to the system.
+- **An answer is JSON, or a file the caller knows the length of.** A
+  result's file is asked for with the length its job lists for it, and is
+  read to that length and no further (`fetch`).
+- **A stream is a connection like any other,** opened to the server itself
+  with the token, and held to this machine where a request would be: what
+  is read from it afterwards is `quantforge_py._websocket`'s (`stream`).
 
 Importing this module imports nothing of the network. `http.client`, `ssl`
 and what else a request takes are imported when a client first needs them,
@@ -78,6 +84,9 @@ _PATH_SAFE = "/%-._~!$&'()*+,;=:@"
 
 # The integers the protocol's own types hold.
 _MOST_INTEGER = 2**63
+
+# What an answer is, unless a caller asks for a file by its own type.
+_JSON_MEDIA_TYPE = "application/json"
 
 
 class _Unreadable(Exception):
@@ -335,13 +344,12 @@ class _Wire:
         import threading
 
         self.server = server
-        self._headers = {
-            "Accept": "application/json",
-            "Connection": "close",
-            "User-Agent": f"quantforge-py/{__version__}",
-        }
+        # What says who asks, which goes with a request and with a stream
+        # alike, and what a request says beside it.
+        self._identity = {"User-Agent": f"quantforge-py/{__version__}"}
         if token is not None:
-            self._headers["Authorization"] = f"Bearer {token}"
+            self._identity["Authorization"] = f"Bearer {token}"
+        self._headers = {"Accept": _JSON_MEDIA_TYPE, "Connection": "close", **self._identity}
         # A token over plain `http` goes to this machine alone, which a
         # connection is held to as it is made: a name leads where the
         # system's resolver says.
@@ -370,6 +378,21 @@ class _Wire:
             server.host, server.port, timeout=_CONNECT_SECONDS, context=self._context
         )
 
+    def _connected(self):
+        """A connection to the server, open, with nothing sent on it yet:
+        one that carries a token over plain `http` is held to ending on
+        this machine first. It fails as opening a connection does, and is
+        closed where it fails."""
+        connection = self._connection()
+        try:
+            connection.connect()
+            if self._local_only:
+                self._held_to_this_machine(connection)
+        except BaseException:
+            connection.close()
+            raise
+        return connection
+
     def _held_to_this_machine(self, connection):
         """Refuses a connection that does not end on this machine, before
         anything is sent on it."""
@@ -388,17 +411,29 @@ class _Wire:
             f"HTTP ({wrong}); is it a QuantForge server?"
         )
 
-    def _too_long(self, method, target):
+    def _too_long(self, method, target, held_to=None):
         """The exception an answer with a body longer than is taken is
-        raised as."""
+        raised as: longer than any answer is, or than `held_to`, which is
+        what a caller that asked for a file says of the file's length."""
+        if held_to is not None:
+            return RemoteError(
+                f"the server at {self.server.shown} answered {method} {target} with more than "
+                f"{held_to}"
+            )
         return RemoteError(
             f"the server at {self.server.shown} answered {method} {target} with more than "
             f"{_answer._MOST_ANSWER_BYTES} bytes, more than a QuantForge server sends; is it one?"
         )
 
-    def _read(self, stream, method, target, forgotten):
+    def _read(self, stream, method, target, forgotten, file=None):
         """One answer, read from its connection: its status and its headers,
         which have to be whole, and then its body.
+
+        `file` is given where the answer is a file whose length the caller
+        knows: the most bytes it may hold, and what the caller says of that
+        length. A success is then read to that length; a refusal's body is
+        the protocol's error envelope whatever was asked for, and is held to
+        the limit every answer is.
 
         A success whose body cannot be read is no answer. A refusal is told
         by its status, and its body is read for the protocol's error
@@ -408,13 +443,14 @@ class _Wire:
         short is another matter, and is raised as it is: the answer did not
         come whole, and asked again the server may give it whole."""
         version, status, reason, headers = _answer._head(stream)
+        most, held_to = file if file is not None and 200 <= status < 300 else (None, None)
         unread = None
         try:
-            body = _answer._body(stream, version, status, headers)
+            body = _answer._body(stream, version, status, headers, most)
         except _answer._NotHTTP as wrong:
             unread = self._not_http(method, target, wrong)
         except _answer._TooLong:
-            unread = self._too_long(method, target)
+            unread = self._too_long(method, target, held_to)
         if unread is not None:
             if 200 <= status < 300:
                 raise unread
@@ -422,13 +458,18 @@ class _Wire:
         wait = headers.get("retry-after", (None,))[0]
         return _Answer(status, reason, wait, body, forgotten, unread)
 
-    def _once(self, method, target, body=None, media_type=None):
+    def _once(self, method, target, body=None, media_type=None, file=None):
         """One request, on a connection of its own, and its answer. `body`
         is what it carries, bytes of `media_type`, where it carries
-        anything."""
+        anything. `file` says that it asks for a file: the file's media
+        type, the most bytes it may hold, and what the caller says of that
+        length."""
         import http.client
 
         headers, pieces = self._headers, None
+        if file is not None:
+            accept, *file = file
+            headers = {**headers, "Accept": accept}
         if body is not None:
             # Its length stated, and sent a piece at a time: each piece has
             # as long as the server may stay silent, and no more is asked of
@@ -442,10 +483,7 @@ class _Wire:
         try:
             # Within what a failure is told by: making ready for TLS reads
             # files, and fails as opening a connection does.
-            connection = self._connection()
-            connection.connect()
-            if self._local_only:
-                self._held_to_this_machine(connection)
+            connection = self._connected()
             connection.sock.settimeout(_READ_SECONDS)
             # Counted as the request leaves: a refusal of a version that
             # comes after this is newer than what this request is answered.
@@ -453,8 +491,8 @@ class _Wire:
             connection.request(method, target, body=pieces, headers=headers)
             # The answer is read here, from the connection itself, and the
             # connection is let go of however reading it ends.
-            with connection.sock.makefile("rb") as file:
-                return self._read(_answer._Stream(file), method, target, forgotten)
+            with connection.sock.makefile("rb") as answer:
+                return self._read(_answer._Stream(answer), method, target, forgotten, file)
         except (OSError, http.client.IncompleteRead) as failure:
             # What the system says of a connection names no more of the
             # server than its address, and never the token.
@@ -473,13 +511,13 @@ class _Wire:
             if connection is not None:
                 connection.close()
 
-    def _answered(self, method, target, body=None, media_type=None, again=True):
+    def _answered(self, method, target, body=None, media_type=None, again=True, file=None):
         """A request's answer, the request sent again while the server
         answers `503` with `Retry-After`, a few times: unless `again` says
         that it is one a server must not be sent twice."""
         attempt = 1
         while True:
-            answer = self._once(method, target, body, media_type)
+            answer = self._once(method, target, body, media_type, file)
             if answer.status != 503 or attempt >= _ATTEMPTS or not again:
                 return answer
             wait = _retry_after(answer.retry_after)
@@ -515,13 +553,13 @@ class _Wire:
             return VersionMismatch(message, code=code, status=answer.status, supported=supported)
         return raised(message, code=code, status=answer.status)
 
-    def _made_of(self, answer, method, target, read):
-        """An answer as `read` makes of its JSON, or the exception it is
-        raised as."""
+    def _made_of(self, answer, method, target, read, file=False):
+        """An answer as `read` makes of its JSON, or of its bytes where it
+        is a file, or the exception it is raised as."""
         if not 200 <= answer.status < 300:
             raise self._refusal(answer) from answer.unread
         try:
-            return read(_parsed(answer.body))
+            return read(answer.body if file else _parsed(answer.body))
         except _Unreadable as unreadable:
             raise RemoteError(
                 f"the server at {self.server.shown} answered {method} {target} with a body the "
@@ -576,3 +614,26 @@ class _Wire:
         _, version = self.handshake()
         target = f"{self.server.path}v{version}/{route}"
         return self._ask(method, target, read, body, media_type, again)
+
+    def fetch(self, route, read, *, media_type, most, held_to):
+        """The file a route under the agreed version answers, as `read`
+        makes of its bytes: asked for by `media_type`, and read to `most`
+        bytes and no further, which `held_to` says what they are, as in
+        `the 1882 bytes job j lists for it`. A file changes nothing, so it
+        is asked for again as any read is."""
+        _, version = self.handshake()
+        target = f"{self.server.path}v{version}/{route}"
+        answer = self._answered("GET", target, file=(media_type, most, held_to))
+        return self._made_of(answer, "GET", target, read, file=True)
+
+    def stream(self, route):
+        """A route under the agreed version asked as a WebSocket: the
+        stream, open, on a connection of its own that was opened and
+        checked as a request's is, with the token. Whatever stops it from
+        opening is raised as it is, for a caller that has another way to
+        ask (`quantforge_py._websocket`)."""
+        from . import _websocket
+
+        _, version = self.handshake()
+        target = f"{self.server.path}v{version}/{route}"
+        return _websocket._opened(self._connected, target, self._identity, _READ_SECONDS)

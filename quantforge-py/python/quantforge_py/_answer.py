@@ -20,7 +20,8 @@ here holds it to what HTTP writes, and to limits of its own:
   more of it is taken than `_MOST_FRAMING_BYTES`.
 - **A body is read in pieces of the client's own size,** to the longest
   that is taken, `_MOST_ANSWER_BYTES`, and one that is longer by its own
-  account is not read at all.
+  account is not read at all. An answer that is a file is taken to the
+  length its caller knows it by instead, which may be more or less.
 - **A limit is what is taken.** To tell an answer that is past one, one
   byte past it is read, and no more.
 - **An answer that only says another is to come is read past,** to the
@@ -85,8 +86,6 @@ def _at_most(digits, most):
     return min(int(digits or "0"), most)
 
 
-
-
 class _Stream:
     """One answer as it comes from its connection: what frames its body a
     line at a time, counted against the most that is taken of it, and its
@@ -137,13 +136,14 @@ class _Stream:
             body += piece
             left -= len(piece)
 
-    def rest(self):
+    def rest(self, most):
         """A body that ends where its connection does, which says nothing of
-        its length: read to its end, and to one byte past the longest that
-        is taken at the most, which is how one that is longer is told."""
+        its length: read to its end, and to one byte past `most`, the
+        longest that is taken, at the most, which is how one that is longer
+        is told."""
         body = bytearray()
-        while len(body) <= _MOST_ANSWER_BYTES:
-            piece = self._file.read1(min(_PIECE_BYTES, _MOST_ANSWER_BYTES + 1 - len(body)))
+        while len(body) <= most:
+            piece = self._file.read1(min(_PIECE_BYTES, most + 1 - len(body)))
             if not piece:
                 return bytes(body)
             body += piece
@@ -271,13 +271,13 @@ def _in_chunks(headers):
     return bool(codings)
 
 
-def _stated_length(headers):
+def _stated_length(headers, most):
     """How many bytes an answer says its body has, or `None` where it says
-    none: at most one more than the longest body that is taken, which is
-    how one that is too long is told. A length that is said more than once
-    is one length where each says the same; one that is not digits, or two
-    that differ, is a `_NotHTTP`, since nothing then says where the body
-    ends."""
+    none: at most one more than `most`, the longest body that is taken,
+    which is how one that is too long is told. A length that is said more
+    than once is one length where each says the same; one that is not
+    digits, or two that differ, is a `_NotHTTP`, since nothing then says
+    where the body ends."""
     values = headers.get("content-length")
     if values is None:
         return None
@@ -286,14 +286,14 @@ def _stated_length(headers):
         raise _NotHTTP("a Content-Length that is not digits")
     if len({text.lstrip("0") for text in stated}) != 1:
         raise _NotHTTP("two Content-Lengths that differ")
-    return _at_most(stated.pop(), _MOST_ANSWER_BYTES + 1)
+    return _at_most(stated.pop(), most + 1)
 
 
-def _chunks(stream):
+def _chunks(stream, most):
     """A body that comes in chunks, whole: each chunk of the size it states,
     in hex digits and nothing else, the last of no bytes, and the trailers
     after it to the empty line that ends them. A chunk that would make the
-    body longer than is taken is not read."""
+    body longer than `most`, the longest that is taken, is not read."""
     import http.client
 
     body = bytearray()
@@ -310,8 +310,8 @@ def _chunks(stream):
         if not size:
             break
         # Told by its digits before it is converted: more than eight is
-        # more than any body that is taken.
-        if len(size) > 8 or len(body) + int(size, 16) > _MOST_ANSWER_BYTES:
+        # more than any body that is taken, the longest file among them.
+        if len(size) > 8 or len(body) + int(size, 16) > most:
             raise _TooLong
         stream.into(body, int(size, 16))
         end = stream.line()
@@ -323,23 +323,28 @@ def _chunks(stream):
     return bytes(body)
 
 
-def _body(stream, version, status, headers):
+def _body(stream, version, status, headers, most=None):
     """An answer's body, whole. An answer of a status that has no body is
     read for none. One that comes in chunks is read by its chunks, and one
     that states its length to that length and no further, so that a server
     that keeps its connection open is not waited for; a body longer than is
     taken by either account is a `_TooLong`, and is not read. Any other
     ends where its connection does. Before any of that the answer is held
-    to the version it is written in, whether it has a body or not."""
+    to the version it is written in, whether it has a body or not.
+
+    `most` is the longest body that is taken: `_MOST_ANSWER_BYTES`, unless
+    the answer is a file whose length its caller knows."""
+    if most is None:
+        most = _MOST_ANSWER_BYTES
     _held_to_its_version(version, headers)
     if _has_no_body(status):
         return b""
     if _in_chunks(headers):
-        return _chunks(stream)
-    stated = _stated_length(headers)
+        return _chunks(stream, most)
+    stated = _stated_length(headers, most)
     if stated is None:
-        return stream.rest()
-    if stated > _MOST_ANSWER_BYTES:
+        return stream.rest(most)
+    if stated > most:
         raise _TooLong
     body = bytearray()
     stream.into(body, stated)

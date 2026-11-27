@@ -129,6 +129,10 @@ def test_the_page_gives_the_client_and_a_job_as_python_does(page, quoted, sessio
         f"Client.backtest.submit_class{called(backtests.submit_class)}",
         f"Job.refresh{called(qf.Job.refresh)}",
         f"Job.cancel{called(qf.Job.cancel)}",
+        f"Job.wait{called(qf.Job.wait)}",
+        f"Job.stream_logs{called(qf.Job.stream_logs)}",
+        f"Job.result{called(qf.Job.result)}",
+        f"Job.provenance{called(qf.Job.provenance)}",
     ]
     # A client's members, each once: the class as it is called, its method,
     # its properties, and what `backtest` gives.
@@ -163,13 +167,26 @@ def test_the_page_gives_the_client_and_a_job_as_python_does(page, quoted, sessio
         "status": "property",
         "refresh": "function",
         "cancel": "function",
+        "wait": "function",
+        "stream_logs": "function",
+        "result": "function",
+        "provenance": "function",
     }
     assert [quoted(member) for member, _ in page(PAGE).rows("job members")] == [
         "id",
         "status",
         f"refresh{called(qf.Job.refresh)}",
         f"cancel{called(qf.Job.cancel)}",
+        f"wait{called(qf.Job.wait)}",
+        f"stream_logs{called(qf.Job.stream_logs)}",
+        f"result{called(qf.Job.result)}",
+        f"provenance{called(qf.Job.provenance)}",
     ]
+    # The four a job gained have a page of their own, which this one names.
+    assert "(python-jobs.md)" in page(PAGE).text
+    said = " ".join(qf.Job.__doc__.split())
+    for name in public(qf.Job):
+        assert f"`{name}" in said, name
     # Every one says what it is, to `help()` as on the page.
     for kind in (qf.Client, backtests, qf.Job, qf.JobStatus):
         assert kind.__doc__, kind
@@ -366,13 +383,13 @@ def test_the_page_writes_a_job_and_a_client_as_python_writes_them(page, session)
     assert repr(qf.Client(f"http://{SHOWN}")) == f"<Client http://{SHOWN}/>"
 
 
-def test_what_the_page_leaves_to_later_stories_is_what_the_packages_page_does(page, quoted):
+def test_what_the_page_leaves_to_later_stories_is_the_servers_own(page, quoted):
     left = dict(row for row in table(page(PAGE), "## What is left"))
-    assert sorted(left.values()) == ["QUA-345", "QUA-468"]
+    assert sorted(left.values()) == ["QUA-345"]
     package = dict(row for row in table(page(PACKAGE_PAGE), "## What is left"))
-    # A client's own story, as the package's page lists it among what is
-    # left of the package; the server's is the server's.
-    assert {story for story in left.values() if story in package.values()} == {"QUA-468"}
+    # Nothing of the client is left of the package: what is, is the
+    # server's, which the package's page does not list.
+    assert not set(left.values()) & set(package.values())
 
 
 def table(read, heading: str) -> list[list[str]]:
@@ -384,5 +401,5 @@ def table(read, heading: str) -> list[list[str]]:
             break
         if line.startswith("|"):
             rows.append([cell.strip() for cell in line.strip().strip("|").split("|")])
-    assert len(rows) > 2, heading
+    assert len(rows) > 2 and set(rows[1][0]) == {"-"}, heading
     return rows[2:]

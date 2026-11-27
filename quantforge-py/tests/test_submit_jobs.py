@@ -570,10 +570,11 @@ def test_the_readmes_example_of_a_submission_runs_against_a_real_server(
     page, tmp_path, monkeypatch
 ):
     # What PyPI shows of a submission is what a reader copies: the readme's
-    # last example, which goes on from the client, the market and the
-    # settings the examples before it made.
+    # example of one, the last but the one that follows its job, which goes
+    # on from the client, the market and the settings the examples before
+    # it made.
     readme = page("quantforge-py/README.md")
-    *before, of_the_client, example = readme.fences("python")
+    *before, of_the_client, example, of_its_job = readme.fences("python")
     made_before = "\n".join([*before, of_the_client])
     for line in [
         'market = qf.MarketId("binance_spot", "btcusdt", "1m")',
@@ -602,6 +603,6 @@ def test_the_readmes_example_of_a_submission_runs_against_a_real_server(
         assert server.result(job.id)["metrics"]["trade_count"] == 15
     # The exception it names is the one a bundle is refused with, and no
     # other of the package's is named beside it.
-    said_of_it = readme.text.split(example)[1]
+    said_of_it = readme.text.split(example)[1].split(of_its_job)[0]
     assert re.findall(r"`qf\.(\w+)`", said_of_it) == ["BundleError"]
     assert "`source_only=True`" in said_of_it and "Nothing is pickled" in said_of_it

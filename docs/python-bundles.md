@@ -16,7 +16,6 @@ client reaches, with which token, and what a request fails with is
 calls answer.
 
 ```python
->>> import time
 >>> import quantforge_py as qf
 >>> client = qf.Client("http://127.0.0.1:9600")
 >>> market = qf.MarketId("binance_spot", "BTCUSDT", "1m")
@@ -90,15 +89,12 @@ Client.backtest.submit_class(strategy, *, imports='import quantforge_py as qf', 
 
 - **Either call gives the job the server queued,** as a `Job`, with the
   status the server answered: what it runs, the bundle's code hash among
-  it, and the window it runs on. It does not wait for the job
-  ([what is left](#what-is-left)): the job is asked where it stands, as any
-  job is.
+  it, and the window it runs on. It does not wait for the job: `wait()`
+  does, as for any job, and its log, its result and its provenance are the
+  job's to give ([a job from Python](python-jobs.md)).
 
 ```python
->>> while not job.refresh().ended:
-...     time.sleep(0.1)
-...
->>> job.status.state
+>>> job.wait().state
 'succeeded'
 ```
 
@@ -405,10 +401,7 @@ written in a notebook's cell, which is no file to submit.
 ...     config=config,
 ...     source_only=True,
 ... )
->>> while not job.refresh().ended:
-...     time.sleep(0.1)
-...
->>> job.status.state
+>>> job.wait().state
 'succeeded'
 ```
 
@@ -675,5 +668,4 @@ Each row is what Python raises for the call, where `client`, `market` and
 
 | What | Story |
 | --- | --- |
-| A job waited for, its log followed, its result as DataFrames, and its provenance | QUA-468 |
 | A server that checks the token it is sent | QUA-345 |

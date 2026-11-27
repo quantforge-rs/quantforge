@@ -13,10 +13,13 @@ answer is the protocol, which the `quantforge` crate's own documentation
 specifies (`quantforge::protocol`). Which token goes where is the command
 line's rule for `--remote-token`, in
 [configuration](configuration.md#remote-backtests), which a client follows.
-And one page applies it: how a strategy's files are made into a bundle and
+And two pages apply it. How a strategy's files are made into a bundle and
 submitted as a job is
 [submitting a backtest from Python](python-bundles.md), the contract of
-`submit` and `submit_class`.
+`submit` and `submit_class`. What a job gives beside its status, its end
+waited for, its log, its result and its provenance, is
+[a job from Python](python-jobs.md), the contract of `wait`, `stream_logs`,
+`result` and `provenance`.
 
 ```python
 >>> import quantforge_py as qf
@@ -57,6 +60,10 @@ Client.backtest.submit(strategy, *, entry=None, params=None, deps=None, market, 
 Client.backtest.submit_class(strategy, *, imports='import quantforge_py as qf', params=None, deps=None, market, start=None, end=None, config, source_only=False)
 Job.refresh()
 Job.cancel()
+Job.wait(timeout=None)
+Job.stream_logs(*, after=0, on_progress=None)
+Job.result()
+Job.provenance()
 ```
 <!-- end: signatures -->
 
@@ -90,7 +97,7 @@ Job.cancel()
   request is made on one of its own, so a client is used by any number of
   threads at once, and has nothing to close.
 - **Reading an attribute never asks the server.** `handshake`, `list`,
-  `get`, `submit` and `submit_class` do, and a job's `refresh` and `cancel`.
+  `get`, `submit` and `submit_class` do, and a job's methods.
 
 ## Which server it reaches
 
@@ -224,6 +231,10 @@ True
 | `status` | Where the job stood when the server was last asked, a `JobStatus` |
 | `refresh()` | Asks the server where the job stands, keeps the answer as `status`, and gives it |
 | `cancel()` | Asks the server to cancel the job, keeps the status it answers as `status`, and gives it |
+| `wait(timeout=None)` | Asks the server where the job stands until it has ended, and gives its status then |
+| `stream_logs(*, after=0, on_progress=None)` | Follows the job's log to its end: an iterator of its lines, each a `LogLine` |
+| `result()` | Asks the server what the job produced, and gives it, a `JobResult` |
+| `provenance()` | Asks the server what the job ran on, and gives it, a `Provenance` |
 <!-- end: job members -->
 
 - **A `Job` is a handle on one job, and not a value.** `client.backtest`
@@ -232,6 +243,10 @@ True
   last given.
 - **Reading a job asks nothing.** `status` is what the server last
   answered this handle, a moment or an hour ago; `refresh()` asks again.
+- **`wait`, `stream_logs`, `result` and `provenance` have a page of their
+  own,** [a job from Python](python-jobs.md): how a job is waited for, how
+  its log is followed, what its result and its provenance are, and what
+  each of the four raises.
 - **`repr()` of a job is its ID and the state it was last given,** as in
   `<Job 57917a9825f44d75ad4a2e6329d00ec7 running>`.
 
@@ -506,6 +521,10 @@ been taken all the same
 - **The 60 seconds are the longest silence, not the longest answer.** A
   server that keeps sending, however slowly, is read for as long as it
   sends, to the two limits of how much.
+- **A result's file is an answer of a length its job lists,** and is read
+  to that length in the place of the 64 MiB, 1 GiB at the most; and a
+  job's log is followed over a stream with limits of its own
+  ([a job from Python](python-jobs.md#limits)).
 
 ## How an answer is read
 
@@ -564,6 +583,9 @@ held to what HTTP writes, and to two limits of its own.
   server's longest silence there too: each piece has that long to be
   taken, and the answer that long to begin once the last piece is handed
   to the system. An upload that keeps moving, however slowly, goes on.
+- **A log's stream is the one connection that stays open,** for as long as
+  the log is followed over it, and is made as any other is
+  ([how a log is followed](python-jobs.md#how-a-log-is-followed)).
 - **The package imports nothing of the network until a client asks its
   server.** `import quantforge_py` is as fast with a client in it as
   without, and a program that never makes one pays nothing for it.
@@ -608,5 +630,4 @@ was sent. The token is QF_REMOTE_TOKEN's: pass token="" to send none`.
 
 | What | Story |
 | --- | --- |
-| A job waited for, its log followed, its result as DataFrames, and its provenance | QUA-468 |
 | A server that checks the token it is sent | QUA-345 |

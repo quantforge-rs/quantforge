@@ -4,12 +4,21 @@ which the package publishes; a status read strictly from what the protocol
 writes; and the server's jobs listed, got and submitted
 (`docs/python-client.md`, `docs/python-bundles.md`).
 
+A job is waited for here. What else is asked of one is a module of its
+own: its log followed (`quantforge_py._logs`), its result
+(`quantforge_py._results`) and its provenance
+(`quantforge_py._provenance`), each of which `docs/python-jobs.md` is the
+contract of.
+
 What a job runs is given in the package's own types, built by the engine's
 own rules: its market a `MarketId`, and how its fills are simulated a
 `BacktestConfig`, every amount an exact decimal.
 
 This module is private: import its names from `quantforge_py`.
 """
+
+import operator
+import time
 
 from ._errors import _published
 from ._native import BacktestConfig, MarketId
@@ -21,11 +30,19 @@ _SUCCEEDED, _FAILED, _CANCELLED = "succeeded", "failed", "cancelled"
 _ENDED = (_SUCCEEDED, _FAILED, _CANCELLED)
 _STATES = (_QUEUED, _RUNNING, *_ENDED)
 
+# The members of a market, as the protocol writes one.
+_MARKET = ("exchange", "category", "symbol", "interval")
+
 # What a job's ID and the digits of a content hash are written with.
 _LETTERS = "abcdefghijklmnopqrstuvwxyz"
 _ID_CHARACTERS = frozenset(_LETTERS + _LETTERS.upper() + "0123456789-_")
 _HEX = frozenset("0123456789abcdef")
 _HASH_PREFIX = "sha256:"
+
+# How long `Job.wait` waits before it asks its server again: this long at
+# first, twice as long each time after, and never longer than the second.
+_WAIT_SECONDS = 0.1
+_MOST_WAIT_SECONDS = 2.0
 
 
 def _final(cls):
@@ -55,6 +72,50 @@ def _not_writable(value, name):
     raise AttributeError(f"'{named}' object has no attribute '{name}'")
 
 
+def _given(slot, said):
+    """A field of a record: what the record was given for it, under the
+    field's own name, with what the class says of it."""
+    return property(operator.attrgetter(slot), doc=said)
+
+
+class _Record:
+    """What the records a server's answers are read into share. A record is
+    what a server answered, and none is built; it is a value, and never
+    changes; two are equal when every field is; and it is no key, as the
+    engine's own records are none.
+
+    A record's class names its fields in `__slots__`, each with a `_`
+    before it, and says in `_BUILT` why none is built."""
+
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        raise TypeError(self._BUILT)
+
+    @classmethod
+    def _of(cls, **fields):
+        record = object.__new__(cls)
+        for name in cls.__slots__:
+            object.__setattr__(record, name, fields[name.removeprefix("_")])
+        return record
+
+    def __setattr__(self, name, value):
+        _not_writable(self, name)
+
+    def __delattr__(self, name):
+        _not_writable(self, name)
+
+    def _fields(self):
+        return tuple(operator.attrgetter(*self.__slots__)(self))
+
+    def __eq__(self, other):
+        if type(other) is not type(self):
+            return NotImplemented
+        return self._fields() == other._fields()
+
+    __hash__ = None
+
+
 def _is_job_id(text):
     """Whether text is a job's ID by the protocol's rule: 1 to 64 ASCII
     letters, digits, `-` or `_`."""
@@ -72,6 +133,56 @@ def _is_exact_decimal(text):
     if point and not (fraction.isascii() and fraction.isdigit()):
         return False
     return digits == text or not set(digits) <= {"0", "."}
+
+
+def _is_content_hash(text):
+    """Whether text is a content hash as the protocol writes one: `sha256:`
+    and 64 lowercase hex digits."""
+    digits = text.removeprefix(_HASH_PREFIX)
+    return len(text) == len(_HASH_PREFIX) + 64 and len(digits) == 64 and _HEX.issuperset(digits)
+
+
+def _count(record, name, what):
+    """A count as the protocol writes one: an integer that is not
+    negative."""
+    count = _member(record, name, int, what)
+    if count < 0:
+        raise _Unreadable(f"the `{name}` of {what} is negative")
+    return count
+
+
+def _market(exchange, category, symbol, interval, what):
+    """The market four names of the protocol say, as the engine's own type,
+    built by the engine's own rules: a product line or an interval it does
+    not hold is its to refuse."""
+    named = f"{exchange} {category} {symbol} {interval}"
+    try:
+        market = MarketId(f"{exchange}_{category}", symbol, interval)
+    except ValueError as refused:
+        raise _Unreadable(
+            f"{what} names the market {named}, which this version of the package does not know "
+            f"({refused})"
+        ) from None
+    if (str(market.exchange), str(market.symbol), str(market.interval)) != (
+        f"{exchange}_{category}",
+        symbol,
+        interval,
+    ):
+        raise _Unreadable(f"{what} names the market {named}, which is not in its canonical form")
+    return market
+
+
+def _config(settings, what):
+    """How fills are simulated, as the protocol writes it, as the engine's
+    own type: an amount it does not hold is its to refuse."""
+    try:
+        return BacktestConfig(
+            initial_cash=_amount(settings, "initial_cash", what),
+            fee_bps=_amount(settings, "fee_bps", what),
+            close_out_at_end=_member(settings, "close_out_at_end", bool, what),
+        )
+    except ValueError as refused:
+        raise _Unreadable(f"{what} has settings the engine refuses ({refused})") from None
 
 
 def _amount(record, name, what):
@@ -96,6 +207,25 @@ def _job_id(job_id):
     return job_id
 
 
+def _seconds(timeout):
+    """How long a caller waits at the most, in seconds, or `None` for as
+    long as it takes."""
+    if timeout is None:
+        return None
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+        raise _wrong_type("timeout", "a number of seconds or None", timeout)
+    said = "it is how many seconds to wait at the most, or None for as long as the job takes"
+    if timeout != timeout:
+        raise ValueError(f"timeout is no number: {said}")
+    if timeout < 0:
+        raise ValueError(f"timeout is negative: {said}")
+    try:
+        return float(timeout)
+    except OverflowError:
+        # A whole number of seconds beyond any float: as long as it takes.
+        return float("inf")
+
+
 def _status(value):
     """A job's status as the protocol writes it, read strictly into a
     `JobStatus`."""
@@ -110,40 +240,15 @@ def _status(value):
 
     what = f"job {job_id}'s submission"
     bundle = _member(submission, "bundle", str, what)
-    digits = bundle.removeprefix(_HASH_PREFIX)
-    if len(bundle) != len(_HASH_PREFIX) + 64 or len(digits) != 64 or not _HEX.issuperset(digits):
+    if not _is_content_hash(bundle):
         raise _Unreadable(f"the `bundle` of {what} is no content hash")
     data = _member(submission, "data", dict, what)
-    exchange, category, symbol, interval = (
-        _member(data, name, str, what) for name in ("exchange", "category", "symbol", "interval")
-    )
+    names = [_member(data, name, str, what) for name in _MARKET]
     start = _member(data, "start_open_ms", int, what)
     end = _member(data, "end_open_ms", int, what)
-    # The engine's own types, built by the engine's own rules: a product
-    # line, an interval or an amount it does not hold is its to refuse.
-    named = f"{exchange} {category} {symbol} {interval}"
-    try:
-        market = MarketId(f"{exchange}_{category}", symbol, interval)
-    except ValueError as refused:
-        raise _Unreadable(
-            f"{what} names the market {named}, which this version of the package does not know "
-            f"({refused})"
-        ) from None
-    if (str(market.exchange), str(market.symbol), str(market.interval)) != (
-        f"{exchange}_{category}",
-        symbol,
-        interval,
-    ):
-        raise _Unreadable(f"{what} names the market {named}, which is not in its canonical form")
-    settings = _member(submission, "backtest", dict, what)
-    try:
-        config = BacktestConfig(
-            initial_cash=_amount(settings, "initial_cash", what),
-            fee_bps=_amount(settings, "fee_bps", what),
-            close_out_at_end=_member(settings, "close_out_at_end", bool, what),
-        )
-    except ValueError as refused:
-        raise _Unreadable(f"{what} has settings the engine refuses ({refused})") from None
+    # The engine's own types, built by the engine's own rules.
+    market = _market(*names, what)
+    config = _config(_member(submission, "backtest", dict, what), what)
 
     what = f"job {job_id}'s state"
     kind = _member(state, "kind", str, what)
@@ -364,11 +469,21 @@ class Job:
 
     `Client.backtest` gives a job, by `get`, in `list` or for one it
     submits, and none is built. Reading an attribute never asks the server:
-    `refresh` and `cancel` do, and keep what it answers as `status`.
+    its methods do. `refresh`, `cancel` and `wait` keep what the server
+    answers as `status`.
 
     - `id`: the job's ID, the server's name for it.
     - `status`: where the job stood when the server was last asked, a
       `JobStatus`.
+    - `refresh()` and `cancel()`: ask where the job stands, and ask for it
+      to be cancelled.
+    - `wait(timeout=None)`: asks until the job has ended.
+    - `stream_logs(*, after=0, on_progress=None)`: follows the job's log,
+      line by line, to its end.
+    - `result()`: what the job produced, once it has succeeded, a
+      `JobResult`.
+    - `provenance()`: what the job ran on, as its server recorded it before
+      the job ran, a `Provenance`.
     """
 
     __slots__ = ("_wire", "_status")
@@ -428,6 +543,109 @@ class Job:
         to have ended.
         """
         return self._asked("POST", f"backtests/{self.id}/cancel", _cancelled)
+
+    def wait(self, timeout=None):
+        """Asks the server where the job stands until it has ended, keeps
+        each answer as `status`, and gives the last: the status of a job
+        that has succeeded, failed or been cancelled. A job the handle
+        already holds as ended is given as it is, and nothing is asked.
+
+        `timeout` is how many seconds to wait at the most, an `int` or a
+        `float`, or `None` for as long as the job takes. A job that has not
+        ended by then is a `TimeoutError`: the job goes on, and `status`
+        is what the server last answered. The time is looked at between two
+        requests, and one that is under way is not cut short.
+
+        The server is asked again after a tenth of a second, and then after
+        twice as long each time, two seconds at the most. A request that
+        fails is raised as it is, and the job waited for again by calling
+        again.
+
+        A job that failed is given like any other: read `state`. A state a
+        later revision of the protocol adds does not end a job here, as its
+        `ended` is `False`.
+        """
+        seconds = _seconds(timeout)
+        status = self._status
+        if status.ended:
+            return status
+        deadline = None if seconds is None else time.monotonic() + seconds
+        pause = _WAIT_SECONDS
+        while True:
+            status = self.refresh()
+            if status.ended:
+                return status
+            nap = pause
+            if deadline is not None:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    raise TimeoutError(
+                        f"job {self.id} had not ended after {seconds:g} seconds: it was "
+                        f"{status.state} when the server was last asked"
+                    )
+                nap = min(pause, left)
+            time.sleep(nap)
+            pause = min(pause * 2, _MOST_WAIT_SECONDS)
+
+    def stream_logs(self, *, after=0, on_progress=None):
+        """Follows the job's log to its end: gives an iterator of its
+        lines, each a `LogLine`, first the ones the server already holds
+        and then each new one as the job writes it. It ends once the job
+        has ended and its last line was given, so a log followed late is
+        the whole log, and one followed from the start is every line as it
+        comes.
+
+        - `after`: the number of the last line the caller already holds:
+          the first line given is the one after it. 0, which it is unless
+          it is given, gives the log from its first line.
+        - `on_progress`: called with `bars_done` and `bars_total`, two
+          `int`s, whenever the server says the job has come further than
+          it last said; or `None`, and nothing is.
+
+        Nothing is asked until the iterator is first asked for a line. It
+        asks the server for a stream of the log, and reads the log a page
+        at a time, from the last line it gave, wherever the stream cannot
+        be had or breaks off: no line is given twice, and none is left
+        out. Lines the server no longer holds are passed over, which shows
+        as a jump in `seq`. The log of a queued job begins with the job.
+
+        Closing the iterator lets go of the connection, which Python does
+        once nothing holds the iterator any more, as after a `break` out of
+        a loop over it. A request that fails is raised from the loop as it
+        is, and the log followed again from where it stopped by `after=`
+        the `seq` of the last line given.
+        """
+        from ._logs import _asked, _followed
+
+        return _followed(self._wire, self.id, *_asked(after, on_progress))
+
+    def result(self):
+        """Asks the server what the job produced, and gives it, a
+        `JobResult`: the job's metrics, and its closed trades and its
+        equity curve, each downloaded when it is first asked for.
+
+        Only a job that has succeeded has a result: one that is queued or
+        running, that failed or was cancelled is a `Conflict`, which says
+        which. Each call asks the server: keep the result it gives.
+        """
+        from ._results import _result
+
+        return _result(self._wire, self.id)
+
+    def provenance(self):
+        """Asks the server what the job ran on, and gives it, a
+        `Provenance`: the bundle, the bars and the segments that hold them,
+        the settings and what ran the bundle, as the server recorded them
+        before the job ran, with the identity of those inputs, which is
+        checked here against them.
+
+        A job has its provenance once it has started. One that is still
+        queued, or that ended before its server read its inputs, is a
+        `Conflict`, which says which.
+        """
+        from ._provenance import _provenance
+
+        return self._wire.ask("GET", f"backtests/{self.id}/provenance", _provenance(self.id))
 
     def __repr__(self):
         return f"<Job {self.id} {self._status.state}>"

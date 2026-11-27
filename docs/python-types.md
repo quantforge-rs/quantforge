@@ -14,10 +14,12 @@ A batch of candles as NumPy arrays has a page of its own,
 backtest's result as pandas DataFrames,
 [candles and results as pandas DataFrames](python-pandas.md), the reader
 of the candles a store holds, [the candle reader](python-reader.md), the
-client of a QuantForge server, [the Python client](python-client.md), and
-a backtest submitted to one,
-[submitting a backtest from Python](python-bundles.md). How the package is named, built and
-tested is [the Python package](python-package.md).
+client of a QuantForge server, [the Python client](python-client.md), a
+backtest submitted to one,
+[submitting a backtest from Python](python-bundles.md), and that job
+followed to its result, [a job from Python](python-jobs.md). How the
+package is named, built and tested is
+[the Python package](python-package.md).
 
 ```python
 >>> from decimal import Decimal
@@ -86,15 +88,19 @@ the engine's own reader, `quantforge::CandleReader`, and
 
 **And the client of a QuantForge server, with what it gives and what it
 raises:** `Client`, the `Job` it gives for each backtest job the server
-holds, a job's `JobStatus`, `RemoteError` with the six exceptions derived
-from it, and `BundleError`, for a strategy bundle that is refused before it
-is sent. They are written in Python, with the standard library alone, and
-bind no type of the engine's: a status gives what its job runs in the types
-of this page, a `MarketId` and a `BacktestConfig`, and a job is submitted
-with the same two. [The Python client](python-client.md) is their contract,
-with their signatures, and
-[submitting a backtest from Python](python-bundles.md) that of a
-submission.
+holds, a job's `JobStatus`, what a job gives beside it, a `LogLine` of its
+log, its `JobResult` with each `ResultFile` of it, and its `Provenance`
+with each `ProvenanceSegment`, `RemoteError` with the six exceptions
+derived from it, and `BundleError`, for a strategy bundle that is refused
+before it is sent. They are written in Python, with the standard library
+alone, and bind no type of the engine's: a status and a provenance give
+what their job runs in the types of this page, a `MarketId` and a
+`BacktestConfig`, a job is submitted with the same two, and a job's result
+is given as this page's `BacktestResult`.
+[The Python client](python-client.md) is their contract, with their
+signatures, [submitting a backtest from Python](python-bundles.md) that of
+a submission, and [a job from Python](python-jobs.md) that of a job's end,
+its log, its result and its provenance.
 
 ## How a value crosses
 

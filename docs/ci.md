@@ -217,10 +217,12 @@ python3.15`, which runs, in order:
   strategy bundles on its `serve run`, whose workers are the Python of the
   run ([the Python worker](python-worker.md#testing-it)), the client's
   list, get and cancel the jobs of one
-  ([the Python client](python-client.md)), and those of a submission hold
+  ([the Python client](python-client.md)), those of a submission hold
   the bundle the client builds to the one the binary's own
   `backtest --remote` builds of the same files
-  ([submitting a backtest from Python](python-bundles.md)). The script
+  ([submitting a backtest from Python](python-bundles.md)), and those of a
+  job that is followed read its log, its result and its provenance from
+  one ([a job from Python](python-jobs.md)). The script
   tells every run below where it is, in `QUANTFORGE_PY_TEST_CLI`.
 - **The wheel**: `maturin build` once, then the tests against it in a fresh
   virtualenv of each Python named, where it is installed with its two
@@ -466,8 +468,11 @@ evidence too.** Until they land, what holds the Python client to a job's
 states is `test_client_jobs.py` in `python` and in each `wheel` leg: a real
 `serve run` with a job that succeeded, one that failed, one that is running
 and one queued, listed, got and cancelled from Python, on SQLite and, where
-the job has a server, on PostgreSQL. Submitting a job from Python is
-QUA-462's, and following one to its result QUA-468's.
+the job has a server, on PostgreSQL. Submitting a job from Python is held
+by `test_submit_jobs.py`, and following one to its end, its log, its result
+and its provenance by `test_handle_jobs.py`, in the same jobs and on the
+same stores: a job's result there is the result of the same strategy run
+in the test's own process over the candles read from the server's store.
 
 **The goldens are evidence of their own.** The matrix names them, as
 ALG-383, for `strategy.backtest_local`: the frozen SMA-cross results

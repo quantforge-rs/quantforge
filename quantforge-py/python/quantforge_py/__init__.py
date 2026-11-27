@@ -42,6 +42,15 @@ refused in the engine's own words:
   ``client.backtest.submit`` makes a strategy's files into a bundle, checks
   it, uploads it and submits a backtest of it, and
   ``client.backtest.submit_class`` does so for a class, by its source.
+- ``LogLine``, ``JobResult``, ``ResultFile``, ``Provenance`` and
+  ``ProvenanceSegment``: what a ``Job`` gives beside its status.
+  ``job.wait()`` asks until the job has ended; ``job.stream_logs()``
+  follows its log to its end, each line a ``LogLine``; ``job.result()``
+  gives what it produced, a ``JobResult``: its metrics, its closed trades
+  and its equity curve as the DataFrames a local run's result gives, and
+  the result as a ``BacktestResult``; and ``job.provenance()`` gives what
+  it ran on, a ``Provenance``: the bundle, the bars by the segments that
+  hold them, the settings and the runtime, with the identity of them all.
 - ``BundleError``: a strategy bundle that is refused before anything of it
   is sent, because it breaks the bundle spec or its server cannot run it,
   with every problem by the spec's code. It is a ``ValueError``.
@@ -77,10 +86,11 @@ plain values, and none of it is imported or run where it is submitted from.
 
 The types come from the compiled extension module, ``quantforge_py._native``,
 the DataFrame functions from ``quantforge_py._frames``, and the client, its
-jobs, its bundles and its exceptions from ``quantforge_py._client``,
-``quantforge_py._jobs``, ``quantforge_py._bundles`` and
-``quantforge_py._errors``. Every module of the package is private: import
-the names from here.
+jobs, what a job gives, its bundles and its exceptions from
+``quantforge_py._client``, ``quantforge_py._jobs``, ``quantforge_py._logs``,
+``quantforge_py._results``, ``quantforge_py._provenance``,
+``quantforge_py._bundles`` and ``quantforge_py._errors``. Every module of
+the package is private: import the names from here.
 """
 
 from ._native import (
@@ -114,6 +124,9 @@ from ._frames import (
 )
 from ._client import Client
 from ._jobs import Job, JobStatus
+from ._logs import LogLine
+from ._results import JobResult, ResultFile
+from ._provenance import Provenance, ProvenanceSegment
 from ._bundles import BundleError
 from ._errors import (
     AuthError,
@@ -154,6 +167,11 @@ __all__ = [
     "Client",
     "Job",
     "JobStatus",
+    "LogLine",
+    "JobResult",
+    "ResultFile",
+    "Provenance",
+    "ProvenanceSegment",
     "BundleError",
     "RemoteError",
     "AuthError",
