@@ -2210,6 +2210,27 @@ def test_a_state_of_a_later_protocol_is_given_as_the_server_wrote_it(server):
     status = job_of(server, written(state=archived)).status
     assert (status.state, status.ended, status.finished_at_ms) == ("archived", False, FINISHED)
     assert (status.error_code, status.error_message) == (None, None)
+    assert repr(status) == f"<JobStatus {JOB} archived>"
+
+
+def test_a_state_is_written_as_it_is_only_where_it_is_a_plain_word(server):
+    # A state is the server's to name. It is given as it was written, and
+    # written out where it is anything but a word: nothing a server names
+    # reaches a terminal as it came.
+    for state, shown in [
+        ("on_hold-2", "on_hold-2"),
+        ("\x1b[2Jqueued\r\n", r"'\x1b[2Jqueued\r\n'"),
+        ("", "''"),
+        ("queued> <Job", "'queued> <Job'"),
+        ("arrêté", "'arrêté'"),
+        ("s" * 64, "s" * 64),
+        ("s" * 65, repr("s" * 65)),
+        ("s" * 81, repr("s" * 80) + "..."),
+    ]:
+        job = job_of(server, written(state={"kind": state}))
+        assert job.status.state == state
+        assert repr(job.status) == f"<JobStatus {JOB} {shown}>"
+        assert repr(job) == f"<Job {JOB} {shown}>"
 
 
 def test_every_product_line_and_interval_the_engine_has_is_a_jobs_market(server):

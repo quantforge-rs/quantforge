@@ -31,7 +31,7 @@ This module is private: import its names from `quantforge_py`.
 import time
 
 from ._errors import _published
-from ._jobs import _count, _final, _given, _is_job_id, _Record
+from ._jobs import _count, _final, _given, _is_job_id, _Record, _word
 from ._wire import (
     _MOST_INTEGER,
     _member,
@@ -84,7 +84,7 @@ class LogLine(_Record):
     )
 
     def __repr__(self):
-        return f"<LogLine {self._seq} {self._level}: {_quoted(self._message)}>"
+        return f"<LogLine {self._seq} {_word(self._level)}: {_quoted(self._message)}>"
 
 
 def _asked(after, on_progress):

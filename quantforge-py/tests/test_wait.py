@@ -133,6 +133,15 @@ def test_a_job_that_has_not_ended_in_time_is_a_timeout_and_goes_on(server, clock
     assert job.wait(1.0).state == "succeeded"
 
 
+def test_a_job_that_ended_as_the_time_ran_out_is_given_and_is_no_timeout(server, clock):
+    # The last wait ends as the time runs out, and the server is asked
+    # then: what it says of a job that ended meanwhile is given.
+    job = stands(server, QUEUED, QUEUED, RUNNING, RUNNING, RUNNING, SUCCEEDED)
+    assert job.wait(1.0).state == "succeeded"
+    assert clock.slept == pytest.approx([0.1, 0.2, 0.4, 0.3])
+    assert asked(server) == 5
+
+
 def test_a_timeout_of_no_time_asks_once(server, clock):
     job = stands(server, QUEUED, RUNNING)
     for timeout in (0, 0.0):

@@ -248,7 +248,9 @@ True
   its log is followed, what its result and its provenance are, and what
   each of the four raises.
 - **`repr()` of a job is its ID and the state it was last given,** as in
-  `<Job 57917a9825f44d75ad4a2e6329d00ec7 running>`.
+  `<Job 57917a9825f44d75ad4a2e6329d00ec7 running>`. The protocol's states
+  are plain words; one that is not is shown as Python writes text, with
+  control characters escaped.
 
 ## A job's status
 

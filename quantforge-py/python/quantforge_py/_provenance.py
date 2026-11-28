@@ -22,6 +22,7 @@ This module is private: import its names from `quantforge_py`.
 from ._errors import _published
 from ._jobs import (
     _MARKET,
+    _MOST_IN_32_BITS,
     _config,
     _count,
     _final,
@@ -80,7 +81,7 @@ class Provenance(_Record):
     `Job.provenance()` gives one, and none is built. It is a value, and
     never changes: two are equal when every field is.
 
-    What the job's result depends on, which the identity covers:
+    What the job was given to run on, which the identity covers:
 
     - `code_hash`: the code hash of the strategy bundle, which fixes its
       code, its manifest and so its parameters.
@@ -216,7 +217,7 @@ def _segment(value, what):
         hash=_hash(record, "hash", what),
         first_open_ms=_member(record, "first_open_ms", int, what),
         last_open_ms=_member(record, "last_open_ms", int, what),
-        bar_count=_count(record, "bar_count", what),
+        bar_count=_count(record, "bar_count", what, _MOST_IN_32_BITS),
     )
 
 
@@ -269,7 +270,7 @@ def _provenance(job_id):
         deps = _member(runtime, "deps", dict, what)
         for name in deps:
             _member(deps, name, str, f"the packages of {what}")
-        proto_version = _count(inputs, "proto_version", f"job {job_id}'s inputs")
+        proto_version = _count(inputs, "proto_version", f"job {job_id}'s inputs", _MOST_IN_32_BITS)
 
         what = f"job {job_id}'s provenance"
         strategy = _member(record, "strategy", dict, what)
@@ -281,7 +282,7 @@ def _provenance(job_id):
         said = f"where job {job_id}'s provenance was recorded"
         at = _member(recorded, "at_ms", int, said)
         backend = _member(recorded, "backend", str, said)
-        schema = _count(recorded, "schema_version", said)
+        schema = _count(recorded, "schema_version", said, _MOST_IN_32_BITS)
         results = None
         if listed is not None:
             results = tuple(_file(each, f"a result file of {what}") for each in listed)

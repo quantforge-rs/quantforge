@@ -83,7 +83,7 @@ def test_a_provenance_gives_what_a_job_ran_on_in_the_packages_own_types(server, 
     assert server.routes[2:] == [f"GET {PROVENANCE}"]
     answered = example()
     inputs = answered["inputs"]
-    # What the result depends on.
+    # What the job was given to run on.
     assert provenance.code_hash == inputs["code_hash"] == EMPTY
     assert provenance.market == qf.MarketId("binance_spot", "BTCUSDT", "1m")
     assert (provenance.start_open_ms, provenance.end_open_ms) == (1792454400000, 1792540740000)
@@ -263,6 +263,43 @@ def test_what_a_succeeded_job_produced_is_listed_with_its_provenance(server, job
     assert job.provenance().results == ()
 
 
+def test_a_file_is_written_by_its_name_only_where_the_name_is_a_plain_word(server, job):
+    # A provenance lists whatever files its server names, the ones a later
+    # revision of the protocol adds among them. A name is given as it was
+    # written, and written out where it is anything but a word: nothing a
+    # server names reaches a terminal as it came.
+    names = [
+        "trades",
+        "draw_down-2",
+        "\x1b[2Jequity\r\n",
+        "",
+        "équité",
+        "n" * 64,
+        "n" * 65,
+        "n" * 81,
+    ]
+    produced = [
+        {"name": name, "media_type": "application/json", "hash": EMPTY, "size_bytes": 7}
+        for name in names
+    ]
+    server.says("GET", PROVENANCE, (200, {**example(), "results": produced}))
+    results = job.provenance().results
+    assert [each.name for each in results] == names
+    assert [repr(each) for each in results] == [
+        f"<ResultFile {written} {EMPTY} of 7 bytes>"
+        for written in [
+            "trades",
+            "draw_down-2",
+            r"'\x1b[2Jequity\r\n'",
+            "''",
+            "'équité'",
+            "n" * 64,
+            repr("n" * 65),
+            repr("n" * 80) + "...",
+        ]
+    ]
+
+
 def test_two_records_of_different_kinds_are_never_equal_whatever_they_hold(server, job):
     # A segment and a result's file each hold a hash and three more fields.
     # Two that held the same four values would still be two different
@@ -416,6 +453,10 @@ UNREADABLE = [
     (with_member("recorded__at_ms", "now"), f"the `at_ms` of {WHERE} is not an integer"),
     (with_member("recorded__backend", None), f"the `backend` of {WHERE} is not a string"),
     (with_member("recorded__schema_version", -1), f"the `schema_version` of {WHERE} is negative"),
+    (
+        with_member("recorded__schema_version", 2**32),
+        f"the `schema_version` of {WHERE} is beyond the 4294967295 the protocol holds it to",
+    ),
     (with_member("results", {}), f"the `results` of {WHOLE} is not a list"),
     (with_member("results", [7]), f"a result file of {WHOLE} is not an object"),
     (
@@ -447,6 +488,15 @@ UNREADABLE = [
             data__segments=[{"hash": EMPTY, "first_open_ms": 0, "last_open_ms": 0, "bar_count": -1}]
         ),
         f"the `bar_count` of a segment of {INPUTS} is negative",
+    ),
+    (
+        recorded(
+            data__segments=[
+                {"hash": EMPTY, "first_open_ms": 0, "last_open_ms": 0, "bar_count": 2**32}
+            ]
+        ),
+        f"the `bar_count` of a segment of {INPUTS} is beyond the 4294967295 the protocol holds "
+        "it to",
     ),
     (
         recorded(data__interval="7m"),
@@ -481,6 +531,10 @@ UNREADABLE = [
     ),
     (recorded(proto_version="1"), f"the `proto_version` of {INPUTS} is not an integer"),
     (recorded(proto_version=-1), f"the `proto_version` of {INPUTS} is negative"),
+    (
+        recorded(proto_version=2**32),
+        f"the `proto_version` of {INPUTS} is beyond the 4294967295 the protocol holds it to",
+    ),
 ] + [
     (without_input(path), f"{what} has no `{path.rpartition('__')[2]}`")
     for path, what in [
@@ -515,6 +569,23 @@ def test_a_provenance_the_protocol_does_not_write_is_refused_and_never_guessed_a
         f"not read: {why}; is it a QuantForge server?"
     )
     assert (error.code, error.status) == (None, None)
+
+
+def test_a_count_the_protocol_holds_in_32_bits_is_taken_to_the_last_one_they_hold(server, job):
+    most = 2**32 - 1
+    answered = recorded(
+        proto_version=most,
+        data__segments=[{"hash": EMPTY, "first_open_ms": 0, "last_open_ms": 0, "bar_count": most}],
+    )
+    answered["recorded"]["schema_version"] = most
+    server.says("GET", PROVENANCE, (200, answered))
+    provenance = job.provenance()
+    assert provenance.proto_version == provenance.schema_version == most
+    assert [segment.bar_count for segment in provenance.segments] == [most]
+    # The bars a job ran on are held in the 64 bits the protocol's integers
+    # have, as the size of a file is.
+    server.says("GET", PROVENANCE, (200, recorded(data__bar_count=2**32)))
+    assert job.provenance().bar_count == 2**32
 
 
 def test_inputs_that_hold_text_that_is_no_unicode_have_no_identity(server, job):

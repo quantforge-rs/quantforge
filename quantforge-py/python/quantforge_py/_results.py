@@ -38,6 +38,7 @@ from ._jobs import (
     _is_job_id,
     _not_writable,
     _Record,
+    _word,
 )
 from ._native import BacktestResult
 from ._wire import _member, _object, _quoted, _Unreadable
@@ -105,7 +106,7 @@ class ResultFile(_Record):
     size_bytes = _given("_size_bytes", "How many bytes the file holds.")
 
     def __repr__(self):
-        return f"<ResultFile {self._name} {self._hash} of {self._size_bytes} bytes>"
+        return f"<ResultFile {_word(self._name)} {self._hash} of {self._size_bytes} bytes>"
 
 
 def _file(value, what):
@@ -219,9 +220,13 @@ def _table(job_id, file, read, trades=None):
 
 def _result(wire, job_id):
     """Asks a server for the result of the job `job_id`, and gives it."""
+    import threading
+
     metrics, files = wire.ask("GET", f"backtests/{job_id}/result", _listing(job_id))
+    # Whose turn it is to download each of the two tables.
+    turns = {name: threading.Lock() for name, _, _ in _FILES[1:]}
     result = object.__new__(JobResult)
-    for name, value in zip(JobResult.__slots__, (wire, job_id, metrics, files, {})):
+    for name, value in zip(JobResult.__slots__, (wire, job_id, metrics, files, {}, turns)):
         object.__setattr__(result, name, value)
     return result
 
@@ -237,7 +242,8 @@ class JobResult:
     it, checked against the hash its job lists, read by the engine's own
     reader of the result format, and kept: `trades_df`, `equity_df` and
     `to_backtest_result` ask the server for what they need and do not hold
-    yet, and reading an attribute never does.
+    yet, and reading an attribute never does. Callers that ask for a table
+    at the same moment take turns, so that one of them downloads it.
 
     - `job_id`: the job's ID.
     - `metrics`: the job's summary, a dict of the fields `metrics.json`
@@ -259,7 +265,7 @@ class JobResult:
     pickled.
     """
 
-    __slots__ = ("_wire", "_job_id", "_metrics", "_files", "_tables")
+    __slots__ = ("_wire", "_job_id", "_metrics", "_files", "_tables", "_turns")
 
     def __init__(self, *args, **kwargs):
         raise TypeError(
@@ -291,10 +297,22 @@ class JobResult:
 
     def _rows(self, name):
         """The rows of one of the two tables, downloaded and checked the
-        first time they are asked for, and kept."""
+        first time they are asked for, and kept.
+
+        One caller downloads a table. Whoever asks for it meanwhile waits
+        for that download and is given the rows it kept; where it failed
+        nothing was kept, and the next in turn asks the server itself."""
         rows = self._tables.get(name)
-        if rows is not None:
-            return rows
+        if rows is None:
+            with self._turns[name]:
+                rows = self._tables.get(name)
+                if rows is None:
+                    rows = self._tables[name] = self._downloaded(name)
+        return rows
+
+    def _downloaded(self, name):
+        """The rows of one of the two tables, of the file a server answers
+        for it now: held to what the job lists for the file, and read."""
         (file,) = (file for file in self._files if file.name == name)
         (file_name,) = (file_name for held, file_name, _ in _FILES if held == name)
         if file.size_bytes > _MOST_FILE_BYTES:
@@ -307,7 +325,7 @@ class JobResult:
             read = _table(self._job_id, file, _native._result_trades, self._metrics[-1])
         else:
             read = _table(self._job_id, file, _native._result_equity)
-        rows = self._wire.fetch(
+        return self._wire.fetch(
             f"backtests/{self._job_id}/result/{file_name}",
             read,
             media_type=file.media_type,
@@ -316,10 +334,6 @@ class JobResult:
                 f"the {file.size_bytes} bytes job {self._job_id}'s result lists for its {name} file"
             ),
         )
-        # Two threads that ask at the same time each download it, and
-        # either's serves.
-        self._tables[name] = rows
-        return rows
 
     def _backtest(self, trades=(), equity_curve=()):
         """The engine's own result of these metrics and these rows."""

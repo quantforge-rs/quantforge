@@ -124,7 +124,9 @@ True
   its `status` is what the server last answered.
 - **The time is looked at between two requests.** The server is asked at
   least once, a timeout of 0 included, and a request that is under way is
-  not cut short: a wait can outlast its timeout by one request.
+  not cut short: a wait can outlast its timeout by one request. The last
+  request is made as the time runs out, so that a job that ended by then
+  is given as ended, and never raised as one that had not.
 - **The server is asked again after a tenth of a second, and then after
   twice as long each time,** two seconds at the most.
 - **A request that fails is raised as it is,** and the job's `status` stays
@@ -194,7 +196,8 @@ examples writes nothing, so they follow another, of a class that does:
 
 - **What a strategy prints is `info`,** and what it writes to its standard
   error `warning`. A level a later revision of the protocol adds is given
-  as the server wrote it.
+  as the server wrote it; `repr()` of a line shows a level that is no
+  plain word as it shows the message, with control characters escaped.
 - **`message` is the job's own text,** with every character the job wrote:
   treat it as text a stranger wrote before it is shown where control
   characters matter. `repr()` of a line shows it as Python writes text,
@@ -264,6 +267,10 @@ stream, with the standard library alone, over `http` and over `https`.
   failed, so its log ends, and the loop with it. The stream of a job that
   has not ended is closed without an end, and the page asked for in its
   place finds no server: a `ServerUnavailable`.
+- **A server that is killed ends nothing.** The stream of the job it ran
+  is cut off, and the page finds no server: a `ServerUnavailable` there
+  too. The next server on the store fails that job, and holds none of what
+  it had written, which the killed server had not stored yet.
 
 ## A job's result
 
@@ -350,7 +357,9 @@ server.
 - **`trades_df()` downloads `trades.arrow`, `equity_df()` downloads
   `equity.arrow`,** and `to_backtest_result()` whichever of the two the
   result does not hold yet. Each file is downloaded once and its rows kept
-  by the result, for as long as the result is.
+  by the result, for as long as the result is. Callers that ask for a
+  table at the same moment, from threads of their own, take turns: one
+  downloads it, and the others wait and are given its rows.
 - **A file is held to what its job lists before it is read:** it is read
   to the size the job lists and no further, and is that long and of that
   hash, or it is refused. One that states another length is not read at
@@ -369,7 +378,12 @@ server.
   server lists for a file is the path on the server itself, without what a
   proxy serves it under, and is not used.
 - **A file that was refused is not kept.** Asked for again, it is
-  downloaded again.
+  downloaded again, as it is for a caller that waited its turn behind the
+  one that was refused it.
+- **A table is read whole, in memory.** Its file is held while it is
+  checked and read, and its rows from then on, a Python object each, for
+  as long as the result is. The limit on a file is the limit on what a
+  table can cost its caller.
 - **A result file longer than 1 GiB is not downloaded.** A year of
   one-minute bars, the most a server runs one job on unless it is told
   otherwise, makes an equity curve of a fiftieth of that. A file past it
@@ -513,8 +527,9 @@ True
 
 **`job.provenance()` gives what the job ran on, a `Provenance`:** what its
 server read for it and recorded before the job ran. A worker is handed
-those inputs and nothing else, so they are everything the job's result
-depends on.
+those inputs and nothing else, so a strategy that decides from what it is
+handed depends on nothing else. One that reads a clock or draws on
+randomness depends on that as well, and no provenance records it.
 
 <!-- begin: provenance fields -->
 | Field | Type | What it is |
@@ -572,12 +587,12 @@ depends on.
 
 ## The identity
 
-**`identity` covers everything the result depends on, and nothing else:**
-the bundle by its code hash, the market and the range with every segment,
-the settings, the engine, the Python and the packages, and the protocol
-version. Jobs given the same have the same identity, on every server and
-every store; where and when a provenance was recorded is no part of it, and
-neither is the job.
+**`identity` covers everything a job is given to run on, and nothing
+else:** the bundle by its code hash, the market and the range with every
+segment, the settings, the engine, the Python and the packages, and the
+protocol version. Jobs given the same have the same identity, on every
+server and every store; where and when a provenance was recorded is no
+part of it, and neither is the job.
 
 ```python
 >>> again = client.backtest.submit(

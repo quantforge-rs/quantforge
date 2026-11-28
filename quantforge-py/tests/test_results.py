@@ -15,6 +15,7 @@ import copy
 import hashlib
 import json
 import pickle
+import threading
 from decimal import Decimal
 
 import pytest
@@ -126,6 +127,57 @@ def raised(kind, call):
         call()
     assert type(caught.value) is kind
     return caught.value
+
+
+class Held:
+    """A file's route that answers nothing until the test lets it: `first`
+    is set once a request for the file has come and `second` once another
+    has, and each waits for `free` before it is answered, with `answers`
+    in turn and the last of them from then on."""
+
+    def __init__(self, server, name, *answers):
+        self.first, self.second, self.free = (threading.Event() for _ in range(3))
+        answers = list(answers)
+        counted = threading.Lock()
+
+        def answer():
+            with counted:
+                raw = answers.pop(0) if len(answers) > 1 else answers[0]
+                came = self.second if self.first.is_set() else self.first
+                came.set()
+            assert self.free.wait(30)
+            return 200, raw, {}
+
+        server.says("GET", f"{server.prefix}{RESULT}/{FILES[name]}", answer)
+
+
+def together(call, held, count=2):
+    """Calls `call` from `count` callers at once, each once the one before
+    it has had the time to ask its server, and gives what each was given
+    or raised, in no order: the first is asking for the file that is held
+    back when the next begins, and the file is let go of once all have
+    begun."""
+    outcomes = []
+
+    def caller():
+        try:
+            outcomes.append(call())
+        except qf.RemoteError as error:
+            outcomes.append(error)
+
+    callers = [threading.Thread(target=caller, daemon=True) for _ in range(count)]
+    callers[0].start()
+    assert held.first.wait(10)
+    for each in callers[1:]:
+        each.start()
+    # A caller that asked its server itself would have by now: its request
+    # would come while the first one's is held back.
+    asked_again = held.second.wait(0.5)
+    held.free.set()
+    for each in callers:
+        each.join(10)
+        assert not each.is_alive()
+    return outcomes, asked_again
 
 
 def unread(server, why: str, target=RESULT) -> str:
@@ -290,6 +342,66 @@ def test_each_table_is_downloaded_when_it_is_first_asked_for_and_kept(server):
     other = server.job.result()
     assert other.metrics == result.metrics
     assert server.fetched == ["/", "/trades.arrow", "/equity.arrow", "/"]
+
+
+def test_a_table_two_callers_ask_for_at_once_is_downloaded_once_and_given_to_both(server):
+    held = Held(server, "equity", file("equity.sma_cross"))
+    result = server.job.result()
+    (one, other), asked_again = together(result.to_backtest_result, held)
+    # The second found the table being downloaded, waited for it, and was
+    # given the rows the first one kept.
+    assert not asked_again
+    assert server.fetched == ["/", "/trades.arrow", "/equity.arrow"]
+    assert type(one) is type(other) is qf.BacktestResult and one == other
+    assert len(one.equity_curve) == 15
+    # As were three of them.
+    held = Held(server, "equity", file("equity.sma_cross"))
+    result = server.job.result()
+    results, asked_again = together(result.to_backtest_result, held, count=3)
+    assert not asked_again and results[0] == results[1] == results[2]
+    assert server.fetched[3:] == ["/", "/trades.arrow", "/equity.arrow"]
+
+
+def test_a_table_whose_download_failed_is_asked_for_again_by_the_caller_that_waited(server):
+    equity = file("equity.sma_cross")
+    altered = bytes([equity[0] ^ 1]) + equity[1:]
+    held = Held(server, "equity", altered, equity)
+    result = server.job.result()
+    outcomes, asked_again = together(result.to_backtest_result, held)
+    # The one that downloaded the file was refused it, and kept nothing:
+    # the one that waited for it asked the server itself, and was answered
+    # the file the job lists.
+    assert not asked_again
+    assert server.fetched == ["/", "/trades.arrow", "/equity.arrow", "/equity.arrow"]
+    (refused,) = [each for each in outcomes if type(each) is qf.RemoteError]
+    (read,) = [each for each in outcomes if type(each) is qf.BacktestResult]
+    assert f"it is {len(altered)} bytes hashing to {named(altered)}" in str(refused)
+    assert len(read.equity_curve) == 15
+    # And it is kept from then on.
+    assert result.to_backtest_result() == read
+    assert server.fetched.count("/equity.arrow") == 2
+
+
+def test_a_table_that_is_being_downloaded_holds_up_no_caller_of_the_other(server):
+    held = Held(server, "equity", file("equity.sma_cross"))
+    result = server.job.result()
+    given = {}
+    curve = threading.Thread(
+        target=lambda: given.update(equity=result._rows("equity")), daemon=True
+    )
+    curve.start()
+    assert held.first.wait(10)
+    # The trades are another file, with a turn of their own.
+    trades = threading.Thread(
+        target=lambda: given.update(trades=result._rows("trades")), daemon=True
+    )
+    trades.start()
+    trades.join(10)
+    assert list(given) == ["trades"] and len(given["trades"]) == 2
+    held.free.set()
+    curve.join(10)
+    assert list(given) == ["trades", "equity"] and len(given["equity"]) == 15
+    assert server.fetched == ["/", "/equity.arrow", "/trades.arrow"]
 
 
 def test_a_file_is_asked_for_by_its_own_type_under_the_clients_own_url():

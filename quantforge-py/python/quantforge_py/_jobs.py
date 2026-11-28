@@ -39,6 +39,10 @@ _ID_CHARACTERS = frozenset(_LETTERS + _LETTERS.upper() + "0123456789-_")
 _HEX = frozenset("0123456789abcdef")
 _HASH_PREFIX = "sha256:"
 
+# The most a count is that the protocol holds in 32 bits: the bars of a
+# segment, and the number of a protocol version and of a store's schema.
+_MOST_IN_32_BITS = 2**32 - 1
+
 # How long `Job.wait` waits before it asks its server again: this long at
 # first, twice as long each time after, and never longer than the second.
 _WAIT_SECONDS = 0.1
@@ -142,12 +146,26 @@ def _is_content_hash(text):
     return len(text) == len(_HASH_PREFIX) + 64 and len(digits) == 64 and _HEX.issuperset(digits)
 
 
-def _count(record, name, what):
-    """A count as the protocol writes one: an integer that is not
-    negative."""
+def _word(text):
+    """What a server names, as a repr writes it: a plain word as it is, and
+    any other text as Python writes a string, in part where it is very
+    long. The words the protocol has are plain. One that came with a
+    terminal's control characters in it is written out for a reader, and
+    never to the terminal as it came."""
+    if 1 <= len(text) <= 64 and _ID_CHARACTERS.issuperset(text):
+        return text
+    return _quoted(text)
+
+
+def _count(record, name, what, most=None):
+    """A count as the protocol writes one: an integer that is not negative,
+    and no more than `most` where the protocol holds it in fewer bits than
+    its integers have."""
     count = _member(record, name, int, what)
     if count < 0:
         raise _Unreadable(f"the `{name}` of {what} is negative")
+    if most is not None and count > most:
+        raise _Unreadable(f"the `{name}` of {what} is beyond the {most} the protocol holds it to")
     return count
 
 
@@ -458,7 +476,7 @@ class JobStatus:
     __hash__ = None
 
     def __repr__(self):
-        return f"<JobStatus {self._job_id} {self._state}>"
+        return f"<JobStatus {self._job_id} {_word(self._state)}>"
 
 
 @_final
@@ -554,7 +572,9 @@ class Job:
         `float`, or `None` for as long as the job takes. A job that has not
         ended by then is a `TimeoutError`: the job goes on, and `status`
         is what the server last answered. The time is looked at between two
-        requests, and one that is under way is not cut short.
+        requests, and one that is under way is not cut short. The last is
+        made as the time runs out, so that a job that ended by then is
+        given as ended.
 
         The server is asked again after a tenth of a second, and then after
         twice as long each time, two seconds at the most. A request that
@@ -648,7 +668,7 @@ class Job:
         return self._wire.ask("GET", f"backtests/{self.id}/provenance", _provenance(self.id))
 
     def __repr__(self):
-        return f"<Job {self.id} {self._status.state}>"
+        return f"<Job {self.id} {_word(self._status.state)}>"
 
 
 class _Backtests:

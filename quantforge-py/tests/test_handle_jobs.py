@@ -6,7 +6,8 @@ run` on a store of either backend, its workers this interpreter
   server offers: a line arrives while its job still runs, a log followed
   late is the whole log, and the same lines come a page at a time where the
   stream cannot be had. A server that stops ends the stream, and the loop
-  with what is raised of a server that is gone.
+  with it or with what is raised of a server that is gone, as a server
+  that is killed does.
 - **A job is waited for,** to its end or to a timeout.
 - **A job's result is a local run's:** the goldens' SMA cross submitted as
   a bundle gives, as a `BacktestResult`, the result `run_backtest` gives of
@@ -22,6 +23,7 @@ against servers of the test's own.
 """
 
 import importlib.util
+import os
 import re
 import shutil
 import sys
@@ -293,6 +295,7 @@ def test_the_log_of_a_queued_job_begins_with_the_job(tmp_path, never_paged):
         assert queued.wait(jobs.PATIENCE).state == "succeeded"
 
 
+@pytest.mark.skipif(os.name != "posix", reason="a server is asked to stop by a signal, POSIX's")
 def test_a_server_that_stops_ends_the_log_of_the_job_it_ran_which_the_next_server_holds(tmp_path):
     place = with_minutes(stores.Place.sqlite(tmp_path))
     with jobs.served(place, scratch(tmp_path)) as server:
@@ -314,6 +317,30 @@ def test_a_server_that_stops_ends_the_log_of_the_job_it_ran_which_the_next_serve
             ("info", "the first line"),
             ("warning", "the second, to standard error"),
         ]
+
+
+def test_a_server_that_is_killed_leaves_the_follower_of_the_job_it_ran_with_no_server(tmp_path):
+    place = with_minutes(stores.Place.sqlite(tmp_path))
+    with jobs.served(place, scratch(tmp_path)) as server:
+        port = server.port
+        job = submitted(server, SPEAKS_THEN_WAITS)
+        logs = job.stream_logs()
+        assert next(logs).message == "the first line"
+        assert next(logs).message == "the second, to standard error"
+        # A server that is killed finishes nothing and tells nobody: the
+        # stream is cut off without an end, and the page that is asked for
+        # in its place finds no server.
+        server.kill()
+        error = raised(qf.ServerUnavailable, lambda: next(logs))
+        assert str(error).startswith(f"could not reach the server at http://127.0.0.1:{port}/: ")
+    # The next server on the store finds the job running under no server,
+    # and fails it. What the job had written was the killed server's to
+    # keep, and went with it.
+    with jobs.served(place, scratch(tmp_path)) as server:
+        again = qf.Client(f"http://127.0.0.1:{server.port}").backtest.get(job.id)
+        assert again.wait(jobs.PATIENCE).state == "failed"
+        assert again.status.error_code == "internal"
+        assert said(again.stream_logs()) == []
 
 
 def test_a_server_that_stops_leaves_the_follower_of_a_job_that_has_not_ended_with_no_server(

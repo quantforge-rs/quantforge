@@ -69,19 +69,23 @@ ACCEPT_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 DROP = object()
 
 
-def frame(payload=b"", kind=TEXT, final=True, mask=None, reserved=0) -> bytes:
+def frame(payload=b"", kind=TEXT, final=True, mask=None, reserved=0, length_in=None) -> bytes:
     """One frame as WebSocket writes it: a server's, which is not masked,
     unless a test gives it a mask of four bytes. A `dict` is the JSON of
-    it, as every frame of the protocol is, and a `str` its UTF-8."""
+    it, as every frame of the protocol is, and a `str` its UTF-8. Its
+    length is written in the fewest bytes that hold it, as WebSocket has
+    it, unless a test says in how many more: `length_in` 2 or 8."""
     if isinstance(payload, dict):
         payload = json.dumps(payload)
     if isinstance(payload, str):
         payload = payload.encode()
     head = bytes([(0x80 if final else 0) | reserved | kind])
     masked = 0x80 if mask else 0
-    if len(payload) < 126:
+    if length_in is None:
+        length_in = 0 if len(payload) < 126 else 2 if len(payload) < 65536 else 8
+    if length_in == 0:
         head += bytes([masked | len(payload)])
-    elif len(payload) < 65536:
+    elif length_in == 2:
         head += bytes([masked | 126]) + struct.pack(">H", len(payload))
     else:
         head += bytes([masked | 127]) + struct.pack(">Q", len(payload))

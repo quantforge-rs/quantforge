@@ -12,6 +12,7 @@ client does with the stream of a real `serve run` is in
 """
 
 import copy
+import json
 import pickle
 import struct
 import threading
@@ -291,11 +292,30 @@ def test_a_stream_is_read_past_what_is_not_a_line_and_in_however_many_frames_a_m
     assert heard(server) == [[(PONG, b"are you there"), (PONG, b""), GOODBYE]]
 
 
+def sized(seq, size) -> bytes:
+    """A line whose frame holds exactly `size` bytes."""
+    empty = len(json.dumps({"type": "line", **line(seq, message="")}))
+    return a_line(seq, message="z" * (size - empty))
+
+
+def test_a_frame_of_every_length_is_taken_where_the_length_is_written_in_the_fewest_bytes(
+    server, job
+):
+    # The longest a short frame holds and the shortest a medium one does,
+    # and the same of a medium frame and a long one.
+    sizes = [125, 126, 65535, 65536]
+    frames = [sized(seq, size) for seq, size in enumerate(sizes, start=1)]
+    assert [len(each) - size for each, size in zip(frames, sizes)] == [2, 4, 4, 10]
+    server.streams(f"{LOGS}?after=0", *frames, said("end"), closing())
+    assert numbers(job.stream_logs()) == [1, 2, 3, 4]
+    assert routes(server) == ["/logs?after=0 (stream)"]
+
+
 def test_an_upgrade_is_taken_however_its_answer_spells_websocket(server, job):
     spelled = [
         dict(Upgrade="WebSocket", Connection="upgrade"),
         dict(Upgrade="websocket", Connection="keep-alive, Upgrade"),
-        dict(Upgrade="h2c, WEBSOCKET", Connection="UPGRADE"),
+        dict(Upgrade="WEBSOCKET", Connection="UPGRADE"),
     ]
     for headers in spelled:
         server.streams(
@@ -612,6 +632,12 @@ BROKEN_MID_STREAM = {
     "a close that is long": [frame(b"x" * 126, CLOSE)],
     "a kind websocket has not": [frame(b"", 3)],
     "another kind websocket has not": [frame(b"", 11)],
+    # A length is written in the fewest bytes that hold it.
+    "a short frame's length in two bytes": [frame({"type": "line", **line(2)}, length_in=2)],
+    "a short frame's length in eight bytes": [frame({"type": "line", **line(2)}, length_in=8)],
+    "a medium frame's length in eight bytes": [
+        frame({"type": "line", **line(2, message="y" * 300)}, length_in=8)
+    ],
 }
 
 
@@ -641,24 +667,43 @@ def test_a_message_longer_than_is_taken_stops_the_stream_before_it_is_read(
 ):
     monkeypatch.setattr(_websocket, "_MOST_MESSAGE_BYTES", 256)
     long = a_line(2, message="x" * 300)
-    pieces = [frame(long[4:104], TEXT, final=False), frame(long[104:], CONTINUED)]
+    # The message a frame of that length holds, after the four bytes of the
+    # frame's head, in two parts that are each within what is taken and
+    # too long only together.
+    text = long[4:]
+    first, rest = text[:200], text[200:]
+    assert len(first) <= 256 and len(rest) <= 256 < len(first) + len(rest)
     for sent in (
         [long],
-        # In two frames that are each within it.
-        pieces,
+        # In two frames, of which neither is too long by itself.
+        [frame(first, TEXT, final=False), frame(rest, CONTINUED)],
         # By what its frame says alone: the frame's head, and nothing of
         # what it says is to come.
         [struct.pack(">BBQ", 0x81, 127, 2**62)],
     ):
-        server.streams(f"{LOGS}?after=0", a_line(1), *sent)
+        # A follower that took the message would read on to the end the
+        # stream then says, and ask for no page.
+        server.streams(f"{LOGS}?after=0", a_line(1), *sent, said("end"), closing())
     server.says("GET", f"{LOGS}?after=1", (200, page(2, complete=True)))
     for _ in range(3):
         assert numbers(job.stream_logs()) == [1, 2]
-    # One that is exactly as long as is taken is taken.
-    exact = a_line(2, message="x" * 300)
-    monkeypatch.setattr(_websocket, "_MOST_MESSAGE_BYTES", len(exact) - 4)
-    server.streams(f"{LOGS}?after=1", exact, said("end"), closing())
-    assert numbers(job.stream_logs(after=1)) == [2]
+    assert routes(server) == ["/logs?after=0 (stream)", "/logs?after=1"] * 3
+    # One that is exactly as long as is taken is taken, whole or in two
+    # frames: its line came over the stream, and not from the page that
+    # stands in for a stream that stopped.
+    monkeypatch.setattr(_websocket, "_MOST_MESSAGE_BYTES", len(text))
+    for sent in ([long], [frame(first, TEXT, final=False), frame(rest, CONTINUED)]):
+        asked = len(routes(server))
+        server.streams(f"{LOGS}?after=1", *sent, said("end"), closing())
+        assert numbers(job.stream_logs(after=1)) == [2]
+        assert routes(server)[asked:] == ["/logs?after=1 (stream)"]
+    # And one that is a byte longer is not: the page gives its line.
+    monkeypatch.setattr(_websocket, "_MOST_MESSAGE_BYTES", len(text) - 1)
+    for sent in ([long], [frame(first, TEXT, final=False), frame(rest, CONTINUED)]):
+        asked = len(routes(server))
+        server.streams(f"{LOGS}?after=1", *sent, said("end"), closing())
+        assert numbers(job.stream_logs(after=1)) == [2]
+        assert routes(server)[asked:] == ["/logs?after=1 (stream)", "/logs?after=1"]
 
 
 def test_a_stream_that_falls_silent_for_longer_than_a_server_may_is_given_up(
@@ -701,6 +746,15 @@ REFUSED_UPGRADES = {
     "no answer to the key": lambda nonce: upgraded(nonce, Sec_WebSocket_Accept=None),
     "no upgrade named": lambda nonce: upgraded(nonce, Upgrade=None),
     "another upgrade named": lambda nonce: upgraded(nonce, Upgrade="h2c"),
+    # WebSocket has the answer name it alone: among others it is a
+    # connection the client did not ask for, and so is one named twice.
+    "another upgrade named before it": lambda nonce: upgraded(nonce, Upgrade="h2c, WEBSOCKET"),
+    "another upgrade named after it": lambda nonce: upgraded(nonce, Upgrade="websocket, h2c"),
+    "the upgrade named twice": lambda nonce: upgraded(nonce, Upgrade="websocket, websocket"),
+    "the upgrade named in two headers": lambda nonce: upgraded(nonce).replace(
+        b"Upgrade: websocket\r\n", b"Upgrade: websocket\r\nUpgrade: websocket\r\n"
+    ),
+    "the upgrade named with its version": lambda nonce: upgraded(nonce, Upgrade="websocket/13"),
     "a connection that stays http": lambda nonce: upgraded(nonce, Connection="keep-alive"),
     "no connection named": lambda nonce: upgraded(nonce, Connection=None),
     "an extension nobody asked for": lambda nonce: upgraded(
@@ -1093,3 +1147,27 @@ def test_a_line_whose_text_is_long_or_holds_control_characters_is_written_safely
     assert repr(long) == f"<LogLine 2 info: {'x' * 80!r}...>"
     # The text itself is the job's own, with every character it wrote.
     assert escaped.message == "\x1b[2J\r\nrm -rf" and len(long.message) == 500
+
+
+def test_a_level_is_written_as_it_is_only_where_it_is_a_plain_word(server, job):
+    # A level is the server's to name, and one a later revision of the
+    # protocol adds is given as it was written: so it is written out where
+    # it is anything but a word, as a line's text is.
+    levels = ["trace", "\x1b[2Jinfo\r\n", "", "info: 'forged'>", "sérieux", "x" * 64, "x" * 65]
+    server.streams(
+        f"{LOGS}?after=0",
+        *[a_line(seq, level=level) for seq, level in enumerate(levels, start=1)],
+        said("end"),
+        closing(),
+    )
+    lines = list(job.stream_logs())
+    assert [each.level for each in lines] == levels
+    assert [repr(each) for each in lines] == [
+        "<LogLine 1 trace: 'line 1'>",
+        r"<LogLine 2 '\x1b[2Jinfo\r\n': 'line 2'>",
+        "<LogLine 3 '': 'line 3'>",
+        """<LogLine 4 "info: 'forged'>": 'line 4'>""",
+        "<LogLine 5 'sérieux': 'line 5'>",
+        f"<LogLine 6 {'x' * 64}: 'line 6'>",
+        f"<LogLine 7 {'x' * 65!r}: 'line 7'>",
+    ]

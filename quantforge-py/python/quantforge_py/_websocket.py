@@ -7,12 +7,14 @@ it in text messages. The client says nothing on it but what WebSocket asks
 of a client, so this is the half of WebSocket (RFC 6455) that takes:
 
 - **The upgrade is held to its answer.** A server that answers anything but
-  `101`, that does not name WebSocket, or whose answer is not to the key
-  this client sent, has not opened a stream. Neither has one that names an
-  extension or a protocol: the client asked for none.
+  `101`, that names anything but WebSocket as what the connection has
+  become, or whose answer is not to the key this client sent, has not
+  opened a stream. Neither has one that names an extension or a protocol:
+  the client asked for none.
 - **A frame is as WebSocket writes one,** or the stream is broken: no
-  reserved bit, no mask on what a server sends, a control frame short and
-  whole, a message continued only once it has begun.
+  reserved bit, no mask on what a server sends, its length in the fewest
+  bytes that hold it, a control frame short and whole, a message continued
+  only once it has begun.
 - **A message is taken to `_MOST_MESSAGE_BYTES`,** in however many frames it
   comes, and a text message is UTF-8.
 - **A ping is answered, and a close is answered,** each as WebSocket asks,
@@ -102,10 +104,13 @@ def _opened(connect, target, identity, silence):
             _, status, _, headers = _answer._head(_answer._Stream(file))
             if status != 101:
                 raise _Broken(f"the server answered {status} to the upgrade")
-            if "websocket" not in _listed(headers, "upgrade") or "upgrade" not in _listed(
-                headers, "connection"
-            ):
-                raise _Broken("the answer to the upgrade does not name WebSocket")
+            # What the connection has become is WebSocket and nothing else,
+            # named once: a list that holds it names a connection the client
+            # did not ask for. The upgrade is one of whatever the answer says
+            # of the connection itself, which is a list (RFC 6455, 4.1).
+            became = [value.lower() for value in headers.get("upgrade", ())]
+            if became != ["websocket"] or "upgrade" not in _listed(headers, "connection"):
+                raise _Broken("the answer to the upgrade does not name WebSocket alone")
             # Not a secret, and no hash of one: what WebSocket has a server
             # say to show that it read this client's upgrade.
             taken = hashlib.sha1((key + _ACCEPT_GUID).encode("ascii"), usedforsecurity=False)
@@ -165,8 +170,12 @@ class _Socket:
                 raise _Broken("a control frame that is long, or in pieces")
         elif length == 126:
             length = int.from_bytes(self._take(2), "big")
+            if length < 126:
+                raise _Broken("a frame whose length is written in more bytes than it needs")
         elif length == 127:
             length = int.from_bytes(self._take(8), "big")
+            if length < 0x10000:
+                raise _Broken("a frame whose length is written in more bytes than it needs")
         return final, kind, length
 
     def message(self):
