@@ -334,6 +334,16 @@ the same bundle from either, under the same code hash. `start` and `end`
 mean there what `--start` and `--end` mean here
 ([python-bundles.md](python-bundles.md)).
 
+**And it follows a job as `backtest --remote` does:** its log over the
+stream the log route offers, and a page at a time from the last line given
+wherever the stream stops, and its result with each downloaded file held to
+the size and the hash the job lists and read by the same strict reader. It
+differs in two things: it asks for the stream over `https` as over `http`,
+where the command line reads pages over `https`, and it downloads a table,
+the equity curve among them, when its caller asks for it, where the command
+line downloads the trades and leaves the curve on the server
+([python-jobs.md](python-jobs.md)).
+
 ## Environment variables QuantForge does not own
 
 These are conventions shared across Rust and Unix tools, read by dependencies

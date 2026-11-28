@@ -314,15 +314,13 @@ def test_what_the_page_leaves_to_later_stories_is_what_the_other_pages_do(page):
         return dict(rows[2:])
 
     here = left(PAGE)
-    assert sorted(here.values()) == ["QUA-345", "QUA-468"]
+    assert sorted(here.values()) == ["QUA-345"]
     # The client's page leaves the same, in the same words, and the
-    # package's page lists the client's own story among what is left of it.
+    # package's page lists neither a submission nor a job that is followed
+    # among what is left of it.
     assert left(CLIENT_PAGE) == here
     package = left(PACKAGE_PAGE)
-    assert "QUA-462" not in package.values()
-    assert {what for what, story in package.items() if story == "QUA-468"} == {
-        what for what, story in here.items() if story == "QUA-468"
-    }
+    assert not {"QUA-462", "QUA-468"} & set(package.values())
 
 
 def test_the_page_says_what_the_strategy_of_its_examples_is(page):

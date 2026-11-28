@@ -8,7 +8,8 @@ the `quantforge` command line.
 says what it is, holds the engine's types, each built by the engine's own
 rule, has the class a strategy derives from, runs a backtest, reads the
 candles the command line stored, and reaches the backtest jobs of a
-QuantForge server, to which it submits a strategy's files as a job:
+QuantForge server, to which it submits a strategy's files as a job, and
+follows that job to its result:
 
 ```python
 from decimal import Decimal
@@ -223,6 +224,36 @@ with every problem by the spec's code. For a class written in a notebook,
 `source_only=True` as its caller's word that nothing else of the notebook
 goes with it
 ([submitting a backtest from Python](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-bundles.md)).
+
+The job is then followed from Python: its log as it is written, its end,
+what it produced and what it ran on:
+
+```python
+for line in job.stream_logs():           # the job's log, line by line, as the job writes it
+    print(line.seq, line.level, line.message)
+job.wait().state                         # 'succeeded': asks until the job has ended
+remote = job.result()                    # what it produced: its metrics, and no table yet
+remote.metrics["trade_count"]            # 15
+remote.metrics["final_equity"]           # a Decimal: exact, with the digits the server wrote
+remote.to_backtest_result()              # a BacktestResult, as run_backtest gives one
+provenance = job.provenance()            # what it ran on, as the server recorded it
+provenance.code_hash                     # the bundle's code hash: job.status.bundle
+provenance.identity                      # the same for every job given the same inputs
+trades = remote.trades_df()              # the frame trades_to_dataframe gives of a local result
+curve = remote.equity_df()               # and the one equity_to_dataframe gives
+```
+
+A log is followed over a stream the server offers, and a page at a time
+where none can be had, so a log followed late is the whole log and one
+followed from the start is every line as it comes. A result's two tables
+are downloaded when they are first asked for, each held to the hash its job
+lists, and are read by the engine's own reader. Its frames are the frames
+of a local result, column for column, with floats for amounts, and
+`to_backtest_result()` is the result a local run of the same strategy over
+the same candles gives, every amount exact. A job that has not succeeded
+has no result, a `qf.Conflict` in the server's words, and one that has not
+ended within `wait`'s `timeout` is Python's own `TimeoutError`
+([a job from Python](https://github.com/quantforge-rs/quantforge/blob/main/docs/python-jobs.md)).
 
 The package installs as `quantforge-py` and imports as `quantforge_py`.
 `quantforge` on PyPI is another project.

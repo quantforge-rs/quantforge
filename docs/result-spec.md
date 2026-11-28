@@ -271,7 +271,10 @@ the file's hash and size first.
 A reader that must know a file is exactly a result of this format, such as
 `decode_trades` and `decode_equity`, reads the rows, writes them again as
 this page says, and refuses a file that is not byte for byte what it wrote.
-`Metrics::decode` does the same for `metrics.json`.
+`Metrics::decode` does the same for `metrics.json`. The Python package
+reads a job's two tables with those two readers, compiled into it, and
+holds a job's metrics to the hash of `metrics.json` by writing them as this
+page says ([a job from Python](python-jobs.md#the-two-tables)).
 
 The format's number is in every table's schema, under
 `quantforge-result-format`, and in a server's answer for the job. A change

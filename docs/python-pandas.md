@@ -7,6 +7,11 @@
 the columns of each frame are, what crosses exactly and what crosses as a
 float, what is refused, and where a market stays.
 
+The result of a job a server ran gives the same two frames, by the same
+two functions: `JobResult.trades_df()` and `JobResult.equity_df()`
+([a job from Python](python-jobs.md#the-two-frames)). So what this page
+says of a result's frames holds wherever the result was made.
+
 pandas is one of the package's two extras, and the four are all that need
 it: `pip install "quantforge-py[pandas]"` installs the package with it, and
 with the NumPy a frame is made of ([pandas itself](#pandas-itself)).

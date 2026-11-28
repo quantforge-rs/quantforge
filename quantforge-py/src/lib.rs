@@ -14,13 +14,15 @@
 //! strategy bundle runs in (`runtime.rs`), with the worker a QuantForge
 //! server runs bundles in (`worker.rs`); and what the package's client,
 //! which is written in Python, builds a bundle with before it submits one
-//! (`bundle.rs`).
+//! (`bundle.rs`) and reads a remote job's result with (`result.rs`).
 //! `docs/python-package.md` says how the package is named, built and
 //! tested, `docs/python-types.md` what each type takes and gives and how a
 //! backtest is run, `docs/python-numpy.md` what crosses to NumPy and how,
 //! `docs/python-pandas.md` what a frame of candles and of a result is,
 //! `docs/python-reader.md` which store a reader opens and what it reads,
-//! and `docs/python-bundles.md` how a bundle is built and submitted.
+//! `docs/python-bundles.md` how a bundle is built and submitted, and
+//! `docs/python-jobs.md` how a job is waited for and followed, and what
+//! its result and its provenance are.
 
 // As in the `quantforge` crate. The unsafe code an extension module needs is
 // what PyO3's macros expand to, which the lint leaves alone.
@@ -41,6 +43,7 @@ mod floats;
 mod frames;
 mod market;
 mod reader;
+mod result;
 mod run;
 mod runtime;
 mod strategy;
@@ -82,6 +85,11 @@ mod native {
     // reads a range, and a time as the engine writes one.
     #[pymodule_export]
     use crate::reader::{bounds, rfc3339};
+    // Private: what the client reads a remote job's result with, each the
+    // engine's own code: its metrics written as the file the result format
+    // gives them, and its two tables read into the package's own types.
+    #[pymodule_export]
+    use crate::result::{equity, metrics, trades};
     #[pymodule_export]
     use crate::run::run_backtest;
     #[pymodule_export]

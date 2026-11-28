@@ -186,7 +186,8 @@ class Served:
             text=True,
         )
         self._lines = queue.Queue()
-        threading.Thread(target=self._read, daemon=True).start()
+        self._reader = threading.Thread(target=self._read, daemon=True)
+        self._reader.start()
         self.said = {}
         while "listening" not in self.said:
             try:
@@ -219,7 +220,20 @@ class Served:
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait(PATIENCE)
+        # What it said is read to its end, and both of its pipes are let go
+        # of here: one left for Python to close says so whenever it does,
+        # in the middle of whichever test runs then.
+        self._reader.join(PATIENCE)
+        self.process.stdout.close()
         self.process.stderr.close()
+
+    def kill(self):
+        """Ends the server where it stands, as a machine that loses its
+        power does: it is asked nothing, so it finishes nothing and tells
+        nobody. `stop` asks a server to stop only on POSIX, by a signal,
+        and ends one on Windows as this does."""
+        self.process.kill()
+        self.process.wait(PATIENCE)
 
     def __enter__(self):
         return self

@@ -226,11 +226,11 @@ def test_a_server_that_stopped_is_unavailable_and_reached_again_once_it_is_back(
 
 def test_the_readmes_example_of_the_client_runs_against_a_real_server(page, tmp_path):
     # What PyPI shows of the client is what a reader copies: the readme's
-    # example of it, the last but the one of a submission, with this
-    # server's address in the place of the one `serve run` listens on unless
-    # it is told otherwise.
+    # example of it, the one before those of a submission and of a job that
+    # is followed, with this server's address in the place of the one
+    # `serve run` listens on unless it is told otherwise.
     readme = page("quantforge-py/README.md")
-    example, of_a_submission = readme.fences("python")[-2:]
+    example, of_a_submission, _ = readme.fences("python")[-3:]
     shown = "http://127.0.0.1:9600"
     assert example.count(shown) == 1 and "QF_REMOTE_TOKEN" in example
     # On a server no job was submitted to, it lists none and ends there.

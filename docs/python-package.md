@@ -23,9 +23,12 @@ QuantForge server runs strategy bundles in workers that are a Python
 interpreter with the package installed, through the same bindings
 ([the Python worker](python-worker.md)), and `Client` reaches such a
 server from Python: it lists the server's backtest jobs, gets one and
-cancels one ([the Python client](python-client.md)), and submits one, of a
+cancels one ([the Python client](python-client.md)), submits one, of a
 strategy's files made into a bundle, or of a class by its source
-([submitting a backtest from Python](python-bundles.md)).
+([submitting a backtest from Python](python-bundles.md)), and follows one:
+waits for it, follows its log as it is written, and gives its result, as
+the frames and the result a local run gives, and its provenance
+([a job from Python](python-jobs.md)).
 
 ## Contents
 
@@ -84,8 +87,9 @@ What the package says about itself, the engine's types, the strategy a
 class implements, the function that runs one, the two conversions between a
 decimal and a float, the reader of the candles a store holds, the four
 functions that give or take a pandas DataFrame, the client of a QuantForge
-server with the job and the status it gives, what a strategy bundle is
-refused with before it is sent, and what a request to a server fails with:
+server with the job and the status it gives, what a job gives beside its
+status, what a strategy bundle is refused with before it is sent, and what
+a request to a server fails with:
 
 <!-- begin: public names -->
 | Name | What it is |
@@ -118,6 +122,11 @@ refused with before it is sent, and what a request to a server fails with:
 | `Client` | The client of a QuantForge server: its backtest jobs listed, got, cancelled and submitted |
 | `Job` | One backtest job a server holds: its ID, the status the server last gave of it, and what can be asked of it |
 | `JobStatus` | Where a job stood when the server was last asked: its state, its times, why it failed, and what it runs |
+| `LogLine` | One line of a job's log, as its server holds it: its number, its time, its level and its text |
+| `JobResult` | What a succeeded job produced: its metrics, and its closed trades and its equity curve, as the frames and the result a local run gives |
+| `ResultFile` | One result file of a job, as its server lists it: what it holds, and the hash and the size of its bytes |
+| `Provenance` | What a job ran on, as its server recorded it before the job ran: the bundle, the bars, the settings and the runtime, with the identity of them all |
+| `ProvenanceSegment` | One segment a job's bars came from: stored candles, named by the hash of their bytes |
 | `BundleError` | A strategy bundle that is refused before anything of it is sent, with every problem by the bundle spec's code: a `ValueError` |
 | `RemoteError` | A request to a server that did not get its answer: every exception below is one |
 | `AuthError` | The server refused the request's credentials |
@@ -165,6 +174,12 @@ job's status holds, and what is raised for each way a request fails.
 `client.backtest.submit` and `submit_class`, and of `BundleError`: what is
 bundled, how its manifest is written, what is checked before anything is
 sent, and what is never done, pickling among it.
+[A job from Python](python-jobs.md) is the contract of a job's `wait`,
+`stream_logs`, `result` and `provenance`, and of `LogLine`, `JobResult`,
+`ResultFile`, `Provenance` and `ProvenanceSegment`: how a job is waited
+for, how its log is followed, when a result's tables are downloaded and
+what each is held to, where an amount is exact and where a float, and what
+a provenance's identity covers.
 
 ## Two versions
 
@@ -382,18 +397,22 @@ quantforge-py/
 │   └── candle_arrays.py    how long a batch of candles takes to cross to NumPy arrays and back: figures to read, which no test holds a run to
 ├── python/
 │   └── quantforge_py/
-│       ├── __init__.py     the package: publishes the extension module's names, and those of the modules written in Python beside it: the four functions of the frames, the client, its job and its status, and the exceptions
+│       ├── __init__.py     the package: publishes the extension module's names, and those of the modules written in Python beside it: the four functions of the frames, the client, its job and its status, what a job gives beside it, and the exceptions
 │       ├── _answer.py      one answer of a server as the client reads it from its connection: held to what HTTP writes, its body to the longest that is taken and what frames it to a limit of its own, with the standard library alone
 │       ├── _bundles.py     BundleError, and a strategy bundle as a client makes one before it submits a job: the files a caller names, its parameters and packages checked, the manifest written for them, and the bundle built and checked by the engine's own code
 │       ├── _client.py      Client: the client of a QuantForge server, which is where the server is, the token it sends, and the server's backtest jobs
 │       ├── _errors.py      RemoteError and the six exceptions derived from it: what a request to a server fails with, each raised by the code of the protocol's error envelope
 │       ├── _frames.py      candles and a backtest's result as pandas DataFrames, and a frame of candles as a batch: written in Python, with pandas' own calls
-│       ├── _jobs.py        Job and JobStatus: a server's backtest jobs listed, got and submitted, the handle on one, and its status read strictly from what the protocol writes, into the package's own types
+│       ├── _jobs.py        Job and JobStatus: a server's backtest jobs listed, got and submitted, the handle on one, a job waited for, and its status read strictly from what the protocol writes, into the package's own types
+│       ├── _logs.py        LogLine, and a job's log followed to its end: over the stream a server offers, and a page at a time from wherever the stream stopped, by the cursor that keeps a line from being given twice or left out
 │       ├── _names.py       what the text of a class sent by its source reads and does not define: the same answer on every Python, a class's body read in the order it is written, and what to do about each name, with nothing run and nothing asked
+│       ├── _provenance.py  Provenance and ProvenanceSegment: what a job ran on, read strictly from what the protocol writes into the package's own types, the identity of its inputs taken again and held to the one its server gave
+│       ├── _results.py     JobResult and ResultFile: a succeeded job's metrics held to the hash of the file that holds them, each of its two tables downloaded when it is first asked for, held to the size and the hash its job lists and read by the engine's own reader, and the frames and the result a local run gives made of them
 │       ├── _runtime.py     the runtime a strategy bundle runs in, in Python: the environment a worker offers, a bundle's strategy imported from its files and built from its parameters, what its own code may import, its lines and its failures
 │       ├── _source.py      a class as submit_class sends one: the text of its class statement, found in its module's file or its notebook's cell by the class's own functions, below the imports its caller declares
 │       ├── _submit.py      a backtest job submitted: what is checked before a server is asked, then its runtime, the bars it stores, the bundle uploaded under the hash computed here, and the job submitted once
-│       ├── _wire.py        a server as a client's requests reach it, with the standard library alone: its URL and the token checked, the protocol version agreed on, each request on a connection of its own, what is asked again, and an answer given as its route's or raised as the exception it is
+│       ├── _websocket.py   a WebSocket as the client reads one, with the standard library alone: a connection asked to become a stream and held to the answer, the text messages a server sends on it, each frame as WebSocket writes one, a ping answered, and the stream let go of in order
+│       ├── _wire.py        a server as a client's requests reach it, with the standard library alone: its URL and the token checked, the protocol version agreed on, each request on a connection of its own, what is asked again, an answer given as its route's or raised as the exception it is, a file read to the length its caller knows, and a stream opened as a request's connection is
 │       └── _worker.py      the worker a QuantForge server runs Python bundles in, `python -m quantforge_py._worker`: what the server gave it closed, its frames moved off standard output, then the extension's worker
 ├── src/
 │   ├── adapter.rs          the engine's Strategy over a Python object: a thread attached for each callback, a failure with its traceback
@@ -416,6 +435,7 @@ quantforge-py/
 │   ├── reader/
 │   │   ├── range.rs        the bounds of a range of candles: an int of milliseconds, a datetime with a time zone or RFC 3339 text, each as the engine's millisecond, for a reader's range and for the window of a job
 │   │   └── settings.rs     which store a reader opens: the command line's settings, from the reader's arguments and the variables behind them, refused by where a value came from and never by the value
+│   ├── result.rs           what the client reads a remote job's result with, each private: its metrics written as the file the result format gives them, and its two tables read strictly into the package's own types, by the engine's own code
 │   ├── run.rs              run_backtest: a run's arguments read, the market of the run settled, the engine run on the calling thread, and what it refused raised in its words
 │   ├── runtime.rs          the runtime a strategy bundle runs in, the one path every host takes: the bundle's strategy as the engine drives it, and a strategy that failed worded with its traceback
 │   ├── strategy.rs         Strategy, StrategyContext and TargetPosition: the class a strategy derives from, what its callbacks are handed, what they hand back
@@ -424,7 +444,7 @@ quantforge-py/
 └── tests/
     ├── conftest.py         what the tests share: the checkout's manifests, the installed distribution, how a page and a refusal are read, how a strategy is run on either host, how a result is compared with a fixture's, where a store lives on each backend, and the protocol's codes and states as the crate has them
     ├── jobs.py             what the job tests share: a `serve run` whose workers are this interpreter, on a store of either backend, bundles as their canonical tar, the job routes spoken to with the standard library alone, a result's Arrow files read back as text, and a job in each state for a client to list, get and cancel
-    ├── standin.py          what the client's tests share: a server of the test's own, which answers what a test tells it to and records what it was asked, and one that stores an upload and queues a submission as a server does
+    ├── standin.py          what the client's tests share: a server of the test's own, which answers what a test tells it to and records what it was asked, as a WebSocket too, with the frames a test gives it, and one that stores an upload and queues a submission as a server does
     ├── stores.py           what the reader's tests share: stores the quantforge command line wrote from an exchange that answers on this machine, a SQLite file and a PostgreSQL database of its own, and the server spoken to with the standard library alone
     ├── test_backtest.py    a backtest's config, a closed trade, an equity point and a result
     ├── test_bundles.py     a bundle as the package builds one: the spec's shared cases through the package, a code hash against a builder on the standard library's tarfile, a directory as the spec collects it, the manifest written from the arguments, and every refusal of a strategy, an entry, a parameter and a package
@@ -437,7 +457,10 @@ quantforge-py/
     ├── test_distribution.py  the installed distribution: its name, its Pythons, its license, its files
     ├── test_end_to_end.py  a strategy that decides from its bars, run over fixture candles: the engine's decisions and result, and what each figure means
     ├── test_golden_parity.py  the golden parity test: an SMA cross written in Python makes the trades, the final equity and the drawdown of the Rust one's frozen run, digit for digit
+    ├── test_handle_jobs.py  a job followed on a real `serve run` on either backend: a line that reaches a follower while its job still runs, a log followed late and a page at a time, a job waited for, a result equal to the same run made here and its frames that run's column for column, and a provenance as the server recorded it
     ├── test_hostile_bundles.py  bundles that mean harm, run by a server's workers on either backend: each tries one thing a job has no business doing, a fork bomb, a memory bomb, a socket, a file outside its scratch directory, its server's secrets, a frame in its worker's place, and is held to what the workers say they enforce
+    ├── test_jobs_page.py   the page of a job, held to the package, its examples run against a real server
+    ├── test_logs.py        a job's log followed, against servers of the test's own: the stream it asks for and what it says on it, every way a stream stops and the pages that take over from its last line, the cursor, progress told once, and every page that is refused
     ├── test_market.py      a symbol, an interval, a product family, a product line and a market
     ├── test_numpy.py       a batch's columns as NumPy arrays and arrays as a batch: each array's type and shape, what crosses exactly and what as a float, and every refusal
     ├── test_numpy_fixtures.py  the repository's fixtures through a batch that names its market and through NumPy: every product line kept apart, a store's decimals, the frozen day of candles and its backtest
@@ -448,10 +471,12 @@ quantforge-py/
     ├── test_pandas_fixtures.py  the repository's Spot fixtures through frames: the frozen day of candles and its backtest, the frames of the frozen result, the shared strategy cases, a store's decimals, every product line
     ├── test_pandas_optional.py  pandas as an extra of the package: when it is imported, what the four functions say where Python finds none or one the extra does not take, and the NumPy asked for beside it
     ├── test_pandas_page.py  the page of the DataFrames, held to the package
+    ├── test_provenance.py  a job's provenance, against servers of the test's own: each field in the package's own types, the identity taken again and held to the server's, and every answer that is refused
     ├── test_reader.py      the candle reader before it reads: the class it is, which store its settings select, an argument over its variable over the default, every refusal by where a value came from, and a reader closed, shared between threads or carried into another process
     ├── test_reader_page.py  the page of the candle reader, held to the package
     ├── test_reader_stores.py  what the reader reads on each backend, from stores the command line wrote: every candle digit for digit and oldest first, a range in each way a time is written, the sentence for a range that held nothing, product lines kept apart, and a store it refuses and leaves as it was
     ├── test_repository.py  this page, the readme and the manifests, held to the package
+    ├── test_results.py     a job's result, against servers of the test's own: its metrics held to their file's hash, each table downloaded when it is first asked for and held to what its job lists, the result format's shared cases read by the package, and every result and every file that is refused
     ├── test_run_backtest.py  run_backtest: what it takes, the order it checks that in, the market a batch names, what the engine refuses, and that a run repeats
     ├── test_runtime.py     the runtime a bundle runs in, in this process: its strategy built from its entry and its parameters, what its own code may import and what quantforge_py imports for it, every refusal and its traceback, its lines, and what a worker offers
     ├── test_source.py      a class as submit_class sends one: its statement found in a file and in a notebook's cell, the imports written above it, every name it reads and does not define refused with what to do, the same on every Python and held to what running the file gives, and every class that is not sent
@@ -462,6 +487,7 @@ quantforge-py/
     ├── test_submit.py      a backtest submitted, against servers of the test's own: what is asked and in which order, what is sent, the window, what stops before anything is asked or uploaded, an upload asked again and a submission never, and every answer that is refused
     ├── test_submit_jobs.py  a backtest submitted to a real `serve run` on either backend: a strategy's directory run to the goldens' trades, the client's code hash held to the server's, the command line's and a builder's on the standard library, a class run from its source, and bundles refused before any upload
     ├── test_types_page.py  the page of the types, held to the package
+    ├── test_wait.py        a job waited for, against servers of the test's own and by a clock of the test's own: what is asked and when, how long between two requests, and what a timeout is
     └── test_worker_jobs.py  bundles run by a server's workers: the goldens as a bundle on either backend, digit for digit; a raising strategy's traceback in its job's log; a package not on offer refused at upload and submission, and an import refused as it runs; what a strategy writes; a worker per job, holding nothing of its server's store; and how long a job takes to reach its first bar
 ```
 <!-- end: layout -->
@@ -785,6 +811,40 @@ They hold the installed package to the checkout they are in:
   does not offer, leave the server's store without a bundle. And every
   table and example of [python-bundles.md](python-bundles.md), the examples
   against such a server.
+- **A job followed** (`test_wait.py`, `test_logs.py`, `test_results.py`,
+  `test_provenance.py`, `test_handle_jobs.py`, `test_jobs_page.py`): first
+  against servers of the test's own. A job waited for by a clock of the
+  test's own: what is asked and when, how long between two requests, a
+  timeout that leaves the job as it was last given, and a job that failed
+  given like any other. A log followed over a stream the test's server
+  speaks, frame by frame: the upgrade as WebSocket asks it, with the token;
+  a message in however many frames, a ping answered, a goodbye said; every
+  way a stream stops, an answer to the upgrade that is none, a frame
+  WebSocket does not write, a message the protocol does not, a silence and
+  a close without an end among them, each followed from its last line a
+  page at a time, with no line given twice and none left out; progress
+  told once across the two; and every page the protocol does not write
+  refused. A result read from the result format's shared cases,
+  `tests/fixtures/result_cases.json`: its metrics held to the hash of the
+  file that holds them, each table downloaded when it is first asked for
+  and once, a file held to the size and the hash its job lists, however
+  it says where it ends, and one that is not what the result format writes
+  refused though its hash is listed. A provenance read from the protocol's
+  own example, its identity taken again and held to the crate's own test
+  of it, and every member that is missing or of another type refused.
+  Then against a real `quantforge serve run` on SQLite and on PostgreSQL:
+  a line reaches a follower while the job that wrote it still runs, and
+  never by a page; a log followed late is the same lines, as is one read a
+  page at a time; a queued job's log begins with the job; a server that
+  stops ends the log of the job it ran, and leaves the follower of a job
+  that has not ended with no server; the goldens' strategy submitted as a
+  bundle gives, as a `BacktestResult`, the result `run_backtest` gives of
+  the same class over the candles a reader reads from the same store, and
+  its two frames are that result's, column for column and cell for cell;
+  and a job's provenance is what its server recorded, which two
+  submissions of one thing share the identity of. And every table and
+  example of [python-jobs.md](python-jobs.md), the examples against such a
+  server.
 - **The page of the types** (`test_types_page.py`): every table of
   [python-types.md](python-types.md), every signature, every refusal it
   shows, and its examples, which run as they are written.
@@ -934,6 +994,5 @@ The spikes under `spikes/` are workspaces of their own, as before.
 | --- | --- |
 | The goldens reproduced from candles read out of each store, and by a server's job | QUA-458 |
 | A Python strategy run by the command line | QUA-461 |
-| A job waited for, its log followed, its result as DataFrames, and its provenance | QUA-468 |
 | Type stubs and the `py.typed` marker | QUA-471 |
 | The release to PyPI, and whether it carries a source distribution | QUA-476 |
