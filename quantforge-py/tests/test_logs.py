@@ -12,11 +12,13 @@ client does with the stream of a real `serve run` is in
 """
 
 import copy
+import io
 import json
 import pickle
 import struct
 import threading
 import time
+import tracemalloc
 import types
 
 import pytest
@@ -309,6 +311,35 @@ def test_a_frame_of_every_length_is_taken_where_the_length_is_written_in_the_few
     server.streams(f"{LOGS}?after=0", *frames, said("end"), closing())
     assert numbers(job.stream_logs()) == [1, 2, 3, 4]
     assert routes(server) == ["/logs?after=0 (stream)"]
+
+
+def test_a_message_costs_what_it_holds_however_many_frames_it_comes_in():
+    # A message that begins with nothing, goes on with nothing fifty
+    # thousand times over and ends with its text: each a frame WebSocket
+    # has, and none holding a byte that would count against the limit.
+    text = json.dumps({"type": "line", **line(1)}).encode()
+    count = 50_000
+    frames = (
+        frame(b"", TEXT, final=False)
+        + frame(b"", CONTINUED, final=False) * count
+        + frame(text, CONTINUED)
+    )
+    stream = _websocket._Socket(None, io.BytesIO(frames))
+    tracing = tracemalloc.is_tracing()
+    if not tracing:
+        tracemalloc.start()
+    try:
+        tracemalloc.reset_peak()
+        before, _ = tracemalloc.get_traced_memory()
+        message = stream.message()
+        _, most = tracemalloc.get_traced_memory()
+    finally:
+        if not tracing:
+            tracemalloc.stop()
+    assert message == text.decode()
+    # Nothing is kept of a frame but its bytes: something kept for each
+    # frame, were it one reference, would be 400,000 bytes here.
+    assert most - before < 64 * 1024
 
 
 def test_an_upgrade_is_taken_however_its_answer_spells_websocket(server, job):

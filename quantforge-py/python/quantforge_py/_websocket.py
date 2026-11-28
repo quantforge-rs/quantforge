@@ -16,7 +16,9 @@ of a client, so this is the half of WebSocket (RFC 6455) that takes:
   bytes that hold it, a control frame short and whole, a message continued
   only once it has begun.
 - **A message is taken to `_MOST_MESSAGE_BYTES`,** in however many frames it
-  comes, and a text message is UTF-8.
+  comes, and a text message is UTF-8. Nothing is kept of a frame but its
+  bytes, so a message costs what it holds and no more, whatever the number
+  of its frames.
 - **A ping is answered, and a close is answered,** each as WebSocket asks,
   with frames that are masked, as a client's are.
 - **A stream is let go of in order.** The client says goodbye, says that
@@ -182,15 +184,19 @@ class _Socket:
         """The next text message the server sent, or `None` once it has
         closed the stream. A ping is answered on the way, and a message
         that is no text is passed over: the protocol sends none."""
-        pieces, held, text = None, 0, False
+        # A message is kept as its bytes, and nothing is kept of a frame
+        # beside them: however many frames a server sends one in, empty
+        # ones among them, it takes no more than its bytes, which have a
+        # limit.
+        whole, held, text = None, 0, False
         while True:
             final, kind, length = self._frame()
             if kind in (_TEXT, _BINARY):
-                if pieces is not None:
+                if whole is not None:
                     raise _Broken("a message that begins inside another")
-                pieces, held, text = [], 0, kind == _TEXT
+                whole, held, text = bytearray(), 0, kind == _TEXT
             elif kind == _CONTINUED:
-                if pieces is None:
+                if whole is None:
                     raise _Broken("a frame that continues no message")
             elif kind not in (_CLOSE, _PING, _PONG):
                 raise _Broken(f"a frame of a kind WebSocket does not have, {kind}")
@@ -206,13 +212,13 @@ class _Socket:
                 self._send(_PONG, payload)
             if kind >= _CLOSE:
                 continue
-            pieces.append(payload)
+            whole += payload
             if not final:
                 continue
-            whole, pieces = b"".join(pieces), None
+            message, whole = whole, None
             if text:
                 try:
-                    return whole.decode("utf-8")
+                    return message.decode("utf-8")
                 except UnicodeDecodeError:
                     raise _Broken("a text message that is not UTF-8") from None
 

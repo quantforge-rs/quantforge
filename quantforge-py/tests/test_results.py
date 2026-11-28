@@ -133,35 +133,71 @@ class Held:
     """A file's route that answers nothing until the test lets it: `first`
     is set once a request for the file has come and `second` once another
     has, and each waits for `free` before it is answered, with `answers`
-    in turn and the last of them from then on."""
+    in turn and the last of them from then on. `moved` is set with
+    `second`, and by a `Turn` once every caller has come for it: by one
+    of the two, whichever a caller does."""
 
     def __init__(self, server, name, *answers):
-        self.first, self.second, self.free = (threading.Event() for _ in range(3))
+        self.first, self.second, self.free, self.moved = (threading.Event() for _ in range(4))
         answers = list(answers)
         counted = threading.Lock()
 
         def answer():
             with counted:
                 raw = answers.pop(0) if len(answers) > 1 else answers[0]
-                came = self.second if self.first.is_set() else self.first
-                came.set()
+                if self.first.is_set():
+                    self.second.set()
+                    self.moved.set()
+                self.first.set()
             assert self.free.wait(30)
             return 200, raw, {}
 
         server.says("GET", f"{server.prefix}{RESULT}/{FILES[name]}", answer)
 
 
-def together(call, held, count=2):
-    """Calls `call` from `count` callers at once, each once the one before
-    it has had the time to ask its server, and gives what each was given
-    or raised, in no order: the first is asking for the file that is held
-    back when the next begins, and the file is let go of once all have
-    begun."""
+class Turn:
+    """A table's turn, in the place of the one its result made, that says
+    when its callers have come for it: `waiting` is set, and `moved` with
+    it, as the last of `callers` asks for the turn, before it waits for
+    it."""
+
+    def __init__(self, turn, callers, moved):
+        self._turn = turn
+        self._left = callers
+        self._counted = threading.Lock()
+        self._moved = moved
+        self.waiting = threading.Event()
+
+    def __enter__(self):
+        with self._counted:
+            self._left -= 1
+            if self._left == 0:
+                self.waiting.set()
+                self._moved.set()
+        self._turn.acquire()
+
+    def __exit__(self, *raised):
+        self._turn.release()
+
+
+def together(result, held, name="equity", count=2):
+    """Asks `result` for itself as a `BacktestResult` from `count` callers
+    at once, and gives what each was given or raised, in no order, with
+    whether every caller came for the turn of the table `name` and whether
+    any asked the server for it while the first one's request was held
+    back.
+
+    The first caller is asking for the file, which `held` holds back, when
+    the others begin. The file is let go of once every one of them has
+    come for the table's turn, or one of them has asked the server itself:
+    whichever a caller does, it has done by then, however slow the machine
+    is."""
+    turn = result._turns[name] = Turn(result._turns[name], count, held.moved)
     outcomes = []
 
     def caller():
         try:
-            outcomes.append(call())
+            outcomes.append(result.to_backtest_result())
         except qf.RemoteError as error:
             outcomes.append(error)
 
@@ -170,14 +206,13 @@ def together(call, held, count=2):
     assert held.first.wait(10)
     for each in callers[1:]:
         each.start()
-    # A caller that asked its server itself would have by now: its request
-    # would come while the first one's is held back.
-    asked_again = held.second.wait(0.5)
+    assert held.moved.wait(10)
+    waited, asked_again = turn.waiting.is_set(), held.second.is_set()
     held.free.set()
     for each in callers:
         each.join(10)
         assert not each.is_alive()
-    return outcomes, asked_again
+    return outcomes, waited, asked_again
 
 
 def unread(server, why: str, target=RESULT) -> str:
@@ -347,18 +382,18 @@ def test_each_table_is_downloaded_when_it_is_first_asked_for_and_kept(server):
 def test_a_table_two_callers_ask_for_at_once_is_downloaded_once_and_given_to_both(server):
     held = Held(server, "equity", file("equity.sma_cross"))
     result = server.job.result()
-    (one, other), asked_again = together(result.to_backtest_result, held)
-    # The second found the table being downloaded, waited for it, and was
-    # given the rows the first one kept.
-    assert not asked_again
+    (one, other), waited, asked_again = together(result, held)
+    # The second came for the table's turn while the first was downloading
+    # it, waited, and was given the rows the first one kept.
+    assert waited and not asked_again
     assert server.fetched == ["/", "/trades.arrow", "/equity.arrow"]
     assert type(one) is type(other) is qf.BacktestResult and one == other
     assert len(one.equity_curve) == 15
     # As were three of them.
     held = Held(server, "equity", file("equity.sma_cross"))
     result = server.job.result()
-    results, asked_again = together(result.to_backtest_result, held, count=3)
-    assert not asked_again and results[0] == results[1] == results[2]
+    results, waited, asked_again = together(result, held, count=3)
+    assert waited and not asked_again and results[0] == results[1] == results[2]
     assert server.fetched[3:] == ["/", "/trades.arrow", "/equity.arrow"]
 
 
@@ -367,11 +402,11 @@ def test_a_table_whose_download_failed_is_asked_for_again_by_the_caller_that_wai
     altered = bytes([equity[0] ^ 1]) + equity[1:]
     held = Held(server, "equity", altered, equity)
     result = server.job.result()
-    outcomes, asked_again = together(result.to_backtest_result, held)
+    outcomes, waited, asked_again = together(result, held)
     # The one that downloaded the file was refused it, and kept nothing:
-    # the one that waited for it asked the server itself, and was answered
-    # the file the job lists.
-    assert not asked_again
+    # the one that waited for its turn asked the server itself then, and
+    # was answered the file the job lists.
+    assert waited and not asked_again
     assert server.fetched == ["/", "/trades.arrow", "/equity.arrow", "/equity.arrow"]
     (refused,) = [each for each in outcomes if type(each) is qf.RemoteError]
     (read,) = [each for each in outcomes if type(each) is qf.BacktestResult]

@@ -380,15 +380,21 @@ server.
 - **A file that was refused is not kept.** Asked for again, it is
   downloaded again, as it is for a caller that waited its turn behind the
   one that was refused it.
-- **A table is read whole, in memory.** Its file is held while it is
-  checked and read, and its rows from then on, a Python object each, for
-  as long as the result is. The limit on a file is the limit on what a
-  table can cost its caller.
+- **A table is read whole, in memory, and takes more than its file.**
+  While it is read it takes about ten times its file's size: the file,
+  what the engine's reader makes of it to hold it to the format byte for
+  byte, and its rows, a Python object each. From then on the result keeps
+  the rows, for as long as it is: 64 bytes for each point of an equity
+  curve, and about 200 for each trade. The curve of a year of one-minute
+  bars, a file of 22 MB, takes about 200 MB while it is read and 34 MB
+  from then on.
 - **A result file longer than 1 GiB is not downloaded.** A year of
   one-minute bars, the most a server runs one job on unless it is told
   otherwise, makes an equity curve of a fiftieth of that. A file past it
   is fetched from the server's own route with a tool that reads Arrow
-  files to disk.
+  files to disk. The limit is on the file, and no limit on memory: a
+  table far below it can take more than a process has, and is read that
+  way too.
 
 ```python
 >>> whole = result.to_backtest_result()
